@@ -46,6 +46,23 @@
 
 ---
 
+## Additional Key Decisions (from Platform Design Sessions)
+
+See `platform/design/INDEX.md` for full rationale and design details.
+
+| Decision | Choice |
+|---|---|
+| Schema inheritance semantics | `base:` creates polymorphic (is-a) inheritance — subtypes are queryable as their parent type |
+| Validator `entity_types` matching | Subtype-aware — declaring a parent type covers all subtypes; declaring a child type targets only that subtype; redundant entries emit a startup warning |
+| Config-driven validation | `validators.yaml` supports unified validator format with CEL conditions, `expand` path pre-fetching, `when` pre-conditions, `requires` shorthand, and `existing` context for updates |
+| CEL expression language | Used for config-driven validator conditions (not a custom DSL) — sandboxed, proven, supports AND/OR/list macros |
+| Expand path syntax | `field`, `field.child`, `field[]`, `field[].child` — explicit pre-fetch declarations; paths deduplicated; batch-fetched for list nodes; cycle detection via visited set; `max_expand_list_size` safety cap |
+| Lazy evaluation rejected | Explicit `expand` paths preferred — CEL short-circuit makes implicit I/O non-deterministic; explicit paths are auditable |
+| Built-in validator presets | `ref_check`, `count_constraint`, `immutable_field`, `field_required_if`, `no_self_ref` ship as ergonomic shortcuts expanding to unified format — not separate code paths |
+| External adapter stubs | STARLIMS, HALO, Donor DB concrete implementations move to Cappella; `ExternalSourceAdapter` ABC stays in Hippo |
+| Reference loader plugin system | `hippo.reference_loaders` entry point; `ReferenceLoader` ABC ships `schema_fragment()`; install auto-migrates; `requires:` block in schema.yaml; collision → `ConfigError` |
+| Fuzzy search | `EntityStore.search()` ABC method; per-field `search:` mode in schema config; `ScoredMatch` core SDK type; adapter capability declaration at startup |
+
 ## Open Questions
 
 | Question | Section | Priority |
@@ -62,16 +79,19 @@
 
 The following changes are required based on decisions recorded in `platform/design/INDEX.md`. They should be applied before sec2–sec5 are marked complete.
 
-| Section | Change needed |
-|---|---|
-| `sec2_architecture.md` | Add `WriteValidator` ABC + `hippo.write_validators` entry point; add `WriteOperation` + `ValidationResult` types to package structure |
-| `sec2_architecture.md` | Add `EntityStore.search()` + `ScoredMatch` type; add adapter capability declaration |
-| `sec2_architecture.md` | Add `ReferenceLoader` ABC + `hippo.reference_loaders` entry point to plugin system |
-| `sec2_architecture.md` | Remove concrete external adapter stubs (STARLIMS, HALO, Donor DB) from package structure — `ExternalSourceAdapter` ABC remains |
-| `sec3_data_model.md` | Add `search` field declaration to schema config field type system |
-| `sec3_data_model.md` | Add `requires:` block to schema config format |
-| `sec4_api_layer.md` | *(not started)* Include fuzzy search endpoint + `ScoredMatch` response |
-| `sec5_ingestion.md` | *(not started)* Include `hippo reference` CLI commands + `ReferenceLoader` lifecycle |
+| Section | Change needed | Source decision |
+|---|---|---|
+| `sec2_architecture.md` | Add unified config validator infrastructure to package structure: `validators.yaml` loader, expand path engine, CEL evaluator, built-in preset registry, `WriteValidator` ABC, `WriteOperation` + `ValidationResult` types | Unified validation architecture |
+| `sec2_architecture.md` | Add `hippo.write_validators` entry point group to plugin system section | Unified validation architecture |
+| `sec2_architecture.md` | Add `EntityStore.search()` + `ScoredMatch` type to adapter interface; add adapter capability declaration | Fuzzy search |
+| `sec2_architecture.md` | Add `ReferenceLoader` ABC + `hippo.reference_loaders` entry point to plugin system | Reference loader plugin system |
+| `sec2_architecture.md` | Remove concrete external adapter stubs (STARLIMS, HALO, Donor DB) from package structure — `ExternalSourceAdapter` ABC remains | Adapter boundary |
+| `sec3_data_model.md` | Formalise `base:` as polymorphic (is-a) inheritance; document subtype semantics for queries, validators, and relationships | Schema inheritance |
+| `sec3_data_model.md` | Add `search` field declaration to schema config field type system | Fuzzy search |
+| `sec3_data_model.md` | Add `requires:` block to schema config format | Reference loader plugin system |
+| `sec3b_relational_storage.md` | Add storage strategy for polymorphic inheritance (type discriminator column vs. joined tables) | Schema inheritance |
+| `sec4_api_layer.md` | *(not started)* Include fuzzy search endpoint + `ScoredMatch` response | Fuzzy search |
+| `sec5_ingestion.md` | *(not started)* Include `hippo reference` CLI commands + `ReferenceLoader` lifecycle | Reference loader plugin system |
 
 ---
 
