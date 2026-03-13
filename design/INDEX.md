@@ -58,6 +58,23 @@
 
 ---
 
+## Pending Updates (from Platform Design Sessions)
+
+The following changes are required based on decisions recorded in `platform/design/INDEX.md`. They should be applied before sec2–sec5 are marked complete.
+
+| Section | Change needed |
+|---|---|
+| `sec2_architecture.md` | Add `WriteValidator` ABC + `hippo.write_validators` entry point; add `WriteOperation` + `ValidationResult` types to package structure |
+| `sec2_architecture.md` | Add `EntityStore.search()` + `ScoredMatch` type; add adapter capability declaration |
+| `sec2_architecture.md` | Add `ReferenceLoader` ABC + `hippo.reference_loaders` entry point to plugin system |
+| `sec2_architecture.md` | Remove concrete external adapter stubs (STARLIMS, HALO, Donor DB) from package structure — `ExternalSourceAdapter` ABC remains |
+| `sec3_data_model.md` | Add `search` field declaration to schema config field type system |
+| `sec3_data_model.md` | Add `requires:` block to schema config format |
+| `sec4_api_layer.md` | *(not started)* Include fuzzy search endpoint + `ScoredMatch` response |
+| `sec5_ingestion.md` | *(not started)* Include `hippo reference` CLI commands + `ReferenceLoader` lifecycle |
+
+---
+
 ## How to Use This Spec
 
 Each section document is self-contained and includes `Depends on` and `Feeds into` headers
