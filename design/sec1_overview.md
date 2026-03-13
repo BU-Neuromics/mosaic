@@ -2,14 +2,20 @@
 
 ### 1.1 What Is Hippo?
 
-Hippo is an open source metadata tracking service for multi-modal omics datasets. It provides a
-unified, queryable registry of biological samples, donors, data files, and their relationships —
-enabling downstream pipelines, analysis tools, and data portals to reliably locate and filter
-datasets without manually managing spreadsheets or bespoke file manifests.
+Hippo is an open source, configurable metadata tracking service. It provides a unified,
+queryable registry of entities, their fields, and their relationships — enabling downstream
+systems, analysis pipelines, and data portals to reliably locate and filter metadata without
+manually managing spreadsheets or bespoke file manifests.
 
-Hippo is designed as the first module of a larger omics data platform. It tracks *where data lives*
-and *what it describes* — not the data itself. Raw data files remain in place (e.g., S3, local
-filesystem); Hippo stores the metadata and file locations needed to find and interpret them.
+Hippo is designed as the first module of a larger platform. It tracks *where data lives*
+and *what it describes* — not the data itself. Raw data files remain in place (e.g., S3,
+local filesystem); Hippo stores the metadata and file locations needed to find and interpret
+them.
+
+Hippo is domain-agnostic: the entity types, fields, and relationships it tracks are defined
+entirely by a schema config file authored for each deployment. For example, an omics research
+deployment might define entity types like Subject, Sample, and Datafile, while a manufacturing
+deployment might define Batch, Component, and Inspection.
 
 ### 1.2 Deployment Philosophy
 
@@ -27,21 +33,20 @@ required to move between deployment tiers.
 
 ### 1.3 Position in the Larger Platform
 
-Hippo is the first independently deliverable module of a modular omics data platform. It is
-designed so that other platform modules — including a subject/donor database, tissue registry,
-digital histology store, and data portal — can be built independently and integrated later via
-well-defined interfaces.
+Hippo is the first independently deliverable module of a modular platform. It is designed so
+that other platform modules can be built independently and integrated later via well-defined
+interfaces.
 
 Hippo itself has no dependencies on those future modules. They will depend on Hippo.
 
 ```
 ┌──────────────────────────────────────────────────────┐
-│                  Omics Data Platform                 │
+│                    Platform                           │
 │                                                      │
 │  ┌─────────┐  ┌──────────┐  ┌──────────────────┐    │
-│  │  Hippo  │  │  Tissue  │  │  Digital         │    │
-│  │  (MTS)  │  │  Registry│  │  Histology Store │    │
-│  │  ◄ HERE │  │ (future) │  │  (future)        │    │
+│  │  Hippo  │  │ Module B │  │  Module C        │    │
+│  │  (MTS)  │  │ (future) │  │  (future)        │    │
+│  │  ◄ HERE │  │          │  │                  │    │
 │  └────┬────┘  └──────────┘  └──────────────────┘    │
 │       │                                              │
 │  ┌────▼──────────────────────────────────────────┐   │
@@ -54,13 +59,13 @@ Hippo itself has no dependencies on those future modules. They will depend on Hi
 
 Hippo explicitly does not:
 
-- Store, move, or manage raw data files (fastq, BAM, VCF, images, etc.)
+- Store, move, or manage raw data files
 - Execute or schedule analysis pipelines
-- Perform any biological analysis or QC
+- Perform domain-specific analysis or QC
 - Provide a user-facing data portal or visualization layer
 - Manage authentication or authorization (delegated to transport layer)
-- Serve as the system of record for donor clinical data, tissue inventory, or histology metadata
-  (those are separate future modules with placeholder ingestion interfaces in Hippo)
+- Serve as the system of record for upstream source systems (those are separate modules with
+  placeholder ingestion interfaces in Hippo)
 - Replace or replicate LIMS, EHR, or other upstream source systems
 
 ### 1.5 Delivery Scope (v0.1)
@@ -68,11 +73,11 @@ Hippo explicitly does not:
 The initial four-week delivery targets a functional development environment containing:
 
 - Core Python SDK with SQLite backend adapter
-- Config-driven schema system supporting the primary omics entity types
+- Config-driven schema system supporting arbitrary entity types
 - Full provenance and audit trail on all writes
 - REST API service (FastAPI) wrapping the SDK
 - Batch ingestion interface for loading metadata from flat files
-- Placeholder ingestion adapters for future external systems (tissue registry, donor DB, etc.)
+- Placeholder ingestion adapters for future external systems
 - Unit and integration test suite
 
 The following are explicitly out of scope for v0.1:
@@ -99,23 +104,20 @@ The following are explicitly out of scope for v0.1:
 
 In v0.1, Hippo serves other applications only — there is no human-facing query interface:
 
-- **Analysis pipelines** (e.g., Nextflow): resolve file paths and sample metadata at runtime
-- **Future data portal**: browse and filter datasets via the GraphQL layer
-- **Future platform modules**: look up omics datasets related to donors, tissues, or slides
+- **Analysis pipelines** (e.g., Nextflow): resolve file paths and entity metadata at runtime
+- **Future data portal**: browse and filter entities via the GraphQL layer
+- **Future platform modules**: look up entities related to other modules' data
 
 ### 1.8 Glossary
 
 | Term | Definition |
 |---|---|
-| **Donor** | A biological subject who contributed samples. May have associated demographic and clinical metadata. |
-| **Sample** | A biological specimen derived from a donor, associated with a specific tissue and collection event. |
-| **DataFile** | A file (e.g., fastq, BAM, VCF) stored at a known location (S3 URI, local path) and associated with a Sample. |
-| **Modality** | The type of omics assay (e.g., RNASeq, bisulfite sequencing, genotyping, ATAC-seq). |
-| **BrainRegion** | An anatomical region of origin for a Sample. Generalizable to any tissue region. |
-| **Dataset** | A named, versioned collection of Samples and DataFiles representing a cohort or experiment. |
-| **Entity** | Any top-level object tracked by Hippo (Donor, Sample, DataFile, etc.). |
+| **Entity** | Any top-level object tracked by Hippo. Entity types are defined in schema config (e.g., Project, Item, Attachment). |
+| **Schema config** | A YAML or JSON file defining the entity types, fields, and relationships for a Hippo deployment. Authored in Hippo DSL or LinkML. |
+| **Field** | A named, typed attribute on an entity type, declared in schema config. See sec3 §3.5 for supported types. |
+| **Relationship** | A directional, typed edge connecting two entities. Declared in schema config with cardinality constraints. |
+| **External ID** | An identifier from an upstream system mapped to a Hippo entity UUID. Enables cross-system lookups. |
 | **Adapter** | A pluggable implementation of a storage or integration interface. |
 | **Provenance record** | An immutable record of a change to any entity, including what changed, when, and by whom. |
 
 ---
-

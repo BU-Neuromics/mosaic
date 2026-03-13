@@ -1,4 +1,4 @@
-# Hippo — Omics Metadata Tracking Service
+# Hippo — Metadata Tracking Service
 ## Specification Index
 
 **Codename:** Hippo  
@@ -11,13 +11,15 @@
 
 | File | Section | Status | Notes |
 |---|---|---|---|
-| `sec1_overview.md` | 1. Overview & Scope | ✅ Complete | Reviewed and approved |
-| `sec2_architecture.md` | 2. Architecture | ✅ Complete | Reviewed and approved |
-| `sec3_data_model.md` | 3. Data Model | 🔄 In review | v0.2 — system fields, status enum, LinkML DSL updated |
+| `sec1_overview.md` | 1. Overview & Scope | 🔄 In review | Generalized — domain-specific terms removed |
+| `sec2_architecture.md` | 2. Architecture | 🔄 In review | Generic entity routing, domain-neutral examples |
+| `sec3_data_model.md` | 3. Data Model | 🔄 In review | v0.3 — conceptual model only; storage detail moved to sec3b |
+| `sec3b_relational_storage.md` | 3b. Relational Storage Mapping | 🔄 In review | Reference impl for SQLite/PostgreSQL adapters |
 | `sec4_api_layer.md` | 4. API Layer | ⬜ Not started | |
 | `sec5_ingestion.md` | 5. Ingestion & Integration | ⬜ Not started | |
 | `sec6_provenance.md` | 6. Provenance & Audit | ⬜ Not started | Closely coupled to sec3 |
 | `sec7_nfr.md` | 7. Non-Functional Requirements | ⬜ Not started | |
+| `appendix_a_example_schema_omics.md` | Appendix A. Example Schema (Omics) | 🔄 In review | Example deployment config; not system spec |
 
 ---
 
@@ -31,15 +33,16 @@
 | Plugin system | Entry points (`hippo.storage_adapters`, `hippo.external_adapters`) | sec2 |
 | Storage backend v0.1 | SQLite via stdlib `sqlite3` | sec2 |
 | Data model approach | Config-driven relational + graph-shaped API; graph DB as future adapter | sec3 |
-| Temporal metadata | Provenance log only — not stored on entity tables | sec3 |
-| Entity lifecycle | `status` enum column; partial index on `active` | sec3 |
-| Status values | active, archived, superseded, deleted, distributed, removed | sec3 |
+| Temporal metadata | Provenance log only — not stored on entities; computed at read time | sec3 |
+| Entity lifecycle | `is_available` boolean; storage adapters optimize for this filter | sec3, sec3b |
+| Lifecycle semantics | Reason for unavailability stored in provenance events, not on entities | sec3 |
 | Supersession | System-level `superseded_by` relationship; atomic SDK operation | sec3 |
 | Schema authoring | Hippo DSL (YAML/JSON) compiled transiently to LinkML | sec3 |
 | LinkML output | On-demand via `hippo compile-schema`; not auto-committed | sec3 |
-| Workflow tracking | WorkflowRun in default schema; execution state in `properties` | sec3 |
 | Graph DB | Future adapter option; not v0.1 scope | sec3 |
 | Multi-tenancy | Out of scope for v0.1 | sec3 |
+| Conceptual/storage separation | Sec3 defines conceptual data model only; relational storage mapping in sec3b | sec3, sec3b |
+| Domain-neutral spec | System spec contains no domain-specific schema; omics types removed | sec1, sec2, sec3 |
 
 ---
 
@@ -47,7 +50,8 @@
 
 | Question | Section | Priority |
 |---|---|---|
-| WorkflowRun execution state — enum extension vs properties JSON? | sec3/sec4 | Medium |
+| ~~WorkflowRun execution state — enum extension vs properties JSON?~~ | sec3/sec4 | ✅ Resolved — dedicated enum field (domain schema decision, no longer in system spec) |
+| Where does the omics schema ultimately live? (config repo, `schemas/omics/`, deferred) | — | Medium |
 | Pagination strategy for large query results | sec4 | High |
 | Ingestion idempotency key design | sec5 | High |
 | Provenance retention policy | sec6 | Medium |

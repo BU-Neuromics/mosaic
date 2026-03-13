@@ -72,10 +72,9 @@ hippo/
 ├── rest/
 │   ├── app.py                   # FastAPI app object (primary artifact)
 │   ├── routers/
-│   │   ├── donors.py
-│   │   ├── samples.py
-│   │   ├── datafiles.py
-│   │   └── datasets.py
+│   │   ├── entities.py          # Generic entity CRUD — dispatches by entity_type
+│   │   ├── relationships.py     # Relationship operations
+│   │   └── ingestion.py         # Batch ingestion endpoints
 │   ├── dependencies.py          # Dependency injection (SDK client, config)
 │   ├── auth.py                  # Auth middleware stub (no-op in v0.1)
 │   └── schemas.py               # Pydantic request/response models
@@ -91,7 +90,7 @@ hippo/
 │   └── defaults.py              # Default config values
 │
 └── schema/
-    └── default_schema.yaml      # Bundled default schema for omics datasets
+    └── example_schema.yaml      # Example schema for reference
 ```
 
 ### 2.3 Adapter Pattern
@@ -208,8 +207,8 @@ adapter:                         # Which storage backend to use and its settings
   sqlite:
     path: ./hippo.db
 
-schema:                          # Path to entity schema definition (see Section 3)
-  path: ./schema.yaml            # Defaults to bundled default_schema.yaml if omitted
+schema:                          # Path to entity schema definition (required — see Section 3)
+  path: ./schema.yaml            # Hippo DSL or LinkML; no default schema is bundled
 
 server:                          # REST API server settings (only needed for hippo serve)
   host: 0.0.0.0
@@ -233,10 +232,10 @@ injected into route handlers via FastAPI's dependency system:
 def get_client() -> HippoClient:
     return _client  # module-level singleton initialized at startup
 
-# hippo/rest/routers/samples.py
-@router.get("/samples")
-def list_samples(filters: SampleQuery, client: HippoClient = Depends(get_client)):
-    return client.query.samples(filters)
+# hippo/rest/routers/entities.py
+@router.get("/{entity_type}")
+def list_entities(entity_type: str, filters: dict, client: HippoClient = Depends(get_client)):
+    return client.query(entity_type, **filters)
 ```
 
 For local SDK usage, the caller instantiates `HippoClient` directly:
@@ -245,7 +244,7 @@ For local SDK usage, the caller instantiates `HippoClient` directly:
 from hippo import HippoClient, HippoConfig
 
 client = HippoClient(HippoConfig.from_file("hippo.yaml"))
-results = client.query.samples(brain_region="hippocampus", modality="RNASeq")
+results = client.query("Item", category="task", completion_state="pending")
 ```
 
 ### 2.6 Transport Layer
