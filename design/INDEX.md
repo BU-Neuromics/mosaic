@@ -3,8 +3,8 @@
 
 **Codename:** Hippo  
 **Component:** Metadata Tracking Service (MTS)  
-**Version:** 0.1 — First Complete Draft  
-**Status:** Ready for review
+**Version:** 0.1 — Implementation Ready  
+**Status:** Ready for implementation
 
 ---
 
@@ -21,6 +21,10 @@
 | `sec6_provenance.md` | 6. Provenance & Audit | ✅ Draft v0.1 | Event model, structured context, storage, history API, retention |
 | `sec7_nfr.md` | 7. Non-Functional Requirements | ✅ Draft v0.1 | Performance targets, scalability tiers, reliability, schema sync roadmap |
 | `appendix_a_example_schema_omics.md` | Appendix A. Example Schema (Omics) | ✅ Draft v0.1 | Complete DSL with `search:`, polymorphic extension example |
+| `appendix_b_implementation_guide.md` | Appendix B. Implementation Guide | ✅ Draft v0.1 | Build order, module map, error hierarchy, invariants, test strategy, OpenSpec mapping |
+| `reference_hippo_yaml.md` | Reference: `hippo.yaml` Config Schema | ✅ Draft v0.1 | All valid keys, types, defaults, env var substitution, minimal configs |
+| `reference_validators_yaml.md` | Reference: `validators.yaml` Format | ✅ Draft v0.1 | Complete field spec, expand syntax, all built-in presets, execution semantics |
+| `reference_cel_context.md` | Reference: CEL Evaluation Context | ✅ Draft v0.1 | All context variables, CEL types, expanded field shapes, available functions, common patterns |
 
 ---
 
