@@ -188,6 +188,21 @@ adapter:
 New storage backends can be added by implementing `EntityStore` and registering the class — no
 changes to core SDK logic required.
 
+**Multi-instance adapter contract:** Storage adapters used in multi-instance deployments
+(i.e. any adapter other than SQLite) **must** implement entity creation and ExternalID
+registration as atomic server-side upserts — not as application-level read-then-write
+sequences. Specifically:
+
+- Entity creation: `INSERT ... ON CONFLICT (id) DO UPDATE` (PostgreSQL) or equivalent
+  conditional write (DynamoDB)
+- ExternalID registration: atomic on `(entity_id, system, external_id)` uniqueness constraint
+
+This requirement exists because multiple Hippo instances can receive concurrent writes for the
+same entity or ExternalID. Application-level read-then-write creates a race window that leads
+to duplicate records. The SQLite adapter is exempt because SQLite's single-writer WAL mode
+serialises all writes naturally — concurrent multi-instance use of SQLite is not supported
+(see sec7 §7.3).
+
 #### Plugin System
 
 Hippo supports third-party adapter packages via Python entry points (`importlib.metadata`).

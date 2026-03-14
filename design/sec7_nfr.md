@@ -109,9 +109,33 @@ Migration path: `hippo migrate` applies schema to new adapter; data migration is
 
 #### REST server scaling
 
-The REST server (Uvicorn + FastAPI) scales horizontally behind a load balancer. Each worker
-maintains its own SQLite connection in WAL mode. Write throughput is still bounded by SQLite's
-single-writer model; reads scale linearly with workers.
+The REST server (Uvicorn + FastAPI) is **fully stateless** — no in-process mutable state
+spans requests. Multiple instances behind a load balancer are transparent to callers.
+
+All distributed-systems concerns (transaction atomicity, upsert race conditions, replication,
+failover) are delegated entirely to the storage adapter. The API layer has no distributed
+logic of its own.
+
+**Multi-instance operational constraint (v0.1):** Schema changes require a **restart-on-migrate**
+procedure: drain all instances, run `hippo migrate` against the storage backend, restart
+all instances. This is standard operational practice (30–60s downtime window) and acceptable
+for the expected v0.1 schema change frequency (infrequent, deliberate).
+
+The schema is loaded into memory at startup and held for the lifetime of the process. There
+is no dynamic schema reload in v0.1.
+
+#### Planned schema sync roadmap (post-v0.1)
+
+The foundation for zero-downtime schema changes is already in place (additive-only migrations,
+schema version tracked in `hippo_meta`). The roadmap to eliminate restart-on-migrate:
+
+| Phase | Change | Complexity |
+|---|---|---|
+| **v0.2** | Schema version check on every write: compare instance's cached version against `hippo_meta`. Return `503 Service Unavailable` + `Retry-After: 5s` if mismatch. Eliminates silent data inconsistency risk; operators see 503s as a restart signal. | Low |
+| **v0.3** | Schema version polling: each instance polls `hippo_meta` on a short interval (default 10s) and reloads schema in-memory if the version changes. No new infrastructure dependencies — polling uses the existing storage adapter. | Moderate |
+| **v0.3+** | `hippo migrate` enforces the expand-contract convention for new required fields: required fields must be introduced as optional in one migration and made required in a subsequent one. Eliminates the remaining validation-inconsistency window during transitions. | Moderate |
+
+These phases build incrementally on the existing design without architectural changes.
 
 ---
 
