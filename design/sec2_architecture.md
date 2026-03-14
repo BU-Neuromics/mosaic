@@ -633,3 +633,129 @@ startup identifying both packages.
 **Extending loader-provided types:** Deferred to post-v0.1.
 
 ---
+
+### 2.13 Validation Infrastructure
+
+Hippo's write path enforces two tiers of validation before committing any change.
+
+#### Tier 1: Schema validation (built-in)
+
+Runs on every write. Enforces structural constraints declared in `schema.yaml`:
+- Required fields present and correctly typed
+- Enum values within declared set
+- `ref` fields point to an existing, available entity of the correct type
+- Relationship cardinality constraints
+
+Raises `SchemaValidationError` on failure. Cannot be disabled.
+
+#### Tier 2: Config-driven and plugin validators
+
+Optional. Loaded from the path declared in `hippo.yaml` (`validators:` key). If absent, this
+tier is skipped entirely. Two sub-tiers run in order:
+
+**Tier 2a — `validators.yaml` config-driven validators** (no Python required):
+
+```yaml
+validators:
+  - name: <identifier>
+    entity_types: [EntityType, ...]   # null = all types; subtype-aware (is-a)
+    on: [create, update, availability_change, relationship]  # default: all
+    expand:                           # paths to pre-fetch before CEL evaluation
+      - field_name                    # scalar ref: replaced with full entity dict
+      - field_name.child              # chained ref
+      - field_name[]                  # relationship collection: batch-fetched
+      - field_name[].child            # child field on each element
+    when: '<CEL expression>'          # skip if false
+    condition: '<CEL expression>'     # must be true to pass
+    requires: [field_a, field_b]      # shorthand: these fields must be non-null
+    error: "message {entity.field}"   # supports {entity.*} and {existing.*}
+    max_expand_list_size: 200         # default 200, hard cap 1000
+```
+
+CEL context: `entity` (proposed state, with expand paths populated) and `existing`
+(current state; `null` for creates). Built-in presets (`ref_check`, `count_constraint`,
+`immutable_field`, `field_required_if`, `no_self_ref`) expand to this format.
+
+**Tier 2b — Python plugin validators** (`hippo.write_validators` entry points):
+
+```python
+class WriteValidator(ABC):
+    name: str
+    entity_types: list[str] | None    # None = all; subtype-aware
+    priority: int = 0                 # lower runs first
+
+    @abstractmethod
+    def validate(self, operation: WriteOperation,
+                 client: HippoClient) -> ValidationResult: ...
+
+@dataclass
+class WriteOperation:
+    kind: Literal["create", "update", "availability_change", "relationship"]
+    entity_type: str
+    entity_id: str
+    proposed: dict
+    existing: dict | None
+    actor: str
+    provenance_context: dict | None   # structured context from caller (e.g. workflow run id)
+```
+
+**Full execution order on every write:**
+```
+1. Schema validation (Tier 1, SchemaValidationError)
+2. Config-driven validators (Tier 2a, declaration order, RuleValidationError)
+3. Plugin validators (Tier 2b, priority order, RuleValidationError)
+4. Commit + record provenance event
+```
+Atomic — any failure rolls back the transaction; no provenance event is written.
+
+---
+
+### 2.14 Reference Loader System
+
+Reference loaders install community-standard ontology data as regular Hippo entities.
+Distributed as `hippo-reference-<name>` pip packages; discovered via `hippo.reference_loaders`
+entry points.
+
+**`ReferenceLoader` ABC:**
+
+```python
+class ReferenceLoader(ABC):
+    name: str           # e.g. "fma", "ensembl", "go"
+    description: str
+
+    @abstractmethod
+    def versions(self) -> list[str]: ...
+    # Available version strings e.g. ["3.3", "3.4"]
+
+    @abstractmethod
+    def entity_types(self) -> list[str]: ...
+    # Entity type names this loader creates e.g. ["AnatomyTerm"]
+
+    @abstractmethod
+    def schema_fragment(self) -> dict: ...
+    # Entity + relationship definitions in Hippo DSL; merged on install
+
+    @abstractmethod
+    def load(self, client: HippoClient, version: str, **kwargs) -> LoadResult: ...
+```
+
+**Install lifecycle (`hippo reference install <name>`):**
+1. Resolve loader from `hippo.reference_loaders` entry points
+2. Call `loader.schema_fragment()`, merge into deployed schema, run `hippo migrate`
+3. Call `loader.load(client, version)` to ingest the data
+4. Record `{loader_name: version}` in `hippo_meta` under key `reference_versions`
+
+**User schema dependency declaration:**
+
+```yaml
+# schema.yaml
+requires:
+  - hippo-reference-fma>=3.3
+  - hippo-reference-ensembl>=GRCh38.109
+```
+
+`hippo validate` checks `requires:` and raises `ConfigError` if any loader is not installed.
+Users reference loader-provided entity types directly in their schema without redeclaring them.
+Extending loader-provided types is deferred — not in v0.1.
+
+---
