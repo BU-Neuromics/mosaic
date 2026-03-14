@@ -1,0 +1,28 @@
+architectural_impact:
+- change_type: new
+  component: hippo.config
+  description: HippoConfig Pydantic model and hippo.yaml loader with env var substitution
+- change_type: new
+  component: hippo.schema
+  description: 'SchemaConfig Pydantic model; Hippo DSL YAML parser; cycle detection
+    for base: inheritance'
+- change_type: new
+  component: hippo.core.types
+  description: 'Shared SDK types: Filter, PaginatedResult, ScoredMatch, WriteOperation,
+    ValidationResult, ProvenanceRecord, IngestResult'
+- change_type: new
+  component: hippo.core.errors
+  description: 'Full error hierarchy: HippoError, ConfigError, SchemaError, ValidationError,
+    EntityNotFoundError, AdapterError and subclasses'
+features: []
+id: epic-001
+outcome: 'A coding agent can parse a valid hippo.yaml and schema.yaml into fully validated
+  Pydantic models with a complete error hierarchy and no I/O dependencies.
+
+  '
+success_metrics:
+- name: config_parse_coverage
+  target: All valid hippo.yaml fields parse without error; all invalid inputs raise
+    ConfigError or SchemaError with a clear message
+  unit: test cases passing
+title: Foundation - Config, Schema Parsing, and Core Types

@@ -1,0 +1,43 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "hippo"
+version = "0.1.0"
+description = "SDK-first, infrastructure-agnostic metadata tracking service for bioinformatics research"
+readme = "README.md"
+requires-python = ">=3.10"
+license = {text = "MIT"}
+dependencies = [
+    "pydantic>=2.0",
+    "pyyaml",
+    "typer",
+    "fastapi",
+    "uvicorn[standard]",
+    "cel-python",
+]
+
+[project.optional-dependencies]
+rest = ["fastapi", "uvicorn[standard]"]
+dev = [
+    "pytest",
+    "pytest-cov",
+    "httpx",   # FastAPI test client
+]
+
+[project.scripts]
+hippo = "hippo.cli.main:app"
+
+[project.entry-points."hippo.storage_adapters"]
+sqlite = "hippo.adapters.sqlite.store:SQLiteEntityStore"
+
+[project.entry-points."hippo.write_validators"]
+schema = "hippo.validators.schema_validator:SchemaValidator"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/hippo"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]

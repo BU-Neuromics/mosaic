@@ -1,0 +1,19 @@
+# IngestionPipeline Result Tracking and Metrics
+
+## Goal
+IngestionPipeline Result Tracking and Metrics: Implementation of IngestResult tracking with counts for created, updated, unchanged, and error records.
+
+## Acceptance Criteria
+- Given an ingestion process completes successfully, when they check the IngestResult, then the created count is accurately tracked and equals the number of new records added
+- Given an ingestion process completes successfully, when they check the IngestResult, then the updated count is accurately tracked and equals the number of existing records modified
+- Given an ingestion process completes successfully, when they check the IngestResult, then the unchanged count is accurately tracked and equals the number of records that remained unmodified
+- Given an ingestion process encounters errors during processing, when they retrieve results, then error information is properly logged with context including the record ID and error message
+- Given an ingestion process encounters errors during processing, when they retrieve results, then the error count is accurately tracked and equals the number of failed records
+- Given multiple ingestion runs occur, when they analyze IngestResult history, then all counts are preserved for reporting across multiple execution cycles
+- Given multiple ingestion runs occur, when they analyze IngestResult history, then timestamps are preserved for each execution to enable temporal reporting
+- Given an ingestion process completes with mixed results, when they check the IngestResult, then all count types (created, updated, unchanged, errors) are accurately tracked and sum to total records processed
+- Given an ingestion process is initiated with invalid data, when it completes, then error information is properly logged including source file path and error type
+- Given an ingestion process is completed, when they retrieve results, then the IngestResult object contains all necessary tracking metrics with appropriate data types
+
+## Constraints
+- Complexity: medium

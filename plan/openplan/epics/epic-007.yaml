@@ -1,0 +1,21 @@
+architectural_impact:
+- change_type: new
+  component: hippo.cli.main
+  description: Typer CLI with all commands wired to HippoClient and supporting modules
+- change_type: new
+  component: hippo.schema.migrator
+  description: Schema diff engine detecting additive changes, generating migration
+    plan, and applying DDL
+features: []
+id: epic-007
+outcome: 'All hippo CLI commands are implemented. A user can initialize a project,
+  run migrations, ingest data, manage reference loaders, and start the server entirely
+  through the CLI.
+
+  '
+success_metrics:
+- name: cli_command_coverage
+  target: 'All commands implemented: init, serve, migrate, validate, ingest, reference
+    install/update/list, compile-schema'
+  unit: commands implemented
+title: CLI

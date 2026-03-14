@@ -1,0 +1,22 @@
+acceptance_criteria:
+- Given a hippo.yaml with invalid YAML syntax, when the config loader attempts to
+  parse it, then a ConfigError is raised with a message indicating "invalid YAML syntax"
+- Given a hippo.yaml with missing required fields, when the config loader validates
+  it, then a ConfigError is raised with a message identifying the missing field
+- Given a schema.yaml with invalid JSON Schema definition, when the schema parser
+  attempts to process it, then a SchemaError is raised with a message specifying the
+  parsing error location and description
+- Given an operation processes an entity that does not exist in the system, when the
+  operation tries to access the entity, then an EntityNotFoundError is raised with
+  a message indicating the resource name and ID
+- Given an adapter encounters an invalid configuration during initialization, when
+  the adapter attempts to load its settings, then an AdapterError is raised with details
+  about the misconfiguration
+complexity: low
+dependencies: []
+description: Implement complete error hierarchy including HippoError, ConfigError,
+  SchemaError, ValidationError, EntityNotFoundError, AdapterError and subclasses for
+  robust error handling.
+id: epic-001-feature-004
+spec_ready: true
+title: Full Error Hierarchy Implementation

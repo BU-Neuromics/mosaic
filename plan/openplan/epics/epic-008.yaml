@@ -1,0 +1,24 @@
+architectural_impact:
+- change_type: new
+  component: hippo.adapters.sqlite.search
+  description: FTS5 virtual table creation, population on write, and ranked search
+    query
+- change_type: modify
+  component: hippo.adapters.base
+  description: Add search() and search_capabilities() methods to EntityStore ABC
+features:
+- id: epic-008-feature-001
+- id: epic-008-feature-002
+- id: epic-008-feature-003
+id: epic-008
+outcome: 'Fields declared with search: fts in the schema support full-text search
+  via SQLite FTS5. The search() method returns ScoredMatch results ordered by relevance.
+  Adapter capabilities are declared at startup and validated against schema requirements.
+
+  '
+success_metrics:
+- name: fts_search_correctness
+  target: FTS5 virtual tables populated on every write; search() returns results ordered
+    by rank desc; SearchCapabilityError raised at startup for unsupported search modes
+  unit: confirmed by test assertions
+title: Full-Text Search via FTS5

@@ -1,0 +1,37 @@
+acceptance_criteria:
+- Given a valid CSV file with headers exists, when the ingestion pipeline is invoked,
+  then each record is parsed correctly and inserted into the system with proper error
+  handling for malformed rows
+- Given a valid JSON file containing an array of structured data exists, when the
+  ingestion pipeline is invoked, then each record is processed and upserted based
+  on the external ID field provided in the record
+- Given a batch of records contains duplicate external IDs, when the ingestion pipeline
+  is invoked, then records are properly upserted with accurate counts for created,
+  updated, and unchanged records
+- Given an invalid CSV file without proper headers is provided, when the ingestion
+  pipeline is invoked, then an error is thrown with appropriate error message indicating
+  the invalid format
+- Given a JSON file with malformed data structure is provided, when the ingestion
+  pipeline is invoked, then records are skipped with errors logged and processing
+  continues for valid records
+- Given a CSV file exceeding maximum allowed row count is provided, when the ingestion
+  pipeline is invoked, then processing fails gracefully with an appropriate error
+  message
+- Given a JSONL file contains records with missing external ID fields, when the ingestion
+  pipeline is invoked, then records are processed with proper handling of missing
+  IDs and appropriate error logging
+- Given a batch of records includes both new and existing external IDs, when the ingestion
+  pipeline is invoked, then new records are created and existing records are updated
+  as expected
+- Given an empty CSV file is provided, when the ingestion pipeline is invoked, then
+  no processing occurs and zero counts returned in response
+- Given a JSON file with nested object structures is provided, when the ingestion
+  pipeline is invoked, then nested fields are flattened appropriately for storage
+  in the system
+complexity: high
+dependencies: []
+description: Implementation of data ingestion capabilities for CSV, JSON, and JSONL
+  formats with upsert-by-ExternalID functionality.
+id: epic-004-feature-005
+spec_ready: true
+title: IngestionPipeline CSV/JSON Processing

@@ -1,0 +1,25 @@
+architectural_impact:
+- change_type: new
+  component: hippo.validators.base
+  description: WriteValidator ABC, WriteOperation dataclass, ValidationResult dataclass
+- change_type: new
+  component: hippo.validators.schema_validator
+  description: Tier 1 schema validator for required fields, types, enums, ref existence;
+    runs at priority -1
+- change_type: new
+  component: hippo.validators.registry
+  description: Validator discovery via entry points, ordering by priority, and write-path
+    execution pipeline
+features: []
+id: epic-003
+outcome: 'Every write operation is validated against the schema before committing.
+  Required fields, type constraints, enum ranges, and ref existence are enforced with
+  no bypass path.
+
+  '
+success_metrics:
+- name: schema_validation_non_bypassable
+  target: No write method or REST endpoint accepts a skip_validation parameter; 100%
+    of write tests include a validation assertion
+  unit: confirmed in code review
+title: Schema Validation - Tier 1

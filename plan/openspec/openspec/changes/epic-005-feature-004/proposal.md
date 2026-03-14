@@ -1,0 +1,14 @@
+# Built-in Preset Expansion System
+
+## Goal
+Built-in Preset Expansion System: Implement the five built-in presets (ref_check, count_constraint, immutable_field, field_required_if, no_self_ref) for common validation patterns.
+
+## Acceptance Criteria
+- Given a validator uses ref_check preset with a reference constraint, when validation runs on a document with an invalid reference, then it correctly rejects the document with a specific reference constraint violation error
+- Given a validator uses ref_check preset with a reference constraint, when validation runs on a document with a valid reference, then it correctly accepts the document without any errors
+- Given a validator uses count_constraint preset with a collection count limit, when validation runs on a collection exceeding the allowed count, then it throws an appropriate count constraint violation error
+- Given a validator uses count_constraint preset with a collection count limit, when validation runs on a collection within the allowed count limit, then it correctly accepts the document without any errors
+- Given a validator uses immutable_field preset and attempts to modify an immutable field, when validation runs, then it correctly rejects the change with an immutable field violation error
+
+## Constraints
+- Complexity: medium

@@ -1,0 +1,30 @@
+acceptance_criteria:
+- Given a schema with a field declared with search fts, when hippo migrate runs, then
+  an FTS5 virtual table is created for that field with the correct content table configuration
+- Given an entity is written via client.put(), when the write completes, then the
+  FTS5 virtual table for all fts-indexed fields on that entity type is updated in
+  the same transaction
+- Given an entity's availability is set to false, when the write completes, then the
+  FTS5 content for that entity is removed from the virtual table
+- Given a schema migration adds a new fts field to an existing entity type, when hippo
+  migrate runs, then a new FTS5 virtual table is created and backfilled with existing
+  entity data
+- Given an FTS5 virtual table exists for an entity type, when a new entity is created
+  with data matching a search term, then the entity can be retrieved using full-text
+  search queries on that field
+- Given an FTS5 virtual table exists for an entity type, when an entity's text content
+  is updated, then the FTS5 table is updated to reflect the new content within the
+  same transaction
+- Given an entity has been written and indexed in an FTS5 table, when the entity is
+  deleted from the main storage, then the corresponding entry is removed from the
+  FTS5 virtual table
+complexity: medium
+dependencies:
+- epic-002-feature-002
+- epic-002-feature-003
+description: Create and maintain SQLite FTS5 virtual tables for all schema fields
+  declared with search fts. Tables are created during schema provisioning and populated
+  on every entity write.
+id: epic-008-feature-001
+spec_ready: true
+title: FTS5 Virtual Table Management

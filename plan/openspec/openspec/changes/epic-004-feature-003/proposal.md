@@ -1,0 +1,19 @@
+# HippoClient ExternalID Management
+
+## Goal
+HippoClient ExternalID Management: Implementation of external ID operations including register_external_id and supersede for managing entity identification across systems.
+
+## Acceptance Criteria
+- Given an entity exists with no external identifiers, when the client calls register_external_id with a new external ID, then the external identifier is associated with the entity and can be retrieved later using get_by_external_id
+- Given an entity has an existing external ID, when the client calls register_external_id with a different external ID, then both external IDs are associated with the entity and can be retrieved later
+- Given an entity has an existing external ID, when the client calls supersede with a new external ID, then the old external ID is replaced with the new one while preserving the entity's history and the new ID can be retrieved later
+- Given an entity has an existing external ID, when the client calls supersede operation twice sequentially, then each supersede replaces the previous external ID while preserving all historical associations
+- Given multiple entities exist with overlapping external IDs, when the client calls get_by_external_id with that ID, then the correct entity is returned based on latest registration timestamp
+- Given an entity has only one external ID and it is superseded, when the client calls get_by_external_id with the old ID, then a NotFound error or null response is returned indicating the ID is no longer associated with any entity
+- Given an entity has multiple external IDs, when the client calls get_by_external_id with one of those IDs, then that specific entity is returned and the other associations remain intact
+- Given two entities exist with the same external ID, when the client registers a third external ID for first entity, then both entities can be retrieved separately by their new external ID
+- Given an entity exists with multiple external IDs, when the client calls register_external_id with an ID that already exists for a different entity, then registration fails with appropriate error code or validation message
+- Given no entity exists with a particular external ID, when the client calls get_by_external_id, then a NotFound error is returned
+
+## Constraints
+- Complexity: medium

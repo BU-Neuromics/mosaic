@@ -1,0 +1,35 @@
+acceptance_criteria:
+- Given the SQLite adapter is active and a schema declares search fts on a field,
+  when hippo starts up, then startup succeeds with no error
+- Given the SQLite adapter is active and a schema declares search embedding on a field,
+  when hippo starts up, then a SearchCapabilityError is raised at startup before any
+  requests are served
+- Given the SQLite adapter is active and a REST search endpoint is called with a field
+  that has search fts declared, when the query executes, then results are returned
+  correctly via the adapter search method
+- Given the SQLite adapter is active and search_capabilities() is called, when the
+  method executes, then it returns a set containing 'fts'
+- Given the SQLite adapter is inactive and a schema declares search fts on a field,
+  when hippo starts up, then startup succeeds with no error
+- Given the SQLite adapter is inactive and a schema declares search embedding on a
+  field, when hippo starts up, then no error is raised during startup
+- Given the REST search endpoint is called with a field that has search fts declared,
+  when the query executes, then results are returned correctly via the adapter search
+  method regardless of adapter type
+- Given a schema declares search fts on a field and the SQLite adapter is active,
+  when search_capabilities() is called, then it returns a set containing 'fts'
+- Given the SQLite adapter is active, when search_capabilities() is called, then it
+  returns a set that includes 'fts' as one of the elements
+- Given a schema declares search embedding on a field and the SQLite adapter is active,
+  when hippo starts up, then a SearchCapabilityError is raised during startup before
+  any requests are served
+complexity: low
+dependencies:
+- epic-001-feature-002
+- epic-008-feature-001
+description: Implement search_capabilities() on EntityStore ABC and the SQLite adapter.
+  Hippo validates at startup that all schema-declared search modes are supported by
+  the active adapter, raising SearchCapabilityError for unsupported modes.
+id: epic-008-feature-003
+spec_ready: true
+title: Adapter Search Capability Declaration and Startup Validation

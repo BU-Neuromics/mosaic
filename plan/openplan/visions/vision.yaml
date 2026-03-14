@@ -1,0 +1,52 @@
+id: hippo-vision
+problem_statement: >
+  Bioinformatics research deployments lack a lightweight, infrastructure-agnostic metadata
+  tracking service that works identically from a single researcher's laptop (SQLite) to a
+  shared institutional server (PostgreSQL) to a cloud deployment (DynamoDB) — without
+  requiring code changes or cloud vendor lock-in. Existing solutions (Terra, DNAnexus) are
+  proprietary, cloud-native, and inaccessible to researchers working on-premise or with
+  sensitive data. Researchers need to track entities (subjects, samples, datafiles,
+  workflow runs), relationships between them, provenance of every change, and cross-system
+  identifiers from upstream systems (STARLIMS, HALO, REDCap) — all through a clean Python
+  SDK with no ORM boilerplate.
+
+target_users: >
+  Bioinformatics researchers and engineers at academic medical centers, VA hospitals, and
+  research institutes who need a metadata tracking backbone for multi-modal omics research.
+  Primary persona: a bioinformatician (Python proficient, not a backend engineer) who
+  manages sample metadata, sequencing data provenance, and upstream LIMS integrations for
+  a brain tissue bank or similar biorepository.
+
+objectives:
+  - Deliver a working Python SDK (HippoClient) that a bioinformatician can pip install and
+    use to track research entities with full provenance in under 30 minutes
+  - Support SQLite (zero-config local), PostgreSQL (shared server), and DynamoDB (cloud)
+    backends through a pluggable adapter pattern requiring no application code changes
+  - Provide a config-driven schema and validation system that non-engineers can maintain
+    without writing Python
+  - Enable safe multi-instance deployment with full audit trail and no data loss guarantees
+
+success_metrics:
+  - name: time_to_first_entity
+    target: "A bioinformatician can pip install hippo, configure a schema, and write their first entity in under 30 minutes following the README"
+    unit: minutes
+  - name: adapter_portability
+    target: "Switching from SQLite to PostgreSQL requires only a change to hippo.yaml — zero application code changes"
+    unit: lines of code changed
+  - name: validation_coverage
+    target: "All write operations are validated against schema (Tier 1) and config rules (Tier 2) with no bypass path; 100% of write tests assert provenance events"
+    unit: percent
+  - name: provenance_completeness
+    target: "Every entity mutation produces a structured, immutable provenance event; entity state can be reconstructed at any past timestamp"
+    unit: percent of writes with provenance event
+
+risks:
+  - description: CEL sandbox (cel-python) may have performance overhead for high-frequency writes with many expand paths
+    severity: medium
+    mitigation: Benchmark at Phase 5; pre-condition guards (`when:`) reduce unnecessary evaluation; expand paths are batch-fetched
+  - description: SQLite WAL mode has a single-writer constraint that limits write throughput for shared-server deployments
+    severity: low
+    mitigation: Document threshold clearly; PostgreSQL adapter is the upgrade path; SQLite targets single-researcher and small-team use cases
+  - description: LinkML compilation step (schema DSL → LinkML) may be slow or brittle for large schemas
+    severity: low
+    mitigation: Compilation is on-demand only (hippo compile-schema); hot path uses parsed SchemaConfig directly

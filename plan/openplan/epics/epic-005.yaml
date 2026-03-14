@@ -1,0 +1,29 @@
+architectural_impact:
+- change_type: new
+  component: hippo.validators.cel_validator
+  description: CEL condition evaluation loading validators.yaml and evaluating against
+    constructed context
+- change_type: new
+  component: hippo.validators.expand
+  description: Expand path parser, batch fetcher, cycle detector, and max_size enforcer
+- change_type: new
+  component: hippo.validators.cel_context
+  description: CEL context construction with entity map, existing map, expanded field
+    merging, and type coercion
+- change_type: new
+  component: hippo.validators.presets
+  description: 'Built-in preset expansion: ref_check, count_constraint, immutable_field,
+    field_required_if, no_self_ref'
+features: []
+id: epic-005
+outcome: 'Config-driven business rule validators in validators.yaml are loaded, parsed,
+  and executed in the write path with correct expand path batch-fetching, cycle detection,
+  and all five built-in presets working correctly.
+
+  '
+success_metrics:
+- name: cel_expand_correctness
+  target: Expand path batch-fetch issues one query per list not N queries; cycle detection
+    prevents infinite expansion; max_expand_list_size cap is enforced
+  unit: confirmed by test assertions on query count
+title: CEL Validators - Tier 2 and Plugin System

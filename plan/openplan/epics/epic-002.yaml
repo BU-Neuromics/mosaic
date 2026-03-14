@@ -1,0 +1,25 @@
+architectural_impact:
+- change_type: new
+  component: hippo.adapters.base
+  description: EntityStore ABC with full method signatures for CRUD, search, and provenance
+- change_type: new
+  component: hippo.adapters.sqlite
+  description: SQLite EntityStore implementation with WAL mode, partial indexes, provenance
+    table, summary view, and immutability triggers
+- change_type: new
+  component: hippo.adapters.sqlite.schema_ddl
+  description: DDL generation from SchemaConfig including polymorphic class-table
+    inheritance strategy
+features: []
+id: epic-002
+outcome: 'Entities can be created, updated, queried, and soft-deleted against a SQLite
+  backend with full provenance recording. All writes are atomic. Provenance records
+  are immutable at the database level via triggers.
+
+  '
+success_metrics:
+- name: write_provenance_atomicity
+  target: 100% of write operations produce exactly one provenance event in the same
+    transaction
+  unit: percent
+title: SQLite Storage Adapter

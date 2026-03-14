@@ -1,0 +1,22 @@
+architectural_impact:
+- change_type: new
+  component: hippo.core.client
+  description: HippoClient with put, get, query, relate, unrelate, set_availability,
+    supersede, register_external_id, history, state_at, traverse
+- change_type: new
+  component: hippo.core.ingestion
+  description: 'IngestionPipeline: CSV/JSON/JSONL parsing, upsert-by-ExternalID, IngestResult
+    with created/updated/unchanged/errors counts'
+features: []
+id: epic-004
+outcome: 'The complete HippoClient public interface is implemented covering all entity
+  lifecycle operations, relationships, ExternalID management, provenance history,
+  and the IngestionPipeline.
+
+  '
+success_metrics:
+- name: sdk_interface_completeness
+  target: All methods in sec4 section 4.2 HippoClient interface are implemented and
+    tested
+  unit: methods implemented and tested
+title: Full HippoClient SDK

@@ -1,0 +1,26 @@
+architectural_impact:
+- change_type: new
+  component: hippo.rest.app
+  description: FastAPI app factory create_app mounting all routers with global error
+    handlers
+- change_type: new
+  component: hippo.rest.routers
+  description: Entity, history, availability, supersede, relationship, external_id,
+    search, ingest, and schema routers
+- change_type: new
+  component: hippo.rest.auth
+  description: AuthMiddleware ABC and pass-through stub with X-Hippo-Actor header
+    extraction
+features: []
+id: epic-006
+outcome: 'The full REST API is available as a FastAPI application. All endpoints in
+  the design spec section 4.3 are implemented as thin wrappers over HippoClient with
+  correct HTTP status codes and auto-generated OpenAPI docs.
+
+  '
+success_metrics:
+- name: endpoint_coverage
+  target: All endpoints in sec4 section 4.3 implemented; ValidationError maps to 422,
+    EntityNotFoundError to 404, AdapterError to 500
+  unit: endpoints implemented and tested
+title: REST Transport Layer

@@ -1,0 +1,21 @@
+acceptance_criteria:
+- Given an entity with a fts-indexed field containing "prefrontal cortex", when client.search()
+  is called with query "prefrontal", then the entity appears in results with score
+  greater than 0.0
+- Given multiple entities matching a query, when client.search() returns results,
+  then they are ordered by score descending with score values between 0.0 and 1.0
+- Given a min_score parameter is passed to search(), when results are returned, then
+  no result has a score below min_score
+- Given a limit parameter is passed to search(), when results are returned, then at
+  most limit results are returned
+- Given client.search() is called on a field not declared with search fts, when the
+  query executes, then a SearchCapabilityError is raised
+complexity: medium
+dependencies:
+- epic-008-feature-001
+- epic-004-feature-001
+description: Implement the EntityStore.search() method for the SQLite adapter using
+  FTS5 ranked queries. Returns list[ScoredMatch] ordered by relevance score descending.
+id: epic-008-feature-002
+spec_ready: true
+title: FTS5 Search Query and ScoredMatch Results
