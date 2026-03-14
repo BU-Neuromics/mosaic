@@ -449,9 +449,13 @@ fields:
         scope: entity_type
 ```
 
-Built-in validators for v0.1: `required`, `unique`, `range`, `uri_scheme`, `regex`,
-`min_length`, `max_length`. Custom validators register via the plugin system as Python
-callables.
+Built-in field validators for v0.1: `required`, `unique`, `range`, `uri_scheme`, `regex`,
+`min_length`, `max_length`. These are field-level structural constraints only.
+
+For cross-field and cross-entity business rule validation, see sec2 §2.13 (Validation
+Infrastructure) — config-driven `validators.yaml` rules (CEL-based) and Python plugin
+validators (`hippo.write_validators` entry points) are a separate, complementary system
+that runs in the write path after field validators.
 
 ---
 
