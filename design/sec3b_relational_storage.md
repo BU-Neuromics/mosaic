@@ -244,3 +244,94 @@ known — Cappella adapters and workflow pipelines should use this when querying
 subtype.
 
 ---
+
+---
+
+### 3b.8 Polymorphic Inheritance Storage
+
+When a schema declares `base:` on an entity type, the relational adapter uses a
+**class-table inheritance** strategy (also known as "joined table inheritance"):
+
+- The parent type has its own table containing system fields (`id`, `is_available`) and all
+  parent-declared fields
+- Each subtype has its own table containing only the fields specific to that subtype; it
+  shares the same `id` as the parent row
+- The parent table has a `__type__` discriminator column (TEXT, NOT NULL) recording the
+  concrete entity type name (e.g. `"BrainSample"`)
+
+**Example (BrainSample extends Sample):**
+
+```sql
+-- Parent table (Sample)
+CREATE TABLE samples (
+    id          TEXT PRIMARY KEY,
+    is_available BOOLEAN NOT NULL DEFAULT 1,
+    __type__    TEXT NOT NULL,            -- e.g. "Sample" or "BrainSample"
+    external_id TEXT,
+    tissue_type TEXT,
+    collection_date TEXT
+    -- ... other Sample fields
+);
+
+-- Subtype table (BrainSample-specific fields only)
+CREATE TABLE brain_samples (
+    id              TEXT PRIMARY KEY REFERENCES samples(id),
+    brain_region    TEXT,
+    hemisphere      TEXT CHECK (hemisphere IN ('left','right','bilateral','unknown')),
+    post_mortem_interval_hours REAL
+);
+```
+
+**Query strategy:**
+
+- `client.query("Sample")` → `SELECT s.*, bs.* FROM samples s LEFT JOIN brain_samples bs ON s.id = bs.id WHERE s.is_available = 1`
+- `client.query("Sample", exact_type=True)` → adds `WHERE s.__type__ = 'Sample'`
+- `client.query("BrainSample")` → `SELECT s.*, bs.* FROM samples s JOIN brain_samples bs ON s.id = bs.id WHERE s.is_available = 1`
+- The `LEFT JOIN` for polymorphic queries means subtype-specific fields are `null` on rows
+  that are plain `Sample` entities — callers can distinguish via `__type__`
+
+**Write strategy:**
+
+- Creating a `BrainSample` writes one row to `samples` (with `__type__ = "BrainSample"`)
+  and one row to `brain_samples` — both in the same transaction
+- Updating a `BrainSample` updates columns in whichever table(s) contain the changed fields
+- Availability changes only touch the `samples` table (the parent owns `is_available`)
+
+**Index strategy:**
+
+- Parent table fields follow the existing partial index strategy (§3b.2): partial indexes
+  on all `indexed: true` parent fields, scoped to `WHERE is_available = 1`
+- Subtype table fields get their own partial indexes, joining to the parent's availability:
+
+```sql
+CREATE INDEX idx_brain_samples_brain_region
+ON brain_samples (brain_region)
+WHERE id IN (SELECT id FROM samples WHERE is_available = 1);
+```
+
+**Migration DDL for new subtypes:**
+
+| Conceptual change | Relational DDL |
+|---|---|
+| Declare new subtype (e.g. `BrainSample: base: Sample`) | `CREATE TABLE brain_samples (id TEXT PRIMARY KEY REFERENCES samples(id), ...)` + `ALTER TABLE samples ADD COLUMN __type__ TEXT` (if first subtype) |
+| Add field to subtype | `ALTER TABLE brain_samples ADD COLUMN ...` |
+| Add field to parent type | `ALTER TABLE samples ADD COLUMN ...` (all subtypes inherit automatically via JOIN) |
+
+The `__type__` discriminator column is added to the parent table the first time any subtype
+is declared for that parent. Pre-existing rows receive `__type__ = "<ParentTypeName>"` as
+their default value via the migration.
+
+**Rationale for class-table over single-table inheritance:**
+
+- Single-table inheritance (all types in one table, nullable columns for subtype fields)
+  would produce very wide sparse tables as the number of subtypes grows — poor for
+  columnar storage patterns and confusing for direct SQL queries
+- Class-table inheritance keeps each table narrow and semantically coherent; SQL queries
+  against a subtype return only relevant columns
+- The JOIN overhead is acceptable for the expected query patterns in Hippo deployments
+
+**Opinionated decision:** Class-table inheritance is the mandated strategy for the SQLite
+and PostgreSQL adapters. Alternative adapters (e.g. graph database) may implement
+polymorphic inheritance differently, but must present identical semantics to the SDK.
+
+---
