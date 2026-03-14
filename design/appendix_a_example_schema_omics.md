@@ -191,3 +191,219 @@ System relationships (built-in, available on all entity types):
 ```
 
 ---
+
+### A.4 Complete Schema YAML (Hippo DSL)
+
+The full `schema.yaml` for this example deployment. This is what a deployer would author
+and commit to their config repository.
+
+```yaml
+version: "1.0"
+format: hippo-dsl
+
+# This example does not reference any external ontology packages.
+# A deployment that uses FMA anatomy terms or Ensembl gene IDs would declare them here:
+# requires:
+#   - hippo-reference-fma>=3.3
+#   - hippo-reference-ensembl>=GRCh38.109
+
+entities:
+
+  Subject:
+    description: "A biological subject who contributed one or more samples."
+    fields:
+      external_id:
+        type: string
+        required: true
+        indexed: true
+      species:
+        type: enum
+        values: [Homo sapiens, Mus musculus, Rattus norvegicus]
+        required: true
+      biological_sex:
+        type: enum
+        values: [male, female, unknown]
+      age_at_collection:
+        type: float
+        description: "Age in years at time of sample collection"
+      diagnosis:
+        type: string
+        indexed: true
+        search: fts    # enables full-text search on diagnosis field
+
+  Sample:
+    description: "A piece of biological material derived from a Subject."
+    fields:
+      external_id:
+        type: string
+        required: true
+        indexed: true
+      tissue_type:
+        type: string
+        required: true
+        indexed: true
+      tissue_region:
+        type: string
+        indexed: true
+        search: fts    # enables full-text search on region descriptions
+      collection_date:
+        type: date
+      passage:
+        type: int
+
+  # Example of polymorphic extension (base: = is-a inheritance).
+  # BrainSample IS a Sample — it is queryable as Sample and validates against Sample rules.
+  # A brain bank deployment would extend the generic omics schema this way.
+  BrainSample:
+    base: Sample
+    description: "A sample from a brain tissue collection."
+    fields:
+      brain_region:
+        type: string
+        indexed: true
+        search: fts
+      hemisphere:
+        type: enum
+        values: [left, right, bilateral, unknown]
+      post_mortem_interval_hours:
+        type: float
+
+  Datafile:
+    description: "A file at a known location containing data derived from one or more Samples."
+    fields:
+      uri:
+        type: uri
+        required: true
+        indexed: true
+      file_type:
+        type: enum
+        values: [fastq, bam, vcf, tsv, h5ad, idat, csv, other]
+        required: true
+        indexed: true
+      modality:
+        type: enum
+        values: [RNASeq, WGBS, WGS, ATAC, genotyping, proteomics, metabolomics, other]
+        required: true
+        indexed: true
+      file_size_bytes:
+        type: int
+      checksum_md5:
+        type: string
+      read_count:
+        type: int
+        validators:
+          - type: range
+            min: 0
+      genome_build:
+        type: string
+        indexed: true
+      is_primary:
+        type: bool
+        indexed: true
+
+  Dataset:
+    description: "A named, versioned logical collection of Datafiles."
+    fields:
+      name:
+        type: string
+        required: true
+        indexed: true
+        search: fts
+      version:
+        type: string
+        required: true
+      description:
+        type: string
+        search: fts
+      is_public:
+        type: bool
+        indexed: true
+
+  Workflow:
+    description: "A versioned analysis pipeline definition."
+    fields:
+      name:
+        type: string
+        required: true
+        indexed: true
+        search: fts
+      version:
+        type: string
+        required: true
+        indexed: true
+      description:
+        type: string
+        search: fts
+      repository_uri:
+        type: uri
+      language:
+        type: enum
+        values: [nextflow, snakemake, wdl, cwl, other]
+
+  WorkflowRun:
+    description: "A single execution of a Workflow."
+    fields:
+      execution_state:
+        type: enum
+        values: [pending, running, succeeded, failed]
+        required: true
+        indexed: true
+      executor:
+        type: string
+        description: "Nextflow run ID, AWS Batch job ID, etc."
+      started_at:
+        type: datetime
+      completed_at:
+        type: datetime
+      parameters:
+        type: json
+        required: true
+
+relationships:
+  - name: donated
+    from: Subject
+    to: Sample
+    cardinality: one-to-many
+    description: "A subject donated one or more samples"
+
+  - name: derived_from
+    from: Sample
+    to: Sample
+    cardinality: many-to-many
+    description: "A sample derived from another (e.g. dissection, aliquot)"
+    properties:
+      method: {type: string}
+
+  - name: generated
+    from: Sample
+    to: Datafile
+    cardinality: one-to-many
+
+  - name: input_to
+    from: Datafile
+    to: WorkflowRun
+    cardinality: many-to-many
+
+  - name: output_of
+    from: Datafile
+    to: WorkflowRun
+    cardinality: many-to-many
+
+  - name: instance_of
+    from: WorkflowRun
+    to: Workflow
+    cardinality: many-to-one
+    required: true
+
+  - name: contains
+    from: Dataset
+    to: Datafile
+    cardinality: many-to-many
+```
+
+> **Note:** The `BrainSample` type is included here to illustrate polymorphic extension.
+> A deployment that doesn't need brain-specific fields would simply omit it. The `donated`
+> and `derived_from` relationships declared `from: Sample` also cover `BrainSample` entities
+> because `BrainSample` is a subtype of `Sample`.
+
+---
