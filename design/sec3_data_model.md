@@ -131,6 +131,29 @@ See sec3b_relational_storage.md §3b.3 for the relational table schema.
 | `uri` | S3 URI, local path, or HTTPS URL | `"s3://bucket/key"` |
 | `ref` | Foreign reference to another Hippo entity by UUID | `"sample:abc-123"` |
 
+**Optional `search` declaration on string, enum, json, and ref fields:**
+
+```yaml
+fields:
+  preferred_label:
+    type: string
+    search: fts          # full-text search (SQLite FTS5, PostgreSQL tsvector)
+  description:
+    type: string
+    search: embedding    # vector similarity (adapter-specific model)
+  synonyms:
+    type: json           # list of strings treated as additional FTS tokens
+    search: synonym
+  fma_id:
+    type: string
+    indexed: true        # exact lookup only — no search: declaration
+```
+
+Supported search modes: `fts`, `embedding`, `synonym`. The active storage adapter declares
+which modes it supports via `search_capabilities()`. Hippo validates at startup that all
+schema-declared modes are supported; fails with `SearchCapabilityError` otherwise. Search
+returns `list[ScoredMatch]` — see sec2 §2.3 for the type definition.
+
 **`ref` type validation:** The `ref` format encodes the target entity type and UUID
 (e.g. `"sample:abc-123"`). The SDK validates at write time that (a) the referenced entity
 type exists in the current schema config, and (b) the referenced entity UUID exists and is
@@ -273,10 +296,47 @@ relationships:
     cardinality: many-to-many
 ```
 
-#### Schema inheritance
+#### Schema `requires:` block
 
-> **Example (omics deployment):** A brain tissue bank might extend the Sample type from
-> Appendix A with region-specific fields.
+A schema may declare dependencies on reference loader packages. `hippo validate` fails fast
+with a clear install suggestion if any required loader is absent.
+
+```yaml
+version: "1.0"
+
+requires:
+  - hippo-reference-fma>=3.3
+  - hippo-reference-ensembl>=GRCh38.109
+  - hippo-reference-go>=2024-01-01
+
+entities:
+  Sample:
+    fields:
+      tissue_region:
+        type: ref
+        target: AnatomyTerm    # provided by hippo-reference-fma
+        search: fts
+```
+
+#### Schema inheritance (polymorphic)
+
+`base:` declares an **is-a** (polymorphic) relationship — not just field copying. A subtype
+entity *is* an instance of its parent type. This has the following semantics:
+
+- **Queries:** `client.query("Sample")` returns entities of type `Sample` and all subtypes
+  (`BrainSample`, `CellLine`, etc.) unless `exact_type=True` is passed
+- **Validators:** `entity_types: [Sample]` in a validator config covers `Sample` and all subtypes
+- **Relationships:** A relationship declared `from: Sample` accepts any Sample subtype
+- **Storage:** Each subtype has its own table for its additional fields; subtype queries join
+  to the parent table. See sec3b §3b.8 for the relational mapping.
+- **`__type__` system field:** Every entity carries a read-only `__type__` field containing
+  the concrete type name (e.g. `"BrainSample"`), enabling callers to distinguish subtypes
+
+Single inheritance only. A type may have one `base:` declaration. Cycles are rejected at
+schema validation time.
+
+> **Example (omics deployment):** A brain tissue bank extends `Sample` with region-specific
+> fields:
 
 ```yaml
 entities:
@@ -284,7 +344,7 @@ entities:
     base: Sample
     description: "A sample from a brain tissue collection"
     fields:
-      brain_region: {type: string, indexed: true}
+      brain_region: {type: string, indexed: true, search: fts}
       hemisphere:
         type: enum
         values: [left, right, bilateral, unknown]
