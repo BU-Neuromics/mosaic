@@ -175,3 +175,72 @@ The choice of strategy is an adapter implementation detail. Both approaches prod
 results visible to callers. See sec6_provenance.md for the full provenance event model.
 
 ---
+
+### 3b.8 Polymorphic Inheritance Storage
+
+When a schema declares a subtype via `base:`, Hippo uses a **joined table inheritance**
+strategy: each type in the hierarchy has its own table containing only the fields declared
+at that level. A query for a parent type joins across all subtype tables.
+
+#### Table structure
+
+```
+samples (parent table — Sample fields only)
+  id          UUID  PK
+  is_available BOOL
+  tissue_type  TEXT
+  ...
+
+brain_samples (child table — BrainSample-specific fields only)
+  id                         UUID  PK  FK → samples.id
+  brain_region               TEXT
+  hemisphere                 TEXT
+  post_mortem_interval_hours REAL
+```
+
+The child table's `id` column is both a primary key and a foreign key to the parent table.
+Every subtype entity has exactly one row in the parent table and one row in its own table.
+
+#### `__type__` discriminator
+
+A `__type__` column on the parent table stores the concrete type name:
+
+```sql
+ALTER TABLE samples ADD COLUMN __type__ TEXT NOT NULL DEFAULT 'Sample';
+```
+
+This allows efficient single-table queries when the concrete type is already known, and
+drives `__type__` exposure on entity response objects.
+
+#### Query behaviour
+
+| Query | SQL |
+|---|---|
+| `client.query("Sample")` | `SELECT * FROM samples LEFT JOIN brain_samples USING (id) LEFT JOIN cell_lines USING (id) WHERE samples.is_available = true` |
+| `client.query("Sample", exact_type=True)` | `SELECT * FROM samples WHERE __type__ = 'Sample' AND is_available = true` |
+| `client.query("BrainSample")` | `SELECT * FROM samples JOIN brain_samples USING (id) WHERE samples.is_available = true` |
+| `client.get("Sample", id)` | Looks up `__type__` in parent table, then fetches the full row via the appropriate join |
+
+The storage adapter resolves the join structure at startup from the deployed schema config.
+No hardcoded table names — all table and column names are derived from the schema.
+
+#### Migration DDL for subtypes
+
+| Operation | DDL |
+|---|---|
+| New subtype declared | `CREATE TABLE {subtype}s (id UUID PRIMARY KEY REFERENCES {parent}s(id), ...)` + `ALTER TABLE {parent}s ADD COLUMN __type__ TEXT` if not present |
+| New field on subtype | `ALTER TABLE {subtype}s ADD COLUMN {field} {sql_type}` |
+| New field on parent | `ALTER TABLE {parent}s ADD COLUMN {field} {sql_type}` — inherited by all subtypes automatically |
+
+Hippo never drops tables or columns. Removing a subtype from schema config is rejected by the
+migration planner until all entities of that type are marked unavailable.
+
+#### Performance note
+
+Joined table inheritance adds a JOIN per subtype level per query. For shallow hierarchies
+(1–2 levels) this is negligible. Deep hierarchies (3+ levels) should be avoided as a schema
+design practice. The `exact_type=True` flag avoids joins entirely when the concrete type is
+known — Cappella adapters and workflow pipelines should use this when querying for a specific
+subtype.
+
+---
