@@ -2,175 +2,223 @@ id: road-map-001
 title: Hippo - Metadata Tracking Service v0.1
 vision_id: hippo-vision
 epics:
+- id: epic-001
+  title: Foundation - Config, Schema Parsing, and Core Types
+  outcome: 'A coding agent can parse a valid hippo.yaml and schema.yaml into fully
+    validated Pydantic models with a complete error hierarchy and no I/O dependencies.
 
-  - id: epic-001
-    title: Foundation - Config, Schema Parsing, and Core Types
-    outcome: >
-      A coding agent can parse a valid hippo.yaml and schema.yaml into fully validated
-      Pydantic models with a complete error hierarchy and no I/O dependencies.
-    success_metrics:
-      - name: config_parse_coverage
-        target: All valid hippo.yaml fields parse without error; all invalid inputs raise ConfigError or SchemaError with a clear message
-        unit: test cases passing
-    architectural_impact:
-      - component: hippo.config
-        change_type: new
-        description: HippoConfig Pydantic model and hippo.yaml loader with env var substitution
-      - component: hippo.schema
-        change_type: new
-        description: "SchemaConfig Pydantic model; Hippo DSL YAML parser; cycle detection for base: inheritance"
-      - component: hippo.core.types
-        change_type: new
-        description: "Shared SDK types: Filter, PaginatedResult, ScoredMatch, WriteOperation, ValidationResult, ProvenanceRecord, IngestResult"
-      - component: hippo.core.errors
-        change_type: new
-        description: "Full error hierarchy: HippoError, ConfigError, SchemaError, ValidationError, EntityNotFoundError, AdapterError and subclasses"
-    features: []
+    '
+  success_metrics:
+  - name: config_parse_coverage
+    target: All valid hippo.yaml fields parse without error; all invalid inputs raise
+      ConfigError or SchemaError with a clear message
+    unit: test cases passing
+  architectural_impact:
+  - component: hippo.config
+    change_type: new
+    description: HippoConfig Pydantic model and hippo.yaml loader with env var substitution
+  - component: hippo.schema
+    change_type: new
+    description: 'SchemaConfig Pydantic model; Hippo DSL YAML parser; cycle detection
+      for base: inheritance'
+  - component: hippo.core.types
+    change_type: new
+    description: 'Shared SDK types: Filter, PaginatedResult, ScoredMatch, WriteOperation,
+      ValidationResult, ProvenanceRecord, IngestResult'
+  - component: hippo.core.errors
+    change_type: new
+    description: 'Full error hierarchy: HippoError, ConfigError, SchemaError, ValidationError,
+      EntityNotFoundError, AdapterError and subclasses'
+  features: []
+  depends_on: []
+- id: epic-002
+  title: SQLite Storage Adapter
+  outcome: 'Entities can be created, updated, queried, and soft-deleted against a
+    SQLite backend with full provenance recording. All writes are atomic. Provenance
+    records are immutable at the database level via triggers.
 
-  - id: epic-002
-    title: SQLite Storage Adapter
-    outcome: >
-      Entities can be created, updated, queried, and soft-deleted against a SQLite backend
-      with full provenance recording. All writes are atomic. Provenance records are
-      immutable at the database level via triggers.
-    success_metrics:
-      - name: write_provenance_atomicity
-        target: "100% of write operations produce exactly one provenance event in the same transaction"
-        unit: percent
-    architectural_impact:
-      - component: hippo.adapters.base
-        change_type: new
-        description: EntityStore ABC with full method signatures for CRUD, search, and provenance
-      - component: hippo.adapters.sqlite
-        change_type: new
-        description: SQLite EntityStore implementation with WAL mode, partial indexes, provenance table, summary view, and immutability triggers
-      - component: hippo.adapters.sqlite.schema_ddl
-        change_type: new
-        description: DDL generation from SchemaConfig including polymorphic class-table inheritance strategy
-    features: []
+    '
+  success_metrics:
+  - name: write_provenance_atomicity
+    target: 100% of write operations produce exactly one provenance event in the same
+      transaction
+    unit: percent
+  architectural_impact:
+  - component: hippo.adapters.base
+    change_type: new
+    description: EntityStore ABC with full method signatures for CRUD, search, and
+      provenance
+  - component: hippo.adapters.sqlite
+    change_type: new
+    description: SQLite EntityStore implementation with WAL mode, partial indexes,
+      provenance table, summary view, and immutability triggers
+  - component: hippo.adapters.sqlite.schema_ddl
+    change_type: new
+    description: DDL generation from SchemaConfig including polymorphic class-table
+      inheritance strategy
+  features: []
+  depends_on:
+  - epic-001
+- id: epic-003
+  title: Schema Validation - Tier 1
+  outcome: 'Every write operation is validated against the schema before committing.
+    Required fields, type constraints, enum ranges, and ref existence are enforced
+    with no bypass path.
 
-  - id: epic-003
-    title: Schema Validation - Tier 1
-    outcome: >
-      Every write operation is validated against the schema before committing. Required
-      fields, type constraints, enum ranges, and ref existence are enforced with no
-      bypass path.
-    success_metrics:
-      - name: schema_validation_non_bypassable
-        target: No write method or REST endpoint accepts a skip_validation parameter; 100% of write tests include a validation assertion
-        unit: confirmed in code review
-    architectural_impact:
-      - component: hippo.validators.base
-        change_type: new
-        description: "WriteValidator ABC, WriteOperation dataclass, ValidationResult dataclass"
-      - component: hippo.validators.schema_validator
-        change_type: new
-        description: Tier 1 schema validator for required fields, types, enums, ref existence; runs at priority -1
-      - component: hippo.validators.registry
-        change_type: new
-        description: Validator discovery via entry points, ordering by priority, and write-path execution pipeline
-    features: []
+    '
+  success_metrics:
+  - name: schema_validation_non_bypassable
+    target: No write method or REST endpoint accepts a skip_validation parameter;
+      100% of write tests include a validation assertion
+    unit: confirmed in code review
+  architectural_impact:
+  - component: hippo.validators.base
+    change_type: new
+    description: WriteValidator ABC, WriteOperation dataclass, ValidationResult dataclass
+  - component: hippo.validators.schema_validator
+    change_type: new
+    description: Tier 1 schema validator for required fields, types, enums, ref existence;
+      runs at priority -1
+  - component: hippo.validators.registry
+    change_type: new
+    description: Validator discovery via entry points, ordering by priority, and write-path
+      execution pipeline
+  features: []
+  depends_on:
+  - epic-001
+  - epic-002
+- id: epic-004
+  title: Full HippoClient SDK
+  outcome: 'The complete HippoClient public interface is implemented covering all
+    entity lifecycle operations, relationships, ExternalID management, provenance
+    history, and the IngestionPipeline.
 
-  - id: epic-004
-    title: Full HippoClient SDK
-    outcome: >
-      The complete HippoClient public interface is implemented covering all entity
-      lifecycle operations, relationships, ExternalID management, provenance history,
-      and the IngestionPipeline.
-    success_metrics:
-      - name: sdk_interface_completeness
-        target: All methods in sec4 section 4.2 HippoClient interface are implemented and tested
-        unit: methods implemented and tested
-    architectural_impact:
-      - component: hippo.core.client
-        change_type: new
-        description: "HippoClient with put, get, query, relate, unrelate, set_availability, supersede, register_external_id, history, state_at, traverse"
-      - component: hippo.core.ingestion
-        change_type: new
-        description: "IngestionPipeline: CSV/JSON/JSONL parsing, upsert-by-ExternalID, IngestResult with created/updated/unchanged/errors counts"
-    features: []
+    '
+  success_metrics:
+  - name: sdk_interface_completeness
+    target: All methods in sec4 section 4.2 HippoClient interface are implemented
+      and tested
+    unit: methods implemented and tested
+  architectural_impact:
+  - component: hippo.core.client
+    change_type: new
+    description: HippoClient with put, get, query, relate, unrelate, set_availability,
+      supersede, register_external_id, history, state_at, traverse
+  - component: hippo.core.ingestion
+    change_type: new
+    description: 'IngestionPipeline: CSV/JSON/JSONL parsing, upsert-by-ExternalID,
+      IngestResult with created/updated/unchanged/errors counts'
+  features: []
+  depends_on:
+  - epic-002
+  - epic-003
+- id: epic-005
+  title: CEL Validators - Tier 2 and Plugin System
+  outcome: 'Config-driven business rule validators in validators.yaml are loaded,
+    parsed, and executed in the write path with correct expand path batch-fetching,
+    cycle detection, and all five built-in presets working correctly.
 
-  - id: epic-005
-    title: CEL Validators - Tier 2 and Plugin System
-    outcome: >
-      Config-driven business rule validators in validators.yaml are loaded, parsed, and
-      executed in the write path with correct expand path batch-fetching, cycle detection,
-      and all five built-in presets working correctly.
-    success_metrics:
-      - name: cel_expand_correctness
-        target: Expand path batch-fetch issues one query per list not N queries; cycle detection prevents infinite expansion; max_expand_list_size cap is enforced
-        unit: confirmed by test assertions on query count
-    architectural_impact:
-      - component: hippo.validators.cel_validator
-        change_type: new
-        description: CEL condition evaluation loading validators.yaml and evaluating against constructed context
-      - component: hippo.validators.expand
-        change_type: new
-        description: "Expand path parser, batch fetcher, cycle detector, and max_size enforcer"
-      - component: hippo.validators.cel_context
-        change_type: new
-        description: CEL context construction with entity map, existing map, expanded field merging, and type coercion
-      - component: hippo.validators.presets
-        change_type: new
-        description: "Built-in preset expansion: ref_check, count_constraint, immutable_field, field_required_if, no_self_ref"
-    features: []
+    '
+  success_metrics:
+  - name: cel_expand_correctness
+    target: Expand path batch-fetch issues one query per list not N queries; cycle
+      detection prevents infinite expansion; max_expand_list_size cap is enforced
+    unit: confirmed by test assertions on query count
+  architectural_impact:
+  - component: hippo.validators.cel_validator
+    change_type: new
+    description: CEL condition evaluation loading validators.yaml and evaluating against
+      constructed context
+  - component: hippo.validators.expand
+    change_type: new
+    description: Expand path parser, batch fetcher, cycle detector, and max_size enforcer
+  - component: hippo.validators.cel_context
+    change_type: new
+    description: CEL context construction with entity map, existing map, expanded
+      field merging, and type coercion
+  - component: hippo.validators.presets
+    change_type: new
+    description: 'Built-in preset expansion: ref_check, count_constraint, immutable_field,
+      field_required_if, no_self_ref'
+  features: []
+  depends_on:
+  - epic-003
+  - epic-004
+- id: epic-006
+  title: REST Transport Layer
+  outcome: 'The full REST API is available as a FastAPI application. All endpoints
+    in the design spec section 4.3 are implemented as thin wrappers over HippoClient
+    with correct HTTP status codes and auto-generated OpenAPI docs.
 
-  - id: epic-006
-    title: REST Transport Layer
-    outcome: >
-      The full REST API is available as a FastAPI application. All endpoints in the
-      design spec section 4.3 are implemented as thin wrappers over HippoClient with
-      correct HTTP status codes and auto-generated OpenAPI docs.
-    success_metrics:
-      - name: endpoint_coverage
-        target: "All endpoints in sec4 section 4.3 implemented; ValidationError maps to 422, EntityNotFoundError to 404, AdapterError to 500"
-        unit: endpoints implemented and tested
-    architectural_impact:
-      - component: hippo.rest.app
-        change_type: new
-        description: FastAPI app factory create_app mounting all routers with global error handlers
-      - component: hippo.rest.routers
-        change_type: new
-        description: Entity, history, availability, supersede, relationship, external_id, search, ingest, and schema routers
-      - component: hippo.rest.auth
-        change_type: new
-        description: AuthMiddleware ABC and pass-through stub with X-Hippo-Actor header extraction
-    features: []
+    '
+  success_metrics:
+  - name: endpoint_coverage
+    target: All endpoints in sec4 section 4.3 implemented; ValidationError maps to
+      422, EntityNotFoundError to 404, AdapterError to 500
+    unit: endpoints implemented and tested
+  architectural_impact:
+  - component: hippo.rest.app
+    change_type: new
+    description: FastAPI app factory create_app mounting all routers with global error
+      handlers
+  - component: hippo.rest.routers
+    change_type: new
+    description: Entity, history, availability, supersede, relationship, external_id,
+      search, ingest, and schema routers
+  - component: hippo.rest.auth
+    change_type: new
+    description: AuthMiddleware ABC and pass-through stub with X-Hippo-Actor header
+      extraction
+  features: []
+  depends_on:
+  - epic-004
+  - epic-005
+- id: epic-007
+  title: CLI
+  outcome: 'All hippo CLI commands are implemented. A user can initialize a project,
+    run migrations, ingest data, manage reference loaders, and start the server entirely
+    through the CLI.
 
-  - id: epic-007
-    title: CLI
-    outcome: >
-      All hippo CLI commands are implemented. A user can initialize a project, run
-      migrations, ingest data, manage reference loaders, and start the server entirely
-      through the CLI.
-    success_metrics:
-      - name: cli_command_coverage
-        target: "All commands implemented: init, serve, migrate, validate, ingest, reference install/update/list, compile-schema"
-        unit: commands implemented
-    architectural_impact:
-      - component: hippo.cli.main
-        change_type: new
-        description: Typer CLI with all commands wired to HippoClient and supporting modules
-      - component: hippo.schema.migrator
-        change_type: new
-        description: Schema diff engine detecting additive changes, generating migration plan, and applying DDL
-    features: []
+    '
+  success_metrics:
+  - name: cli_command_coverage
+    target: 'All commands implemented: init, serve, migrate, validate, ingest, reference
+      install/update/list, compile-schema'
+    unit: commands implemented
+  architectural_impact:
+  - component: hippo.cli.main
+    change_type: new
+    description: Typer CLI with all commands wired to HippoClient and supporting modules
+  - component: hippo.schema.migrator
+    change_type: new
+    description: Schema diff engine detecting additive changes, generating migration
+      plan, and applying DDL
+  features: []
+  depends_on:
+  - epic-004
+  - epic-005
+- id: epic-008
+  title: Full-Text Search via FTS5
+  outcome: 'Fields declared with search: fts in the schema support full-text search
+    via SQLite FTS5. The search() method returns ScoredMatch results ordered by relevance.
+    Adapter capabilities are declared at startup and validated against schema requirements.
 
-  - id: epic-008
-    title: Full-Text Search via FTS5
-    outcome: >
-      Fields declared with search: fts in the schema support full-text search via SQLite
-      FTS5. The search() method returns ScoredMatch results ordered by relevance. Adapter
-      capabilities are declared at startup and validated against schema requirements.
-    success_metrics:
-      - name: fts_search_correctness
-        target: "FTS5 virtual tables populated on every write; search() returns results ordered by rank desc; SearchCapabilityError raised at startup for unsupported search modes"
-        unit: confirmed by test assertions
-    architectural_impact:
-      - component: hippo.adapters.sqlite.search
-        change_type: new
-        description: "FTS5 virtual table creation, population on write, and ranked search query"
-      - component: hippo.adapters.base
-        change_type: modify
-        description: Add search() and search_capabilities() methods to EntityStore ABC
-    features: []
+    '
+  success_metrics:
+  - name: fts_search_correctness
+    target: FTS5 virtual tables populated on every write; search() returns results
+      ordered by rank desc; SearchCapabilityError raised at startup for unsupported
+      search modes
+    unit: confirmed by test assertions
+  architectural_impact:
+  - component: hippo.adapters.sqlite.search
+    change_type: new
+    description: FTS5 virtual table creation, population on write, and ranked search
+      query
+  - component: hippo.adapters.base
+    change_type: modify
+    description: Add search() and search_capabilities() methods to EntityStore ABC
+  features: []
+  depends_on:
+  - epic-002
+  - epic-004
