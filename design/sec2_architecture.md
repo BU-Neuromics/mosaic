@@ -37,10 +37,8 @@ accessibility. The Infrastructure Layer is optional and adds cloud-scale storage
 │  │  (v0.1)     │  │  (future)   │  │                      │    │
 │  └─────────────┘  └─────────────┘  └──────────────────────┘    │
 │                                                                 │
-│  ┌─────────────┐  ┌─────────────┐  ┌──────────────────────┐    │
-│  │   STARLIMS  │  │    HALO     │  │   Donor DB           │    │
-│  │  (future)   │  │  (future)   │  │   (future)           │    │
-│  └─────────────┘  └─────────────┘  └──────────────────────┘    │
+│  (External system connectors live in Cappella, not Hippo.        │
+│   Hippo defines ExternalSourceAdapter ABC only — see §2.3)       │
 └─────────────────────────────────────────────────────────────────┘
 ```
 
@@ -51,29 +49,43 @@ hippo/
 │
 ├── core/                        # All business logic — no I/O
 │   ├── client.py                # HippoClient: primary public interface
-│   ├── query.py                 # QueryEngine: filter, join, resolve
+│   ├── query.py                 # QueryEngine: filter, join, resolve, search
 │   ├── ingestion.py             # IngestionPipeline: validate & write entities
 │   ├── provenance.py            # ProvenanceManager: change tracking
-│   ├── schema.py                # SchemaConfig: load & validate YAML schema
+│   ├── schema.py                # SchemaConfig: load, validate, inheritance resolution
 │   └── models.py                # Pydantic models for all core entities
 │
 ├── adapters/
-│   ├── base.py                  # Abstract base classes (EntityStore, ExternalSource)
-│   ├── storage/
-│   │   ├── sqlite.py            # SQLite adapter (v0.1)
-│   │   ├── postgres.py          # PostgreSQL adapter (future, stub in v0.1)
-│   │   └── dynamodb.py          # DynamoDB adapter (future, stub in v0.1)
-│   └── external/                # Ingest-only adapters for upstream systems
-│       ├── base.py              # ExternalSourceAdapter ABC
-│       ├── starlims.py          # STARLIMS placeholder
-│       ├── halo.py              # HALO placeholder
-│       └── donor_db.py          # Donor DB placeholder
+│   ├── base.py                  # Abstract base classes (EntityStore, ExternalSourceAdapter)
+│   └── storage/
+│       ├── sqlite.py            # SQLite adapter (v0.1)
+│       ├── postgres.py          # PostgreSQL adapter (future, stub in v0.1)
+│       └── dynamodb.py          # DynamoDB adapter (future, stub in v0.1)
+│       # External system connectors (STARLIMS, HALO, etc.) live in Cappella, not here.
+│       # Hippo defines ExternalSourceAdapter ABC in base.py only.
+│
+├── validators/
+│   ├── base.py                  # WriteValidator ABC, WriteOperation, ValidationResult
+│   ├── registry.py              # Validator registry: entry point discovery + config instantiation
+│   ├── cel_engine.py            # CEL evaluation: expand path resolution, context building
+│   ├── expander.py              # Entity graph expander: path parsing, batch fetch, cycle detection
+│   └── builtins/
+│       ├── ref_check.py         # ref_check preset
+│       ├── count_constraint.py  # count_constraint preset
+│       ├── immutable_field.py   # immutable_field preset
+│       ├── field_required_if.py # field_required_if preset
+│       └── no_self_ref.py       # no_self_ref preset
+│
+├── reference/
+│   ├── base.py                  # ReferenceLoader ABC, LoadResult
+│   └── registry.py              # Reference loader entry point discovery + version tracking
 │
 ├── rest/
 │   ├── app.py                   # FastAPI app object (primary artifact)
 │   ├── routers/
 │   │   ├── entities.py          # Generic entity CRUD — dispatches by entity_type
 │   │   ├── relationships.py     # Relationship operations
+│   │   ├── search.py            # Fuzzy search endpoints
 │   │   └── ingestion.py         # Batch ingestion endpoints
 │   ├── dependencies.py          # Dependency injection (SDK client, config)
 │   ├── auth.py                  # Auth middleware stub (no-op in v0.1)
@@ -83,7 +95,7 @@ hippo/
 │   └── __init__.py
 │
 ├── cli/
-│   └── main.py                  # Typer CLI: init, serve, ingest, validate
+│   └── main.py                  # Typer CLI: init, serve, ingest, validate, reference
 │
 ├── config/
 │   ├── loader.py                # Config file loading & validation
@@ -107,16 +119,41 @@ class EntityStore(ABC):
     def get(self, entity_type: str, entity_id: str) -> dict: ...
 
     @abstractmethod
-    def query(self, entity_type: str, filters: list[Filter]) -> list[dict]: ...
+    def query(self, entity_type: str, filters: list[Filter],
+              include_unavailable: bool = False) -> list[dict]: ...
 
     @abstractmethod
-    def put(self, entity_type: str, entity: dict, actor: str) -> ProvenanceRecord: ...
+    def put(self, entity_type: str, entity: dict, actor: str,
+            provenance_context: dict | None = None) -> ProvenanceRecord: ...
 
     @abstractmethod
     def history(self, entity_type: str, entity_id: str) -> list[ProvenanceRecord]: ...
+
+    @abstractmethod
+    def search(self, entity_type: str, field: str, query: str,
+               limit: int = 10, min_score: float = 0.0) -> list[ScoredMatch]: ...
+
+    @abstractmethod
+    def search_capabilities(self) -> set[str]: ...
+    # Returns supported search modes e.g. {"fts", "embedding", "synonym"}
+    # Hippo validates at startup that all schema-declared search modes are in this set.
 ```
 
-**ExternalSourceAdapter ABC** (external ingestion adapters must implement):
+`ScoredMatch` is a core SDK type (adapter-agnostic):
+
+```python
+@dataclass
+class ScoredMatch:
+    entity_id: str
+    entity_type: str
+    field: str
+    value: str
+    score: float          # 0.0–1.0
+    match_mode: str       # "fts" | "embedding" | "synonym" | "exact"
+```
+
+**ExternalSourceAdapter ABC** (external ingestion adapters must implement — implementations
+live in Cappella, not Hippo; this ABC defines the contract only):
 
 ```python
 class ExternalSourceAdapter(ABC):
@@ -157,18 +194,30 @@ Hippo supports third-party adapter packages via Python entry points (`importlib.
 This allows the community to develop, publish, and share adapters as standalone pip-installable
 packages without forking Hippo or contributing to the core repository.
 
-**Declaring a plugin adapter** (in the third-party package's `pyproject.toml`):
+Hippo defines four entry point groups. Third-party packages can contribute to any of them:
+
+| Entry point group | Purpose | Naming convention |
+|---|---|---|
+| `hippo.storage_adapters` | Storage backend implementations | `hippo-adapter-<name>` |
+| `hippo.external_adapters` | External system connector implementations (Cappella ships these) | `cappella-adapter-<name>` |
+| `hippo.write_validators` | Write-path business rule validators | `hippo-validators-<name>` |
+| `hippo.reference_loaders` | Reference ontology data loaders | `hippo-reference-<name>` |
+
+**Declaring plugins** (in the third-party package's `pyproject.toml`):
 
 ```toml
 [project.entry-points."hippo.storage_adapters"]
 myadapter = "mypkg.adapters.storage:MyStorageAdapter"
 
-[project.entry-points."hippo.external_adapters"]
-myinstitution_lims = "mypkg.adapters.lims:MyLIMSAdapter"
+[project.entry-points."hippo.write_validators"]
+my_rules = "mypkg.validators:MyBusinessRuleValidator"
+
+[project.entry-points."hippo.reference_loaders"]
+my_ontology = "mypkg.reference:MyOntologyLoader"
 ```
 
-Once the package is `pip install`ed alongside Hippo, the adapter type becomes available in
-`hippo.yaml` with no other registration step:
+Once the package is `pip install`ed alongside Hippo, its contributions are available with no
+other registration step:
 
 ```yaml
 adapter:
@@ -177,22 +226,27 @@ adapter:
     some_setting: value
 ```
 
-**Adapter discovery at startup:** Hippo's adapter registry loads all entry points under the
-`hippo.storage_adapters` and `hippo.external_adapters` groups on initialization. Built-in
-adapters (sqlite, postgres, dynamodb, and the bundled external placeholders) are registered
-via the same entry points mechanism in Hippo's own `pyproject.toml` — there is no separate
-internal registration path. If two installed packages register the same adapter type name, Hippo
-raises a `ConfigError` at startup with a clear conflict message.
+**Discovery and conflict handling:** All four entry point groups are loaded at startup via
+`importlib.metadata`. Built-in contributions (sqlite adapter, bundled write validators,
+bundled reference loaders) are registered via the same entry points mechanism in Hippo's own
+`pyproject.toml` — no separate internal registration path. If two packages register the same
+name within the same group, Hippo raises a `ConfigError` at startup with a clear conflict
+message identifying both packages.
 
-**Interface stability and versioning:** The `EntityStore` and `ExternalSourceAdapter` ABCs are
-part of Hippo's public API. Once v1.0 is released, breaking changes to these interfaces
-constitute a semver-major version bump. Pre-1.0 minor versions may make breaking changes with
-deprecation notices in the changelog. Plugin authors should pin to compatible Hippo versions
-using `hippo>=0.x,<0.(x+1)` until v1.0 is reached.
+**Startup validation:** After loading all plugins, Hippo performs cross-validation:
+- Schema-declared `search:` modes are checked against `adapter.search_capabilities()` — fail
+  fast if a mode is declared but not supported by the active adapter
+- Schema-declared `requires:` loader names are checked against installed reference loaders —
+  fail fast with a clear install suggestion if a required loader is missing
 
-**Community adapter registry:** A curated list of known community adapters will be maintained
-in the Hippo repository README, following the convention established by projects like pytest
-and Flask.
+**Interface stability:** The ABCs for all four plugin groups are part of Hippo's public API.
+Once v1.0 is released, breaking changes constitute a semver-major bump. Pre-1.0, breaking
+changes may occur with deprecation notices. Plugin authors should pin to compatible Hippo
+versions using `hippo>=0.x,<0.(x+1)` until v1.0 is reached.
+
+**Community registry:** A curated list of known community plugins will be maintained in the
+Hippo repository README. The naming conventions above (`hippo-adapter-<name>`,
+`hippo-reference-<name>`, etc.) ensure discoverability via PyPI search.
 
 ### 2.4 Config System
 
@@ -208,7 +262,10 @@ adapter:                         # Which storage backend to use and its settings
     path: ./hippo.db
 
 schema:                          # Path to entity schema definition (required — see Section 3)
-  path: ./schema.yaml            # Hippo DSL or LinkML; no default schema is bundled
+  path: ./schema.yaml            # Hippo DSL; no default schema is bundled
+
+validators:                      # Path to business rule validators config (optional)
+  path: ./validators.yaml        # If omitted, only schema-level validation runs
 
 server:                          # REST API server settings (only needed for hippo serve)
   host: 0.0.0.0
@@ -292,12 +349,16 @@ The Hippo CLI is implemented with Typer and installed as the `hippo` command:
 
 | Command | Description |
 |---|---|
-| `hippo init` | Scaffold a new `hippo.yaml` config and schema file in the current directory |
+| `hippo init` | Scaffold a new `hippo.yaml`, `schema.yaml`, and `validators.yaml` in the current directory |
 | `hippo serve` | Start the REST API server using settings from `hippo.yaml` |
-| `hippo ingest <source> <file>` | Run a batch ingestion from a flat file against a named source adapter |
-| `hippo validate` | Validate config and schema files without starting the server |
+| `hippo ingest <source> <file>` | Run a batch ingestion from a flat file (CSV/JSON/JSONL) |
+| `hippo validate` | Validate config, schema, and validators files without starting the server |
 | `hippo migrate` | Apply any pending schema migrations to the current storage backend |
-| `hippo status` | Show current config, adapter type, entity counts, and schema version |
+| `hippo status` | Show current config, adapter type, entity counts, schema version, and installed plugins |
+| `hippo compile-schema` | Compile `schema.yaml` to LinkML on demand; output to `./schema.linkml.yaml` |
+| `hippo reference list` | List all installed reference loaders and their installed versions |
+| `hippo reference install <name> [--version <v>]` | Install a reference dataset; merges schema fragment and runs migrate |
+| `hippo reference update <name> [--version <v>]` | Update an installed reference dataset to a newer release |
 
 ### 2.9 Deployment Tiers
 
@@ -332,9 +393,12 @@ Errors propagate outward from adapter → SDK → transport layer in a consisten
 ```
 HippoError (base)
 ├── EntityNotFoundError       # Requested entity does not exist
-├── ValidationError           # Entity failed schema validation
+├── ValidationError           # Entity failed validation
+│   ├── SchemaValidationError     # Failed schema-level field/type/enum check
+│   └── RuleValidationError       # Failed a write validator rule (carries validator name)
 ├── IngestError               # Batch ingestion failure (with row context)
 ├── AdapterError              # Storage backend error (wraps underlying exception)
+├── SearchCapabilityError     # Schema declares a search mode the active adapter doesn't support
 └── ConfigError               # Invalid or missing configuration
 ```
 
@@ -361,6 +425,7 @@ surfacing — internal implementation details never leak through the SDK boundar
 | `pydantic>=2.0` | Entity models, config validation, schema enforcement |
 | `pyyaml` | Config and schema file parsing |
 | `typer` | CLI framework |
+| `cel-python` | CEL expression language for config-driven validators |
 
 **SQLite adapter (v0.1, included in core):**
 
@@ -375,22 +440,24 @@ surfacing — internal implementation details never leak through the SDK boundar
 | `fastapi` | REST framework |
 | `uvicorn[standard]` | ASGI server |
 
+**References extra (optional):**
+
+| Package | Purpose |
+|---|---|
+| Bundled `hippo-reference-*` loaders | FMA, Ensembl, GO, etc. (each is a separate package) |
+
 **Installation extras:**
 
 ```bash
-pip install hippo                  # Core SDK + SQLite only
-pip install hippo[rest]            # Adds REST API server
-pip install hippo[postgres]        # Adds PostgreSQL adapter (future)
-pip install hippo[all]             # Everything
-```
+pip install hippo                   # Core SDK + SQLite + CEL validators
+pip install hippo[rest]             # Adds REST API server
+pip install hippo[postgres]         # Adds PostgreSQL adapter (future)
+pip install hippo[references]       # Adds bundled reference loader packages
+pip install hippo[all]              # Everything
 
-**Plugin adapter packages:**
-
-Third-party adapters are distributed as independent packages and installed alongside Hippo.
-Hippo discovers them automatically via entry points — no manual registration required:
-
-```bash
-pip install hippo hippo-adapter-redshift   # hypothetical community adapter
+# Community plugins installed alongside:
+pip install hippo hippo-adapter-redshift    # hypothetical storage adapter
+pip install hippo hippo-reference-reactome  # community reference loader
 ```
 
 Plugin packages should follow the naming convention `hippo-adapter-<name>` for discoverability.
@@ -400,3 +467,169 @@ scaffolding pre-wired.
 
 ---
 
+
+### 2.13 Validation Infrastructure
+
+Hippo's write path enforces two tiers of validation before committing any change.
+
+#### Tier 1: Schema validation (built-in)
+
+Runs on every write. Enforces structural constraints declared in `schema.yaml`:
+- Required fields present
+- Field types and value ranges
+- Enum values within declared set
+- `ref` fields point to an existing, available entity of the correct type
+- Relationship cardinality constraints
+
+Raises `SchemaValidationError` on failure. Cannot be disabled.
+
+#### Tier 2: Config-driven business rule validators (`validators.yaml`)
+
+Optional. Loaded from the path declared in `hippo.yaml`. If the key is absent, this tier is
+skipped entirely.
+
+**`validators.yaml` config format:**
+
+```yaml
+validators:
+  - name: <unique identifier used in error messages>
+    entity_types: [EntityType, ...]     # omit or null to match all types
+    on: [create, update, availability_change, relationship]  # default: all
+    expand:                             # paths to pre-fetch before CEL evaluation
+      - field_name
+      - field_name.child
+      - field_name[].child_field        # [] = iterate over relationship collection
+    when: '<CEL expression>'            # skip this validator if false
+    condition: '<CEL expression>'       # must be true to pass
+    requires: [field_a, field_b]        # shorthand: fields must be non-null
+    error: "message with {entity.field} and {existing.field} substitutions"
+    max_expand_list_size: 200           # default 200, hard cap 1000
+```
+
+**CEL evaluation context:**
+
+| Variable | Contents |
+|---|---|
+| `entity` | Proposed new state (with expand paths pre-fetched and populated in place) |
+| `existing` | Current state before write; `null` for creates |
+
+**Expand path mechanics:**
+- `field` — scalar `ref` field: replaces the ID value with the full referenced entity dict
+- `field.child` — chain: expands `child` on the fetched entity
+- `field[]` — relationship collection: replaces list of IDs with list of entity dicts (one batch query)
+- `field[].child` — expands `child` on each element of the collection
+- Paths sharing a prefix are deduplicated — a shared entity is fetched only once
+- Cycle detection via visited set prevents infinite loops on self-referential relationships
+- `max_expand_list_size` prevents runaway expansion on large collections
+
+**Write validator execution order:**
+```
+1. Schema validation (Tier 1, always first → SchemaValidationError on failure)
+2. Config-driven validators (Tier 2, declaration order → RuleValidationError on failure)
+3. Plugin validators (Tier 3, priority order → RuleValidationError on failure)
+4. Commit write + record provenance event
+```
+The entire sequence is atomic — any failure rolls back the transaction and no provenance event
+is written.
+
+**`WriteValidator` ABC** (Tier 3 — Python plugin validators):
+
+```python
+class WriteValidator(ABC):
+    name: str                           # used in error messages and logs
+    entity_types: list[str] | None      # None = run for all types; subtype-aware
+    priority: int = 0                   # lower runs first; schema validation = -1
+
+    @abstractmethod
+    def validate(self, operation: WriteOperation,
+                 client: HippoClient) -> ValidationResult: ...
+
+@dataclass
+class WriteOperation:
+    kind: Literal["create", "update", "availability_change", "relationship"]
+    entity_type: str
+    entity_id: str
+    proposed: dict
+    existing: dict | None               # None for creates
+    actor: str
+    provenance_context: dict | None     # structured context from caller (e.g. workflow run)
+
+@dataclass
+class ValidationResult:
+    valid: bool
+    errors: list[str] = field(default_factory=list)
+    warnings: list[str] = field(default_factory=list)
+```
+
+**`entity_types` and schema inheritance:** With polymorphic inheritance, `entity_types: [Sample]`
+covers `Sample` and all subtypes. `entity_types: [BrainSample]` targets only that subtype.
+Redundant entries (child listed with parent) emit a startup warning.
+
+**Built-in validator presets** (ergonomic shortcuts in `validators.yaml`, not separate code paths):
+
+| Preset `type:` | Equivalent pattern |
+|---|---|
+| `ref_check` | `expand` + `condition` checking a referenced entity |
+| `count_constraint` | `expand` with `[]` + `size()` CEL condition |
+| `immutable_field` | `on: [update]` + `condition: entity.field == existing.field` |
+| `field_required_if` | `when` pre-condition + `requires` |
+| `no_self_ref` | `condition` checking entity does not reference itself |
+
+---
+
+### 2.14 Reference Loader System
+
+Reference loaders install community-standard ontology data as regular Hippo entities.
+Distributed as `hippo-reference-<name>` packages, discovered via `hippo.reference_loaders`
+entry points.
+
+**`ReferenceLoader` ABC:**
+
+```python
+class ReferenceLoader(ABC):
+    name: str           # e.g. "fma", "ensembl", "go"
+    description: str
+
+    @abstractmethod
+    def versions(self) -> list[str]: ...
+    # Available version strings
+
+    @abstractmethod
+    def entity_types(self) -> list[str]: ...
+    # Entity type names this loader creates
+
+    @abstractmethod
+    def schema_fragment(self) -> dict: ...
+    # Entity type + relationship definitions in Hippo DSL.
+    # Merged into the deployed schema on install.
+
+    @abstractmethod
+    def load(self, client: HippoClient, version: str, **kwargs) -> LoadResult: ...
+    # Ingests the reference dataset at the given version.
+```
+
+**Install lifecycle (`hippo reference install <name> [--version <v>]`):**
+1. Resolve loader from `hippo.reference_loaders` entry points
+2. Call `loader.schema_fragment()` and merge into deployed schema
+3. Run `hippo migrate` (additive = non-interactive; structural = prompt for confirmation)
+4. Call `loader.load(client, version)` to ingest
+5. Record `{loader_name: version}` in `hippo_meta` under key `reference_versions`
+
+**User schema dependency declaration:**
+
+```yaml
+# schema.yaml
+requires:
+  - hippo-reference-fma>=3.3
+  - hippo-reference-ensembl>=GRCh38.109
+```
+
+`hippo validate` fails fast with a clear install suggestion if a required loader is missing.
+Users reference loader-provided entity types by name without redeclaring them.
+
+**Collision detection:** Two packages declaring the same entity type name → `ConfigError` at
+startup identifying both packages.
+
+**Extending loader-provided types:** Deferred to post-v0.1.
+
+---
