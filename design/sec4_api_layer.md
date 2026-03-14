@@ -6,22 +6,25 @@
 
 ---
 
-### 4.1 Overview
+### 4.1 Design Philosophy
 
-Hippo exposes its functionality through two API surfaces:
+The API layer is SDK-first. All business logic lives in the Core SDK (`HippoClient`). The
+REST API is a thin transport adapter that calls the SDK — it contains no logic of its own.
+This means the SDK and REST API are always in sync, and the REST API is never "ahead" of the
+SDK in capability.
 
-1. **Python SDK (`HippoClient`)** — the primary interface; all logic lives here
-2. **REST API** — a thin FastAPI transport layer wrapping the SDK
+The public surface of the API layer is:
+1. **`HippoClient`** — the Python SDK public interface (primary)
+2. **REST API** — JSON over HTTP, auto-documented via OpenAPI (secondary; for non-Python callers)
 
-Both surfaces expose identical semantics. The REST API is an optional deployment concern —
-single-user local deployments use the SDK directly. All examples in this section show both.
+GraphQL is reserved for a future version.
 
 ---
 
 ### 4.2 HippoClient Public Interface
 
-`HippoClient` is the single entry point to all SDK functionality. It is instantiated with a
-`HippoConfig` and exposes the full Hippo surface area.
+`HippoClient` is the single entry point to all Hippo functionality. It is instantiated once
+with a `HippoConfig` and used throughout the application lifetime.
 
 ```python
 from hippo import HippoClient, HippoConfig
@@ -32,384 +35,372 @@ client = HippoClient(HippoConfig.from_file("hippo.yaml"))
 #### Entity operations
 
 ```python
-# Create or update a single entity
-client.put(
+# Create or update an entity (upsert semantics — see sec5 §5.4)
+entity = client.put(
     entity_type="Sample",
-    entity={"tissue_type": "brain", "collection_date": "2024-03-01"},
-    actor="admin",
-    provenance_context={"source": "manual"}
+    data={"tissue_type": "brain", "external_ids": [{"system": "starlims", "id": "SL-123"}]},
+    actor="pipeline-run-42",
+    provenance_context={"workflow_run_id": "wf-abc"}  # optional
 )
-# → ProvenanceRecord
+# Returns the written entity dict including system fields
 
-# Get a single entity by ID
-client.get("Sample", entity_id)
-# → dict (entity fields + system fields created_at, updated_at, schema_version, __type__)
+# Fetch by Hippo UUID
+sample = client.get("Sample", "uuid-here")
 
-# Atomic upsert by external ID
-client.upsert(
-    entity_type="Sample",
-    external_system="starlims",
-    external_id="STARLIMS:12345",
-    fields={...},
-    actor="cappella",
-)
-# → UpsertResult(action="created"|"updated"|"unchanged", entity_id=str)
+# Fetch by ExternalID
+sample = client.get_by_external_id("Sample", system="starlims", external_id="SL-123")
 
-# Availability operations
-client.set_availability("Sample", entity_id, available=False,
-                        reason="withdrawn", actor="admin")
-client.supersede("Sample", old_id="abc", new_id="def",
-                 reason="corrected annotation", actor="admin")
+# Fetch multiple by UUID (batch)
+samples = client.get_many("Sample", ids=["uuid-1", "uuid-2", "uuid-3"])
 ```
 
 #### Query operations
 
 ```python
-# Filter query — returns available entities by default
-client.query(
+# Filter query
+results = client.query(
     "Sample",
-    filters=[
-        Filter("tissue_type", "eq", "brain"),
-        Filter("collection_date", "gte", "2024-01-01"),
-    ],
-    include_unavailable=False,   # default
-    exact_type=False,            # default: include subtypes
-    page=1,
-    page_size=100,
+    tissue_type="brain",
+    is_available=True,           # default; pass False to include unavailable
+    exact_type=False,            # default; pass True to exclude subtypes
+    limit=100,
+    offset=0,
+    order_by="created_at",
+    order_dir="desc"
 )
-# → Page(items=[dict, ...], total=int, page=int, page_size=int, pages=int)
+# Returns PaginatedResult (see §4.4)
 
-# Get by external ID
-client.get_by_external_id("Sample", system="starlims", external_id="STARLIMS:12345")
-# → dict | None
+# Fuzzy search on indexed fields
+matches = client.search(
+    entity_type="AnatomyTerm",
+    field="preferred_label",
+    query="prefrontal cortex",
+    limit=5,
+    min_score=0.5
+)
+# Returns list[ScoredMatch]
 
-# Graph traversal — follow a named relationship
-client.traverse("Sample", entity_id, relationship="donated", direction="from")
-# → list[dict] — entities on the other end of the relationship
+# Graph traversal: follow a named relationship
+subjects = client.traverse(
+    start_type="Sample", start_id="sample-uuid",
+    relationship="donated",
+    direction="inbound",   # "outbound" | "inbound" | "both"
+    target_type="Subject"  # optional filter
+)
 
-# Point-in-time snapshot
-client.entity_at("Sample", entity_id, at=datetime(...))
-# → dict
+# Fetch updated since a timestamp (used by Cappella hippo_poll trigger)
+recent = client.query_updated_since(
+    entity_type="Sample",
+    since="2024-01-01T00:00:00Z",
+    limit=500
+)
 ```
 
-#### Search operations
+#### Availability and lifecycle operations
 
 ```python
-# Fuzzy search on a searchable field
-client.search("AnatomyTerm", field="preferred_label", query="prefrontal cortex",
-              limit=5, min_score=0.5)
-# → list[ScoredMatch]
+# Mark unavailable
+client.set_availability(
+    entity_type="Sample", entity_id="uuid",
+    available=False,
+    reason="Sample quality insufficient",
+    actor="data-team"
+)
+
+# Supersede one entity with another
+client.supersede(
+    entity_type="Sample",
+    old_id="old-uuid", new_id="new-uuid",
+    actor="pipeline-run-42",
+    reason="Corrected tissue region annotation"
+)
 ```
 
 #### Relationship operations
 
 ```python
-client.add_relationship(
+# Create a relationship
+client.relate(
     relationship="donated",
-    from_type="Subject", from_id="...",
-    to_type="Sample",   to_id="...",
-    actor="admin",
+    from_type="Subject", from_id="subj-uuid",
+    to_type="Sample",   to_id="sample-uuid",
+    actor="data-team",
     properties={"method": "surgical biopsy"}
 )
 
-client.remove_relationship(relationship_id="...", actor="admin", reason="data error")
+# Remove a relationship (soft delete)
+client.unrelate(
+    relationship_id="edge-uuid",
+    actor="data-team",
+    reason="Incorrectly linked"
+)
+
+# Query relationships
+edges = client.relationships(
+    entity_type="Subject", entity_id="subj-uuid",
+    relationship="donated",
+    direction="outbound"
+)
+```
+
+#### ExternalID operations
+
+```python
+# Register an ExternalID
+client.register_external_id(
+    entity_type="Sample", entity_id="uuid",
+    system="starlims", external_id="SL-123",
+    actor="data-team"
+)
+
+# Correct an ExternalID (supersession)
+client.correct_external_id(
+    entity_type="Sample", entity_id="uuid",
+    system="starlims",
+    old_value="SL-123", new_value="SL-124",
+    reason="Transcription error",
+    actor="data-team"
+)
 ```
 
 #### Provenance operations
 
 ```python
-client.history("Sample", entity_id)
-# → list[ProvenanceEvent]
+# Full history for an entity
+events = client.history("Sample", "uuid")
+# Returns list[ProvenanceRecord] in chronological order
 
-client.events_since("Sample", since=datetime(...), event_types=None)
-# → list[ProvenanceEvent]
+# Filtered history
+events = client.history("Sample", "uuid",
+    event_types=["EntityUpdated", "AvailabilityChanged"],
+    since="2024-01-01T00:00:00Z"
+)
 
-client.events_by_context(key="sync_run_id", value="uuid")
-# → list[ProvenanceEvent]
+# State reconstruction at a point in time
+state = client.state_at("Sample", "uuid", timestamp="2024-06-01T00:00:00Z")
 ```
 
-#### Schema operations
+#### Schema introspection
 
 ```python
-client.schema.entity_types()                    # → list[str]
-client.schema.fields("Sample")                  # → dict[str, FieldDef]
-client.schema.relationships()                   # → list[RelationshipDef]
-client.schema.is_subtype_of("BrainSample", "Sample")  # → bool
-client.schema.deprecated_fields("Sample")       # → list[str]
+# List all entity types
+entity_types = client.schema.entity_types()
+
+# Describe an entity type (fields, validators, relationships)
+descriptor = client.schema.describe("Sample")
+
+# List installed reference loaders
+loaders = client.schema.reference_loaders()
+
+# Check deprecated fields
+deprecated = client.schema.deprecated_fields("Sample")
+
+# Check subtype hierarchy
+subtypes = client.schema.subtypes("Sample")   # ["BrainSample", "CellLine"]
+ancestors = client.schema.ancestors("BrainSample")  # ["Sample"]
 ```
 
 ---
 
-### 4.3 Filter API
+### 4.3 REST API
 
-Filters are composable predicates on entity fields. The `Filter` type:
+The REST API is a FastAPI application. All endpoints call `HippoClient` directly — no
+separate REST-layer business logic.
 
-```python
-@dataclass
-class Filter:
-    field: str
-    operator: str   # see table below
-    value: Any
+Base path: `/api/v1`
+
+Auto-generated docs available at `/docs` (Swagger UI) and `/redoc`. OpenAPI JSON at
+`/openapi.json`.
+
+#### Entity endpoints
+
+| Method | Path | Description |
+|---|---|---|
+| `GET` | `/entities/{entity_type}` | Query entities (supports filter params, pagination) |
+| `POST` | `/entities/{entity_type}` | Create or update an entity (upsert) |
+| `GET` | `/entities/{entity_type}/{entity_id}` | Fetch entity by UUID |
+| `GET` | `/entities/{entity_type}/{entity_id}/history` | Full provenance history |
+| `POST` | `/entities/{entity_type}/{entity_id}/availability` | Set availability |
+| `POST` | `/entities/{entity_type}/{entity_id}/supersede` | Supersede with another entity |
+| `GET` | `/entities/{entity_type}/{entity_id}/relationships` | List relationships |
+
+#### Search endpoints
+
+| Method | Path | Description |
+|---|---|---|
+| `GET` | `/search/{entity_type}` | Fuzzy search on a field (`?field=&q=&limit=&min_score=`) |
+
+#### Relationship endpoints
+
+| Method | Path | Description |
+|---|---|---|
+| `POST` | `/relationships` | Create a relationship |
+| `DELETE` | `/relationships/{relationship_id}` | Remove a relationship (soft delete) |
+
+#### ExternalID endpoints
+
+| Method | Path | Description |
+|---|---|---|
+| `GET` | `/external-ids/{system}/{external_id}` | Lookup entity by ExternalID |
+| `POST` | `/entities/{entity_type}/{entity_id}/external-ids` | Register ExternalID |
+| `PUT` | `/entities/{entity_type}/{entity_id}/external-ids/{system}` | Correct ExternalID |
+
+#### Ingestion endpoints
+
+| Method | Path | Description |
+|---|---|---|
+| `POST` | `/ingest/{entity_type}` | Batch ingest (JSON array body) |
+
+#### Schema introspection endpoints
+
+| Method | Path | Description |
+|---|---|---|
+| `GET` | `/schema/entity-types` | List all entity types |
+| `GET` | `/schema/entity-types/{entity_type}` | Describe an entity type |
+| `GET` | `/schema/reference-loaders` | List installed reference loaders and versions |
+
+#### System endpoints
+
+| Method | Path | Description |
+|---|---|---|
+| `GET` | `/health` | Liveness check — returns `{"status": "ok"}` |
+| `GET` | `/status` | Adapter type, schema version, entity counts, plugin summary |
+
+#### Standard request/response conventions
+
+**Request headers:**
+- `X-Hippo-Actor: <identity>` — actor for write operations (required on all writes; defaults
+  to `"anonymous"` if absent in v0.1)
+- `X-Hippo-Context: <JSON>` — provenance context JSON (optional)
+
+**Response envelope (all responses):**
+```json
+{
+  "data": { ... },        // null on error
+  "error": null,          // null on success; see error format below
+  "meta": {               // always present
+    "schema_version": "1.1",
+    "request_id": "uuid"
+  }
+}
 ```
 
-Supported operators:
+**Error format:**
+```json
+{
+  "data": null,
+  "error": {
+    "type": "ValidationError",
+    "message": "Sample 'abc-123' failed validation",
+    "detail": {
+      "validator": "active_subject_check",
+      "errors": ["Subject xyz is withdrawn"]
+    }
+  },
+  "meta": { "schema_version": "1.1", "request_id": "uuid" }
+}
+```
 
-| Operator | Meaning | Field types |
-|---|---|---|
-| `eq` | Equal | all |
-| `neq` | Not equal | all |
-| `gt`, `gte`, `lt`, `lte` | Comparison | int, float, date, datetime |
-| `in` | Value in list | all |
-| `not_in` | Value not in list | all |
-| `contains` | Substring match | string |
-| `starts_with` | Prefix match | string |
-| `is_null` | Field is null | all |
-| `is_not_null` | Field is not null | all |
-
-Multiple filters are ANDed together. OR composition is not supported in v0.1 — complex
-boolean queries should use the REST search endpoint with a CEL expression (future).
-
-**Filtering on subtype fields:** When querying a parent type, filters on child-only fields
-require `exact_type=True` or explicit subtype declaration. Filtering on `brain_region`
-(a `BrainSample`-only field) when querying `Sample` without `exact_type` raises a
-`QueryError` identifying the ambiguity.
+HTTP status codes:
+- `200 OK` — successful read
+- `201 Created` — entity created
+- `200 OK` — entity updated (not 204, always returns the entity)
+- `404 Not Found` — `EntityNotFoundError`
+- `422 Unprocessable Entity` — `ValidationError` (schema or rule)
+- `409 Conflict` — `ConfigError` (e.g. adapter conflict)
+- `500 Internal Server Error` — `AdapterError` (storage failure)
 
 ---
 
 ### 4.4 Pagination
 
-All list-returning endpoints and SDK methods are paginated. There are no unbounded list
-operations in v0.1.
+**Opinionated decision:** Hippo uses **offset-based pagination** for v0.1. Cursor-based
+pagination is deferred.
 
-**Pagination model:** Offset-based pagination via `page` (1-indexed) and `page_size`
-(default 100, max 1000).
+**Rationale:** Offset pagination is simpler to implement, universally understood, and
+sufficient for the expected v0.1 query volumes. The main limitation (page drift when new
+records are inserted during pagination) is acceptable for research workloads where callers
+typically retrieve complete result sets rather than paginating live feeds.
 
-```python
-page = client.query("Sample", filters=[...], page=1, page_size=100)
-page.items       # list[dict]
-page.total       # total matching records
-page.page        # current page number
-page.page_size   # records per page
-page.pages       # total number of pages
-```
-
-**Opinionated decision:** Cursor-based pagination is more correct for large mutable datasets
-but significantly more complex to implement and consume. Offset pagination is sufficient for
-v0.1 workloads (research labs, not web-scale traffic). Cursor pagination is the natural
-upgrade path if needed.
-
-**`events_since` and `history` pagination:** Provenance queries also return `Page` objects.
-Default `page_size` for provenance queries is 500.
-
----
-
-### 4.5 REST API Design
-
-The REST API is a FastAPI application. All endpoints return JSON. All writes require an
-`X-Hippo-Actor` header (defaulting to `"anonymous"` in v0.1 when auth is disabled).
-
-#### Entity endpoints
-
-```
-GET    /entities/{entity_type}
-       ?filter=<field:op:value>  (repeatable)
-       &include_unavailable=false
-       &exact_type=false
-       &page=1&page_size=100
-       → Page<EntityResponse>
-
-POST   /entities/{entity_type}
-       Body: {fields: {...}, provenance_context: {...}}
-       → EntityResponse
-
-GET    /entities/{entity_type}/{id}
-       → EntityResponse
-
-PATCH  /entities/{entity_type}/{id}
-       Body: {fields: {...}, provenance_context: {...}}
-       → EntityResponse
-
-POST   /entities/{entity_type}/{id}/availability
-       Body: {available: bool, reason: str}
-       → EntityResponse
-
-POST   /entities/{entity_type}/{id}/supersede
-       Body: {new_id: str, reason: str}
-       → EntityResponse
-```
-
-#### Query and search endpoints
-
-```
-GET    /entities/{entity_type}/by-external-id
-       ?system=<s>&id=<v>
-       → EntityResponse | 404
-
-POST   /entities/{entity_type}/upsert
-       Body: {external_system: str, external_id: str, fields: {...}}
-       → UpsertResponse
-
-GET    /entities/{entity_type}/search
-       ?field=<f>&q=<query>&limit=10&min_score=0.0
-       → list[ScoredMatchResponse]
-
-GET    /entities/{entity_type}/{id}/traverse
-       ?relationship=<r>&direction=from|to&page=1&page_size=100
-       → Page<EntityResponse>
-
-GET    /entities/{entity_type}/{id}/at
-       ?t=<ISO-8601>
-       → EntityResponse
-```
-
-#### Relationship endpoints
-
-```
-GET    /relationships?from_type=<t>&from_id=<id>&relationship=<r>
-       → Page<RelationshipResponse>
-
-POST   /relationships
-       Body: {relationship: str, from_type, from_id, to_type, to_id, properties: {...}}
-       → RelationshipResponse
-
-DELETE /relationships/{id}
-       Body: {reason: str}
-       → RelationshipResponse (status: removed)
-```
-
-#### Provenance endpoints
-
-```
-GET    /provenance/{entity_type}/{id}
-       ?page=1&page_size=500
-       → Page<ProvenanceEventResponse>
-
-GET    /provenance/{entity_type}/{id}/at
-       ?t=<ISO-8601>
-       → EntityResponse
-
-GET    /provenance/events
-       ?since=<ISO>&actor=<s>&event_type=<t>&context_key=<k>&context_value=<v>
-       &page=1&page_size=500
-       → Page<ProvenanceEventResponse>
-```
-
-#### Ingestion endpoints
-
-```
-POST   /ingest/{entity_type}
-       Body: multipart/form-data, file + optional mapping JSON
-       → IngestResult
-
-POST   /ingest/{entity_type}/batch
-       Body: [HippoRecord, ...]
-       → IngestResult
-```
-
-#### Schema endpoints
-
-```
-GET    /schema
-       → {entity_types: [...], relationships: [...], version: str}
-
-GET    /schema/{entity_type}
-       → {fields: {...}, base: str|null, relationships: [...]}
-```
-
-#### Response shapes
+#### SDK pagination
 
 ```python
-# EntityResponse
-{
-    "id": "uuid",
-    "entity_type": "BrainSample",
-    "__type__": "BrainSample",        # concrete type
-    "is_available": true,
-    "created_at": "2024-03-01T...",
-    "updated_at": "2024-03-15T...",
-    "schema_version": "1.0",
-    # ... user-defined fields ...
-}
+# Automatic pagination: iterates all pages and yields individual entities
+for sample in client.iter_query("Sample", tissue_type="brain"):
+    process(sample)
 
-# UpsertResponse
-{
-    "action": "created" | "updated" | "unchanged",
-    "entity_id": "uuid",
-    "entity_type": "Sample"
-}
-
-# ScoredMatchResponse
-{
-    "entity_id": "uuid",
-    "entity_type": "AnatomyTerm",
-    "field": "preferred_label",
-    "value": "dorsolateral prefrontal cortex",
-    "score": 0.94,
-    "match_mode": "fts"
-}
+# Manual pagination: caller controls page fetch
+page = client.query("Sample", tissue_type="brain", limit=100, offset=0)
+# page.items: list[dict]
+# page.total: int (total matching entities, not just this page)
+# page.limit: int
+# page.offset: int
+# page.has_more: bool
 ```
 
-#### Error responses
+#### REST pagination
 
-All errors follow the same JSON envelope (see sec2 §2.11):
+Query parameters: `?limit=<n>&offset=<n>` (default limit: 100, max: 1000)
+
+Response includes pagination metadata in `meta`:
 
 ```json
 {
-    "error": "EntityNotFoundError",
-    "message": "Sample 'abc-123' not found",
-    "detail": {}
+  "data": [ ...entities... ],
+  "error": null,
+  "meta": {
+    "schema_version": "1.1",
+    "request_id": "uuid",
+    "pagination": {
+      "total": 4821,
+      "limit": 100,
+      "offset": 200,
+      "has_more": true
+    }
+  }
 }
 ```
 
-HTTP status code mapping:
+---
 
-| Error type | HTTP status |
-|---|---|
-| `EntityNotFoundError` | 404 |
-| `SchemaValidationError` | 422 |
-| `RuleValidationError` | 422 |
-| `IngestError` | 422 |
-| `SearchCapabilityError` | 422 |
-| `AdapterError` | 500 |
-| `ConfigError` | 500 |
+### 4.5 `query_updated_since` — Polling Support
+
+This method is designed for Cappella's `hippo_poll` trigger source and any other caller that
+needs efficient change detection.
+
+```python
+recent = client.query_updated_since(
+    entity_type="Sample",
+    since="2024-01-01T00:00:00Z",
+    limit=500,
+    offset=0
+)
+```
+
+**Implementation:** Uses the `entity_provenance_summary` view (see sec6 §6.6) to find
+entities with `updated_at > since`, ordered by `updated_at` ascending (oldest first, so
+callers can process in order and advance their watermark incrementally).
+
+**REST endpoint:**
+
+```
+GET /entities/{entity_type}?updated_since=<ISO8601 timestamp>&limit=500
+```
+
+**Opinionated decision:** The `since` timestamp is based on Hippo's provenance `updated_at`
+(server-side UTC), not any caller-supplied timestamp. This avoids clock skew issues between
+Cappella and Hippo. Callers should persist the `updated_at` value of the last entity they
+processed as their watermark for the next poll.
 
 ---
 
-### 4.6 Filter Encoding in REST
-
-Filters are encoded as repeated `filter` query parameters using the format
-`field:operator:value`:
-
-```
-GET /entities/Sample?filter=tissue_type:eq:brain&filter=collection_date:gte:2024-01-01
-```
-
-For `in` / `not_in` operators, values are comma-separated:
-
-```
-GET /entities/Sample?filter=tissue_type:in:brain,cortex,hippocampus
-```
-
----
-
-### 4.7 OpenAPI and Client Generation
-
-The REST API automatically generates an OpenAPI 3.1 schema at `/openapi.json` and a
-Swagger UI at `/docs`. The OpenAPI schema is the authoritative interface contract for
-REST clients.
-
-**Opinionated decision:** Hippo does not ship language-specific client SDKs in v0.1.
-The Python SDK is the primary client. REST consumers can generate typed clients from the
-OpenAPI schema using standard tools (openapi-generator, etc.).
-
----
-
-### 4.8 Open Questions
+### 4.6 Open Questions
 
 | Question | Priority | Notes |
 |---|---|---|
-| Cursor-based pagination | Low | Offset pagination sufficient for v0.1. Upgrade path if high-throughput streaming queries become a requirement. |
-| OR filter composition | Low | AND-only filters sufficient for v0.1. A CEL-based filter expression endpoint is the natural extension (future). |
-| Bulk delete / availability change | Medium | `POST /entities/{type}/bulk-availability` for marking many entities unavailable at once. Needed for large dataset archival. Deferred from v0.1. |
+| Cursor-based pagination | Medium | For large result sets and live-feed pagination. Defer to post-v0.1. |
+| GraphQL transport | Low | Reserved in `hippo/graphql/`. Defer to post-v0.1. |
+| Bulk relationship query | Medium | `client.relationships_bulk(entity_ids=[...])` — fetch relationships for many entities in one query. Useful for Cappella expand path engine. Omitted from v0.1 for simplicity; add when needed. |
+| Rate limiting | Low | Out of scope for v0.1 (no auth layer). Add with auth in a future version. |
 
 ---
