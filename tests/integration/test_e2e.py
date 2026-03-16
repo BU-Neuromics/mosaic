@@ -43,7 +43,12 @@ _SCHEMA_YAML = {
             "fields": [
                 {"name": "name", "type": "string", "required": True},
                 {"name": "tissue", "type": "string", "required": True},
-                {"name": "notes", "type": "string", "required": False, "search": "fts5"},
+                {
+                    "name": "notes",
+                    "type": "string",
+                    "required": False,
+                    "search": "fts5",
+                },
             ],
         }
     ]
@@ -74,6 +79,7 @@ def tmp_hippo(tmp_path: Path) -> Path:
 # ---------------------------------------------------------------------------
 # Client factory helpers
 # ---------------------------------------------------------------------------
+
 
 def _fts_metadata_for_sample() -> dict[str, list[FTSTableMetadata]]:
     """Build the FTS metadata dict that HippoClient needs for FTS search."""
@@ -107,22 +113,50 @@ def _make_client(
     pipeline: ValidationPipeline | None = None
     if validation:
         pipeline = ValidationPipeline()
-        cel = CELWriteValidator(
-            validators_path=str(tmp_hippo / "validators.yaml")
-        )
+        cel = CELWriteValidator(validators_path=str(tmp_hippo / "validators.yaml"))
         pipeline.add_validator(cel)
 
-    client = HippoClient(storage=storage, pipeline=pipeline)
+    # Parse schema from YAML file and pass to HippoClient
+    schema_file = tmp_hippo / "schema.yaml"
+    with open(schema_file, "r") as f:
+        schema_yaml = yaml.safe_load(f)
+
+    # Extract entity schemas
+    entities = schema_yaml.get("entities", [])
+    schemas = {}
+    for entity in entities:
+        from hippo.config.models import SchemaConfig
+
+        schemas[entity["name"]] = SchemaConfig(**entity)
+
+    client = HippoClient(storage=storage, pipeline=pipeline, schemas=schemas)
 
     if fts:
-        client._fts_table_metadata = _fts_metadata_for_sample()
-        # Ensure the FTS virtual table exists in the DB
+        # The FTS metadata will be auto-populated from the schema now
+        # Ensure the FTS virtual table exists in the DB - needs to be done after schema processing
         import sqlite3
+
+        # Get all entity types that have FTS fields from our current schemas
+        from hippo.core.storage.fts import FTSTableMetadata
+
+        fts_tables = []
+        if schemas:
+            for entity_type, schema in schemas.items():
+                for field in schema.fields:
+                    if field.search and "fts" in field.search.lower():
+                        # Create the metadata that would be created by our implementation
+                        meta = FTSTableMetadata.from_field(
+                            field, entity_type=entity_type
+                        )
+                        fts_tables.append(meta)
+
         conn = sqlite3.connect(str(db_path))
-        conn.execute(
-            "CREATE VIRTUAL TABLE IF NOT EXISTS fts_sample_notes "
-            "USING fts5(entity_id, content)"
-        )
+        for fts_meta in fts_tables:
+            table_name = fts_meta.table_name
+            conn.execute(
+                f"CREATE VIRTUAL TABLE IF NOT EXISTS {table_name} "
+                "USING fts5(entity_id, content)"
+            )
         conn.commit()
         conn.close()
 
@@ -137,6 +171,7 @@ def _data(entity: dict[str, Any]) -> dict[str, Any]:
 # ---------------------------------------------------------------------------
 # 1. Round-trip: create then get
 # ---------------------------------------------------------------------------
+
 
 class TestRoundTrip:
     def test_create_and_get_entity(self, tmp_hippo):
@@ -177,6 +212,7 @@ class TestRoundTrip:
 # 2. Validation blocks bad writes
 # ---------------------------------------------------------------------------
 
+
 class TestValidationBlocks:
     def test_invalid_name_raises(self, tmp_hippo):
         client = _make_client(tmp_hippo, validation=True)
@@ -212,6 +248,7 @@ class TestValidationBlocks:
 # ---------------------------------------------------------------------------
 # 3. Additive schema: new optional field doesn't break old data
 # ---------------------------------------------------------------------------
+
 
 class TestAdditiveFieldAddition:
     def test_existing_entity_survives_new_optional_field(self, tmp_hippo):
@@ -253,6 +290,7 @@ class TestAdditiveFieldAddition:
 # 4. REST API via FastAPI TestClient
 # ---------------------------------------------------------------------------
 
+
 class TestRESTAPI:
     def _app(self, tmp_hippo):
         hippo_client = _make_client(tmp_hippo)
@@ -285,17 +323,26 @@ class TestRESTAPI:
 # 5. FTS5 full-text search end-to-end
 # ---------------------------------------------------------------------------
 
+
 class TestFTSSearch:
     def test_fts_search_returns_matching_entity(self, tmp_hippo):
         client = _make_client(tmp_hippo, fts=True)
-        client.create("Sample", {
-            "name": "S001", "tissue": "DLPFC",
-            "notes": "hippocampus lesion observed",
-        })
-        client.create("Sample", {
-            "name": "S002", "tissue": "ACC",
-            "notes": "prefrontal cortex damage",
-        })
+        client.create(
+            "Sample",
+            {
+                "name": "S001",
+                "tissue": "DLPFC",
+                "notes": "hippocampus lesion observed",
+            },
+        )
+        client.create(
+            "Sample",
+            {
+                "name": "S002",
+                "tissue": "ACC",
+                "notes": "prefrontal cortex damage",
+            },
+        )
 
         results = client.search("Sample", "hippocampus")
         names = [_data(r)["name"] for r in results]
@@ -304,24 +351,43 @@ class TestFTSSearch:
 
     def test_fts_search_no_results(self, tmp_hippo):
         client = _make_client(tmp_hippo, fts=True)
-        client.create("Sample", {
-            "name": "S001", "tissue": "DLPFC",
-            "notes": "hippocampus lesion",
-        })
+        client.create(
+            "Sample",
+            {
+                "name": "S001",
+                "tissue": "DLPFC",
+                "notes": "hippocampus lesion",
+            },
+        )
         results = client.search("Sample", "nonexistentterm12345")
         assert results == []
 
     def test_fts_search_multiple_results(self, tmp_hippo):
         client = _make_client(tmp_hippo, fts=True)
-        client.create("Sample", {
-            "name": "S001", "tissue": "DLPFC", "notes": "cortex damage",
-        })
-        client.create("Sample", {
-            "name": "S002", "tissue": "ACC", "notes": "cortex lesion",
-        })
-        client.create("Sample", {
-            "name": "S003", "tissue": "HC", "notes": "hippocampus only",
-        })
+        client.create(
+            "Sample",
+            {
+                "name": "S001",
+                "tissue": "DLPFC",
+                "notes": "cortex damage",
+            },
+        )
+        client.create(
+            "Sample",
+            {
+                "name": "S002",
+                "tissue": "ACC",
+                "notes": "cortex lesion",
+            },
+        )
+        client.create(
+            "Sample",
+            {
+                "name": "S003",
+                "tissue": "HC",
+                "notes": "hippocampus only",
+            },
+        )
 
         results = client.search("Sample", "cortex")
         names = [_data(r)["name"] for r in results]
@@ -333,6 +399,7 @@ class TestFTSSearch:
 # ---------------------------------------------------------------------------
 # 6. Provenance / entity immutability
 # ---------------------------------------------------------------------------
+
 
 class TestProvenanceImmutability:
     def test_entity_has_id_after_create(self, tmp_hippo):

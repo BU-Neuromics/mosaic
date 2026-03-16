@@ -236,3 +236,103 @@ class TestErrorCases:
         """Test that putting empty data raises ValidationFailure."""
         with pytest.raises(ValidationFailure):
             client.put("Sample", {})
+
+
+class TestFTSIntegration:
+    """Tests for FTS metadata derivation from schema."""
+
+    def test_client_with_no_schemas_has_empty_fts_metadata(self) -> None:
+        """Test that client with no schemas has empty _fts_table_metadata."""
+        client = HippoClient()
+        assert hasattr(client, "_fts_table_metadata")
+        assert client._fts_table_metadata == {}
+
+    def test_client_with_schema_containing_fts_field_has_fts_metadata(self) -> None:
+        """Test that client with schema containing FTS field builds FTS metadata."""
+        from hippo.config.models import SchemaConfig, FieldDefinition
+        from hippo.core.storage.fts import FTSTableMetadata
+
+        # Create a simple schema with an FTS field
+        schema = SchemaConfig(
+            name="Sample",
+            version="1.0",
+            fields=[
+                FieldDefinition(name="name", type="string", required=True),
+                FieldDefinition(name="notes", type="string", search="fts5"),
+            ],
+        )
+
+        client = HippoClient(schemas={"Sample": schema})
+        assert hasattr(client, "_fts_table_metadata")
+        assert len(client._fts_table_metadata) == 1
+        assert "Sample" in client._fts_table_metadata
+        assert len(client._fts_table_metadata["Sample"]) == 1
+        meta = client._fts_table_metadata["Sample"][0]
+        assert isinstance(meta, FTSTableMetadata)
+        # Check the table name pattern from FTS field metadata
+        assert len(meta.fields) == 1
+        assert meta.fields[0].field_name == "notes"
+        assert meta.source_entity_type == "Sample"
+
+    def test_client_with_schema_containing_no_fts_fields_has_empty_fts_metadata(
+        self,
+    ) -> None:
+        """Test that client with schema containing no FTS fields has empty _fts_table_metadata."""
+        from hippo.config.models import SchemaConfig, FieldDefinition
+
+        # Create a simple schema with no FTS fields
+        schema = SchemaConfig(
+            name="Sample",
+            version="1.0",
+            fields=[
+                FieldDefinition(name="name", type="string", required=True),
+                FieldDefinition(name="description", type="string"),
+            ],
+        )
+
+        client = HippoClient(schemas={"Sample": schema})
+        assert hasattr(client, "_fts_table_metadata")
+        # No entry should be created for entities without FTS fields (they're not in the dict)
+        assert "Sample" not in client._fts_table_metadata
+
+    def test_client_with_multiple_entity_types_each_have_fts_fields(self) -> None:
+        """Test that client with multiple entity types each having FTS fields populates both entries."""
+        from hippo.config.models import SchemaConfig, FieldDefinition
+        from hippo.core.storage.fts import FTSTableMetadata
+
+        # Create schemas for two entities with FTS fields
+        sample_schema = SchemaConfig(
+            name="Sample",
+            version="1.0",
+            fields=[
+                FieldDefinition(name="name", type="string", required=True),
+                FieldDefinition(name="notes", type="string", search="fts5"),
+            ],
+        )
+
+        project_schema = SchemaConfig(
+            name="Project",
+            version="1.0",
+            fields=[
+                FieldDefinition(name="title", type="string", required=True),
+                FieldDefinition(name="description", type="string", search="fts5"),
+            ],
+        )
+
+        client = HippoClient(
+            schemas={"Sample": sample_schema, "Project": project_schema}
+        )
+        assert hasattr(client, "_fts_table_metadata")
+        assert len(client._fts_table_metadata) == 2
+        assert "Sample" in client._fts_table_metadata
+        assert "Project" in client._fts_table_metadata
+        assert len(client._fts_table_metadata["Sample"]) == 1
+        assert len(client._fts_table_metadata["Project"]) == 1
+
+        sample_meta = client._fts_table_metadata["Sample"][0]
+        project_meta = client._fts_table_metadata["Project"][0]
+        assert isinstance(sample_meta, FTSTableMetadata)
+        assert isinstance(project_meta, FTSTableMetadata)
+        # Check field names in the FTSFieldMetadata
+        assert sample_meta.fields[0].field_name == "notes"
+        assert project_meta.fields[0].field_name == "description"

@@ -61,6 +61,8 @@ class HippoClient:
         self._bypass_validation = bypass_validation
         self._storage = storage
         self._schemas = schemas
+        self._fts_table_metadata: dict[str, list[FTSTableMetadata]] = {}
+        self._build_fts_metadata()
         self._validate_search_capabilities()
 
     @property
@@ -90,6 +92,19 @@ class HippoClient:
             value: The validation pipeline to use.
         """
         self._pipeline = value
+
+    def _build_fts_metadata(self) -> None:
+        """Populate _fts_table_metadata from self._schemas."""
+        if not self._schemas:
+            return
+        for entity_type, schema in self._schemas.items():
+            fts_tables = []
+            for field in schema.fields:
+                if field.search and "fts" in field.search.lower():
+                    meta = FTSTableMetadata.from_field(field, entity_type=entity_type)
+                    fts_tables.append(meta)
+            if fts_tables:
+                self._fts_table_metadata[entity_type] = fts_tables
 
     def _validate_search_capabilities(self) -> None:
         """Validate that the storage adapter supports all search modes declared in schemas.
@@ -135,9 +150,6 @@ class HippoClient:
         Returns:
             List of FTS table metadata.
         """
-        if not hasattr(self, "_fts_table_metadata"):
-            return []
-
         return self._fts_table_metadata.get(entity_type, [])
 
     def _sync_entity_to_fts(
@@ -168,6 +180,13 @@ class HippoClient:
             for fts_meta in fts_tables:
                 table_name = fts_meta.table_name
                 fts_fields = fts_meta.get_fts_columns()
+
+                # Skip gracefully if the FTS virtual table has not been
+                # created yet (e.g. before `hippo migrate` has been run, or
+                # in test fixtures that don't set up FTS tables).
+                from hippo.core.storage.fts import fts_table_exists
+                if not fts_table_exists(conn.cursor(), table_name):
+                    continue
 
                 content = extract_fts_content(data, fts_fields)
 
