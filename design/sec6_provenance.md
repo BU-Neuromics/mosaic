@@ -313,21 +313,48 @@ ON provenance_events (event_type, timestamp);
 ```
 
 **No `UPDATE` or `DELETE` permitted** on `provenance_events`. The SQLite adapter enforces
-this via a trigger:
+this via triggers:
 
 ```sql
-CREATE TRIGGER prevent_provenance_update
-BEFORE UPDATE ON provenance_events
+-- Block primary key updates
+CREATE TRIGGER IF NOT EXISTS prevent_provenance_pk_update
+BEFORE UPDATE OF entity_id ON provenance
 BEGIN
-    SELECT RAISE(ABORT, 'provenance records are immutable');
+    SELECT RAISE(ABORT, 'Cannot update primary key of provenance record');
 END;
 
-CREATE TRIGGER prevent_provenance_delete
-BEFORE DELETE ON provenance_events
+-- Block timestamp field updates
+CREATE TRIGGER IF NOT EXISTS prevent_provenance_timestamp_update
+BEFORE UPDATE OF timestamp ON provenance
 BEGIN
-    SELECT RAISE(ABORT, 'provenance records are immutable');
+    SELECT RAISE(ABORT, 'Cannot update timestamp of provenance record');
+END;
+
+-- Block user_context (metadata) field updates
+CREATE TRIGGER IF NOT EXISTS prevent_provenance_metadata_update
+BEFORE UPDATE OF user_context ON provenance
+BEGIN
+    SELECT RAISE(ABORT, 'Cannot update user_context field of provenance record');
+END;
+
+-- Block payload (content) field updates
+CREATE TRIGGER IF NOT EXISTS prevent_provenance_content_update
+BEFORE UPDATE OF payload ON provenance
+BEGIN
+    SELECT RAISE(ABORT, 'Cannot update payload field of provenance record');
+END;
+
+-- Block DELETE operations
+CREATE TRIGGER IF NOT EXISTS prevent_provenance_delete
+BEFORE DELETE ON provenance
+BEGIN
+    SELECT RAISE(ABORT, 'Cannot delete provenance record');
 END;
 ```
+
+The triggers use `CREATE TRIGGER IF NOT EXISTS` for idempotent initialization.
+Triggers fire at statement level (BEFORE), providing database-level enforcement
+complementary to any application-level checks.
 
 **Provenance summary view** (for efficient `updated_at` derivation on batch reads):
 

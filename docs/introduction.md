@@ -65,6 +65,40 @@ Hippo is designed to run at any scale using the same codebase. You choose your d
 | **Small team** | Run the REST API service (`hippo serve`) on a shared host, backed by SQLite or PostgreSQL. | Lab group, shared project server |
 | **Enterprise / cloud** | Deploy on AWS with a managed PostgreSQL or DynamoDB backend, container orchestration, and authentication middleware. | Production platform, multi-team environment |
 
+## Error Handling
+
+Hippo provides a structured exception hierarchy for robust error handling. All exceptions inherit from `HippoError`, allowing you to catch specific error types or handle all Hippo-related errors uniformly.
+
+### Exception Hierarchy
+
+| Exception | Description |
+|-----------|-------------|
+| `HippoError` | Base exception for all Hippo errors |
+| `ConfigError` | Configuration loading and validation errors |
+| `SchemaError` | Schema parsing and processing errors |
+| `ValidationError` | Data validation errors |
+| `EntityNotFoundError` | Entity lookup failures |
+| `AdapterError` | Adapter-specific errors |
+
+### Usage Example
+
+```python
+from hippo.core.exceptions import (
+    HippoError,
+    ConfigError,
+    EntityNotFoundError,
+)
+
+try:
+    config = load_hippo_config("hippo.yaml")
+except ConfigError as e:
+    print(f"Configuration error: {e.field_name}")
+except EntityNotFoundError as e:
+    print(f"Entity not found: {e.entity_type} {e.entity_id}")
+except HippoError as e:
+    print(f"General error: {e.message}")
+```
+
 ## Next Steps
 
 - **[Quickstart](quickstart.md)** — Get Hippo running locally in under 5 minutes

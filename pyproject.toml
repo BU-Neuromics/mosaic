@@ -7,7 +7,7 @@ name = "hippo"
 version = "0.1.0"
 description = "SDK-first, infrastructure-agnostic metadata tracking service for bioinformatics research"
 readme = "README.md"
-requires-python = ">=3.10"
+requires-python = ">=3.11"
 license = {text = "MIT"}
 dependencies = [
     "pydantic>=2.0",
@@ -15,7 +15,7 @@ dependencies = [
     "typer",
     "fastapi",
     "uvicorn[standard]",
-    "cel-python",
+    "common-expression-language",
 ]
 
 [project.optional-dependencies]

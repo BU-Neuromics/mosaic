@@ -1,0 +1,18 @@
+validators:
+  - name: sample_name_required
+    entity_types: [Sample]
+    'on': [create, update]
+    condition: "entity.name != \"\""
+    error: "Sample {entity_id}: name is required"
+
+  - name: sample_age_positive
+    entity_types: [Sample]
+    'on': [create, update]
+    condition: "entity.age > 0"
+    error: "Sample {entity_id}: age must be positive"
+
+  - name: brain_sample_pmi_required
+    entity_types: [BrainSample]
+    'on': [create]
+    condition: "entity.post_mortem_interval_hours > 0"
+    error: "BrainSample {entity_id}: post_mortem_interval_hours is required"
