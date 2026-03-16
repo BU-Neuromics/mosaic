@@ -12,5 +12,8 @@
     }
   },
   "default_agent": "build",
-  "permission": "allow"
+  "permission": "allow",
+  "tools": {
+    "webfetch": false
+  }
 }
