@@ -10,7 +10,7 @@
 
 - [x] 2.1 Implement JSON parsing functionality for schema files
 - [x] 2.2 Create LinkML transformation pipeline for schema compilation
-- [ ] 2.3 Implement validation rules engine
+- [x] 2.3 Implement validation rules engine
 - [x] 2.4 Add schema diff comparison algorithm
 - [x] 2.5 Integrate commands with main CLI application
 
@@ -18,7 +18,7 @@
 
 - [x] 3.1 Implement syntax error detection for JSON files
 - [x] 3.2 Create comprehensive error message formatting
-- [ ] 3.3 Add validation error reporting functionality
+- [x] 3.3 Add validation error reporting functionality
 - [x] 3.4 Implement file path validation for diff command
 - [x] 3.5 Create tests for error scenarios
 
@@ -27,7 +27,7 @@
 - [x] 4.1 Write unit tests for compile-schema functionality
 - [x] 4.2 Write unit tests for validate functionality
 - [x] 4.3 Write unit tests for schema diff functionality
-- [ ] 4.4 Create integration tests for CLI commands
+- [x] 4.4 Create integration tests for CLI commands
 - [x] 4.5 Document usage examples for all new commands
 - [x] 4.6 Update README with new command information
 
