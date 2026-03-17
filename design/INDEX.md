@@ -66,6 +66,11 @@
 | Multi-instance REST | Fully stateless; all distributed concerns delegated to storage adapter | sec7 |
 | Schema sync v0.1 | Restart-on-migrate; three-phase post-v0.1 roadmap documented | sec7 |
 | Multi-instance adapter contract | Must implement atomic server-side upsert (not read-then-write) for entity and ExternalID creation | sec2, sec7 |
+| Entity namespaces | Optional `namespace:` key in schema files scopes entities to named namespaces; FQN = `namespace.EntityType`; root namespace is the only implicit namespace | sec3 |
+| NamespaceRegistry | Built by `SchemaLoader` at load time; maps `(namespace, entity_name)` → `EntityConfig`; fully populated before cross-namespace reference validation | sec3 |
+| Namespace dependency inference | Dependencies inferred from `references.entity_type` FQNs — no explicit `depends_on:` required; topological sort detects cycles | sec3 |
+| Root namespace canonicalization | `root.Donor` normalized to `"Donor"` at registry ingestion; only unqualified form in `SchemaConfig` and storage | sec3 |
+| Namespace backwards compatibility | Schemas without `namespace:` key load unchanged; no data migration required for existing deployments | sec3 |
 
 ---
 
@@ -77,6 +82,8 @@ out of scope for v0.1 and documented here for tracking.
 | Question | Section | Priority | Status |
 |---|---|---|---|
 | Where does the example omics schema ultimately live? | — | Low | Open — config repo, `schemas/omics/`, or community `hippo-reference-omics` package |
+| Entity type remapping / namespace migration path (OQ1) | sec3 §3.12 | High | Open — no migration path exists for moving `Sample` (root) to `tissue.Sample`; must be resolved before any production namespace adoption of existing entities. Options: `hippo migrate --remap`, namespace aliasing, or out-of-band migration script |
+| Canonical form for root-namespace entities in storage (OQ2) | sec3 §3.11 | Low | Decided — store as `"Donor"` (unqualified); registry normalizes `root.*` to unqualified at load time; documented as a firm invariant |
 | Ingestion idempotency for live webhook integrations | sec5 | High | Deferred — ExternalID upsert is the stable foundation; webhook retry deduplication needs a dedicated design session when live integrations are scoped |
 | Bulk availability change endpoint | sec4 | Medium | Deferred — `POST /entities/{type}/bulk-availability` for dataset archival |
 | OR filter composition in query API | sec4 | Low | Deferred — AND-only v0.1; CEL expression filter endpoint is future |

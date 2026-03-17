@@ -496,6 +496,157 @@ with no further changes.
 
 ---
 
-### 3.11 Multi-tenancy and Namespacing
+### 3.11 Entity Type Namespacing
+
+Entity type strings in Hippo are **optionally namespace-qualified**. The namespace system
+partitions entity types into named scopes, allowing multiple subsystems to define their own
+`Sample` or `Subject` types without collision.
+
+#### Namespace syntax
+
+- **Bare string** (root namespace): `"Sample"`, `"Donor"` — refers to entity types declared
+  with no namespace prefix. All existing entity types without a namespace key are in the root
+  namespace.
+- **Qualified string** (named namespace): `"tissue.Sample"`, `"omics.Datafile"` — the prefix
+  before the dot is the namespace name.
+- **Explicit root prefix**: `"root.Donor"` is equivalent to `"Donor"` — `root` is the only
+  implicit namespace; all others must be explicit.
+
+These forms are valid wherever an entity type is accepted:
+
+| Context | Example |
+|---|---|
+| SDK calls | `client.put("tissue.Sample", {...})` / `client.get("Donor", id)` |
+| REST query parameters | `GET /entities?entity_type=tissue.Sample` |
+| Schema `references.entity_type` fields | `references: {entity_type: tissue.Sample}` |
+| Provenance records | `entity_type` stored verbatim as `"tissue.Sample"` |
+
+#### Root namespace canonicalization
+
+`root.Donor` is normalized to `"Donor"` at schema load time. Only the unqualified form
+appears in `SchemaConfig` and in storage — there is no `root.` prefix in persisted data.
+`tissue.Sample` and `omics.Sample` are stored verbatim as distinct entity type strings.
+
+#### Namespacing in schema config
+
+Schema files may declare a top-level `namespace:` key. Entities in that file are scoped to
+the named namespace. Files without a `namespace:` key contribute to the root namespace.
+Multiple files sharing the same namespace have their entity lists merged at load time.
+
+```yaml
+# schemas/tissue.yaml
+namespace: tissue
+entities:
+  Sample:
+    fields:
+      donor_id: {type: string, references: {entity_type: Donor}}   # root Donor
+      parent_id: {type: string, references: {entity_type: tissue.Sample}}  # self-ref
+```
+
+Cross-namespace references use FQNs in `references.entity_type`. Namespace dependencies are
+inferred from these references — no explicit `depends_on:` declaration is required. See
+§3.12 for the full schema loading and validation model.
+
+#### Backwards compatibility
+
+Schemas with no `namespace:` key are unaffected. All existing unqualified entity type
+strings continue to resolve to the root namespace. No data migration is required — existing
+rows in storage use unqualified names, which remain valid. `client.put("Sample", {...})`
+continues to work for root-namespace `Sample` entities regardless of whether any namespaced
+`tissue.Sample` or `omics.Sample` entities exist in the same deployment.
+
+---
+
+### 3.12 Schema Namespaces
+
+> **Note:** This section documents the multi-file namespace system introduced for multi-team
+> deployments. Single-file deployments with no `namespace:` key require no changes and are
+> unaffected by this section.
+
+#### Namespace declaration
+
+Each schema file may declare an optional `namespace:` key at the top level. This key scopes
+all entity types in that file to a named namespace. Files without the key contribute entities
+to the root namespace.
+
+Multiple files may share the same `namespace:` value — their entity lists are merged at load
+time. If two files in the same namespace declare an entity with the same name, the schema
+loader raises `SchemaValidationError` identifying the conflicting entity and both files.
+
+```yaml
+# schemas/tissue.yaml
+namespace: tissue
+entities:
+  Sample: { ... }
+  Block: { ... }
+
+# schemas/tissue_extended.yaml
+namespace: tissue          # same namespace — merges with tissue.yaml above
+entities:
+  Slide: { ... }           # OK — distinct name
+```
+
+#### NamespaceRegistry
+
+The `SchemaLoader` builds a `NamespaceRegistry` as it discovers schema files. The registry
+maps `(namespace, entity_name) → EntityConfig`. The full registry is populated from all
+files before any cross-namespace reference validation begins — this ensures forward references
+work regardless of file discovery order.
+
+`NamespaceRegistry` provides:
+- FQN lookup: `registry.get("tissue", "Sample")` → `EntityConfig`
+- Root lookup: `registry.get(None, "Donor")` or `registry.get("root", "Donor")` → same result
+- Validation: raises `SchemaValidationError` for unknown FQNs or circular dependencies
+
+#### FQN resolution rules
+
+| Input string | Resolution |
+|---|---|
+| `"Donor"` | Root namespace entity `Donor` |
+| `"root.Donor"` | Equivalent to `"Donor"` — normalized at registry ingestion |
+| `"tissue.Sample"` | Entity `Sample` in namespace `tissue` |
+| `"ghost.Entity"` | `SchemaValidationError` — namespace `ghost` not registered |
+
+#### Cross-namespace reference validation
+
+After the registry is fully populated, the schema loader validates all `references.entity_type`
+values in all fields across all namespaces. For each reference:
+
+1. Parse the FQN into `(namespace, entity_name)`
+2. Look up in the registry
+3. If not found, raise `SchemaValidationError` identifying the unresolved FQN and the file
+
+#### Circular dependency detection
+
+The schema loader derives a namespace dependency graph from cross-namespace references. If
+namespace A references an entity in namespace B, then A depends on B. The loader performs a
+topological sort over this graph. If a cycle is detected (e.g., A → B → A), the loader raises
+`SchemaValidationError` identifying the cycle path.
+
+Dependencies are inferred — no `depends_on:` key is required or supported.
+
+#### Error messages
+
+Namespace validation errors identify the problematic reference or cycle path and the file
+where it originates:
+
+```
+SchemaValidationError: Unresolved FQN reference 'ghost.Entity' in field 'sample.ghost_id'
+  declared in: schemas/tissue.yaml
+
+SchemaValidationError: Circular namespace dependency detected: tissue → omics → tissue
+  first reference: schemas/omics.yaml field 'datafile.sample_id' (references tissue.Sample)
+```
+
+#### Backwards compatibility
+
+Existing single-file `schema.yaml` deployments require no changes. The `namespace:` key is
+optional. `HippoClient` method signatures are unchanged — callers pass FQNs as strings to the
+same `entity_type` parameter they already use. No data migration is required for any existing
+deployment.
+
+---
+
+### 3.13 Multi-tenancy
 
 Single namespace in v0.1. Multi-tenancy is explicitly out of scope for v0.1.

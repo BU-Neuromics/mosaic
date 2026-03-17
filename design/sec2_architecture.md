@@ -367,13 +367,46 @@ The Hippo CLI is implemented with Typer and installed as the `hippo` command:
 | `hippo init` | Scaffold a new `hippo.yaml`, `schema.yaml`, and `validators.yaml` in the current directory |
 | `hippo serve` | Start the REST API server using settings from `hippo.yaml` |
 | `hippo ingest <source> <file>` | Run a batch ingestion from a flat file (CSV/JSON/JSONL) |
-| `hippo validate` | Validate config, schema, and validators files without starting the server |
-| `hippo migrate` | Apply any pending schema migrations to the current storage backend |
+| `hippo validate [--schema <path>]` | Validate config, schema, and validators files without starting the server; `--schema` runs the full namespace graph validation pass (cross-namespace reference checks, duplicate entity detection, circular dependency detection) and reports all errors with file locations |
+| `hippo migrate` | Apply any pending schema migrations to the current storage backend; includes namespace graph validation pass before applying any changes |
 | `hippo status` | Show current config, adapter type, entity counts, schema version, and installed plugins |
 | `hippo compile-schema` | Compile `schema.yaml` to LinkML on demand; output to `./schema.linkml.yaml` |
 | `hippo reference list` | List all installed reference loaders and their installed versions |
 | `hippo reference install <name> [--version <v>]` | Install a reference dataset; merges schema fragment and runs migrate |
 | `hippo reference update <name> [--version <v>]` | Update an installed reference dataset to a newer release |
+
+**Namespace validation in `hippo validate --schema`**
+
+When `--schema` is provided (or the schema path is read from `hippo.yaml`), the validator
+runs the full namespace graph validation pass:
+
+1. Discovers all schema files recursively from the schema path (file or directory)
+2. Builds the `NamespaceRegistry` from all discovered files
+3. Checks for duplicate `(namespace, entity_name)` pairs across files
+4. Validates all `references.entity_type` FQNs against the registry
+5. Detects circular namespace dependencies via topological sort
+
+Each error identifies the unresolved FQN or circular dependency path and the file where it
+originates:
+
+```
+SchemaValidationError: Unresolved FQN reference 'ghost.Entity' in field 'sample.ghost_id'
+  declared in: schemas/tissue.yaml
+
+SchemaValidationError: Circular namespace dependency detected: tissue → omics → tissue
+  first reference: schemas/omics.yaml field 'datafile.sample_id' (references tissue.Sample)
+
+SchemaValidationError: Duplicate entity 'Sample' in namespace 'tissue'
+  first declared in: schemas/tissue.yaml
+  also declared in: schemas/tissue_legacy.yaml
+```
+
+**Namespace validation in `hippo migrate`**
+
+`hippo migrate` runs the namespace graph validation pass before generating the migration
+plan. If namespace validation fails, the migration is aborted and errors are reported before
+any changes are applied. This ensures no schema with broken namespace references can be
+applied to storage.
 
 ### 2.9 Deployment Tiers
 
