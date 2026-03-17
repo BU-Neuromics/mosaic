@@ -317,3 +317,536 @@ results = client.relationships.traverse(
 | `EntityNotFoundError` | Source or target entity doesn't exist |
 | `RelationshipExistsError` | Relationship already exists (if duplicate check needed) |
 | `RelationshipNotFoundError` | Relationship doesn't exist when trying to remove |
+
+## REST API
+
+All REST endpoints (except health checks) require authentication via Bearer token header:
+
+```
+Authorization: Bearer <token>
+```
+
+### Health
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/health` | Service health check |
+| GET | `/` | API root with version info |
+
+**GET /health**
+
+Returns health status of the service.
+
+*Response:*
+```json
+{
+  "status": "healthy",
+  "service": "hippo"
+}
+```
+
+**GET /**
+
+Returns API information.
+
+*Response:*
+```json
+{
+  "service": "Hippo API",
+  "version": "0.1.0",
+  "docs": "/docs"
+}
+```
+
+*Error Codes: None (unauthenticated)*
+
+---
+
+### Entities
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/entities` | List entities with filtering |
+| GET | `/entities/{entity_id}` | Get entity by ID |
+| POST | `/entities` | Create new entity |
+| PUT | `/entities/{entity_id}` | Update an entity |
+| DELETE | `/entities/{entity_id}` | Soft delete an entity |
+
+**GET /entities**
+
+List entities with optional filtering and pagination.
+
+*Query Parameters:*
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `entity_type` | string | Filter by entity type |
+| `limit` | int | Max results (1-1000, default: 100) |
+| `offset` | int | Results to skip (default: 0) |
+
+*Response:* Array of entity objects
+
+**GET /entities/{entity_id}**
+
+Get an entity by ID.
+
+*Path Parameters:*
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `entity_id` | string | Entity ID |
+
+*Query Parameters:*
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `expand` | string | Expand path for related entities |
+
+*Response:* Entity object with all fields
+
+*Error Codes:* `404` - Entity not found
+
+**POST /entities**
+
+Create a new entity.
+
+*Request Body:*
+```json
+{
+  "entity_type": "Sample",
+  "data": {
+    "id": "sample-123",
+    "name": "Test Sample"
+  }
+}
+```
+
+*Response:* Created entity with generated ID and timestamps
+
+*Error Codes:* `422` - Validation failed
+
+**PUT /entities/{entity_id}**
+
+Update an existing entity.
+
+*Path Parameters:*
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `entity_id` | string | Entity ID |
+
+*Request Body:*
+```json
+{
+  "name": "Updated Name",
+  "status": "active"
+}
+```
+
+*Response:* Updated entity object
+
+*Error Codes:* `404` - Entity not found
+
+**DELETE /entities/{entity_id}**
+
+Soft delete an entity (sets `is_available` to false).
+
+*Path Parameters:*
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `entity_id` | string | Entity ID |
+
+*Response:*
+```json
+{
+  "status": "deleted",
+  "entity_id": "entity-123"
+}
+```
+
+*Error Codes:* `404` - Entity not found
+
+---
+
+### Search
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/search` | Full-text search of entities |
+
+**GET /search**
+
+Search entities using full-text search.
+
+*Query Parameters:*
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `entity_type` | string | Entity type to search (required) |
+| `q` | string | Search query string (required) |
+| `limit` | int | Max results (1-1000, default: 100) |
+| `offset` | int | Results to skip (default: 0) |
+
+*Response:* Array of matching entities
+
+---
+
+### History
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/entities/{entity_id}/history` | Get entity change history |
+
+**GET /entities/{entity_id}/history**
+
+Get the change history/provenance log for an entity.
+
+*Path Parameters:*
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `entity_id` | string | Entity ID |
+
+*Response:* Array of history records with timestamps and changes
+
+*Error Codes:* `404` - Entity not found
+
+---
+
+### Relationships
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/entities/{entity_id}/relationships` | List entity relationships |
+| POST | `/entities/{entity_id}/relationships` | Create a relationship |
+| DELETE | `/entities/{entity_id}/relationships/{rel_type}/{target_id}` | Delete a relationship |
+
+**GET /entities/{entity_id}/relationships**
+
+Get all relationships for an entity.
+
+*Path Parameters:*
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `entity_id` | string | Entity ID |
+
+*Response:* Array of relationship objects
+
+*Error Codes:* `404` - Entity not found
+
+**POST /entities/{entity_id}/relationships**
+
+Create a relationship between two entities.
+
+*Path Parameters:*
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `entity_id` | string | Source entity ID |
+
+*Request Body:*
+```json
+{
+  "target_entity_id": "entity-456",
+  "relationship_type": "contains"
+}
+```
+
+*Response:*
+```json
+{
+  "id": "entity-123->entity-456:contains",
+  "source_entity_id": "entity-123",
+  "target_entity_id": "entity-456",
+  "relationship_type": "contains"
+}
+```
+
+*Error Codes:* `404` - Source or target entity not found
+
+**DELETE /entities/{entity_id}/relationships/{rel_type}/{target_id}**
+
+Delete a relationship.
+
+*Path Parameters:*
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `entity_id` | string | Source entity ID |
+| `rel_type` | string | Relationship type |
+| `target_id` | string | Target entity ID |
+
+*Response:*
+```json
+{
+  "status": "deleted",
+  "relationship_id": "entity-123->entity-456:contains"
+}
+```
+
+---
+
+### Ingest
+
+| Method | Path | Description |
+|--------|------|-------------|
+| POST | `/ingest` | Create a new entity |
+
+**POST /ingest**
+
+Create a new entity via the ingestion endpoint.
+
+*Request Body:*
+```json
+{
+  "entity_type": "Sample",
+  "data": {
+    "id": "sample-123",
+    "name": "Test Sample",
+    "status": "active"
+  }
+}
+```
+
+*Response:* Created entity with generated ID and timestamps
+
+*Error Codes:*
+- `400` - Invalid JSON format
+- `422` - Missing required fields or validation failure
+
+---
+
+### Schemas
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/schemas` | List all schemas |
+| GET | `/schemas/{name}` | Get schema by name |
+| POST | `/schemas` | Create a new schema |
+
+**GET /schemas**
+
+List all available entity schemas.
+
+*Response:* Array of schema definitions
+
+**GET /schemas/{name}**
+
+Get a schema by name.
+
+*Path Parameters:*
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `name` | string | Schema name |
+
+*Response:* Schema definition with fields
+
+*Error Codes:* `404` - Schema not found
+
+**POST /schemas**
+
+Create a new schema.
+
+*Request Body:*
+```json
+{
+  "name": "Sample",
+  "version": "1.0",
+  "fields": [
+    {"name": "id", "field_type": "string", "required": true},
+    {"name": "name", "field_type": "string", "required": true}
+  ]
+}
+```
+
+*Response:*
+```json
+{
+  "name": "Sample",
+  "version": "1.0",
+  "status": "created"
+}
+```
+
+---
+
+### Supersession
+
+| Method | Path | Description |
+|--------|------|-------------|
+| POST | `/entities/{entity_id}/supersede` | Supersede an entity's external ID |
+| GET | `/entities/{entity_id}/superseded` | Get superseded external IDs |
+
+**POST /entities/{entity_id}/supersede**
+
+Supersede an entity's external ID with a new one.
+
+*Path Parameters:*
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `entity_id` | string | Entity ID |
+
+*Request Body:*
+```json
+{
+  "old_external_id": "EXT-001",
+  "new_external_id": "EXT-002"
+}
+```
+
+*Response:* New external ID record
+
+*Error Codes:* `404` - Entity not found
+
+**GET /entities/{entity_id}/superseded**
+
+Get superseded external IDs for an entity.
+
+*Path Parameters:*
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `entity_id` | string | Entity ID |
+
+*Response:* Array of superseded external ID records
+
+*Error Codes:* `404` - Entity not found
+
+---
+
+### External IDs
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/external-ids/{id_type}/{external_id}` | Get entity by external ID |
+| GET | `/entities/{entity_id}/external-ids` | List entity's external IDs |
+| POST | `/entities/{entity_id}/external-ids` | Register external ID |
+| DELETE | `/entities/{entity_id}/external-ids/{id_type}/{external_id}` | Delete external ID |
+
+**GET /external-ids/{id_type}/{external_id}**
+
+Get an entity by its external ID.
+
+*Path Parameters:*
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `id_type` | string | External ID type (e.g., "lims", "barcode") |
+| `external_id` | string | External ID value |
+
+*Response:* Entity object
+
+*Error Codes:* `404` - Entity not found
+
+**GET /entities/{entity_id}/external-ids**
+
+List all external IDs for an entity.
+
+*Path Parameters:*
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `entity_id` | string | Entity ID |
+
+*Query Parameters:*
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `include_superseded` | bool | Include superseded IDs (default: false) |
+
+*Response:* Array of external ID records
+
+*Error Codes:* `404` - Entity not found
+
+**POST /entities/{entity_id}/external-ids**
+
+Register an external ID for an entity.
+
+*Path Parameters:*
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `entity_id` | string | Entity ID |
+
+*Request Body:*
+```json
+{
+  "external_id": "LIMS-12345"
+}
+```
+
+*Response:* Created external ID record
+
+*Error Codes:* `404` - Entity not found
+
+**DELETE /entities/{entity_id}/external-ids/{id_type}/{external_id}**
+
+Delete an external ID from an entity.
+
+*Path Parameters:*
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `entity_id` | string | Entity ID |
+| `id_type` | string | External ID type |
+| `external_id` | string | External ID value |
+
+*Response:*
+```json
+{
+  "status": "deleted",
+  "external_id": "LIMS-12345"
+}
+```
+
+---
+
+### Availability
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/entities/{entity_id}/availability` | Get entity availability status |
+| PUT | `/entities/{entity_id}/availability` | Set entity availability status |
+
+**GET /entities/{entity_id}/availability**
+
+Get the availability status of an entity.
+
+*Path Parameters:*
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `entity_id` | string | Entity ID |
+
+*Response:*
+```json
+{
+  "entity_id": "entity-123",
+  "is_available": true
+}
+```
+
+*Error Codes:* `404` - Entity not found
+
+**PUT /entities/{entity_id}/availability**
+
+Set the availability status of an entity.
+
+*Path Parameters:*
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `entity_id` | string | Entity ID |
+
+*Request Body:*
+```json
+{
+  "is_available": false
+}
+```
+
+*Response:*
+```json
+{
+  "entity_id": "entity-123",
+  "is_available": false
+}
+```
+
+*Error Codes:* `404` - Entity not found
+
+---
+
+### Error Codes Summary
+
+| Code | Description |
+|------|-------------|
+| `400` | Bad Request - Invalid JSON format |
+| `401` | Unauthorized - Missing or invalid Bearer token |
+| `404` | Not Found - Entity/Schema not found |
+| `422` | Unprocessable Entity - Validation failed |
+| `500` | Internal Server Error |

@@ -1,25 +1,66 @@
 # Hippo — Metadata Tracking Service
 
+[![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
+[![Tests](https://img.shields.io/badge/tests-634%20passing-green.svg)](https://github.com/anomalyco/hippo)
+
 SDK-first, infrastructure-agnostic metadata tracking service for bioinformatics research.
 
-## Design Spec
+## Table of Contents
 
-See [`design/`](design/) for the full architecture and implementation specification.
-Start with [`design/INDEX.md`](design/INDEX.md).
-
-## Implementation Plan
-
-See [`plan/`](plan/) for the OpenPlan roadmap, epics, and features.
-OpenSpec feature specs live in [`plan/openspec/`](plan/openspec/).
+- [Quick Start](#quick-start)
+- [Documentation](#documentation)
+- [Features](#features)
+- [Validation Pipeline](#validation-pipeline)
+- [Entity Relationships](#entity-relationships)
+- [Development](#development)
 
 ## Quick Start
 
 ```bash
+# Install Hippo
 pip install hippo
 
-hippo init          # scaffold hippo.yaml + schema.yaml
-hippo serve         # start REST server (default: http://127.0.0.1:8000)
+# Initialize a new Hippo project (creates hippo.yaml + schema.yaml)
+hippo init
+
+# Apply schema migrations to your database
+hippo migrate
+
+# Start the REST API server (default: http://127.0.0.1:8000)
+hippo serve
+
+# Use the SDK
+python -c "
+from hippo import HippoClient
+
+client = HippoClient()
+sample = client.put('Sample', {'id': 'S001', 'name': 'Test Sample'})
+print(f'Created: {sample[\"id\"]}')
+"
 ```
+
+## Documentation
+
+| Guide | Description |
+|-------|-------------|
+| [Installation](docs/installation.md) | Installing Hippo and dependencies |
+| [Quick Start](docs/quickstart.md) | Get up and running fast |
+| [Configuration](docs/configuration.md) | Configuring Hippo for your project |
+| [CLI Reference](docs/cli-reference.md) | Command-line interface documentation |
+| [Data Model](docs/data-model.md) | Entity types, fields, and relationships |
+| [API Reference](docs/api-reference.md) | Complete SDK and REST API docs |
+
+## Features
+
+- **Schema-driven entities** — Define entity types and fields in YAML/JSON
+- **Validation pipeline** — Custom validators for data integrity
+- **REST API** — HTTP endpoints for all operations
+- **FTS full-text search** — Fast text search across entities
+- **Relationship graph** — Typed relationships with traversal
+- **Provenance/history** — Full audit trail of all changes
+- **Availability management** — Soft deletes via `is_available` flag
+- **External IDs** — Map to external systems (STARLIMS, HALO, Donor DB)
+- **Schema diff/migration** — Version-controlled schema changes
 
 ## Validation Pipeline
 
