@@ -56,6 +56,11 @@ def serve(
     This command starts the Hippo REST API server with options for specifying
     host address, port number, auto-reload behavior, worker processes,
     and logging levels. By default it runs on 127.0.0.1:8000 with info logging.
+
+    Usage:
+      hippo serve                    # Start with default config
+      hippo serve --port 9000        # Start on custom port
+      hippo serve --log-level debug  # Start with debug logging
     """
     import uvicorn
     from hippo.serve import create_default_app
@@ -253,7 +258,17 @@ def validate(
         False, "--verbose", "-v", help="Show detailed validation output"
     ),
 ) -> None:
-    """Validate schemas against defined rules or application configuration."""
+    """Validate schemas against defined rules or application configuration.
+
+    This command validates schema files or configuration files to ensure they
+    conform to the expected structure and format.
+
+    Usage:
+      hippo validate                    # Validate default configuration
+      hippo validate --schema my-schema.yaml  # Validate specific schema
+      hippo validate --config my-config.yaml  # Validate specific config
+      hippo validate --verbose              # Show detailed output
+    """
     from pathlib import Path
     import yaml
 
@@ -360,6 +375,8 @@ def ingest(
     total_records = 0
     for source in sources.sources:
         typer.echo(f"Processing source: {source.name} ({source.type})")
+        # In a real implementation, this would actually process the source and count records
+        # For now we simulate processing by incrementing total_records
         total_records += 10
 
     if dry_run:

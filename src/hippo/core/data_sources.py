@@ -122,4 +122,7 @@ class DataSources:
                 errors.append(f"Source '{source.name}': type is required")
             if not source.connection:
                 errors.append(f"Source '{source.name}': connection is required")
+            # Additional validation for specific sources types could be added here
+            # but we'll leave it generic as this is the core validation
+
         return errors

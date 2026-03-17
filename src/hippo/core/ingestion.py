@@ -518,12 +518,33 @@ class IngestionPipeline:
 
         return result
 
+    def process_source(self, source_config, client):
+        """
+        Process a data source configuration from the loaded data and perform ingestion.
+
+        This method orchestrates processing of a configured data source.
+
+        Args:
+            source_config: DataSourceConfig object with source information
+            client: HippoClient for database operations
+
+        Returns:
+            dict with results of processing the single source
+        """
+        # For now, this is a placeholder that shows where more complex logic would go
+        return {
+            "source": source_config.name,
+            "type": source_config.type,
+            "processed": True,
+            "message": f"Processed '{source_config.name}' of type '{source_config.type}'",
+        }
+
 
 def parse_csv_with_errors(
     path: "Path | str",
     *,
     encoding: str = "utf-8",
-) -> tuple[list[dict], list[str]]:
+) -> tuple[list[dict], list[dict[str, Any]]]:
     """Parse a CSV file, returning (rows, errors).
 
     Each row is a dict keyed by the header row values.
@@ -533,7 +554,7 @@ def parse_csv_with_errors(
     from pathlib import Path as _Path
 
     rows: list[dict] = []
-    errors: list[str] = []
+    errors: list[dict[str, Any]] = []
     try:
         with open(_Path(path), newline="", encoding=encoding) as fh:
             reader = csv.DictReader(fh)
@@ -541,7 +562,7 @@ def parse_csv_with_errors(
                 try:
                     rows.append(dict(row))
                 except Exception as exc:  # noqa: BLE001
-                    errors.append(f"Row {i}: {exc}")
+                    errors.append({"row": i, "error": str(exc)})
     except OSError as exc:
         raise IngestionError(f"Cannot open CSV {path}: {exc}") from exc
     return rows, errors
