@@ -1,14 +1,14 @@
 # Hippo Quickstart
 
-This guide walks you through setting up Hippo for a real-world bioinformatics research scenario: tracking brain tissue donors, samples, and RNA-seq data files from a small Alzheimer's disease study.
+This guide uses an example research study to walk through Hippo features: tracking brain tissue donors, samples, and RNA-seq data files from a small Alzheimer's disease study.
 
 By the end, you'll understand how to define schemas, run migrations, use the REST API, and work with the Python SDK.
 
 ## Prerequisites
 
-- **Hippo installed**: `pip install hippo-mts`
+- **Hippo installed**: `pip install hippo`
 - **curl** or **HTTPie** for REST API examples
-- (Optional) Python 3.10+ for SDK examples
+- (Optional) Python 3.11+ for SDK examples
 
 ## Step 1: Initialize a Project
 
@@ -21,61 +21,60 @@ hippo init --path brain_study
 Expected output:
 
 ```
-✓ Created project directory: brain_study/
-✓ Created schemas/ directory
-✓ Created config/ directory
-✓ Created data/ directory
-✓ Project initialized with 'basic' template
+Created brain_study/
+Created brain_study/data/
+Created brain_study/config.json
+Created brain_study/.gitignore
+
+Hippo project initialized at brain_study
+Template: Basic
+Run 'hippo serve' to start the server
 ```
 
 This creates the following structure:
 
 ```
 brain_study/
-├── config/
-│   └── hippo.yaml
 ├── data/
-│   └── hippo.db (created after migration)
-├── schemas/
-│   └── .gitkeep
-└── hippo.yaml
+├── config.json
+└── .gitignore
 ```
 
 ## Step 2: Define Schemas
 
-Create a schema file that defines the entities for your Alzheimer's research study. Hippo schemas use YAML with an `entities` key at the top level.
+Create a schema file that defines the entities for your Alzheimer's research study. Hippo schemas use YAML with an `entities` key at the top level, where entity types are declared as a dict of dicts.
 
 Create `schemas/brain_study.yaml`:
 
 ```yaml
 entities:
-  - name: Donor
+  Donor:
     version: '1.0'
     fields:
-      - name: donor_id
+      donor_id:
         type: string
         required: true
         unique: true
-      - name: name
+      name:
         type: string
         required: true
-      - name: age
+      age:
         type: integer
         required: true
-      - name: sex
+      sex:
         type: string
         required: true
         allowed_values:
           - M
           - F
-      - name: diagnosis
+      diagnosis:
         type: string
         required: true
         allowed_values:
           - Control
           - Alzheimer's Disease
           - Mild Cognitive Impairment
-      - name: brain_region
+      brain_region:
         type: string
         required: true
         allowed_values:
@@ -85,26 +84,26 @@ entities:
           - Occipital Cortex
           - Cerebellum
 
-  - name: Sample
+  Sample:
     version: '1.0'
     fields:
-      - name: sample_id
+      sample_id:
         type: string
         required: true
         unique: true
-      - name: donor
+      donor:
         type: ref
         required: true
         references:
           entity_type: Donor
-      - name: tissue_type
+      tissue_type:
         type: string
         required: true
         allowed_values:
           - Brain Tissue
           - Blood
           - CSF
-      - name: brain_region
+      brain_region:
         type: string
         required: true
         allowed_values:
@@ -113,33 +112,33 @@ entities:
           - Temporal Cortex
           - Occipital Cortex
           - Cerebellum
-      - name: collection_date
+      collection_date:
         type: date
         required: true
-      - name: rin_score
+      rin_score:
         type: float
         required: false
         description: RNA Integrity Number (RIN), 1-10 scale
-      - name: notes
+      notes:
         type: string
         required: false
 
-  - name: DataFile
+  DataFile:
     version: '1.0'
     fields:
-      - name: file_id
+      file_id:
         type: string
         required: true
         unique: true
-      - name: sample
+      sample:
         type: ref
         required: true
         references:
           entity_type: Sample
-      - name: file_path
+      file_path:
         type: string
         required: true
-      - name: file_type
+      file_type:
         type: string
         required: true
         allowed_values:
@@ -149,16 +148,16 @@ entities:
           - CSV
           - JSON
           - TSV
-      - name: size_bytes
+      size_bytes:
         type: integer
         required: true
-      - name: checksum
+      checksum:
         type: string
         required: false
-      - name: pipeline_version
+      pipeline_version:
         type: string
         required: false
-      - name: description
+      description:
         type: string
         required: false
 ```
@@ -190,12 +189,18 @@ cd brain_study && hippo migrate
 Expected output:
 
 ```
-✓ Loaded 3 entity definitions from schemas/brain_study.yaml
-✓ Created table: donors (v1.0)
-✓ Created table: samples (v1.0)
-✓ Created table: data_files (v1.0)
-✓ Created relationship tables
-✓ Migration complete: v1.0
+=== Migration Plan ===
+
+New tables to create (3):
+  + donors
+  + samples
+  + data_files
+
+=== Migration Complete ===
+Tables created: 3
+Tables modified: 0
+FTS tables created: 0
+Records backfilled: 0
 ```
 
 The database is now ready to store entities.
@@ -454,76 +459,76 @@ from hippo.core.exceptions import ValidationFailure
 SCHEMAS = {
     "brain_study": """
 entities:
-  - name: Donor
+  Donor:
     version: '1.0'
     fields:
-      - name: donor_id
+      donor_id:
         type: string
         required: true
-      - name: name
+      name:
         type: string
         required: true
-      - name: age
+      age:
         type: integer
         required: true
-      - name: sex
+      sex:
         type: string
         required: true
-      - name: diagnosis
+      diagnosis:
         type: string
         required: true
-      - name: brain_region
+      brain_region:
         type: string
         required: true
 
-  - name: Sample
+  Sample:
     version: '1.0'
     fields:
-      - name: sample_id
+      sample_id:
         type: string
         required: true
-      - name: donor
+      donor:
         type: ref
         required: true
         references:
           entity_type: Donor
-      - name: tissue_type
+      tissue_type:
         type: string
         required: true
-      - name: brain_region
+      brain_region:
         type: string
         required: true
-      - name: collection_date
+      collection_date:
         type: date
         required: true
-      - name: rin_score
+      rin_score:
         type: float
         required: false
 
-  - name: DataFile
+  DataFile:
     version: '1.0'
     fields:
-      - name: file_id
+      file_id:
         type: string
         required: true
-      - name: sample
+      sample:
         type: ref
         required: true
         references:
           entity_type: Sample
-      - name: file_path
+      file_path:
         type: string
         required: true
-      - name: file_type
+      file_type:
         type: string
         required: true
-      - name: size_bytes
+      size_bytes:
         type: integer
         required: true
-      - name: checksum
+      checksum:
         type: string
         required: false
-      - name: pipeline_version
+      pipeline_version:
         type: string
         required: false
 """

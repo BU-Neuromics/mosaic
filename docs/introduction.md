@@ -1,6 +1,8 @@
 # Hippo — Metadata Tracking Service
 
-Hippo is an open-source metadata tracking service for multi-modal omics datasets. It gives you a unified, queryable registry of biological samples, donors, data files, and the relationships between them — so that pipelines, analysis tools, and data portals can reliably locate and filter datasets without manually managing spreadsheets or bespoke file manifests.
+Hippo is an open-source, configurable metadata tracking service. It gives you a unified, queryable registry of entities, their fields, and the relationships between them — so that downstream systems, analysis pipelines, and data portals can reliably locate and filter metadata without manually managing spreadsheets or bespoke file manifests.
+
+Hippo is domain-agnostic: the entity types, fields, and relationships it tracks are defined entirely by a schema config file authored for each deployment.
 
 ## Who Is Hippo For?
 
@@ -10,16 +12,12 @@ Hippo is an open-source metadata tracking service for multi-modal omics datasets
 
 ## What Hippo Does
 
-Hippo tracks *where data lives* and *what it describes* — not the data itself. Raw files (fastq, BAM, VCF, images, etc.) remain in place on your filesystem or object store; Hippo stores the metadata and file locations needed to find and interpret them.
+Hippo tracks *where data lives* and *what it describes* — not the data itself. Raw data files remain in place on your filesystem or object store; Hippo stores the metadata and file locations needed to find and interpret them.
 
 Specifically, Hippo tracks:
 
-- **Subjects (donors)** and their associated metadata
-- **Samples** derived from subjects, including tissue type, collection date, and derivation relationships
-- **Data files** at known locations (S3 URIs, local paths, HTTPS URLs), tagged with modality, file type, and genome build
-- **Datasets** — named, versioned logical collections of data files
-- **Workflows and workflow runs** — pipeline definitions and individual executions linking input files to output files
-- **Relationships** between all of the above, including derivation chains and supersession history
+- **Entities** of any type defined in your schema config (for example: subjects, samples, and data files in an omics deployment; batches, components, and inspections in a manufacturing deployment)
+- **Relationships** between entities, including derivation chains and supersession history
 - **Full provenance** — every write is versioned, nothing is ever hard-deleted, and complete change history is always available
 
 ## What Hippo Does NOT Do
@@ -33,18 +31,18 @@ Hippo is deliberately scoped. It does not:
 - Manage authentication or authorization (this is delegated to the transport layer or a future middleware component)
 - Replace upstream source systems such as LIMS, EHR, or clinical databases
 
-## How Hippo Fits into the BASS Platform
+## How Hippo Fits into the Larger Platform
 
-Hippo is the foundational data layer of the BASS platform. Other BASS components depend on Hippo; Hippo has no dependencies on them.
+Hippo is designed as the first independently deliverable module of a modular platform. Other platform modules depend on Hippo; Hippo has no dependencies on them.
 
 ```
 ┌──────────────────────────────────────────────────────┐
-│                  Omics Data Platform                 │
+│                    Platform                           │
 │                                                      │
 │  ┌─────────┐  ┌──────────┐  ┌──────────────────┐    │
-│  │  Hippo  │  │  Tissue  │  │  Digital         │    │
-│  │  (MTS)  │  │  Registry│  │  Histology Store │    │
-│  │  ◄ HERE │  │ (future) │  │  (future)        │    │
+│  │  Hippo  │  │ Module B │  │  Module C        │    │
+│  │  (MTS)  │  │ (future) │  │  (future)        │    │
+│  │  ◄ HERE │  │          │  │                  │    │
 │  └────┬────┘  └──────────┘  └──────────────────┘    │
 │       │                                              │
 │  ┌────▼──────────────────────────────────────────┐   │
@@ -53,7 +51,7 @@ Hippo is the foundational data layer of the BASS platform. Other BASS components
 └──────────────────────────────────────────────────────┘
 ```
 
-BASS-Cappella (workflow engine) uses Hippo to look up input files and register output files. BASS-Aperture (interface layer) queries Hippo to present data to users. BASS-Bridge (integration middleware) coordinates cross-component operations.
+Downstream analysis pipelines use Hippo to look up input files and register output files. Data portals query Hippo to present metadata to users. Integration middleware coordinates cross-module operations.
 
 ## Deployment Options
 
@@ -64,40 +62,6 @@ Hippo is designed to run at any scale using the same codebase. You choose your d
 | **Local / single-user** | Install via `pip`, point at a local SQLite file, query from a Python script or notebook. No server required. | Individual researcher, exploratory analysis |
 | **Small team** | Run the REST API service (`hippo serve`) on a shared host, backed by SQLite or PostgreSQL. | Lab group, shared project server |
 | **Enterprise / cloud** | Deploy on AWS with a managed PostgreSQL or DynamoDB backend, container orchestration, and authentication middleware. | Production platform, multi-team environment |
-
-## Error Handling
-
-Hippo provides a structured exception hierarchy for robust error handling. All exceptions inherit from `HippoError`, allowing you to catch specific error types or handle all Hippo-related errors uniformly.
-
-### Exception Hierarchy
-
-| Exception | Description |
-|-----------|-------------|
-| `HippoError` | Base exception for all Hippo errors |
-| `ConfigError` | Configuration loading and validation errors |
-| `SchemaError` | Schema parsing and processing errors |
-| `ValidationError` | Data validation errors |
-| `EntityNotFoundError` | Entity lookup failures |
-| `AdapterError` | Adapter-specific errors |
-
-### Usage Example
-
-```python
-from hippo.core.exceptions import (
-    HippoError,
-    ConfigError,
-    EntityNotFoundError,
-)
-
-try:
-    config = load_hippo_config("hippo.yaml")
-except ConfigError as e:
-    print(f"Configuration error: {e.field_name}")
-except EntityNotFoundError as e:
-    print(f"Entity not found: {e.entity_type} {e.entity_id}")
-except HippoError as e:
-    print(f"General error: {e.message}")
-```
 
 ## Next Steps
 

@@ -1,95 +1,8 @@
 # Hippo API Reference
 
-REST API reference for the Hippo metadata tracking service.
-
-> 🚧 This section is under development. See [API Layer design spec](../design/sec4_api_layer.md) for API design documentation.
-
 ## SDK Validation API
 
-### ValidationResult
-
-The `ValidationResult` dataclass represents the outcome of a validation operation.
-
-```python
-from hippo.core.validation import ValidationResult
-```
-
-**Attributes:**
-
-| Attribute | Type | Description |
-|-----------|------|-------------|
-| `is_valid` | `bool` | Whether validation passed (`True`) or failed (`False`) |
-| `errors` | `list[str]` | List of error messages if validation failed |
-| `entity_id` | `str \| None` | Optional entity ID for context |
-
-**Example:**
-
-```python
-result = ValidationResult(
-    is_valid=False,
-    errors=["Field 'name' is required"],
-    entity_id="entity-123"
-)
-```
-
-### SchemaValidator
-
-The `SchemaValidator` validates write operations against defined schema configurations.
-
-```python
-from hippo.core.validation import SchemaValidator, SchemaValidationConfig
-from hippo.config.models import SchemaConfig, FieldDefinition
-```
-
-**Usage Example:**
-
-```python
-# Define a schema
-schema = SchemaConfig(
-    name="Sample",
-    version="1.0",
-    fields=[
-        FieldDefinition(name="id", type="string", required=True),
-        FieldDefinition(name="name", type="string", required=True),
-        FieldDefinition(
-            name="status",
-            type="enum",
-            references={"values": ["active", "archived"]}
-        ),
-    ]
-)
-
-# Create validation config
-config = SchemaValidationConfig(
-    schemas={"Sample": schema},
-    entity_exists_fn=lambda et, eid: True  # Optional: check entity exists
-)
-
-# Validate an operation
-validator = SchemaValidator(config)
-operation = WriteOperation(
-    operation="insert",
-    entity_type="Sample",
-    data={"id": "123", "name": "Test"}
-)
-result = validator.validate(operation)
-
-if not result.is_valid:
-    print(f"Validation failed: {result.errors}")
-```
-
-**Error Message Patterns:**
-
-| Scenario | Error Message Format |
-|----------|---------------------|
-| Required field missing | `Field 'fieldName' is required` |
-| Invalid string type | `Expected string type for field 'fieldName'` |
-| Invalid number type | `Expected integer/number type for field 'fieldName'` |
-| Invalid boolean type | `Expected boolean type for field 'fieldName'` |
-| Invalid timestamp | `Expected ISO 8601 timestamp format for field 'fieldName'` |
-| Invalid enum value | `Invalid enum value 'value' for field 'fieldName'. Expected one of [values]` |
-| Non-existent reference | `Reference to non-existent entity 'entityType' with ID 'entityId'` |
-| Nested reference | `Reference to non-existent entity 'entityType' in field 'nested.field'` |
+Validation runs automatically when you call `create`, `update`, or `delete` on `HippoClient`. The pipeline executes registered validators in order and raises `ValidationFailure` on the first failure. You do not need to call validators directly unless you are building custom validation logic.
 
 ### ValidationPipeline
 
@@ -318,6 +231,50 @@ results = client.relationships.traverse(
 | `RelationshipExistsError` | Relationship already exists (if duplicate check needed) |
 | `RelationshipNotFoundError` | Relationship doesn't exist when trying to remove |
 
+## Error Handling
+
+All Hippo SDK exceptions inherit from `HippoError`. Catch the base class to handle any SDK error, or catch specific subclasses for finer-grained control.
+
+**Exception Hierarchy:**
+
+| Exception | Parent | Description |
+|-----------|--------|-------------|
+| `HippoError` | `Exception` | Base class for all Hippo SDK errors |
+| `ConfigError` | `HippoError` | Configuration loading and validation errors |
+| `SchemaError` | `HippoError` | Schema parsing and processing errors |
+| `ValidationError` | `HippoError` | Internal data validation errors |
+| `EntityNotFoundError` | `HippoError` | Entity not found in the system |
+| `AdapterError` | `HippoError` | Storage or external adapter errors |
+| `ValidationFailure` | `HippoError` | Write operation failed validation pipeline |
+
+**Example:**
+
+```python
+from hippo import HippoClient
+from hippo.core.exceptions import HippoError, EntityNotFoundError, ValidationFailure
+
+client = HippoClient()
+
+# Catch any SDK error
+try:
+    entity = client.get("Sample", "sample-123")
+except HippoError as e:
+    print(f"Hippo error: {e.message}")
+
+# Catch specific errors
+try:
+    entity = client.get("Sample", "sample-123")
+except EntityNotFoundError as e:
+    print(f"Entity not found: {e.entity_type} / {e.entity_id}")
+
+try:
+    client.create("Sample", {"id": "123"})
+except ValidationFailure as e:
+    print(f"Validation failed: {e.format_detailed_message()}")
+    print(f"  Rule:    {e.rule_id}")
+    print(f"  Context: {e.input_context}")
+```
+
 ## REST API
 
 All REST endpoints (except health checks) require authentication via Bearer token header:
@@ -325,6 +282,8 @@ All REST endpoints (except health checks) require authentication via Bearer toke
 ```
 Authorization: Bearer <token>
 ```
+
+Requests missing this header or using an invalid format receive a `401 Unauthorized` response.
 
 ### Health
 
@@ -368,8 +327,6 @@ Returns API information.
 |--------|------|-------------|
 | GET | `/entities` | List entities with filtering |
 | GET | `/entities/{entity_id}` | Get entity by ID |
-| POST | `/entities` | Create new entity |
-| PUT | `/entities/{entity_id}` | Update an entity |
 | DELETE | `/entities/{entity_id}` | Soft delete an entity |
 
 **GET /entities**
@@ -383,7 +340,15 @@ List entities with optional filtering and pagination.
 | `limit` | int | Max results (1-1000, default: 100) |
 | `offset` | int | Results to skip (default: 0) |
 
-*Response:* Array of entity objects
+*Response:*
+```json
+{
+  "items": [],
+  "total": 0,
+  "limit": 100,
+  "offset": 0
+}
+```
 
 **GET /entities/{entity_id}**
 
@@ -400,46 +365,6 @@ Get an entity by ID.
 | `expand` | string | Expand path for related entities |
 
 *Response:* Entity object with all fields
-
-*Error Codes:* `404` - Entity not found
-
-**POST /entities**
-
-Create a new entity.
-
-*Request Body:*
-```json
-{
-  "entity_type": "Sample",
-  "data": {
-    "id": "sample-123",
-    "name": "Test Sample"
-  }
-}
-```
-
-*Response:* Created entity with generated ID and timestamps
-
-*Error Codes:* `422` - Validation failed
-
-**PUT /entities/{entity_id}**
-
-Update an existing entity.
-
-*Path Parameters:*
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| `entity_id` | string | Entity ID |
-
-*Request Body:*
-```json
-{
-  "name": "Updated Name",
-  "status": "active"
-}
-```
-
-*Response:* Updated entity object
 
 *Error Codes:* `404` - Entity not found
 
@@ -513,7 +438,7 @@ Get the change history/provenance log for an entity.
 |--------|------|-------------|
 | GET | `/entities/{entity_id}/relationships` | List entity relationships |
 | POST | `/entities/{entity_id}/relationships` | Create a relationship |
-| DELETE | `/entities/{entity_id}/relationships/{rel_type}/{target_id}` | Delete a relationship |
+| DELETE | `/entities/{entity_id}/relationships/{rel_id}` | Delete a relationship |
 
 **GET /entities/{entity_id}/relationships**
 
@@ -557,16 +482,15 @@ Create a relationship between two entities.
 
 *Error Codes:* `404` - Source or target entity not found
 
-**DELETE /entities/{entity_id}/relationships/{rel_type}/{target_id}**
+**DELETE /entities/{entity_id}/relationships/{rel_id}**
 
-Delete a relationship.
+Delete a relationship by its ID.
 
 *Path Parameters:*
 | Parameter | Type | Description |
 |-----------|------|-------------|
 | `entity_id` | string | Source entity ID |
-| `rel_type` | string | Relationship type |
-| `target_id` | string | Target entity ID |
+| `rel_id` | string | Relationship ID (e.g. `entity-123->entity-456:contains`) |
 
 *Response:*
 ```json
@@ -712,7 +636,6 @@ Get superseded external IDs for an entity.
 | GET | `/external-ids/{id_type}/{external_id}` | Get entity by external ID |
 | GET | `/entities/{entity_id}/external-ids` | List entity's external IDs |
 | POST | `/entities/{entity_id}/external-ids` | Register external ID |
-| DELETE | `/entities/{entity_id}/external-ids/{id_type}/{external_id}` | Delete external ID |
 
 **GET /external-ids/{id_type}/{external_id}**
 
@@ -766,25 +689,6 @@ Register an external ID for an entity.
 
 *Error Codes:* `404` - Entity not found
 
-**DELETE /entities/{entity_id}/external-ids/{id_type}/{external_id}**
-
-Delete an external ID from an entity.
-
-*Path Parameters:*
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| `entity_id` | string | Entity ID |
-| `id_type` | string | External ID type |
-| `external_id` | string | External ID value |
-
-*Response:*
-```json
-{
-  "status": "deleted",
-  "external_id": "LIMS-12345"
-}
-```
-
 ---
 
 ### Availability
@@ -792,7 +696,7 @@ Delete an external ID from an entity.
 | Method | Path | Description |
 |--------|------|-------------|
 | GET | `/entities/{entity_id}/availability` | Get entity availability status |
-| PUT | `/entities/{entity_id}/availability` | Set entity availability status |
+| POST | `/entities/{entity_id}/availability` | Set entity availability status |
 
 **GET /entities/{entity_id}/availability**
 
@@ -813,7 +717,7 @@ Get the availability status of an entity.
 
 *Error Codes:* `404` - Entity not found
 
-**PUT /entities/{entity_id}/availability**
+**POST /entities/{entity_id}/availability**
 
 Set the availability status of an entity.
 

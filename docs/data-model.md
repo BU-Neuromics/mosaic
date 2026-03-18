@@ -25,11 +25,14 @@ Every entity carries the following read-only system fields:
 |---|---|---|
 | `id` | UUID | Unique identifier, generated on creation |
 | `is_available` | bool | Controls visibility in default queries |
-| `created_at` | datetime | Timestamp of entity creation (UTC) |
-| `updated_at` | datetime | Timestamp of most recent change (UTC) |
-| `version` | int | Monotonically increasing version number |
+| `superseded_by` | UUID (nullable) | ID of the replacement entity if this entity has been superseded; `None` otherwise |
+| `created_at` | datetime | Timestamp of entity creation (UTC), derived from the provenance log |
+| `updated_at` | datetime | Timestamp of most recent change (UTC), derived from the provenance log |
+| `schema_version` | string | Schema config version at most recent change, derived from the provenance log |
 
-The `created_at`, `updated_at`, and `version` fields are stored directly on entities. The design spec describes these as computed from the provenance log at read time, but the current implementation stores them directly on the entity record for performance.
+`superseded_by` is set atomically by `client.supersede_entity()` alongside the availability change. `client.get()` returns it on all entities; it is `None` when not superseded. The authoritative record of the supersession is the `EntitySuperseded` provenance event — the column is a fast-read cache.
+
+The `created_at`, `updated_at`, and `schema_version` fields are derived at read time from the provenance log. The current implementation caches `created_at` and `updated_at` directly on the entity record for performance, but the provenance log is authoritative — `client.get()` reads from provenance when available and falls back to the cached values.
 
 ---
 
@@ -48,7 +51,7 @@ All query operations return only available entities by default:
 
 ```python
 # Returns only available samples
-samples = client.query("Sample", filters=[...])
+result = client.query("Sample", filters=[...])
 ```
 
 To include unavailable entities, use the `include_archived` parameter where supported:
@@ -57,6 +60,52 @@ To include unavailable entities, use the `include_archived` parameter where supp
 # Include archived entities
 entity = client.get_by_external_id("EXT-123", include_archived=True)
 ```
+
+---
+
+## Entity Namespaces (FQNs)
+
+Entity type strings in Hippo are optionally namespace-qualified. Namespaces allow multiple subsystems to define their own `Sample` or `Subject` types without collision.
+
+### Namespace Syntax
+
+- **Root namespace** (no prefix): `"Sample"`, `"Donor"` — entity types declared without a namespace key
+- **Named namespace**: `"tissue.Sample"`, `"omics.Datafile"` — the prefix before the dot is the namespace name
+- **Explicit root prefix**: `"root.Donor"` is equivalent to `"Donor"` — normalized at schema load time
+
+### Using FQNs in SDK Calls
+
+FQNs are valid wherever an `entity_type` string is accepted:
+
+```python
+# Root namespace (no prefix needed)
+client.put("Sample", data={...})
+client.get("Donor", entity_id="abc-123")
+client.query("Subject", filters=[...])
+
+# Named namespace
+client.put("tissue.Sample", data={...})
+client.get("tissue.Sample", entity_id="abc-123")
+client.query("tissue.Sample", filters=[...])
+```
+
+### Declaring Namespaces in Schema Config
+
+Add a `namespace:` key at the top of a schema file to scope all its entity types:
+
+```yaml
+# schemas/tissue.yaml
+namespace: tissue
+entities:
+  Sample:
+    fields:
+      donor_id: {type: string, references: {entity_type: Donor}}        # root Donor
+      parent_id: {type: string, references: {entity_type: tissue.Sample}} # self-ref
+```
+
+Schemas without a `namespace:` key contribute to the root namespace. Multiple files may share the same namespace — their entity lists are merged at load time. Cross-namespace references use FQNs in `references.entity_type`.
+
+Existing schemas with no `namespace:` key are unaffected. All unqualified entity type strings continue to resolve to the root namespace; no data migration is required.
 
 ---
 
@@ -96,7 +145,7 @@ external_ids = client.list_external_ids(entity_id="abc-123", include_superseded=
 
 ### External ID Immutability
 
-External IDs are immutable once written. To "correct" an external ID, you supersede the old one with a new one:
+External IDs are immutable once written. To "correct" an external ID, supersede the old one with a new one:
 
 ```python
 # Replace an external ID with a corrected value
@@ -156,23 +205,37 @@ sample = client.get(
 
 ---
 
-## Supersession
+## Entity Supersession
 
-Supersession replaces one entity with another, commonly used for corrections or updates:
+Entity supersession replaces one entity with another. This is used when an entity needs to be corrected or updated in a way that preserves the full audit trail of the old record.
+
+### supersede_entity()
+
+`client.supersede_entity()` is an atomic operation that:
+
+1. Marks the old entity as unavailable (`is_available = false`)
+2. Sets `superseded_by` on the old entity to the new entity's UUID
+3. Writes an `EntitySuperseded` provenance event on the old entity
+4. Creates a `superseded_by` relationship edge from old to new
+5. Writes an `EntityUpdated` provenance event on the new entity
+
+All five writes succeed together or roll back entirely on failure.
 
 ```python
-# Current implementation: supersedes external IDs only
-new_record = client.supersede(
+client.supersede_entity(
     entity_id="abc-123",
-    old_external_id="OLD-ID",
-    new_external_id="NEW-ID"
+    replacement_id="def-456",
+    actor="pipeline-run-789",
+    reason="Corrected tissue region annotation"
 )
 ```
 
-**Gap:** The design spec describes entity-level supersession (replacing one entity UUID with another), but the current implementation only supports external ID supersession. Entity-level supersession would:
-1. Mark the old entity as unavailable
-2. Create a `superseded_by` relationship edge
-3. Record the reason in provenance
+Both entities are retained — there are no hard deletes. The old entity remains queryable via `client.get()` (which returns superseded entities) and `client.history()`.
+
+### Raises
+
+- `EntityNotFoundError` — if either `entity_id` or `replacement_id` does not exist
+- `EntityAlreadySupersededError` — if `entity_id` is already superseded
 
 ---
 
@@ -191,12 +254,14 @@ history = client.history(entity_id="abc-123")
 # - operation_id: Unique identifier
 # - entity_id: The entity ID
 # - entity_type: The entity type
-# - operation_type: CREATE, UPDATE, or SOFT_DELETE
+# - operation_type: CREATE, UPDATE, SOFT_DELETE, EntitySuperseded, etc.
 # - timestamp: When the operation occurred
 # - user_id: Who performed the operation
 # - previous_state_hash: Hash of previous state
 # - state_snapshot: Entity state at that point
 ```
+
+`client.history()` accepts superseded (unavailable) entity IDs.
 
 ### Querying Historical State
 
@@ -218,13 +283,19 @@ This returns the entity's data as it existed at the specified timestamp.
 
 ```python
 # Query entities with filters
-samples = client.query(
+result = client.query(
     entity_type="Sample",
     filters=[
         {"field": "tissue_type", "operator": "eq", "value": "brain"},
         {"field": "passage", "operator": "gte", "value": 5}
     ]
 )
+
+# result is a PaginatedResult
+for item in result.items:
+    print(item["id"], item["data"])
+
+print(f"Showing {len(result.items)} of {result.total} total")
 ```
 
 ### Filter Operators
@@ -249,11 +320,14 @@ samples = client.query(
 
 ```python
 # Query with pagination
-samples = client.query(
+result = client.query(
     entity_type="Sample",
     limit=50,
     offset=100  # Skip first 100 results
 )
+
+# result.total is the count before limit/offset
+print(f"Page: {len(result.items)} items, {result.total} total")
 ```
 
 ### Full-Text Search
@@ -327,7 +401,7 @@ result = client.delete(
 
 ## SDK Types Reference
 
-This section documents the core types used in the Hippo SDK.
+This section documents the user-facing types exported from `hippo.core.types`.
 
 ### FilterCondition
 
@@ -345,7 +419,7 @@ condition = FilterCondition(
 
 ### FilterGroup
 
-A group of conditions combined with a logical operator.
+A group of conditions combined with a logical operator. Supports nested groups via the `groups` field.
 
 ```python
 from hippo.core.types import FilterGroup, FilterCondition, FilterOperator, LogicalOperator
@@ -391,24 +465,35 @@ from hippo.core.types import LogicalOperator
 
 ### PaginatedResult
 
-Paginated query result with metadata.
+Paginated query result returned by `client.query()`.
+
+| Field | Type | Description |
+|---|---|---|
+| `items` | `list[Any]` | The entities on this page |
+| `total` | `int` | Total matching entities across all pages (ignoring `limit`/`offset`) |
+| `limit` | `int` | Maximum items per page; `0` means no limit |
+| `offset` | `int` | Number of items skipped |
 
 ```python
 from hippo.core.types import PaginatedResult
 
-result = PaginatedResult(
-    items=[...],
-    total=150,
-    page=2,
-    page_size=50
-)
-```
+result = client.query("Sample", limit=50, offset=0)
 
-**Gap:** The `query()` method currently returns a plain list, not `PaginatedResult`. This type is defined but not used in the client.
+# result.items — list of entity dicts on this page
+# result.total — count before limit/offset was applied
+# result.limit — the limit that was passed (50)
+# result.offset — the offset that was passed (0)
+```
 
 ### ScoredMatch
 
-Search result with relevance scoring.
+Search result with relevance scoring. Returned by search operations.
+
+| Field | Type | Description |
+|---|---|---|
+| `score` | `float` | Relevance score (higher is more relevant) |
+| `match_data` | `dict[str, Any]` | The matched entity data |
+| `matched_fields` | `list[str]` | Fields that matched the query |
 
 ```python
 from hippo.core.types import ScoredMatch
@@ -422,55 +507,41 @@ match = ScoredMatch(
 
 ### WriteOperation
 
-Represents a write operation for validation.
+Represents a write operation result.
+
+| Field | Type | Description |
+|---|---|---|
+| `success` | `bool` | Whether the operation succeeded |
+| `operation` | `str` | Type of operation: `"insert"`, `"update"`, or `"delete"` |
+| `entity_type` | `str` | The entity type affected |
+| `entity_id` | `str \| None` | ID of the affected entity |
+| `metadata` | `dict[str, Any]` | Additional operation metadata |
 
 ```python
 from hippo.core.types import WriteOperation
 
 operation = WriteOperation(
     success=True,
-    operation="insert",  # or "update", "delete"
+    operation="insert",
     entity_type="Sample",
     entity_id="abc-123",
     metadata={}
 )
 ```
 
-### ValidationError
-
-A single validation failure.
-
-```python
-from hippo.core.types import ValidationError
-
-error = ValidationError(
-    field="external_id",
-    message="external_id is required"
-)
-```
-
-### ValidationResult
-
-Result of validation pipeline execution.
-
-```python
-from hippo.core.types import ValidationResult
-
-result = ValidationResult(
-    valid=False,
-    errors=[
-        ValidationError(field="external_id", message="required")
-    ]
-)
-
-# Convenience property
-if result.is_valid:
-    print("Validation passed")
-```
-
 ### ProvenanceRecord
 
 A single record in the provenance log.
+
+| Field | Type | Description |
+|---|---|---|
+| `source` | `str` | Origin system or entity |
+| `timestamp` | `datetime` | When the operation occurred |
+| `operation` | `str` | Type of operation: `"create"`, `"update"`, `"read"`, `"delete"` |
+| `entity_type` | `str \| None` | Type of entity affected |
+| `entity_id` | `str \| None` | ID of the entity |
+| `user_context` | `str \| None` | User or system context that initiated the operation |
+| `payload` | `dict[str, Any]` | Complete entity state as JSON |
 
 ```python
 from hippo.core.types import ProvenanceRecord
@@ -489,17 +560,28 @@ record = ProvenanceRecord(
 
 ### IngestStatus
 
-Status of a bulk ingestion operation.
+Status enum for bulk ingestion operations.
 
 ```python
 from hippo.core.types import IngestStatus
 
-# SUCCESS, PARTIAL, FAILED
+# IngestStatus.SUCCESS  — all items processed successfully
+# IngestStatus.PARTIAL  — some items failed
+# IngestStatus.FAILED   — all items failed
 ```
 
 ### IngestResult
 
 Result of a bulk ingestion operation.
+
+| Field | Type | Description |
+|---|---|---|
+| `status` | `IngestStatus` | Overall ingestion status |
+| `total_processed` | `int` | Total items processed |
+| `successful` | `int` | Number of successfully processed items |
+| `failed` | `int` | Number of failed items |
+| `errors` | `list[dict[str, Any]]` | Error details for failed items |
+| `metadata` | `dict[str, Any]` | Additional result metadata |
 
 ```python
 from hippo.core.types import IngestResult, IngestStatus
@@ -522,32 +604,22 @@ result = IngestResult(
 
 This section documents known gaps between the design specification and current implementation.
 
-### 1. Entity-Level Supersession
+### 1. Provenance-Computed Temporal Fields
 
-- **Design:** `client.supersede(entity_type, old_id, new_id, actor, reason)` replaces an entire entity with another
-- **Implementation:** `client.supersede(entity_id, old_external_id, new_external_id)` only replaces external IDs
+- **Design:** `created_at`, `updated_at`, `schema_version` are computed exclusively from the provenance log at read time; never stored on the entity record
+- **Implementation:** `created_at` and `updated_at` are cached directly on the entity row in storage. `client.get()` reads provenance timestamps when available and falls back to the cached values. `schema_version` is not yet derived from provenance.
 
-### 2. Provenance-Computed Temporal Fields
-
-- **Design:** `created_at`, `updated_at`, `schema_version` are computed from the provenance log at read time
-- **Implementation:** These fields are stored directly on the entity record in storage
-
-### 3. Soft Delete Implementation
+### 2. Soft Delete Implementation
 
 - **Design:** Delete operations set `is_available = false` via availability transitions
 - **Implementation:** The `delete()` method calls `storage.delete()` directly; soft delete behavior depends on the storage adapter implementation
 
-### 4. PaginatedResult Not Used
-
-- **Design:** Query methods return `PaginatedResult` objects with pagination metadata
-- **Implementation:** `client.query()` returns a plain `list[dict]`; `PaginatedResult` type is defined but unused
-
-### 5. Relationship Properties
+### 3. Relationship Properties
 
 - **Design:** Relationships can carry typed properties declared in schema
 - **Implementation:** The `RelationshipManager` exists but relationship properties are not fully implemented
 
-### 6. Schema-Declared Search Modes
+### 4. Schema-Declared Search Modes
 
 - **Design:** Schema declares `search: fts`, `search: embedding`, or `search: synonym`
 - **Implementation:** FTS is implemented; embedding and synonym search are adapter-dependent

@@ -1,6 +1,6 @@
 # Installation
 
-Hippo is a metadata tracking service for bioinformatics. This guide covers installing Hippo in production and development environments.
+Hippo is a metadata tracking service. This guide covers installing Hippo in production and development environments.
 
 ## Requirements
 
