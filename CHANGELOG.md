@@ -1,5 +1,25 @@
 # Changelog
 
+## v0.3.1 — 2026-03-25
+
+### Bug Fixes
+
+- **`client.get()` now raises `EntityNotFoundError` for deleted and superseded entities by default.**
+  Previously, `get()` silently returned unavailable entities via a `read_any()` fallback, inconsistent
+  with `query()` which already excludes them. Added `include_unavailable=False` parameter — set to `True`
+  for audit/provenance queries that need to read deleted or superseded entities.
+
+- **`client.update()` now raises `EntityNotFoundError` for nonexistent, deleted, or superseded entities.**
+  Previously, `update()` on a nonexistent entity ID silently upserted (created a new entity), which
+  was a data integrity bug. Now verifies the entity exists and is available before proceeding.
+
+### Tests
+
+- Added `tests/core/test_client_availability.py` — 16 unit tests covering availability filtering
+  and update existence checks, developed via TDD (red → green → refactor).
+- Platform-level integration test suite added at monorepo root (`tests/platform/`, `tests/contracts/`):
+  937 total tests passing across all three tiers (unit, contract, platform).
+
 ## Unreleased
 
 ### Breaking Changes

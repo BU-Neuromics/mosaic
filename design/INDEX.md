@@ -96,6 +96,7 @@ out of scope for v0.1 and documented here for tracking.
 | GraphQL transport | sec2 | Low | Reserved in `hippo/graphql/`; deferred post-v0.1 |
 | Provenance system vs. entity events table split | sec6 | Low | Open — `MigrationApplied` and `ReferenceDataInstalled` stored with `entity_id = null`; separate `system_events` table is an alternative |
 | Auth / RBAC | sec7 | High (post-v0.1) | Auth middleware stub in place; JWT/API key/RBAC design deferred |
+| GA4GH DRS server (read-only) | sec4 | High | v0.4.0 target — `GET /ga4gh/drs/v1/objects/{entity_id}` resolves entity UUID → access_methods (s3/https/file). Thin read-only router over existing entity storage. No new data model; entity URI is the download target. Checksums from provenance if available. Enables external tools (Terra, Galaxy, other Canon instances) to resolve `drs://` URIs. Canon DRS client for consuming external DRS URIs deferred to Canon v0.3. |
 
 ---
 
