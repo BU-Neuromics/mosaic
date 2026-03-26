@@ -97,6 +97,7 @@ out of scope for v0.1 and documented here for tracking.
 | Provenance system vs. entity events table split | sec6 | Low | Open — `MigrationApplied` and `ReferenceDataInstalled` stored with `entity_id = null`; separate `system_events` table is an alternative |
 | Auth / RBAC | sec7 | High (post-v0.1) | Auth middleware stub in place; JWT/API key/RBAC design deferred |
 | GA4GH DRS server (read-only) | sec4 | High | v0.4.0 target — `GET /ga4gh/drs/v1/objects/{entity_id}` resolves entity UUID → access_methods (s3/https/file). Thin read-only router over existing entity storage. No new data model; entity URI is the download target. Checksums from provenance if available. Enables external tools (Terra, Galaxy, other Canon instances) to resolve `drs://` URIs. Canon DRS client for consuming external DRS URIs deferred to Canon v0.3. |
+| `HippoClient.schema_references(entity_type)` | — | **Priority — required for Cappella v0.1** | Returns the reference edge graph for an entity type: `{entity_type: str, references: [{field: str, target_entity_type: str, via_field: str}]}`. Reads already-loaded schema (SchemaConfig objects); approximately 20 lines of implementation. Cappella's collection resolver depends on this to infer entity traversal paths from dot-notation criteria (`donor.diagnosis`, `sample.tissue`) without hardcoded config. Add to HippoClient SDK and expose via REST: `GET /schema/{entity_type}/references`. |
 
 ---
 
