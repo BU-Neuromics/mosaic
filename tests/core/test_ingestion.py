@@ -357,3 +357,98 @@ class TestIngestionPipelineJSONL:
             assert result.total_rows == 1
         finally:
             Path(temp_path).unlink()
+
+
+# ---------------------------------------------------------------------------
+# Idempotency tests with real HippoClient + SQLiteAdapter
+# These are RED tests for the bug: _upsert_records uses string matching
+# "not found" to detect EntityNotFoundError, but the actual exception message
+# is "No entity found" — so the substring never matches and entities are never
+# created. Fix: catch EntityNotFoundError explicitly.
+# ---------------------------------------------------------------------------
+
+class TestIngestionIdempotency:
+    """Idempotency tests for IngestionPipeline using a real HippoClient.
+
+    TDD RED phase: these tests exercise the full upsert-by-ExternalID flow
+    with a real in-process HippoClient. They fail before the fix because
+    _upsert_records incorrectly uses string matching instead of catching
+    EntityNotFoundError explicitly.
+    """
+
+    @pytest.fixture()
+    def real_client(self, tmp_path):
+        from hippo.core.client import HippoClient
+        from hippo.core.storage.adapters.sqlite_adapter import SQLiteAdapter
+        storage = SQLiteAdapter(str(tmp_path / "test.db"))
+        return HippoClient(storage=storage)
+
+    @pytest.fixture()
+    def pipeline(self, real_client):
+        return IngestionPipeline(client=real_client)
+
+    def _make_csv(self, tmp_path, content: str, name: str = "data.csv") -> Path:
+        p = tmp_path / name
+        p.write_text(content)
+        return p
+
+    def test_ingest_csv_creates_entities(self, tmp_path, real_client, pipeline):
+        """First ingest must create entities — currently fails because EntityNotFoundError
+        is not caught correctly, so no entities are created."""
+        csv_file = self._make_csv(tmp_path, "external_id,name,diagnosis\nBU0001,Alice,CTE\nBU0002,Bob,AD\n")
+        result = pipeline.ingest_csv(str(csv_file), "Sample")
+        assert result.created == 2, f"Expected 2 created, got {result.created}. Errors: {result.error_messages}"
+        assert result.errors == 0
+        items = list(real_client.query("Sample").items)
+        assert len(items) == 2
+
+    def test_ingest_csv_idempotent_second_run(self, tmp_path, real_client, pipeline):
+        """Second identical ingest must produce unchanged=2, not duplicate entities."""
+        csv_file = self._make_csv(tmp_path, "external_id,name,diagnosis\nBU0001,Alice,CTE\nBU0002,Bob,AD\n")
+        pipeline.ingest_csv(str(csv_file), "Sample")
+        result2 = pipeline.ingest_csv(str(csv_file), "Sample")
+        assert result2.created == 0, f"Expected 0 created on second run, got {result2.created}"
+        assert result2.unchanged == 2, f"Expected 2 unchanged, got {result2.unchanged}"
+        assert result2.errors == 0
+        items = list(real_client.query("Sample").items)
+        assert len(items) == 2, f"Expected 2 entities, got {len(items)} — duplicates created"
+
+    def test_ingest_csv_updates_changed_record(self, tmp_path, real_client, pipeline):
+        """Re-ingest with a changed field must update, not duplicate."""
+        csv_file1 = self._make_csv(tmp_path, "external_id,name,diagnosis\nBU0001,Alice,CTE\n", "v1.csv")
+        pipeline.ingest_csv(str(csv_file1), "Sample")
+
+        csv_file2 = self._make_csv(tmp_path, "external_id,name,diagnosis\nBU0001,Alice-Updated,CTE\n", "v2.csv")
+        result2 = pipeline.ingest_csv(str(csv_file2), "Sample")
+        assert result2.updated == 1, f"Expected 1 updated, got {result2.updated}"
+        assert result2.created == 0
+        items = list(real_client.query("Sample").items)
+        assert len(items) == 1
+        assert items[0]["data"]["name"] == "Alice-Updated"
+
+    def test_ingest_json_creates_entities(self, tmp_path, real_client, pipeline):
+        """JSON ingest must also create entities on first run."""
+        json_file = self._make_csv(tmp_path, '[{"external_id":"J001","name":"Carol"},{"external_id":"J002","name":"Dave"}]', "data.json")
+        result = pipeline.ingest_json(str(json_file), "Sample")
+        assert result.created == 2, f"Expected 2 created, got {result.created}. Errors: {result.error_messages}"
+        assert result.errors == 0
+
+    def test_ingest_json_idempotent_second_run(self, tmp_path, real_client, pipeline):
+        """Second JSON ingest must not duplicate."""
+        json_file = self._make_csv(tmp_path, '[{"external_id":"J001","name":"Carol"}]', "data.json")
+        pipeline.ingest_json(str(json_file), "Sample")
+        result2 = pipeline.ingest_json(str(json_file), "Sample")
+        assert result2.unchanged == 1
+        assert result2.created == 0
+        items = list(real_client.query("Sample").items)
+        assert len(items) == 1
+
+    def test_ingest_with_custom_external_id_field(self, tmp_path, real_client, pipeline):
+        """Ingest works when external_id_field is not 'external_id'."""
+        csv_file = self._make_csv(tmp_path, "SUBJECT_ID,name\nBU0001,Alice\n")
+        result = pipeline.ingest_csv(str(csv_file), "Sample", external_id_field="SUBJECT_ID")
+        assert result.created == 1, f"Expected 1 created, got {result.created}. Errors: {result.error_messages}"
+
+        result2 = pipeline.ingest_csv(str(csv_file), "Sample", external_id_field="SUBJECT_ID")
+        assert result2.unchanged == 1
+        assert result2.created == 0

@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any, Optional
 
 from hippo.core.exceptions import (
+    EntityNotFoundError,
     IngestionError,
     IngestionValidationError,
     ValidationFailure,
@@ -467,15 +468,15 @@ class IngestionPipeline:
             seen_external_ids[external_id] = record
 
         for external_id, record in seen_external_ids.items():
+            record_without_id = {
+                k: v for k, v in record.items() if k != external_id_field
+            }
             try:
                 existing = self._client.get_by_external_id(
                     external_id, include_archived=False
                 )
 
                 existing_data = existing.get("data", {})
-                record_without_id = {
-                    k: v for k, v in record.items() if k != external_id_field
-                }
 
                 if existing_data == record_without_id:
                     result.unchanged += 1
@@ -490,31 +491,39 @@ class IngestionPipeline:
                     )
                     result.updated += 1
 
-            except Exception as e:
-                if "not found" in str(e).lower():
-                    record_without_id = {
-                        k: v for k, v in record.items() if k != external_id_field
-                    }
-                    self.before_write_validation(
-                        entity_type, record_without_id, "create"
-                    )
+            except EntityNotFoundError:
+                # Entity does not exist yet — create it and register the external ID.
+                try:
+                    self.before_write_validation(entity_type, record_without_id, "create")
                     created = self._client.put(
                         entity_type=entity_type,
                         data=record_without_id,
                     )
                     self._client.register_external_id(created["id"], external_id)
                     result.created += 1
-                else:
+                except Exception as create_err:
                     result.errors += 1
-                    error_msg = f"External ID {external_id}: {str(e)}"
+                    error_msg = f"External ID {external_id}: {create_err}"
                     result.error_messages.append(error_msg)
                     result.record_errors.append(
                         {
                             "record_id": external_id,
                             "source_file": source_file,
-                            "error": str(e),
+                            "error": str(create_err),
                         }
                     )
+
+            except Exception as e:
+                result.errors += 1
+                error_msg = f"External ID {external_id}: {e}"
+                result.error_messages.append(error_msg)
+                result.record_errors.append(
+                    {
+                        "record_id": external_id,
+                        "source_file": source_file,
+                        "error": str(e),
+                    }
+                )
 
         return result
 
