@@ -114,6 +114,41 @@ async def get_schema(
     raise HTTPException(status_code=404, detail=f"Schema not found: {schema_name}")
 
 
+@router.get("/{entity_type}/references")
+async def get_schema_references(
+    entity_type: str = Path(..., description="Entity type name"),
+    request: Request = None,
+    auth: dict = Depends(require_auth),
+) -> dict[str, Any]:
+    """Get reference edges declared in the schema for an entity type.
+
+    Returns the list of fields on this entity that reference other entity types.
+
+    Args:
+        entity_type: The entity type to inspect.
+        request: FastAPI request object.
+        auth: Authentication context.
+
+    Returns:
+        Dict with entity_type and references list.
+
+    Raises:
+        HTTPException: If entity type not found in loaded schemas.
+    """
+    client = await get_client(request)
+
+    if client is None or not hasattr(client, "_schemas") or not client._schemas:
+        raise HTTPException(status_code=404, detail=f"Schema not found: {entity_type}")
+
+    if entity_type not in client._schemas:
+        raise HTTPException(status_code=404, detail=f"Schema not found: {entity_type}")
+
+    return {
+        "entity_type": entity_type,
+        "references": client.schema_references(entity_type),
+    }
+
+
 @router.post("")
 async def create_schema(
     request: Request,

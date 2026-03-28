@@ -140,6 +140,30 @@ class HippoClient:
                 unsupported_modes=list(unsupported_modes),
             )
 
+    def schema_references(self, entity_type: str) -> list[dict]:
+        """Return reference edges for an entity type from the loaded schema.
+
+        Returns a list of dicts, each with:
+          - field: str (the field on this entity that references another)
+          - target_entity_type: str (the entity type being referenced)
+
+        Reads from the already-loaded schema (_schemas dict). Returns an empty
+        list if schemas are not loaded or the entity_type is not found.
+
+        TODO: schema_references() requires fields to declare `references:
+        {entity_type: <name>}` in the schema YAML. If no references are
+        declared, this method returns []. Schema enhancement needed for full
+        Cappella collection-resolver support (dot-notation traversal).
+        """
+        if not self._schemas or entity_type not in self._schemas:
+            return []
+        schema = self._schemas[entity_type]
+        return [
+            {"field": field.name, "target_entity_type": field.references["entity_type"]}
+            for field in schema.fields
+            if field.references and "entity_type" in field.references
+        ]
+
     def _get_fts_tables_for_entity_type(
         self, entity_type: str
     ) -> list[FTSTableMetadata]:
