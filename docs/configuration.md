@@ -247,18 +247,23 @@ The `search` field enables full-text search indexing:
 
 ### References (Foreign Keys)
 
-Define relationships to other entity types using the dict-of-dicts field format:
+Declare that a field points to another entity type using `references: {entity_type: <name>}`:
 
 ```yaml
 entities:
-  Sample:
+  - name: Sample
+    version: "1.0"
     fields:
-      donor_id:
+      - name: donor_id
         type: string
+        required: true
         references:
-          entity: Donor
-          field: donor_id
+          entity_type: Donor    # ← must use entity_type key
 ```
+
+The `entity_type` key is required for `HippoClient.schema_references()` and Cappella's collection resolver. Other keys in the `references` dict are ignored by these systems.
+
+> ⚠️ Using `entity:` instead of `entity_type:` will parse without error but will NOT be recognised by `schema_references()`. Always use `entity_type:`.
 
 ---
 
