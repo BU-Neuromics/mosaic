@@ -20,6 +20,7 @@
 | `sec5_ingestion.md` | 5. Ingestion & Integration | ✅ Draft v0.1 | Flat-file, reference data, upsert-by-ExternalID, error handling |
 | `sec6_provenance.md` | 6. Provenance & Audit | ✅ Draft v0.1 | Event model, structured context, storage, history API, retention |
 | `sec7_nfr.md` | 7. Non-Functional Requirements | ✅ Draft v0.1 | Performance targets, scalability tiers, reliability, schema sync roadmap |
+| `sec8_auth_integration.md` | 8. Authentication & Authorization Integration | ✅ Draft v0.1 | Bridge-aware `AuthMiddleware` impl, actor propagation, audit trail split |
 | `appendix_a_example_schema_omics.md` | Appendix A. Example Schema (Omics) | ✅ Draft v0.1 | Complete DSL with `search:`, polymorphic extension example |
 | `appendix_b_implementation_guide.md` | Appendix B. Implementation Guide | ✅ Draft v0.1 | Build order, module map, error hierarchy, invariants, test strategy, OpenSpec mapping |
 | `reference_hippo_yaml.md` | Reference: `hippo.yaml` Config Schema | ✅ Draft v0.1 | All valid keys, types, defaults, env var substitution, minimal configs |
@@ -96,7 +97,7 @@ out of scope for v0.1 and documented here for tracking.
 | Cursor-based pagination | sec4 | Low | **Planned v0.5 (Phase 1)** — cursor-based mode specced in sec4 §4.4; offset mode remains the default |
 | GraphQL transport | sec2 | Low | Reserved in `hippo/graphql/`; deferred post-v0.1 |
 | Provenance system vs. entity events table split | sec6 | Low | Open — `MigrationApplied` and `ReferenceDataInstalled` stored with `entity_id = null`; separate `system_events` table is an alternative |
-| Auth / RBAC | sec7 | High (post-v0.1) | Auth middleware stub in place; JWT/API key/RBAC design deferred |
+| Auth / RBAC | sec8 | **✅ Resolved (Phase 3)** | `BridgeAuthMiddleware` spec in sec8; Bridge owns auth, Hippo trusts injected headers; actor flows into provenance |
 | GA4GH DRS server (read-only) | sec4 | High | v0.4.0 target — `GET /ga4gh/drs/v1/objects/{entity_id}` resolves entity UUID → access_methods (s3/https/file). Thin read-only router over existing entity storage. No new data model; entity URI is the download target. Checksums from provenance if available. Enables external tools (Terra, Galaxy, other Canon instances) to resolve `drs://` URIs. Canon DRS client for consuming external DRS URIs deferred to Canon v0.3. |
 | `HippoClient.schema_references(entity_type)` | — | **✅ Implemented (Hippo v0.4)** | Reads `FieldDefinition.references` from already-loaded schema. Returns `[{field, target_entity_type}]` for each field with `references: {entity_type: <name>}` declared in schema YAML. REST endpoint: `GET /schemas/{entity_type}/references`. Works today — caller schemas must declare `references:` on foreign-key fields. |
 
