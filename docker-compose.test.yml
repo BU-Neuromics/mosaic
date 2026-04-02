@@ -1,0 +1,28 @@
+# Hippo — Docker Compose for local PostgreSQL testing
+#
+# Usage:
+#   docker compose -f docker-compose.test.yml up -d
+#   HIPPO_DATABASE_URL=postgresql://hippo_test:hippo_test@localhost:5433/hippo_test pytest
+#   docker compose -f docker-compose.test.yml down -v
+
+services:
+  postgres-test:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: hippo_test
+      POSTGRES_PASSWORD: hippo_test
+      POSTGRES_DB: hippo_test
+    ports:
+      - "5433:5432"
+    volumes:
+      - pgdata-test:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U hippo_test"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    tmpfs:
+      - /var/lib/postgresql/data  # RAM-backed for fast tests
+
+volumes:
+  pgdata-test:

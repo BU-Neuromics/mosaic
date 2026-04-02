@@ -16,18 +16,24 @@ class InitCommand:
     """Handles project initialization for Hippo."""
 
     DEFAULT_TEMPLATE = "basic"
+    VALID_STORAGE_BACKENDS = {"sqlite", "postgres"}
 
-    def __init__(self, path: Optional[str], template: str, force: bool):
+    def __init__(
+        self, path: Optional[str], template: str, force: bool, storage: str = "sqlite"
+    ):
         self.target_path = Path(path) if path else Path.cwd()
         self.template_name = template if template else self.DEFAULT_TEMPLATE
         self.force = force
+        self.storage = storage
 
     def run(self) -> None:
         """Execute the init command."""
+        self._validate_storage()
         self._validate_template()
         self._validate_path()
         self._create_directories()
         self._generate_files()
+        self._generate_config()
 
     def _validate_template(self) -> None:
         """Validate template name and show available templates if invalid."""
@@ -128,10 +134,54 @@ class InitCommand:
 
         typer.echo(f"\nHippo project initialized at {self.target_path}")
         typer.echo(f"Template: {template.name}")
+        typer.echo(f"Storage: {self.storage}")
         typer.echo("Run 'hippo serve' to start the server")
 
+    def _validate_storage(self) -> None:
+        """Validate the storage backend option."""
+        if self.storage not in self.VALID_STORAGE_BACKENDS:
+            typer.echo(
+                f"Error: Unknown storage backend '{self.storage}'. "
+                f"Must be one of: {', '.join(sorted(self.VALID_STORAGE_BACKENDS))}",
+                err=True,
+            )
+            raise typer.Exit(1)
 
-def run_init(path: Optional[str], template: str, force: bool) -> None:
+    def _generate_config(self) -> None:
+        """Generate hippo.yaml config file with storage backend settings."""
+        config_path = self.target_path / "hippo.yaml"
+        if config_path.exists() and not self.force:
+            return
+
+        if self.storage == "postgres":
+            config_content = (
+                "# Hippo configuration\n"
+                "schema_path: schema.yaml\n"
+                "storage_backend: postgres\n"
+                "database_url: ${HIPPO_DATABASE_URL:-postgresql://localhost:5432/hippo}\n"
+            )
+        else:
+            config_content = (
+                "# Hippo configuration\n"
+                "schema_path: schema.yaml\n"
+                "storage_backend: sqlite\n"
+                "# database_url: data/hippo.db\n"
+            )
+
+        try:
+            config_path.write_text(config_content)
+            typer.echo(f"Created {config_path}")
+        except OSError as e:
+            typer.echo(f"Error: Could not write to {config_path}: {e}", err=True)
+            raise typer.Exit(1)
+
+
+def run_init(
+    path: Optional[str],
+    template: str,
+    force: bool,
+    storage: str = "sqlite",
+) -> None:
     """Entry point for hippo init command."""
-    cmd = InitCommand(path=path, template=template, force=force)
+    cmd = InitCommand(path=path, template=template, force=force, storage=storage)
     cmd.run()

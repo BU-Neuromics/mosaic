@@ -19,6 +19,12 @@ def init(
     template: str = typer.Option(
         "basic", "--template", "-t", help="Template to use (basic, minimal, full)"
     ),
+    storage: str = typer.Option(
+        "sqlite",
+        "--storage",
+        "-s",
+        help="Storage backend: sqlite or postgres",
+    ),
     force: bool = typer.Option(
         False, "--force", "-f", help="Force initialization even if directory exists"
     ),
@@ -26,7 +32,7 @@ def init(
     """Initialize a new Hippo project."""
     from hippo.cli.commands.init import run_init
 
-    run_init(path=path, template=template, force=force)
+    run_init(path=path, template=template, force=force, storage=storage)
 
 
 @app.command()
