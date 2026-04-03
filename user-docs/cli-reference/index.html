@@ -1738,15 +1738,15 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#compile-schema" class="md-nav__link">
+  <a href="#validate-schema" class="md-nav__link">
     <span class="md-ellipsis">
       
-        compile-schema
+        validate-schema
       
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="compile-schema">
+    <nav class="md-nav" aria-label="validate-schema">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
@@ -5102,15 +5102,15 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#compile-schema" class="md-nav__link">
+  <a href="#validate-schema" class="md-nav__link">
     <span class="md-ellipsis">
       
-        compile-schema
+        validate-schema
       
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="compile-schema">
+    <nav class="md-nav" aria-label="validate-schema">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
@@ -5722,10 +5722,10 @@
 <a id="__codelineno-20-11" name="__codelineno-20-11" href="#__codelineno-20-11"></a>hippo<span class="w"> </span>list-ref<span class="w"> </span>sample_ref
 </code></pre></div>
 <hr />
-<h2 id="compile-schema">compile-schema<a class="headerlink" href="#compile-schema" title="Permanent link">&para;</a></h2>
-<p>Compile Hippo DSL schema to LinkML format.</p>
+<h2 id="validate-schema">validate-schema<a class="headerlink" href="#validate-schema" title="Permanent link">&para;</a></h2>
+<p>Validate a LinkML schema file.</p>
 <h3 id="usage_9">Usage<a class="headerlink" href="#usage_9" title="Permanent link">&para;</a></h3>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-21-1" name="__codelineno-21-1" href="#__codelineno-21-1"></a>hippo<span class="w"> </span>compile-schema<span class="w"> </span>&lt;INPUT&gt;<span class="w"> </span><span class="o">[</span>OPTIONS<span class="o">]</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-21-1" name="__codelineno-21-1" href="#__codelineno-21-1"></a>hippo<span class="w"> </span>validate-schema<span class="w"> </span>&lt;INPUT&gt;<span class="w"> </span><span class="o">[</span>OPTIONS<span class="o">]</span>
 </code></pre></div>
 <h3 id="arguments_4">Arguments<a class="headerlink" href="#arguments_4" title="Permanent link">&para;</a></h3>
 <table>
@@ -5756,37 +5756,19 @@
 </thead>
 <tbody>
 <tr>
-<td><code>--output</code>, <code>-o</code></td>
-<td><code>string</code></td>
-<td><code>None</code></td>
-<td>Output file path (stdout if not specified)</td>
-</tr>
-<tr>
-<td><code>--validate</code> / <code>--no-validate</code></td>
-<td><code>boolean</code></td>
-<td><code>true</code></td>
-<td>Enable/disable validation</td>
-</tr>
-<tr>
 <td><code>--format</code>, <code>-f</code></td>
 <td><code>string</code></td>
 <td><code>"yaml"</code></td>
-<td>Output format: <code>yaml</code> or <code>json</code></td>
+<td>Input format: <code>yaml</code> or <code>json</code></td>
 </tr>
 </tbody>
 </table>
 <h3 id="example_8">Example<a class="headerlink" href="#example_8" title="Permanent link">&para;</a></h3>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-22-1" name="__codelineno-22-1" href="#__codelineno-22-1"></a><span class="c1"># Compile schema, output to stdout</span>
-<a id="__codelineno-22-2" name="__codelineno-22-2" href="#__codelineno-22-2"></a>hippo<span class="w"> </span>compile-schema<span class="w"> </span>schema.yaml
+<div class="highlight"><pre><span></span><code><a id="__codelineno-22-1" name="__codelineno-22-1" href="#__codelineno-22-1"></a><span class="c1"># Validate a LinkML schema</span>
+<a id="__codelineno-22-2" name="__codelineno-22-2" href="#__codelineno-22-2"></a>hippo<span class="w"> </span>validate-schema<span class="w"> </span>schema.yaml
 <a id="__codelineno-22-3" name="__codelineno-22-3" href="#__codelineno-22-3"></a>
-<a id="__codelineno-22-4" name="__codelineno-22-4" href="#__codelineno-22-4"></a><span class="c1"># Compile to a specific output file</span>
-<a id="__codelineno-22-5" name="__codelineno-22-5" href="#__codelineno-22-5"></a>hippo<span class="w"> </span>compile-schema<span class="w"> </span>schema.yaml<span class="w"> </span>--output<span class="w"> </span>linkml.yaml
-<a id="__codelineno-22-6" name="__codelineno-22-6" href="#__codelineno-22-6"></a>
-<a id="__codelineno-22-7" name="__codelineno-22-7" href="#__codelineno-22-7"></a><span class="c1"># Compile to JSON format</span>
-<a id="__codelineno-22-8" name="__codelineno-22-8" href="#__codelineno-22-8"></a>hippo<span class="w"> </span>compile-schema<span class="w"> </span>schema.yaml<span class="w"> </span>--format<span class="w"> </span>json<span class="w"> </span>--output<span class="w"> </span>linkml.json
-<a id="__codelineno-22-9" name="__codelineno-22-9" href="#__codelineno-22-9"></a>
-<a id="__codelineno-22-10" name="__codelineno-22-10" href="#__codelineno-22-10"></a><span class="c1"># Skip validation</span>
-<a id="__codelineno-22-11" name="__codelineno-22-11" href="#__codelineno-22-11"></a>hippo<span class="w"> </span>compile-schema<span class="w"> </span>schema.yaml<span class="w"> </span>--no-validate
+<a id="__codelineno-22-4" name="__codelineno-22-4" href="#__codelineno-22-4"></a><span class="c1"># Validate a JSON-format schema</span>
+<a id="__codelineno-22-5" name="__codelineno-22-5" href="#__codelineno-22-5"></a>hippo<span class="w"> </span>validate-schema<span class="w"> </span>schema.json<span class="w"> </span>--format<span class="w"> </span>json
 </code></pre></div>
 <hr />
 <h2 id="schema-diff">schema-diff<a class="headerlink" href="#schema-diff" title="Permanent link">&para;</a></h2>

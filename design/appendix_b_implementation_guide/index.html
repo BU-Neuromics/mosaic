@@ -4422,8 +4422,8 @@ responsibilities, key invariants, and test strategy.</p>
 <a id="__codelineno-0-9" name="__codelineno-0-9" href="#__codelineno-0-9"></a>│   └── ingestion.py            # IngestionPipeline, IngestOptions, IngestResult
 <a id="__codelineno-0-10" name="__codelineno-0-10" href="#__codelineno-0-10"></a>│
 <a id="__codelineno-0-11" name="__codelineno-0-11" href="#__codelineno-0-11"></a>├── schema/
-<a id="__codelineno-0-12" name="__codelineno-0-12" href="#__codelineno-0-12"></a>│   ├── parser.py               # Parse schema.yaml DSL → SchemaConfig (Pydantic model)
-<a id="__codelineno-0-13" name="__codelineno-0-13" href="#__codelineno-0-13"></a>│   ├── compiler.py             # SchemaConfig → LinkML (on-demand, used by hippo compile-schema)
+<a id="__codelineno-0-12" name="__codelineno-0-12" href="#__codelineno-0-12"></a>│   ├── parser.py               # Parse LinkML schema.yaml → SchemaConfig (Pydantic model)
+<a id="__codelineno-0-13" name="__codelineno-0-13" href="#__codelineno-0-13"></a>│   ├── validator.py            # Validate LinkML schema structure and references
 <a id="__codelineno-0-14" name="__codelineno-0-14" href="#__codelineno-0-14"></a>│   ├── migrator.py             # Schema diff, migration plan generation, migration application
 <a id="__codelineno-0-15" name="__codelineno-0-15" href="#__codelineno-0-15"></a>│   └── types.py                # SchemaConfig, EntityTypeConfig, FieldConfig, RelationshipConfig
 <a id="__codelineno-0-16" name="__codelineno-0-16" href="#__codelineno-0-16"></a>│
@@ -4472,7 +4472,7 @@ responsibilities, key invariants, and test strategy.</p>
 <a id="__codelineno-0-59" name="__codelineno-0-59" href="#__codelineno-0-59"></a>│
 <a id="__codelineno-0-60" name="__codelineno-0-60" href="#__codelineno-0-60"></a>├── cli/
 <a id="__codelineno-0-61" name="__codelineno-0-61" href="#__codelineno-0-61"></a>│   └── main.py                 # Typer CLI: init, serve, migrate, ingest, validate,
-<a id="__codelineno-0-62" name="__codelineno-0-62" href="#__codelineno-0-62"></a>│                               #   reference (install/update/list), compile-schema
+<a id="__codelineno-0-62" name="__codelineno-0-62" href="#__codelineno-0-62"></a>│                               #   reference (install/update/list), validate-schema
 <a id="__codelineno-0-63" name="__codelineno-0-63" href="#__codelineno-0-63"></a>│
 <a id="__codelineno-0-64" name="__codelineno-0-64" href="#__codelineno-0-64"></a>└── graphql/
 <a id="__codelineno-0-65" name="__codelineno-0-65" href="#__codelineno-0-65"></a>    └── __init__.py             # Reserved for future GraphQL transport; empty in v0.1
@@ -4649,7 +4649,7 @@ request/response envelope, error mapping.</p>
 - <code>hippo reference install &lt;name&gt; [--version]</code>
 - <code>hippo reference update &lt;name&gt;</code>
 - <code>hippo reference list</code>
-- <code>hippo compile-schema &lt;schema_file&gt; [--out]</code></p>
+- <code>hippo validate-schema &lt;schema_file&gt;</code></p>
 <h4 id="phase-8-search">Phase 8 — Search<a class="headerlink" href="#phase-8-search" title="Permanent link">&para;</a></h4>
 <p><strong>Modules:</strong> <code>adapters/sqlite/search.py</code>, <code>core/client.py</code> (search method), REST search router</p>
 <p><strong>Goal:</strong> FTS5 full-text search on fields declared <code>search: fts</code>. Embedding and synonym

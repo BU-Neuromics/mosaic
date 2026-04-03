@@ -963,10 +963,76 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
+  <a href="#who-is-hippo-for" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Who Is Hippo For?
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#when-to-use-hippo" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        When to Use Hippo
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#key-features" class="md-nav__link">
     <span class="md-ellipsis">
       
         Key Features
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#key-concepts" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Key Concepts
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#architecture-overview" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Architecture Overview
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#deployment-options" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Deployment Options
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#getting-started" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Getting Started
       
     </span>
   </a>
@@ -3991,10 +4057,76 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
+  <a href="#who-is-hippo-for" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Who Is Hippo For?
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#when-to-use-hippo" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        When to Use Hippo
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#key-features" class="md-nav__link">
     <span class="md-ellipsis">
       
         Key Features
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#key-concepts" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Key Concepts
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#architecture-overview" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Architecture Overview
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#deployment-options" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Deployment Options
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#getting-started" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Getting Started
       
     </span>
   </a>
@@ -4054,14 +4186,113 @@
 <h1 id="hippo-metadata-tracking-service">Hippo — Metadata Tracking Service<a class="headerlink" href="#hippo-metadata-tracking-service" title="Permanent link">&para;</a></h1>
 <p>Hippo is an open-source, configurable metadata tracking service. It provides a unified, queryable registry of entities, their fields, and the relationships between them — so that downstream systems, analysis pipelines, and data portals can reliably locate and filter metadata without manually managing spreadsheets or bespoke file manifests.</p>
 <p>Hippo is <strong>domain-agnostic</strong>: the entity types, fields, and relationships it tracks are defined entirely by a schema config file authored for each deployment. For example, an omics research deployment might define entity types like Subject, Sample, and Datafile, while a manufacturing deployment might define Batch, Component, and Inspection.</p>
+<h2 id="who-is-hippo-for">Who Is Hippo For?<a class="headerlink" href="#who-is-hippo-for" title="Permanent link">&para;</a></h2>
+<ul>
+<li><strong>Pipeline authors</strong> who need to resolve file paths and sample metadata at runtime from Nextflow, Snakemake, or custom scripts</li>
+<li><strong>Researchers</strong> who want a queryable record of what data exists, where it lives, and what it describes</li>
+<li><strong>Data managers</strong> who need to track the provenance, lifecycle, and relationships of samples and files across a project</li>
+<li><strong>Platform developers</strong> building downstream tools that need a reliable metadata API</li>
+</ul>
+<h2 id="when-to-use-hippo">When to Use Hippo<a class="headerlink" href="#when-to-use-hippo" title="Permanent link">&para;</a></h2>
+<p>Use Hippo when you need a central metadata registry that is:</p>
+<ul>
+<li><strong>Queryable</strong> — find entities by type, field values, relationships, or external identifiers</li>
+<li><strong>Auditable</strong> — every write is versioned with full provenance; nothing is hard-deleted</li>
+<li><strong>Flexible</strong> — define your own entity types and relationships without changing code</li>
+<li><strong>Embeddable</strong> — use the Python SDK directly in scripts and notebooks, or run a REST API for shared access</li>
+</ul>
+<p>Hippo tracks <em>where data lives</em> and <em>what it describes</em> — not the data itself. Raw data files stay in place on your filesystem or object store.</p>
 <h2 id="key-features">Key Features<a class="headerlink" href="#key-features" title="Permanent link">&para;</a></h2>
 <ul>
-<li><strong>Config-driven data model</strong> — Define entity types, fields, and relationships in YAML/JSON schema (Hippo DSL) compiled to LinkML</li>
+<li><strong>Config-driven data model</strong> — Define entity types, fields, and relationships directly in LinkML schema</li>
 <li><strong>Graph-shaped API</strong> — Query entities and traverse relationships through a relational store with graph semantics</li>
 <li><strong>Provenance tracking</strong> — Every change is logged with structured context and full audit trail</li>
 <li><strong>SDK-first architecture</strong> — Embed Hippo directly in Python scripts or notebooks; REST API is a thin transport wrapper</li>
 <li><strong>Flexible deployment</strong> — From a single researcher's laptop (SQLite) to enterprise cloud (PostgreSQL)</li>
 </ul>
+<h2 id="key-concepts">Key Concepts<a class="headerlink" href="#key-concepts" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th>Concept</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Entity</strong></td>
+<td>A top-level object tracked by Hippo. Entity types are defined in your schema config (e.g., Subject, Sample, Datafile).</td>
+</tr>
+<tr>
+<td><strong>Schema config</strong></td>
+<td>A YAML file defining entity types, fields, and relationships for your deployment, authored directly in LinkML format.</td>
+</tr>
+<tr>
+<td><strong>Relationship</strong></td>
+<td>A directional, typed edge connecting two entities with cardinality constraints.</td>
+</tr>
+<tr>
+<td><strong>External ID</strong></td>
+<td>An identifier from an upstream system (e.g., LIMS barcode) mapped to a Hippo entity UUID.</td>
+</tr>
+<tr>
+<td><strong>Provenance record</strong></td>
+<td>An immutable log entry recording what changed, when, and by whom.</td>
+</tr>
+<tr>
+<td><strong>Availability</strong></td>
+<td>Entities are never hard-deleted. Instead, they transition through lifecycle states: <code>active</code>, <code>archived</code>, <code>superseded</code>, <code>deleted</code>.</td>
+</tr>
+</tbody>
+</table>
+<h2 id="architecture-overview">Architecture Overview<a class="headerlink" href="#architecture-overview" title="Permanent link">&para;</a></h2>
+<p>Hippo has three concentric layers — only the Core SDK is required:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>┌─────────────────────────────────────────────────┐
+<a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>│            Transport Layer (optional)            │
+<a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>│       REST (FastAPI)  ·  GraphQL (future)        │
+<a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>├─────────────────────────────────────────────────┤
+<a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a>│               Core Python SDK                    │
+<a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a>│  HippoClient · QueryEngine · IngestionPipeline  │
+<a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a>│  ProvenanceManager · SchemaConfig                │
+<a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a>├─────────────────────────────────────────────────┤
+<a id="__codelineno-0-9" name="__codelineno-0-9" href="#__codelineno-0-9"></a>│         Infrastructure Layer (adapters)          │
+<a id="__codelineno-0-10" name="__codelineno-0-10" href="#__codelineno-0-10"></a>│    SQLite (v0.1)  ·  PostgreSQL (future)         │
+<a id="__codelineno-0-11" name="__codelineno-0-11" href="#__codelineno-0-11"></a>└─────────────────────────────────────────────────┘
+</code></pre></div>
+<p>All business logic lives in the <strong>Core SDK</strong>. The REST API is a thin wrapper — you can embed Hippo directly in Python code without running a server.</p>
+<h2 id="deployment-options">Deployment Options<a class="headerlink" href="#deployment-options" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th>Tier</th>
+<th>How it works</th>
+<th>Typical use</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Local / single-user</strong></td>
+<td><code>pip install hippo</code>, point at a SQLite file, query from Python or a notebook. No server required.</td>
+<td>Individual researcher, exploratory analysis</td>
+</tr>
+<tr>
+<td><strong>Small team</strong></td>
+<td>Run <code>hippo serve</code> on a shared host backed by SQLite or PostgreSQL.</td>
+<td>Lab group, shared project</td>
+</tr>
+<tr>
+<td><strong>Enterprise / cloud</strong></td>
+<td>Deploy with a managed PostgreSQL backend, container orchestration, and Bridge for authentication.</td>
+<td>Production platform, multi-team environment</td>
+</tr>
+</tbody>
+</table>
+<h2 id="getting-started">Getting Started<a class="headerlink" href="#getting-started" title="Permanent link">&para;</a></h2>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>pip<span class="w"> </span>install<span class="w"> </span>hippo
+<a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a>hippo<span class="w"> </span>init<span class="w"> </span>my-project
+<a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a>hippo<span class="w"> </span>serve
+</code></pre></div>
+<p>See the <strong><a href="user-docs/quickstart/">Quick Start guide</a></strong> for a complete walkthrough — from schema definition through entity creation, querying, and provenance inspection.</p>
 <h2 id="related-components">Related Components<a class="headerlink" href="#related-components" title="Permanent link">&para;</a></h2>
 <ul>
 <li><a href="../cappella/">Cappella</a> — Harmonizes data from external sources and upserts into Hippo</li>
@@ -4074,7 +4305,7 @@
 <li><a href="user-docs/introduction/">Introduction</a> — Detailed overview and use cases</li>
 <li><a href="user-docs/installation/">Installation</a> — Setup instructions</li>
 <li><a href="user-docs/quickstart/">Quick Start</a> — Get running in minutes</li>
-<li><a href="user-docs/schema-guide/">Schema Guide</a> — Authoring entity schemas with Hippo DSL</li>
+<li><a href="user-docs/schema-guide/">Schema Guide</a> — Authoring entity schemas in LinkML</li>
 <li><a href="user-docs/data-model/">Data Model</a> — Core data model concepts</li>
 <li><a href="user-docs/configuration/">Configuration</a> — Configuration reference</li>
 <li><a href="user-docs/cli-reference/">CLI Reference</a> — Command-line interface</li>

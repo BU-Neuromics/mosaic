@@ -1680,10 +1680,10 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#a2-relationship-declarations-hippo-dsl" class="md-nav__link">
+  <a href="#a2-relationship-declarations" class="md-nav__link">
     <span class="md-ellipsis">
       
-        A.2 Relationship Declarations (Hippo DSL)
+        A.2 Relationship Declarations
       
     </span>
   </a>
@@ -1702,10 +1702,10 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#a4-complete-schema-yaml-hippo-dsl" class="md-nav__link">
+  <a href="#a4-complete-schema-yaml" class="md-nav__link">
     <span class="md-ellipsis">
       
-        A.4 Complete Schema YAML (Hippo DSL)
+        A.4 Complete Schema YAML
       
     </span>
   </a>
@@ -4169,10 +4169,10 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#a2-relationship-declarations-hippo-dsl" class="md-nav__link">
+  <a href="#a2-relationship-declarations" class="md-nav__link">
     <span class="md-ellipsis">
       
-        A.2 Relationship Declarations (Hippo DSL)
+        A.2 Relationship Declarations
       
     </span>
   </a>
@@ -4191,10 +4191,10 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#a4-complete-schema-yaml-hippo-dsl" class="md-nav__link">
+  <a href="#a4-complete-schema-yaml" class="md-nav__link">
     <span class="md-ellipsis">
       
-        A.4 Complete Schema YAML (Hippo DSL)
+        A.4 Complete Schema YAML
       
     </span>
   </a>
@@ -4235,7 +4235,7 @@ The entity types, fields, and relationships below illustrate how a multi-modal o
 research group might configure Hippo for tracking biological samples, sequencing data
 files, and analysis workflows. A deployment targeting a different domain (e.g.,
 manufacturing QC, environmental monitoring, clinical trials) would author an entirely
-different schema using the same Hippo DSL features documented in sec3. Hippo's core
+different schema using the same LinkML features documented in sec3. Hippo's core
 behavior is identical regardless of schema content.</p>
 </blockquote>
 <hr />
@@ -4561,7 +4561,7 @@ state is tracked via the <code>execution_state</code> field.</p>
 </tbody>
 </table>
 <hr />
-<h3 id="a2-relationship-declarations-hippo-dsl">A.2 Relationship Declarations (Hippo DSL)<a class="headerlink" href="#a2-relationship-declarations-hippo-dsl" title="Permanent link">&para;</a></h3>
+<h3 id="a2-relationship-declarations">A.2 Relationship Declarations<a class="headerlink" href="#a2-relationship-declarations" title="Permanent link">&para;</a></h3>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nt">relationships</span><span class="p">:</span>
 <a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">donated</span>
 <a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="w">    </span><span class="nt">from</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Subject</span>
@@ -4645,11 +4645,11 @@ state is tracked via the <code>execution_state</code> field.</p>
 <a id="__codelineno-1-38" name="__codelineno-1-38" href="#__codelineno-1-38"></a>  [any entity] ──superseded_by──► [any entity]
 </code></pre></div>
 <hr />
-<h3 id="a4-complete-schema-yaml-hippo-dsl">A.4 Complete Schema YAML (Hippo DSL)<a class="headerlink" href="#a4-complete-schema-yaml-hippo-dsl" title="Permanent link">&para;</a></h3>
+<h3 id="a4-complete-schema-yaml">A.4 Complete Schema YAML<a class="headerlink" href="#a4-complete-schema-yaml" title="Permanent link">&para;</a></h3>
 <p>The full <code>schema.yaml</code> for this example deployment. This is what a deployer would author
 and commit to their config repository.</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="nt">version</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;1.0&quot;</span>
-<a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a><span class="nt">format</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">hippo-dsl</span>
+<a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a><span class="nt">format</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">linkml</span>
 <a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a>
 <a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a><span class="c1"># This example does not reference any external ontology packages.</span>
 <a id="__codelineno-2-5" name="__codelineno-2-5" href="#__codelineno-2-5"></a><span class="c1"># A deployment that uses FMA anatomy terms or Ensembl gene IDs would declare them here:</span>
