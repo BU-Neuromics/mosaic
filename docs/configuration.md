@@ -6,8 +6,8 @@ Complete reference for configuring Hippo, the Metadata Tracking Service (MTS) fo
 
 Hippo uses two primary configuration files:
 
-1. **`config.json`** — Main application configuration that specifies the schema path and storage settings
-2. **Schema files (YAML or JSON)** — Define entity types, fields, validators, and inheritance in LinkML format
+1. **`config.json`** -- Main application configuration that specifies the schema path and storage settings
+2. **Schema files (YAML or JSON)** -- Define entity types, attributes, validators, and inheritance in LinkML format
 
 Configuration is loaded via `load_hippo_config()` from `config.json`, and schemas are loaded via `SchemaParser` or `load_schema()`.
 
@@ -28,7 +28,7 @@ The main configuration model for the Hippo application. Loaded from `config.json
 | `write_path_validation_timeout` | `float` | `None` | Timeout in seconds for write path validation. `None` = no timeout |
 | `validators_path` | `Path` | `None` | Path to custom validators file. If `None`, uses default location |
 
-`schema_path` is **required** — `HippoConfig` will not instantiate without it.
+`schema_path` is **required** -- `HippoConfig` will not instantiate without it.
 
 ### Example config.json
 
@@ -89,199 +89,239 @@ The `full` template includes additional sections:
 
 ---
 
-## SchemaConfig
+## LinkML Schema Format
 
-Defines an entity type schema. Loaded from schema files in the schema directory.
+Schema files use standard **LinkML** format. Classes and their attributes are defined in a dictionary structure with a required schema header. Both YAML and JSON are accepted.
 
-| Field | Type | Default | Description |
-|-------|------|---------|-------------|
-| `name` | `str` | *(required)* | Unique name of the entity schema (e.g., `"Donor"`, `"Sample"`) |
-| `version` | `str` | *(required)* | Schema version string (e.g., `"1.0.0"`) |
-| `description` | `str` | `None` | Human-readable description of the entity |
-| `fields` | `list[FieldDefinition]` | `[]` | List of field definitions for this entity |
-| `base` | `str \| list[str]` | `None` | Parent schema(s) to inherit from. Single string or list for multiple inheritance |
-| `metadata` | `dict[str, Any]` | `None` | Arbitrary metadata dict for documentation or custom use |
-| `unique_constraints` | `list[list[str]]` | `None` | List of field combinations that must be unique. Each entry is a list of field names |
-| `indexes` | `list[dict[str, Any]]` | `None` | Custom index definitions beyond field-level indexes |
-| `validators` | `list[ValidatorDefinition]` | `[]` | Validators to apply to this entity type |
-| `max_batch_size` | `int` | `10000` | Maximum number of entities that can be created/updated in a single batch operation |
-| `flatten_nested` | `bool` | `true` | Whether to flatten nested dict/list fields in storage |
+### Schema Header
 
-### Schema Format
+Every LinkML schema file requires these top-level keys:
 
-Schema files use standard **LinkML** format — a dict-of-dicts structure where entity types and their fields are keyed by name, not listed. Both YAML and JSON are valid.
+| Key | Required | Description |
+|-----|----------|-------------|
+| `id` | Yes | Unique URI identifier for the schema |
+| `name` | Yes | Short schema name (alphanumeric, underscores, dashes) |
+| `prefixes` | Yes | Maps prefix names to IRI namespaces (must include `linkml`) |
+| `imports` | Yes | List of imported schemas (almost always includes `linkml:types`) |
+| `default_range` | Recommended | Default data type for attributes without explicit range (e.g., `string`) |
+| `classes` | Core | Dictionary of class (entity type) definitions |
+| `enums` | Core | Dictionary of enumeration definitions |
+| `slots` | Optional | Dictionary of reusable slot definitions shared across classes |
+
+### Schema Example
 
 ```yaml
-version: "1.0"
+id: https://example.org/my-lab
+name: my_lab
+prefixes:
+  linkml: https://w3id.org/linkml/
+  my_lab: https://example.org/my-lab/
+imports:
+  - linkml:types
+default_range: string
 
-entities:
+enums:
+  SexType:
+    permissible_values:
+      M:
+      F:
+      Unknown:
+
+  SampleType:
+    permissible_values:
+      tissue:
+      blood:
+      csf:
+
+classes:
   Donor:
     description: "Human donor information"
-    fields:
+    attributes:
       donor_id:
-        type: string
+        range: string
         required: true
-        unique: true
-        index: true
+        identifier: true
+        annotations:
+          hippo_index: true
       species:
-        type: string
+        range: string
         required: true
-        default: "Homo sapiens"
+        ifabsent: "string(Homo sapiens)"
       sex:
-        type: enum
+        range: SexType
         required: true
       date_of_birth:
-        type: date
+        range: date
       consent_obtained:
-        type: boolean
-        default: false
+        range: boolean
+        ifabsent: "false"
 
   Sample:
     description: "Biological sample from a donor"
-    fields:
+    attributes:
       sample_id:
-        type: string
+        range: string
         required: true
-        unique: true
-        index: true
-      donor_id:
-        type: string
+        identifier: true
+        annotations:
+          hippo_index: true
+      donor:
+        range: Donor
         required: true
-        index: true
-        references:
-          entity: Donor
-          field: donor_id
+        annotations:
+          hippo_index: true
       sample_type:
-        type: enum
+        range: SampleType
         required: true
       quantity_ng:
-        type: float
+        range: float
       notes:
-        type: string
-        search: fts5
+        range: string
+        annotations:
+          hippo_search: fts5
 ```
 
 ### Schema Inheritance
 
-Schemas support inheritance via the `base` field:
+Schemas support inheritance via `is_a`:
 
 ```yaml
-entities:
+classes:
   BiologicalEntity:
     description: "Base entity for all biological samples"
-    fields:
+    abstract: true
+    attributes:
       external_id:
-        type: string
-        unique: true
+        range: string
+        identifier: true
 
   Donor:
-    base: BiologicalEntity
+    is_a: BiologicalEntity
     description: "Human donor information"
-    fields:
+    attributes:
       donor_id:
-        type: string
+        range: string
         required: true
       species:
-        type: string
+        range: string
 ```
 
-Multiple inheritance is supported by passing a list to `base`:
+Mixins are supported for composing shared attribute sets:
 
 ```yaml
-entities:
-  BrainSample:
-    base:
-      - Sample
-      - BrainEntity
-    fields:
+classes:
+  BrainEntity:
+    mixin: true
+    attributes:
       brain_region:
-        type: string
+        range: string
+
+  BrainSample:
+    is_a: Sample
+    mixins:
+      - BrainEntity
 ```
 
 ---
 
-## FieldDefinition
+## Attribute Properties
 
-Defines a single field within a schema.
+Each attribute within a class supports these LinkML properties:
 
-| Field | Type | Default | Description |
-|-------|------|---------|-------------|
-| `name` | `str` | *(required)* | Field name (must be non-empty, whitespace-trimmed) |
-| `type` | `str` | *(required)* | Data type. Must be one of the valid type system values |
-| `required` | `bool` | `false` | Whether the field is required (non-null) |
+| Property | Type | Default | Description |
+|----------|------|---------|-------------|
+| `range` | `str` | schema's `default_range` | Data type: a built-in type, class name, or enum name |
+| `required` | `bool` | `false` | Whether the attribute is required (non-null) |
 | `description` | `str` | `None` | Human-readable description |
-| `default` | `Any` | `None` | Default value if not provided |
-| `primary_key` | `bool` | `false` | Whether this field is the primary key |
-| `unique` | `bool` | `false` | Whether values must be unique across entities |
-| `index` | `bool` | `false` | Whether to create a database index on this field |
-| `index_partial` | `bool` | `false` | Create a partial index (only for non-null values) |
-| `search` | `str` | `None` | Full-text search mode: `"fts"`, `"fts5"`, or `"embedding"` |
-| `references` | `dict[str, Any]` | `None` | Foreign key reference to another entity type |
+| `ifabsent` | `str` | `None` | Default value expression, e.g., `string(pending)`, `int(0)`, `true` |
+| `identifier` | `bool` | `false` | Whether this attribute is the unique primary key |
+| `multivalued` | `bool` | `false` | Whether the value is a list |
+| `pattern` | `str` | `None` | Regex pattern for validation |
+| `minimum_value` | `number` | `None` | Minimum numeric value (inclusive) |
+| `maximum_value` | `number` | `None` | Maximum numeric value (inclusive) |
+| `inlined` | `bool` | `false` | Whether class-range values are nested inline |
+| `inlined_as_list` | `bool` | `false` | Inlined as a list rather than a dictionary |
 
-### Type System
+### Built-in Range Types
 
-Valid field types:
+Available when you import `linkml:types`:
 
-| Type | Description |
-|------|-------------|
+| Range | Description |
+|-------|-------------|
 | `string` | Text data |
 | `integer` | Integer numbers |
 | `float` | Floating-point numbers |
 | `boolean` | True/false values |
 | `date` | Date (YYYY-MM-DD) |
 | `datetime` | Date and time (ISO 8601) |
-| `list` | List of values |
-| `dict` | Dictionary/object (JSON) |
 | `uri` | URI/URL string |
-| `enum` | Enumerated value (limited set of allowed strings) |
+| `uriorcurie` | URI or compact URI (CURIE) |
 
-### Search Modes
+### Hippo-Specific Annotations
 
-The `search` field enables full-text search indexing:
+Hippo extends standard LinkML with storage annotations. These are expressed under the `annotations` key on attributes:
 
-| Value | Description |
-|-------|-------------|
-| `fts` | SQLite FTS3 full-text search |
-| `fts5` | SQLite FTS5 full-text search (recommended) |
-| `embedding` | Vector embedding for semantic search |
-
-### References (Foreign Keys)
-
-Declare that a field points to another entity type using `references: {entity_type: <name>}`:
+| Annotation | Values | Description |
+|------------|--------|-------------|
+| `hippo_index` | `true` | Creates a B-tree database index on this attribute |
+| `hippo_index_partial` | `true` | Creates a partial index (non-null values only) |
+| `hippo_search` | `fts`, `fts5`, `embedding` | Enables full-text search indexing |
 
 ```yaml
-entities:
-  - name: Sample
-    version: "1.0"
-    fields:
-      - name: donor_id
-        type: string
-        required: true
-        references:
-          entity_type: Donor    # ← must use entity_type key
+  diagnosis:
+    range: string
+    annotations:
+      hippo_index: true
+      hippo_search: fts5
 ```
 
-The `entity_type` key is required for `HippoClient.schema_references()` and Cappella's collection resolver. Other keys in the `references` dict are ignored by these systems.
+### References (Entity Links)
 
-> ⚠️ Using `entity:` instead of `entity_type:` will parse without error but will NOT be recognised by `schema_references()`. Always use `entity_type:`.
+Declare that an attribute points to another class by setting `range` to a class name:
+
+```yaml
+classes:
+  Sample:
+    attributes:
+      donor:
+        range: Donor          # references the Donor class
+        required: true
+```
+
+When the `range` is a class, Hippo treats the attribute as an entity reference. This is used for `HippoClient.schema_references()` and Cappella's collection resolver.
+
+---
+
+## Enum Definitions
+
+Enums are defined at the schema top level under `enums:`. Each enum declares its allowed values under `permissible_values`:
+
+```yaml
+enums:
+  SexType:
+    description: "Biological sex"
+    permissible_values:
+      M:
+        description: "Male"
+      F:
+        description: "Female"
+      Unknown:
+        description: "Not specified"
+```
+
+Reference an enum from an attribute with `range`:
+
+```yaml
+  sex:
+    range: SexType
+    required: true
+```
 
 ---
 
 ## ValidatorDefinition
 
-Defines a validator applied to entity data. Used within `SchemaConfig.validators`.
-
-| Field | Type | Default | Description |
-|-------|------|---------|-------------|
-| `name` | `str` | *(required)* | Unique name for this validator |
-| `type` | `str` | *(required)* | Validator type (e.g., `"cel"` for CEL expressions) |
-| `enabled` | `bool` | `true` | Whether this validator is active |
-| `priority` | `int` | `0` | Execution order (higher runs first). Negative for pre-schema validation |
-| `config` | `dict[str, Any]` | `None` | Type-specific configuration |
-
-### Validator Types
-
-Validators are loaded from a validators file with the CEL (Common Expression Language) engine:
+Defines a validator applied to entity data. Validators are loaded from a separate validators file with the CEL (Common Expression Language) engine:
 
 ```yaml
 validators:
@@ -295,6 +335,14 @@ validators:
       condition: 'entity.name != ""'
       error: "Sample {entity_id}: name is required"
 ```
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `name` | `str` | *(required)* | Unique name for this validator |
+| `type` | `str` | *(required)* | Validator type (e.g., `"cel"` for CEL expressions) |
+| `enabled` | `bool` | `true` | Whether this validator is active |
+| `priority` | `int` | `0` | Execution order (higher runs first). Negative for pre-schema validation |
+| `config` | `dict[str, Any]` | `None` | Type-specific configuration |
 
 ---
 
@@ -314,176 +362,170 @@ validators:
 }
 ```
 
-### schemas/base.yaml — Base Entity
+### schemas/base.yaml -- Base Entity
 
 ```yaml
-version: "1.0"
+id: https://example.org/base
+name: base
+prefixes:
+  linkml: https://w3id.org/linkml/
+  base: https://example.org/base/
+imports:
+  - linkml:types
+default_range: string
 
-entities:
+classes:
   BiologicalEntity:
     description: "Base entity for all biological samples"
-    fields:
+    abstract: true
+    attributes:
       external_id:
-        type: string
-        unique: true
+        range: string
+        identifier: true
         description: "External system identifier"
       created_by:
-        type: string
+        range: string
         description: "User who created this entity"
-      is_available:
-        type: boolean
-        default: true
-        description: "Soft-delete flag (false = deleted)"
-    unique_constraints:
-      - [external_id]
 ```
 
-### schemas/donor.yaml — Donor Entity
+### schemas/donor.yaml -- Donor Entity
 
 ```yaml
-version: "1.0"
+id: https://example.org/donor
+name: donor
+prefixes:
+  linkml: https://w3id.org/linkml/
+  donor: https://example.org/donor/
+imports:
+  - linkml:types
+  - base
+default_range: string
 
-entities:
+enums:
+  SexType:
+    permissible_values:
+      M:
+      F:
+      Unknown:
+
+classes:
   Donor:
+    is_a: BiologicalEntity
     description: "Human donor information"
-    base: BiologicalEntity
-    metadata:
-      department: Oncology
-      pi: Dr. Smith
-    fields:
+    attributes:
       donor_id:
-        type: string
+        range: string
         required: true
-        unique: true
-        index: true
+        identifier: true
+        annotations:
+          hippo_index: true
         description: "Internal donor identifier"
       species:
-        type: string
+        range: string
         required: true
-        default: "Homo sapiens"
+        ifabsent: "string(Homo sapiens)"
         description: "Species of the donor"
       sex:
-        type: enum
+        range: SexType
         required: true
         description: "Biological sex"
       date_of_birth:
-        type: date
+        range: date
         description: "Date of birth"
       ethnicity:
-        type: string
+        range: string
         description: "Ethnicity information"
       consent_obtained:
-        type: boolean
-        default: false
+        range: boolean
+        ifabsent: "false"
         description: "Whether donor consent is on file"
       consent_date:
-        type: date
+        range: date
         description: "Date consent was obtained"
-      diagnosis:
-        type: list
+      diagnoses:
+        range: string
+        multivalued: true
         description: "List of diagnoses"
-      demographics:
-        type: dict
-        description: "Additional demographic data"
       medical_record_number:
-        type: string
-        index: true
+        range: string
+        annotations:
+          hippo_index: true
         description: "Hospital MRN"
       notes:
-        type: string
-        search: fts5
+        range: string
+        annotations:
+          hippo_search: fts5
         description: "Free-text notes for searching"
-    validators:
-      - name: donor_id_required
-        type: cel
-        enabled: true
-        priority: 10
-        config:
-          entity_types: [Donor]
-          on: [create, update]
-          condition: 'entity.donor_id != ""'
-          error: "Donor {entity_id}: donor_id is required"
-      - name: consent_required
-        type: cel
-        enabled: true
-        priority: 5
-        config:
-          entity_types: [Donor]
-          on: [create]
-          condition: 'entity.consent_obtained == true'
-          error: "Donor {entity_id}: consent is required for enrollment"
-    unique_constraints:
-      - [donor_id]
-      - [medical_record_number]
-    indexes:
-      - fields: [species, is_available]
-        name: idx_donor_species_active
 ```
 
-### schemas/sample.yaml — Sample Entity
+### schemas/sample.yaml -- Sample Entity
 
 ```yaml
-version: "1.0"
+id: https://example.org/sample
+name: sample
+prefixes:
+  linkml: https://w3id.org/linkml/
+  sample: https://example.org/sample/
+imports:
+  - linkml:types
+  - base
+  - donor
+default_range: string
 
-entities:
+enums:
+  SampleType:
+    permissible_values:
+      tissue:
+      blood:
+      csf:
+      cell_line:
+
+classes:
   Sample:
+    is_a: BiologicalEntity
     description: "Biological sample from a donor"
-    base: BiologicalEntity
-    fields:
+    attributes:
       sample_id:
-        type: string
+        range: string
         required: true
-        unique: true
-        index: true
+        identifier: true
+        annotations:
+          hippo_index: true
         description: "Internal sample identifier"
-      donor_id:
-        type: string
+      donor:
+        range: Donor
         required: true
-        index: true
-        references:
-          entity: Donor
-          field: donor_id
+        annotations:
+          hippo_index: true
         description: "Reference to donor"
       sample_type:
-        type: enum
+        range: SampleType
         required: true
         description: "Type of biological sample"
       tissue_type:
-        type: string
+        range: string
         description: "Tissue of origin"
       collection_date:
-        type: datetime
+        range: datetime
         description: "Date/time of sample collection"
       quantity_ng:
-        type: float
+        range: float
         description: "Sample quantity in nanograms"
       quality_score:
-        type: float
+        range: float
         description: "Sample quality metric (0-1)"
       storage_location:
-        type: string
+        range: string
         description: "Physical storage location"
       barcode:
-        type: string
-        unique: true
-        index: true
+        range: string
+        annotations:
+          hippo_index: true
         description: "Sample barcode"
-      metadata:
-        type: dict
-        description: "Sample-specific metadata"
-    validators:
-      - name: sample_donor_exists
-        type: cel
-        enabled: true
-        priority: 20
-        config:
-          entity_types: [Sample]
-          on: [create]
-          condition: 'entity.donor_id != ""'
-          error: "Sample {entity_id}: must reference a donor"
-    unique_constraints:
-      - [sample_id]
-      - [barcode]
+    unique_keys:
+      barcode_key:
+        unique_key_slots:
+          - barcode
 ```
 
 ### validators.yaml
@@ -505,7 +547,7 @@ validators:
   - name: sample_with_donor
     entity_types: [Sample]
     'on': [create]
-    condition: 'entity.donor_id != ""'
+    condition: 'entity.donor != ""'
     error: "Sample {entity_id}: must have an associated donor"
 ```
 

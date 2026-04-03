@@ -15,7 +15,7 @@ An **entity** is a typed data object in Hippo. Every entity has:
 - User-defined fields as declared in the schema
 - System fields managed automatically by Hippo
 
-Entity types and their fields are defined in the schema configuration (YAML or JSON), not hardcoded in the SDK.
+Entity types (called **classes** in LinkML) and their attributes are defined in the schema configuration (LinkML YAML or JSON), not hardcoded in the SDK.
 
 ### System Fields
 
@@ -91,21 +91,31 @@ client.query("tissue.Sample", filters=[...])
 
 ### Declaring Namespaces in Schema Config
 
-Add a `namespace:` key at the top of a schema file to scope all its entity types:
+Set the `default_prefix` in a LinkML schema file to scope all its classes into a namespace:
 
 ```yaml
 # schemas/tissue.yaml
-namespace: tissue
-entities:
+id: https://example.org/tissue
+name: tissue
+prefixes:
+  linkml: https://w3id.org/linkml/
+  tissue: https://example.org/tissue/
+imports:
+  - linkml:types
+default_prefix: tissue
+
+classes:
   Sample:
-    fields:
-      donor_id: {type: string, references: {entity_type: Donor}}        # root Donor
-      parent_id: {type: string, references: {entity_type: tissue.Sample}} # self-ref
+    attributes:
+      donor:
+        range: Donor                  # root-namespace Donor
+      parent:
+        range: tissue.Sample          # self-ref within namespace
 ```
 
-Schemas without a `namespace:` key contribute to the root namespace. Multiple files may share the same namespace — their entity lists are merged at load time. Cross-namespace references use FQNs in `references.entity_type`.
+Schemas without a `default_prefix` contribute to the root namespace. Multiple files may share the same namespace -- their class lists are merged at load time. Cross-namespace references use FQNs in the `range` value.
 
-Existing schemas with no `namespace:` key are unaffected. All unqualified entity type strings continue to resolve to the root namespace; no data migration is required.
+Existing schemas with no `default_prefix` are unaffected. All unqualified entity type strings continue to resolve to the root namespace; no data migration is required.
 
 ---
 
@@ -162,16 +172,16 @@ This creates a new active external ID record and marks the old one as superseded
 
 ## Relationships
 
-Relationships are typed, directional edges between entities. They are declared in the schema:
+Relationships are typed, directional edges between entities. They can be declared in the schema using class-level attributes with a class `range`:
 
 ```yaml
-relationships:
-  - name: derived_from
-    from: Sample
-    to: Sample
-    cardinality: many-to-many
-    properties:
-      method: {type: string}
+classes:
+  Sample:
+    attributes:
+      derived_from:
+        range: Sample
+        multivalued: true
+        description: "Samples this was derived from"
 ```
 
 Supported cardinalities:

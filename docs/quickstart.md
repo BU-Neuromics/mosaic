@@ -42,124 +42,137 @@ brain_study/
 
 ## Step 2: Define Schemas
 
-Create a schema file that defines the entities for your Alzheimer's research study. Hippo schemas use YAML with an `entities` key at the top level, where entity types are declared as a dict of dicts.
+Create a LinkML schema file that defines the entity types for your Alzheimer's research study. LinkML schemas use `classes` to define entity types, with `attributes` for their fields.
 
 Create `schemas/brain_study.yaml`:
 
 ```yaml
-entities:
+id: https://example.org/brain-study
+name: brain_study
+prefixes:
+  linkml: https://w3id.org/linkml/
+  brain_study: https://example.org/brain-study/
+imports:
+  - linkml:types
+default_range: string
+
+enums:
+  SexType:
+    permissible_values:
+      M:
+      F:
+
+  DiagnosisType:
+    permissible_values:
+      Control:
+      Alzheimers_Disease:
+        description: "Alzheimer's Disease"
+      Mild_Cognitive_Impairment:
+        description: "Mild Cognitive Impairment"
+
+  BrainRegion:
+    permissible_values:
+      Hippocampus:
+      Frontal_Cortex:
+        description: "Frontal Cortex"
+      Temporal_Cortex:
+        description: "Temporal Cortex"
+      Occipital_Cortex:
+        description: "Occipital Cortex"
+      Cerebellum:
+
+  TissueType:
+    permissible_values:
+      Brain_Tissue:
+        description: "Brain Tissue"
+      Blood:
+      CSF:
+
+  FileType:
+    permissible_values:
+      FASTQ:
+      BAM:
+      VCF:
+      CSV:
+      JSON:
+      TSV:
+
+classes:
   Donor:
-    version: '1.0'
-    fields:
+    description: "Brain tissue donors with demographics and diagnosis"
+    attributes:
       donor_id:
-        type: string
+        range: string
         required: true
-        unique: true
+        identifier: true
       name:
-        type: string
+        range: string
         required: true
       age:
-        type: integer
+        range: integer
         required: true
       sex:
-        type: string
+        range: SexType
         required: true
-        allowed_values:
-          - M
-          - F
       diagnosis:
-        type: string
+        range: DiagnosisType
         required: true
-        allowed_values:
-          - Control
-          - Alzheimer's Disease
-          - Mild Cognitive Impairment
       brain_region:
-        type: string
+        range: BrainRegion
         required: true
-        allowed_values:
-          - Hippocampus
-          - Frontal Cortex
-          - Temporal Cortex
-          - Occipital Cortex
-          - Cerebellum
 
   Sample:
-    version: '1.0'
-    fields:
+    description: "Brain tissue samples with collection details and RNA quality metrics"
+    attributes:
       sample_id:
-        type: string
+        range: string
         required: true
-        unique: true
+        identifier: true
       donor:
-        type: ref
+        range: Donor
         required: true
-        references:
-          entity_type: Donor
+        description: "Reference to the donor entity (holds Hippo internal UUID)"
       tissue_type:
-        type: string
+        range: TissueType
         required: true
-        allowed_values:
-          - Brain Tissue
-          - Blood
-          - CSF
       brain_region:
-        type: string
+        range: BrainRegion
         required: true
-        allowed_values:
-          - Hippocampus
-          - Frontal Cortex
-          - Temporal Cortex
-          - Occipital Cortex
-          - Cerebellum
       collection_date:
-        type: date
+        range: date
         required: true
       rin_score:
-        type: float
-        required: false
-        description: RNA Integrity Number (RIN), 1-10 scale
+        range: float
+        description: "RNA Integrity Number (RIN), 1-10 scale"
       notes:
-        type: string
-        required: false
+        range: string
 
   DataFile:
-    version: '1.0'
-    fields:
+    description: "Sequencing output files linked to samples"
+    attributes:
       file_id:
-        type: string
+        range: string
         required: true
-        unique: true
+        identifier: true
       sample:
-        type: ref
+        range: Sample
         required: true
-        references:
-          entity_type: Sample
+        description: "Reference to the sample entity (holds Hippo internal UUID)"
       file_path:
-        type: string
+        range: string
         required: true
       file_type:
-        type: string
+        range: FileType
         required: true
-        allowed_values:
-          - FASTQ
-          - BAM
-          - VCF
-          - CSV
-          - JSON
-          - TSV
       size_bytes:
-        type: integer
+        range: integer
         required: true
       checksum:
-        type: string
-        required: false
+        range: string
       pipeline_version:
-        type: string
-        required: false
+        range: string
       description:
-        type: string
-        required: false
+        range: string
 ```
 
 This schema defines three entity types:
@@ -167,16 +180,16 @@ This schema defines three entity types:
 - **Sample**: Brain tissue samples with collection details and RNA quality metrics
 - **DataFile**: Sequencing output files linked to samples
 
-### Entity Reference Fields
+### Entity Reference Attributes
 
-The `donor` field on `Sample` and the `sample` field on `DataFile` use `type: ref` with a `references` declaration. These are **entity reference fields** — they are fundamentally different from a plain `type: string` field named `donor_id`:
+The `donor` attribute on `Sample` and the `sample` attribute on `DataFile` have their `range` set to another class. These are **entity reference attributes** -- they are fundamentally different from a plain `string` attribute named `donor_id`:
 
-- **Semantic relationship** — `references: {entity_type: Donor}` declares that this field points to a `Donor` entity, not an arbitrary string. Hippo records and exposes this as a typed edge in the data model.
-- **Holds a Hippo internal ID** — the value stored in a `ref` field is the UUID assigned by Hippo when the entity was ingested (e.g. `"donor-1"`), not a user-facing identifier like `"AD-001"`. User-facing identifiers belong in a plain `string` field (such as `donor_id: string`) or as an ExternalID.
-- **Write-time validation** — when reference validation is enabled, Hippo checks at ingest time that the referenced entity UUID exists and is available. Writing a `Sample` with a `donor` value that points to a non-existent or unavailable `Donor` is rejected.
-- **Graph traversal** — `ref` fields connect to the Relationships API. Hippo can traverse from a `DataFile` to its `Sample` to its `Donor` using `client.relationships.traverse()` or the `/relationships` REST endpoint.
+- **Semantic relationship** -- `range: Donor` declares that this attribute points to a `Donor` entity, not an arbitrary string. Hippo records and exposes this as a typed edge in the data model.
+- **Holds a Hippo internal ID** -- the value stored in a reference attribute is the UUID assigned by Hippo when the entity was ingested (e.g. `"donor-1"`), not a user-facing identifier like `"AD-001"`. User-facing identifiers belong in a plain `string` attribute (such as `donor_id`) or as an ExternalID.
+- **Write-time validation** -- when reference validation is enabled, Hippo checks at ingest time that the referenced entity UUID exists and is available. Writing a `Sample` with a `donor` value that points to a non-existent or unavailable `Donor` is rejected.
+- **Graph traversal** -- reference attributes connect to the Relationships API. Hippo can traverse from a `DataFile` to its `Sample` to its `Donor` using `client.relationships.traverse()` or the `/relationships` REST endpoint.
 
-> **`ref` value format:** Reference field values encode the target entity type and UUID as `"entity_type:uuid"` — for example, `"Donor:donor-1"`. The SDK accepts and normalizes both the bare UUID and the prefixed form.
+> **Reference value format:** Reference attribute values encode the target entity type and UUID as `"entity_type:uuid"` -- for example, `"Donor:donor-1"`. The SDK accepts and normalizes both the bare UUID and the prefixed form.
 
 ## Step 3: Run Migrations
 
@@ -239,7 +252,7 @@ curl -s -X POST http://127.0.0.1:8000/ingest \
       "name": "Subject AD-001",
       "age": 78,
       "sex": "M",
-      "diagnosis": "Alzheimer's Disease",
+      "diagnosis": "Alzheimers_Disease",
       "brain_region": "Hippocampus"
     }
   }'
@@ -256,7 +269,7 @@ Response:
     "name": "Subject AD-001",
     "age": 78,
     "sex": "M",
-    "diagnosis": "Alzheimer's Disease",
+    "diagnosis": "Alzheimers_Disease",
     "brain_region": "Hippocampus"
   },
   "version": 1,
@@ -270,7 +283,7 @@ Save the returned entity `id` (e.g., `donor-1`) for use in subsequent operations
 
 ### Create a Brain Tissue Sample
 
-Use the `id` returned by the Donor ingest call (e.g. `donor-1`) as the value for the `donor` reference field.
+Use the `id` returned by the Donor ingest call (e.g. `donor-1`) as the value for the `donor` reference attribute.
 
 ```bash
 curl -s -X POST http://127.0.0.1:8000/ingest \
@@ -281,7 +294,7 @@ curl -s -X POST http://127.0.0.1:8000/ingest \
     "data": {
       "sample_id": "SMPL-AD-001-HC",
       "donor": "donor-1",
-      "tissue_type": "Brain Tissue",
+      "tissue_type": "Brain_Tissue",
       "brain_region": "Hippocampus",
       "collection_date": "2025-11-15",
       "rin_score": 8.4,
@@ -292,7 +305,7 @@ curl -s -X POST http://127.0.0.1:8000/ingest \
 
 ### Create an RNA-seq Data File
 
-Use the `id` returned by the Sample ingest call (e.g. `sample-1`) as the value for the `sample` reference field.
+Use the `id` returned by the Sample ingest call (e.g. `sample-1`) as the value for the `sample` reference attribute.
 
 ```bash
 curl -s -X POST http://127.0.0.1:8000/ingest \
@@ -338,8 +351,8 @@ curl -s -X PUT http://127.0.0.1:8000/entities/donor-1 \
       "name": "Subject AD-001",
       "age": 78,
       "sex": "M",
-      "diagnosis": "Alzheimer's Disease",
-      "brain_region": "Temporal Cortex"
+      "diagnosis": "Alzheimers_Disease",
+      "brain_region": "Temporal_Cortex"
     }
   }'
 ```
@@ -420,7 +433,7 @@ Response shows every change made to the entity:
     "changes": {
       "brain_region": {
         "old": "Hippocampus",
-        "new": "Temporal Cortex"
+        "new": "Temporal_Cortex"
       }
     }
   }
@@ -458,79 +471,112 @@ from hippo.core.exceptions import ValidationFailure
 # Define schemas programmatically (normally loaded from YAML)
 SCHEMAS = {
     "brain_study": """
-entities:
+id: https://example.org/brain-study
+name: brain_study
+prefixes:
+  linkml: https://w3id.org/linkml/
+  brain_study: https://example.org/brain-study/
+imports:
+  - linkml:types
+default_range: string
+
+enums:
+  SexType:
+    permissible_values:
+      M:
+      F:
+  DiagnosisType:
+    permissible_values:
+      Control:
+      Alzheimers_Disease:
+      Mild_Cognitive_Impairment:
+  BrainRegion:
+    permissible_values:
+      Hippocampus:
+      Frontal_Cortex:
+      Temporal_Cortex:
+      Occipital_Cortex:
+      Cerebellum:
+  TissueType:
+    permissible_values:
+      Brain_Tissue:
+      Blood:
+      CSF:
+  FileType:
+    permissible_values:
+      FASTQ:
+      BAM:
+      VCF:
+      CSV:
+      JSON:
+      TSV:
+
+classes:
   Donor:
-    version: '1.0'
-    fields:
+    attributes:
       donor_id:
-        type: string
+        range: string
         required: true
+        identifier: true
       name:
-        type: string
+        range: string
         required: true
       age:
-        type: integer
+        range: integer
         required: true
       sex:
-        type: string
+        range: SexType
         required: true
       diagnosis:
-        type: string
+        range: DiagnosisType
         required: true
       brain_region:
-        type: string
+        range: BrainRegion
         required: true
 
   Sample:
-    version: '1.0'
-    fields:
+    attributes:
       sample_id:
-        type: string
+        range: string
         required: true
+        identifier: true
       donor:
-        type: ref
+        range: Donor
         required: true
-        references:
-          entity_type: Donor
       tissue_type:
-        type: string
+        range: TissueType
         required: true
       brain_region:
-        type: string
+        range: BrainRegion
         required: true
       collection_date:
-        type: date
+        range: date
         required: true
       rin_score:
-        type: float
-        required: false
+        range: float
 
   DataFile:
-    version: '1.0'
-    fields:
+    attributes:
       file_id:
-        type: string
+        range: string
         required: true
+        identifier: true
       sample:
-        type: ref
+        range: Sample
         required: true
-        references:
-          entity_type: Sample
       file_path:
-        type: string
+        range: string
         required: true
       file_type:
-        type: string
+        range: FileType
         required: true
       size_bytes:
-        type: integer
+        range: integer
         required: true
       checksum:
-        type: string
-        required: false
+        range: string
       pipeline_version:
-        type: string
-        required: false
+        range: string
 """
 }
 
@@ -577,25 +623,25 @@ def main():
         "name": "Subject AD-002",
         "age": 82,
         "sex": "F",
-        "diagnosis": "Alzheimer's Disease",
-        "brain_region": "Frontal Cortex"
+        "diagnosis": "Alzheimers_Disease",
+        "brain_region": "Frontal_Cortex"
     })
     print(f"Created donor: {donor['id']}")
     donor_id = donor['id']
 
-    # Create a sample — donor field holds the Hippo internal ID returned above
+    # Create a sample -- donor attribute holds the Hippo internal ID returned above
     sample = client.create("Sample", {
         "sample_id": "SMPL-AD-002-FC",
         "donor": donor_id,
-        "tissue_type": "Brain Tissue",
-        "brain_region": "Frontal Cortex",
+        "tissue_type": "Brain_Tissue",
+        "brain_region": "Frontal_Cortex",
         "collection_date": "2025-12-01",
         "rin_score": 7.9
     })
     print(f"Created sample: {sample['id']}")
     sample_id = sample['id']
 
-    # Create a data file — sample field holds the Hippo internal ID returned above
+    # Create a data file -- sample attribute holds the Hippo internal ID returned above
     datafile = client.create("DataFile", {
         "file_id": "RNASEQ-AD-002-FC-R1",
         "sample": sample_id,
@@ -610,7 +656,7 @@ def main():
     # Query with filters
     print("\n--- Query: Donors with Alzheimer's ---")
     donors = client.query("Donor", filters=[
-        {"field": "diagnosis", "operator": "eq", "value": "Alzheimer's Disease"}
+        {"field": "diagnosis", "operator": "eq", "value": "Alzheimers_Disease"}
     ])
     for d in donors:
         print(f"  {d['data']['donor_id']}: {d['data']['name']}")
@@ -647,8 +693,8 @@ def main():
     updated_sample = client.update(sample_id, {
         "sample_id": "SMPL-AD-002-FC",
         "donor": donor_id,
-        "tissue_type": "Brain Tissue",
-        "brain_region": "Frontal Cortex",
+        "tissue_type": "Brain_Tissue",
+        "brain_region": "Frontal_Cortex",
         "collection_date": "2025-12-01",
         "rin_score": 8.2
     })
@@ -660,8 +706,8 @@ def main():
         client.update(sample_id, {
             "sample_id": "SMPL-AD-002-FC",
             "donor": donor_id,
-            "tissue_type": "Brain Tissue",
-            "brain_region": "Frontal Cortex",
+            "tissue_type": "Brain_Tissue",
+            "brain_region": "Frontal_Cortex",
             "collection_date": "2025-12-01",
             "rin_score": 15.0  # Invalid: exceeds 10.0
         })
@@ -724,7 +770,7 @@ Updated sample to RIN: 8.2
   Validation failed (expected): ['RIN score must be between 1.0 and 10.0, got 15.0']
 
 --- Get single entity ---
-  Retrieved: AD-002, diagnosis: Alzheimer's Disease
+  Retrieved: AD-002, diagnosis: Alzheimers_Disease
 
 --- Soft delete (set unavailable) ---
   Donor donor-1 marked as unavailable
@@ -771,11 +817,11 @@ curl -s -X PUT http://127.0.0.1:8000/entities/donor-1/availability \
 
 Now that you've completed the quickstart, explore these resources to deepen your understanding:
 
-- **[Data Model](data-model.md)** — Deep dive into entity types, relationships, and schema design
-- **[CLI Reference](cli-reference.md)** — Complete reference for all `hippo` commands
-- **[API Reference](api-reference.md)** — Full REST API documentation
-- **[Configuration](configuration.md)** — Configure Hippo for different deployment scenarios
-- **[Design Specification](../design/INDEX.md)** — Internal engineering specification
+- **[Data Model](data-model.md)** -- Deep dive into entity types, relationships, and schema design
+- **[CLI Reference](cli-reference.md)** -- Complete reference for all `hippo` commands
+- **[API Reference](api-reference.md)** -- Full REST API documentation
+- **[Configuration](configuration.md)** -- Configure Hippo for different deployment scenarios
+- **[Design Specification](../design/INDEX.md)** -- Internal engineering specification
 
 For larger studies, consider:
 - Using PostgreSQL instead of SQLite for production (`hippo serve` with PostgreSQL backend)

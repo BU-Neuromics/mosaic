@@ -9,35 +9,40 @@ A practical guide for writing LinkML schema files for your lab. This document co
 A minimal schema with two linked entity types:
 
 ```yaml
-entities:
-  - name: Donor
-    version: "1.0"
-    fields:
-      - name: external_id
-        type: string
-        required: true
-      - name: diagnosis
-        type: string
-        required: true
-      - name: sex
-        type: string
-      - name: age_at_death
-        type: integer
+id: https://example.org/my-lab
+name: my_lab
+prefixes:
+  linkml: https://w3id.org/linkml/
+  my_lab: https://example.org/my-lab/
+imports:
+  - linkml:types
+default_range: string
 
-  - name: Sample
-    version: "1.0"
-    fields:
-      - name: external_id
-        type: string
+classes:
+  Donor:
+    attributes:
+      external_id:
+        range: string
         required: true
-      - name: tissue
-        type: string
+      diagnosis:
+        range: string
         required: true
-      - name: donor_id
-        type: string
+      sex:
+        range: string
+      age_at_death:
+        range: integer
+
+  Sample:
+    attributes:
+      external_id:
+        range: string
         required: true
-        references:
-          entity_type: Donor    # ← links this field to the Donor entity type
+      tissue:
+        range: string
+        required: true
+      donor:
+        range: Donor          # links this attribute to the Donor class
+        required: true
 ```
 
 Save this as `schema.yaml`, then point your `HippoConfig` at it:
@@ -49,117 +54,194 @@ config = HippoConfig(schema_path="schema.yaml", db_path="my_lab.db")
 
 ---
 
-## Entity Types
+## Schema Header
 
-Each entity type is a named, versioned schema. Bump the version string when you change fields.
+Every LinkML schema file needs a header with metadata and imports. This tells Hippo (and any LinkML tooling) how to interpret the schema.
 
 ```yaml
-entities:
-  - name: SequencingDataset
-    version: "1.2"         # bump when schema changes
+id: https://example.org/brain-study     # unique schema identifier (URI)
+name: brain_study                         # short name (alphanumeric, underscores, dashes)
+prefixes:
+  linkml: https://w3id.org/linkml/
+  brain_study: https://example.org/brain-study/
+imports:
+  - linkml:types                          # imports built-in types (string, integer, date, etc.)
+default_range: string                     # default type for attributes without an explicit range
+```
+
+**Required fields:**
+
+- `id` — A unique URI identifying this schema
+- `name` — A short name for the schema
+- `prefixes` — Must include `linkml` to use standard imports
+- `imports` — Almost always includes `linkml:types` for built-in data types
+
+---
+
+## Classes
+
+Each class defines an entity type in Hippo. Classes are defined under the top-level `classes:` key as a dictionary keyed by class name.
+
+```yaml
+classes:
+  SequencingDataset:
     description: "An RNA-seq or ATAC-seq dataset"
-    fields:
+    attributes:
       ...
 ```
 
 **Rules:**
-- `name` must be unique across your schema
-- `version` is any string (use semver: `"1.0"`, `"2.1.3"`)
+- Class names must be unique across your schema
 - `description` is optional but recommended
+- Use `PascalCase` for class names (e.g., `SequencingDataset`, `GenomeBuild`)
 
 ---
 
-## Fields
+## Attributes
 
-### Basic Fields
+### Basic Attributes
+
+Attributes are declared under a class's `attributes:` key. Each attribute specifies a `range` (data type).
 
 ```yaml
-fields:
-  - name: sample_id
-    type: string
+attributes:
+  sample_id:
+    range: string
     required: true           # raises ValidationFailure if missing on create
 
-  - name: quality_score
-    type: float
+  quality_score:
+    range: float
     required: false          # optional, defaults to null
 
-  - name: read_count
-    type: integer
+  read_count:
+    range: integer
 
-  - name: is_paired
-    type: boolean
+  is_paired:
+    range: boolean
 
-  - name: collected_at
-    type: date               # YYYY-MM-DD
-  
-  - name: processed_at
-    type: datetime           # ISO 8601: 2026-03-01T14:30:00Z
+  collected_at:
+    range: date              # YYYY-MM-DD
 
-  - name: file_uri
-    type: uri                # URI/URL string
+  processed_at:
+    range: datetime          # ISO 8601: 2026-03-01T14:30:00Z
 
-  - name: tags
-    type: list               # list of values (stored as JSON)
-
-  - name: metadata
-    type: dict               # arbitrary key-value dict (stored as JSON)
+  file_uri:
+    range: uri               # URI/URL string
 ```
 
-### Enum Fields
+### Built-in Range Types
 
-Restrict a field to a fixed set of values:
+These types are available when you import `linkml:types`:
+
+| Range | Description |
+|-------|-------------|
+| `string` | Text data |
+| `integer` | Integer numbers |
+| `float` | Floating-point numbers |
+| `boolean` | True/false values |
+| `date` | Date (YYYY-MM-DD) |
+| `datetime` | Date and time (ISO 8601) |
+| `uri` | URI/URL string |
+| `uriorcurie` | URI or compact URI (CURIE) |
+
+### Enum Attributes
+
+Restrict an attribute to a fixed set of values by defining an enum and referencing it:
 
 ```yaml
-  - name: assay
-    type: enum
-    enum_values:
-      - RNASeq
-      - ATACSeq
-      - ChIPSeq
-      - WGS
-    required: true
+enums:
+  AssayType:
+    permissible_values:
+      RNASeq:
+      ATACSeq:
+      ChIPSeq:
+      WGS:
+
+classes:
+  SequencingDataset:
+    attributes:
+      assay:
+        range: AssayType
+        required: true
 ```
 
-Validation raises `ValidationFailure` if an entity is created with a value not in `enum_values`.
+Validation raises `ValidationFailure` if an entity is created with a value not in the enum's `permissible_values`.
+
+You can add descriptions to enum values:
+
+```yaml
+enums:
+  TissueType:
+    permissible_values:
+      DLPFC:
+        description: "Dorsolateral prefrontal cortex"
+      HC:
+        description: "Hippocampus"
+      SN:
+        description: "Substantia nigra"
+      CB:
+        description: "Cerebellum"
+      STR:
+        description: "Striatum"
+```
 
 ### Default Values
 
-```yaml
-  - name: status
-    type: string
-    default: "pending"
+Use `ifabsent` to specify default values:
 
-  - name: priority
-    type: integer
-    default: 0
+```yaml
+  status:
+    range: string
+    ifabsent: "string(pending)"
+
+  priority:
+    range: integer
+    ifabsent: "int(0)"
+
+  is_active:
+    range: boolean
+    ifabsent: "true"
+```
+
+### Multivalued Attributes
+
+Use `multivalued: true` for list-valued attributes:
+
+```yaml
+  tags:
+    range: string
+    multivalued: true
+
+  diagnoses:
+    range: string
+    multivalued: true
 ```
 
 ---
 
-## Linking Entities (Foreign Keys)
+## Linking Classes (References)
 
-Use `references:` to declare that a field points to another entity type. This is the foundation for entity graph traversal in Cappella and explicit relationship queries.
+Use `range` to declare that an attribute points to another class. This is the foundation for entity graph traversal in Cappella and explicit relationship queries.
 
 ```yaml
-  - name: donor_id
-    type: string
+  donor:
+    range: Donor              # the class this attribute points to
     required: true
-    references:
-      entity_type: Donor    # the entity type this field points to
 ```
 
-**Important:** The `references:` declaration does NOT enforce referential integrity at write time (Hippo does not reject creates where the referenced entity doesn't exist). It is used for:
+When the `range` is a class (not a built-in type like `string`), Hippo treats the attribute as an entity reference. This enables:
 - Schema introspection (`HippoClient.schema_references()`)
 - Cappella collection resolver entity graph traversal
-- Documentation and tooling (validators can enforce integrity if you need it — see [Validators](#validators))
+- Documentation and tooling
+
+!!! note
+    Reference attributes hold Hippo internal IDs (UUIDs), not user-facing identifiers. User-facing identifiers belong in a plain `string` attribute (such as `external_id`) or as an ExternalID.
 
 ### Self-Referential Links
 
 ```yaml
-  - name: parent_id
-    type: string
-    references:
-      entity_type: Sample   # links back to the same type
+  parent:
+    range: Sample             # links back to the same class
 ```
 
 ### Multi-Level Chains
@@ -167,41 +249,44 @@ Use `references:` to declare that a field points to another entity type. This is
 Build graph traversal paths by chaining references:
 
 ```yaml
-entities:
-  - name: Donor
-    ...
+classes:
+  Donor:
+    attributes:
+      ...
 
-  - name: Sample
-    fields:
-      - name: donor_id
-        type: string
-        references: {entity_type: Donor}   # Sample → Donor
+  Sample:
+    attributes:
+      donor:
+        range: Donor                       # Sample -> Donor
 
-  - name: SequencingDataset
-    fields:
-      - name: sample_id
-        type: string
-        references: {entity_type: Sample}  # Dataset → Sample → Donor
+  SequencingDataset:
+    attributes:
+      sample:
+        range: Sample                      # Dataset -> Sample -> Donor
 ```
 
-With this schema, Cappella can traverse `Dataset.sample_id → Sample.donor_id → Donor` automatically when you pass criteria like `donor.diagnosis=CTE`.
+With this schema, Cappella can traverse `Dataset.sample -> Sample.donor -> Donor` automatically when you pass criteria like `donor.diagnosis=CTE`.
 
 ---
 
-## Searching and Indexing
+## Hippo Extensions (Annotations)
+
+Hippo extends standard LinkML with storage and indexing annotations. These are expressed using LinkML's `annotations` mechanism and are specific to Hippo's storage layer.
 
 ### Full-Text Search
 
-Mark a field for full-text search (FTS5 is recommended):
+Mark an attribute for full-text search:
 
 ```yaml
-  - name: notes
-    type: string
-    search: fts5
+  notes:
+    range: string
+    annotations:
+      hippo_search: fts5
 
-  - name: description
-    type: string
-    search: fts5
+  description:
+    range: string
+    annotations:
+      hippo_search: fts5
 ```
 
 Query via `HippoClient.search()` or the REST API:
@@ -211,65 +296,96 @@ results = client.search("Sample", "hippocampus cortex")
 
 ### Database Indexes
 
-Speed up exact lookups on frequently-queried fields:
+Speed up exact lookups on frequently-queried attributes:
 
 ```yaml
-  - name: diagnosis
-    type: string
-    index: true              # adds a B-tree index
+  diagnosis:
+    range: string
+    annotations:
+      hippo_index: true              # adds a B-tree index
 
-  - name: batch_id
-    type: string
-    index_partial: true      # index only non-null values (smaller index)
+  batch_id:
+    range: string
+    annotations:
+      hippo_index_partial: true      # index only non-null values (smaller index)
 ```
 
 ### Unique Constraints
 
 ```yaml
-  - name: barcode
-    type: string
-    unique: true             # raises error if duplicate barcode on create
+  barcode:
+    range: string
+    identifier: true                 # makes this the unique primary key for the class
+```
+
+For non-primary-key uniqueness, use a class-level `unique_keys` declaration:
+
+```yaml
+classes:
+  Sample:
+    unique_keys:
+      barcode_key:
+        unique_key_slots:
+          - barcode
+    attributes:
+      barcode:
+        range: string
 ```
 
 ---
 
 ## Schema Inheritance
 
-Use `base:` to inherit all fields from a parent entity type. The child type is queryable both as itself and as the parent type.
+Use `is_a` to inherit all attributes from a parent class. The child class is queryable both as itself and as the parent type.
 
 ```yaml
-entities:
-  - name: File
-    version: "1.0"
-    fields:
-      - name: uri
-        type: uri
+classes:
+  File:
+    attributes:
+      file_uri:
+        range: uri
         required: true
-      - name: checksum_sha256
-        type: string
+      checksum_sha256:
+        range: string
 
-  - name: AlignmentFile
-    version: "1.0"
-    base: File               # inherits uri and checksum_sha256
-    fields:
-      - name: aligner
-        type: string
-      - name: genome_build
-        type: string
-        references:
-          entity_type: GenomeBuild
+  AlignmentFile:
+    is_a: File                    # inherits file_uri and checksum_sha256
+    attributes:
+      aligner:
+        range: string
+      genome_build:
+        range: GenomeBuild
 ```
 
 `client.query("File")` returns both `File` and `AlignmentFile` entities. `client.query("AlignmentFile")` returns only alignment files.
 
-### Multiple Inheritance
+### Mixins
+
+Use `mixins` to compose shared attribute sets without single-inheritance constraints:
 
 ```yaml
-  - name: AnnotatedAlignmentFile
-    version: "1.0"
-    base:
-      - AlignmentFile
-      - QCAnnotation       # inherits from both
+classes:
+  Timestamped:
+    mixin: true
+    attributes:
+      collected_at:
+        range: datetime
+      processed_at:
+        range: datetime
+
+  QCAnnotation:
+    mixin: true
+    attributes:
+      qc_status:
+        range: string
+      qc_score:
+        range: float
+
+  AnnotatedAlignmentFile:
+    is_a: AlignmentFile
+    mixins:
+      - Timestamped
+      - QCAnnotation            # inherits from AlignmentFile, plus both mixins
 ```
 
 ---
@@ -303,9 +419,9 @@ validators:
   - name: donor_must_exist
     entity_type: Sample
     operations: [create]
-    expand: donor_id        # pre-fetches the referenced entity
-    condition: 'has(entity.donor_id) && entity.donor_id != ""'
-    message: "Sample must have a non-empty donor_id"
+    expand: donor        # pre-fetches the referenced entity
+    condition: 'has(entity.donor) && entity.donor != ""'
+    message: "Sample must have a non-empty donor reference"
 ```
 
 Full cross-entity validation (checking the referenced entity actually exists) requires using the `ref_check` built-in validator preset:
@@ -314,7 +430,7 @@ Full cross-entity validation (checking the referenced entity actually exists) re
   - name: valid_donor_ref
     entity_type: Sample
     preset: ref_check
-    field: donor_id
+    field: donor
     ref_entity_type: Donor
 ```
 
@@ -322,159 +438,233 @@ Full cross-entity validation (checking the referenced entity actually exists) re
 
 ## Namespaces
 
-Group entity types from different domains into named namespaces to avoid collisions:
+Group entity types from different domains into named namespaces to avoid collisions. In LinkML, this maps to the `default_prefix` for a schema file:
 
 ```yaml
-namespace: clinical
+id: https://example.org/clinical
+name: clinical
+prefixes:
+  linkml: https://w3id.org/linkml/
+  clinical: https://example.org/clinical/
+imports:
+  - linkml:types
+default_prefix: clinical
 
-entities:
-  - name: Assessment        # fully qualified: clinical.Assessment
-    version: "1.0"
-    fields:
+classes:
+  Assessment:                      # fully qualified: clinical.Assessment
+    attributes:
       ...
 ```
 
-Reference across namespaces using fully-qualified names:
+Reference across namespaces using fully-qualified names in attribute ranges:
 
 ```yaml
-  - name: sample_id
-    type: string
-    references:
-      entity_type: tissue.Sample    # namespace.EntityType
+  sample:
+    range: tissue.Sample           # namespace.ClassName
 ```
 
-Root namespace entities (no namespace declared) can be referenced without qualification.
+Root namespace classes (no namespace declared) can be referenced without qualification.
 
 ---
 
 ## Complete Example: Neuroscience Study
 
 ```yaml
-# schema.yaml — example for a brain tissue bank
+# schema.yaml -- example for a brain tissue bank
 
-entities:
-  - name: Donor
-    version: "1.0"
+id: https://example.org/brain-tissue-bank
+name: brain_tissue_bank
+prefixes:
+  linkml: https://w3id.org/linkml/
+  btb: https://example.org/brain-tissue-bank/
+imports:
+  - linkml:types
+default_range: string
+
+enums:
+  SexType:
+    permissible_values:
+      M:
+      F:
+      Unknown:
+
+  TissueRegion:
+    permissible_values:
+      DLPFC:
+        description: "Dorsolateral prefrontal cortex"
+      HC:
+        description: "Hippocampus"
+      SN:
+        description: "Substantia nigra"
+      CB:
+        description: "Cerebellum"
+      STR:
+        description: "Striatum"
+
+  AssayType:
+    permissible_values:
+      RNASeq:
+      ATACSeq:
+      WGS:
+      WES:
+
+classes:
+  Donor:
     description: "A research subject (human)"
-    fields:
-      - name: external_id
-        type: string
+    attributes:
+      external_id:
+        range: string
         required: true
-        unique: true
-        index: true
-      - name: sex
-        type: enum
-        enum_values: [M, F, Unknown]
+        identifier: true
+        annotations:
+          hippo_index: true
+      sex:
+        range: SexType
         required: true
-      - name: age_at_death
-        type: integer
-      - name: diagnosis
-        type: string
+      age_at_death:
+        range: integer
+      diagnosis:
+        range: string
         required: true
-        index: true
-        search: fts5
-      - name: notes
-        type: string
-        search: fts5
+        annotations:
+          hippo_index: true
+          hippo_search: fts5
+      notes:
+        range: string
+        annotations:
+          hippo_search: fts5
 
-  - name: Sample
-    version: "1.0"
+  Sample:
     description: "A tissue sample from a donor"
-    fields:
-      - name: external_id
-        type: string
+    attributes:
+      external_id:
+        range: string
         required: true
-        unique: true
-      - name: donor_id
-        type: string
+        identifier: true
+      donor:
+        range: Donor
         required: true
-        index: true
-        references:
-          entity_type: Donor
-      - name: tissue
-        type: enum
-        enum_values: [DLPFC, HC, SN, CB, STR]
+        annotations:
+          hippo_index: true
+      tissue:
+        range: TissueRegion
         required: true
-      - name: brain_region
-        type: string
+      brain_region:
+        range: string
 
-  - name: SequencingDataset
-    version: "1.0"
+  SequencingDataset:
     description: "A sequencing run for a sample"
-    fields:
-      - name: external_id
-        type: string
+    attributes:
+      external_id:
+        range: string
         required: true
-      - name: sample_id
-        type: string
+      sample:
+        range: Sample
         required: true
-        index: true
-        references:
-          entity_type: Sample
-      - name: assay
-        type: enum
-        enum_values: [RNASeq, ATACSeq, WGS, WES]
+        annotations:
+          hippo_index: true
+      assay:
+        range: AssayType
         required: true
-      - name: platform
-        type: string
-      - name: read_count
-        type: integer
+      platform:
+        range: string
+      read_count:
+        range: integer
 
-  - name: GenomeBuild
-    version: "1.0"
+  GenomeBuild:
     description: "A reference genome assembly"
-    fields:
-      - name: name
-        type: string
+    attributes:
+      name:
+        range: string
         required: true
-        unique: true
-      - name: source
-        type: string         # ensembl, ucsc, t2t
-      - name: release
-        type: string
-      - name: source_uri
-        type: uri
-      - name: uri
-        type: uri            # local/S3 path after Canon materializes it
+        identifier: true
+      source:
+        range: string
+      release:
+        range: string
+      source_uri:
+        range: uri
+      local_uri:
+        range: uri
 
-  - name: AlignmentFile
-    version: "1.0"
-    base: File               # if you have a base File entity
-    fields:
-      - name: dataset_id
-        type: string
+  AlignmentFile:
+    is_a: File                     # if you have a base File class
+    description: "An aligned sequencing file"
+    attributes:
+      dataset:
+        range: SequencingDataset
         required: true
-        references:
-          entity_type: SequencingDataset
-      - name: genome_build_id
-        type: string
+      genome_build:
+        range: GenomeBuild
         required: true
-        references:
-          entity_type: GenomeBuild
-      - name: aligner
-        type: string
-      - name: aligner_version
-        type: string
+      aligner:
+        range: string
+      aligner_version:
+        range: string
 ```
 
 ---
 
 ## Common Mistakes
 
-**Using `entity:` instead of `entity_type:` in references**  
-The schema parses either, but `HippoClient.schema_references()` and Cappella's collection resolver only read `entity_type:`. Always use:
+**Using `type` instead of `range` for attribute data types**
+LinkML uses `range` to specify data types:
 ```yaml
-references:
-  entity_type: Donor    # ✅ correct
+  diagnosis:
+    range: string       # correct
 ```
 Not:
 ```yaml
-references:
-  entity: Donor         # ❌ won't be picked up by schema_references()
+  diagnosis:
+    type: string        # wrong -- not valid LinkML
 ```
 
-**Forgetting `index: true` on foreign-key fields**  
-Queries filtering on `donor_id` will be slow without an index. Add `index: true` to any field you filter on frequently.
+**Forgetting `imports: - linkml:types`**
+Without this import, built-in types like `string`, `integer`, `date` are not available. Almost every schema needs this import.
 
-**Not bumping the version after field changes**  
-Hippo tracks schema versions on entities. Bumping the version when you add or change fields helps provenance queries understand what schema was active when an entity was written.
+**Defining enums inline on an attribute**
+LinkML enums must be defined as separate top-level entries under `enums:`, then referenced by name in `range`:
+```yaml
+enums:
+  AssayType:
+    permissible_values:
+      RNASeq:
+      ATACSeq:
+
+classes:
+  Dataset:
+    attributes:
+      assay:
+        range: AssayType   # correct -- references the enum by name
+```
+Not:
+```yaml
+      assay:
+        enum_values:       # wrong -- not valid LinkML
+          - RNASeq
+          - ATACSeq
+```
+
+**Using `fields` instead of `attributes`**
+LinkML uses `attributes` for inline class-specific definitions:
+```yaml
+classes:
+  Donor:
+    attributes:            # correct
+      name:
+        range: string
+```
+Not:
+```yaml
+classes:
+  Donor:
+    fields:                # wrong -- not valid LinkML
+      name:
+        type: string
+```
+
+**Forgetting `identifier: true` on the primary key attribute**
+Just naming an attribute `id` or `external_id` does not make it an identifier. You must explicitly set `identifier: true`.
+
+**Not adding `hippo_index` annotation on reference attributes**
+Queries filtering on reference attributes (like `donor`) will be slow without an index. Add `hippo_index: true` annotation to any attribute you filter on frequently.
