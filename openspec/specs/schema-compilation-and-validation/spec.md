@@ -3,18 +3,18 @@
 ## Purpose
 TBD - created by archiving change epic-007-feature-006. Update Purpose after archive.
 ## Requirements
-### Requirement: Schema Compilation
-The system SHALL allow users to compile schema files from JSON format into a system-readable format using the 'hippo compile-schema' command. When a user provides a valid schema file, the CLI should successfully transform the schema and output the compiled result to stdout.
+### Requirement: Schema Validation
+The system SHALL allow users to validate LinkML schema files using the 'hippo validate-schema' command. When a user provides a valid schema file, the CLI should validate the schema structure and output a success message to stdout.
 
-#### Scenario: Successful compilation
-- **WHEN** user runs 'hippo compile-schema' with a valid JSON schema file
-- **THEN** system outputs the compiled schema in a readable format to stdout
+#### Scenario: Successful validation
+- **WHEN** user runs 'hippo validate-schema' with a valid LinkML schema file
+- **THEN** system validates the schema and outputs a success message to stdout
 
 ### Requirement: Syntax Error Handling
-The system SHALL display a clear error message when a user attempts to compile a schema file with syntax errors. The error message should indicate the location and type of syntax error in the schema file.
+The system SHALL display a clear error message when a user attempts to validate a schema file with syntax errors. The error message should indicate the location and type of syntax error in the schema file.
 
-#### Scenario: Invalid JSON syntax
-- **WHEN** user runs 'hippo compile-schema' with a schema file containing invalid JSON syntax
+#### Scenario: Invalid syntax
+- **WHEN** user runs 'hippo validate-schema' with a schema file containing invalid syntax
 - **THEN** system displays an appropriate error message indicating the file path, line number, and syntax error type
 
 ### Requirement: Schema Validation

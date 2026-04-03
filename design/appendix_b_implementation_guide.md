@@ -41,8 +41,8 @@ hippo/
 │   └── ingestion.py            # IngestionPipeline, IngestOptions, IngestResult
 │
 ├── schema/
-│   ├── parser.py               # Parse schema.yaml DSL → SchemaConfig (Pydantic model)
-│   ├── compiler.py             # SchemaConfig → LinkML (on-demand, used by hippo compile-schema)
+│   ├── parser.py               # Parse LinkML schema.yaml → SchemaConfig (Pydantic model)
+│   ├── validator.py            # Validate LinkML schema structure and references
 │   ├── migrator.py             # Schema diff, migration plan generation, migration application
 │   └── types.py                # SchemaConfig, EntityTypeConfig, FieldConfig, RelationshipConfig
 │
@@ -91,7 +91,7 @@ hippo/
 │
 ├── cli/
 │   └── main.py                 # Typer CLI: init, serve, migrate, ingest, validate,
-│                               #   reference (install/update/list), compile-schema
+│                               #   reference (install/update/list), validate-schema
 │
 └── graphql/
     └── __init__.py             # Reserved for future GraphQL transport; empty in v0.1
@@ -305,7 +305,7 @@ request/response envelope, error mapping.
 - `hippo reference install <name> [--version]`
 - `hippo reference update <name>`
 - `hippo reference list`
-- `hippo compile-schema <schema_file> [--out]`
+- `hippo validate-schema <schema_file>`
 
 #### Phase 8 — Search
 

@@ -1,6 +1,6 @@
 # Hippo Schema Writer's Guide
 
-A practical guide for writing `schema.yaml` files for your lab. This document covers the most common schema patterns with real examples. For the full field reference, see [Configuration Reference](configuration.md).
+A practical guide for writing LinkML schema files for your lab. This document covers the most common schema patterns with real examples. For the full field reference, see [Configuration Reference](configuration.md).
 
 ---
 

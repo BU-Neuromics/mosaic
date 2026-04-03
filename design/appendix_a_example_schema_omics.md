@@ -10,7 +10,7 @@
 > research group might configure Hippo for tracking biological samples, sequencing data
 > files, and analysis workflows. A deployment targeting a different domain (e.g.,
 > manufacturing QC, environmental monitoring, clinical trials) would author an entirely
-> different schema using the same Hippo DSL features documented in sec3. Hippo's core
+> different schema using the same LinkML features documented in sec3. Hippo's core
 > behavior is identical regardless of schema content.
 
 ---
@@ -100,7 +100,7 @@ state is tracked via the `execution_state` field.
 
 ---
 
-### A.2 Relationship Declarations (Hippo DSL)
+### A.2 Relationship Declarations
 
 ```yaml
 relationships:
@@ -192,14 +192,14 @@ System relationships (built-in, available on all entity types):
 
 ---
 
-### A.4 Complete Schema YAML (Hippo DSL)
+### A.4 Complete Schema YAML
 
 The full `schema.yaml` for this example deployment. This is what a deployer would author
 and commit to their config repository.
 
 ```yaml
 version: "1.0"
-format: hippo-dsl
+format: linkml
 
 # This example does not reference any external ontology packages.
 # A deployment that uses FMA anatomy terms or Ensembl gene IDs would declare them here:

@@ -277,7 +277,7 @@ adapter:                         # Which storage backend to use and its settings
     path: ./hippo.db
 
 schema:                          # Path to entity schema definition (required — see Section 3)
-  path: ./schema.yaml            # Hippo DSL; no default schema is bundled
+  path: ./schema.yaml            # LinkML format; no default schema is bundled
 
 validators:                      # Path to business rule validators config (optional)
   path: ./validators.yaml        # If omitted, only schema-level validation runs
@@ -370,7 +370,7 @@ The Hippo CLI is implemented with Typer and installed as the `hippo` command:
 | `hippo validate [--schema <path>]` | Validate config, schema, and validators files without starting the server; `--schema` runs the full namespace graph validation pass (cross-namespace reference checks, duplicate entity detection, circular dependency detection) and reports all errors with file locations |
 | `hippo migrate` | Apply any pending schema migrations to the current storage backend; includes namespace graph validation pass before applying any changes |
 | `hippo status` | Show current config, adapter type, entity counts, schema version, and installed plugins |
-| `hippo compile-schema` | Compile `schema.yaml` to LinkML on demand; output to `./schema.linkml.yaml` |
+| `hippo validate-schema` | Validate a LinkML schema file |
 | `hippo reference list` | List all installed reference loaders and their installed versions |
 | `hippo reference install <name> [--version <v>]` | Install a reference dataset; merges schema fragment and runs migrate |
 | `hippo reference update <name> [--version <v>]` | Update an installed reference dataset to a newer release |
@@ -648,7 +648,7 @@ class ReferenceLoader(ABC):
 
     @abstractmethod
     def schema_fragment(self) -> dict: ...
-    # Entity type + relationship definitions in Hippo DSL.
+    # Entity type + relationship definitions in LinkML format.
     # Merged into the deployed schema on install.
 
     @abstractmethod

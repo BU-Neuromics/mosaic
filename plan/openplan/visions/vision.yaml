@@ -47,6 +47,6 @@ risks:
   - description: SQLite WAL mode has a single-writer constraint that limits write throughput for shared-server deployments
     severity: low
     mitigation: Document threshold clearly; PostgreSQL adapter is the upgrade path; SQLite targets single-researcher and small-team use cases
-  - description: LinkML compilation step (schema DSL → LinkML) may be slow or brittle for large schemas
+  - description: LinkML schema parsing may be slow for large schemas
     severity: low
-    mitigation: Compilation is on-demand only (hippo compile-schema); hot path uses parsed SchemaConfig directly
+    mitigation: Schemas are parsed once at startup; hot path uses parsed SchemaConfig directly

@@ -29,8 +29,8 @@ Adapters are registered via entry points: `hippo.storage_adapters`, `hippo.exter
 
 ## Data Model Essentials
 
-- **Config-driven relational** storage with a **graph-shaped API** — entity types and relationships defined in YAML/JSON schema, not hardcoded.
-- **Hippo DSL** (YAML/JSON) compiled transiently to LinkML via `hippo compile-schema` (on-demand, not auto-committed).
+- **Config-driven relational** storage with a **graph-shaped API** — entity types and relationships defined in LinkML schema, not hardcoded.
+- Schemas are authored directly in **LinkML** format (no intermediate DSL or compilation step).
 - System fields (`id`, `is_available`) live on entity tables; temporal fields (`created_at`, `updated_at`, `schema_version`) live exclusively in the provenance log and are computed at read time.
 - **No hard deletes** — availability transitions (`is_available` boolean) replace deletion.
 - Entity status values: `active`, `archived`, `superseded`, `deleted`, `distributed`, `removed`.

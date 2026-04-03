@@ -44,7 +44,7 @@ adapter:
 
 # ---------------------------------------------------------------------------
 # schema (required)
-# Path to the entity schema definition file (Hippo DSL or LinkML).
+# Path to the entity schema definition file (LinkML format).
 # ---------------------------------------------------------------------------
 schema:
   path: ./schema.yaml     # required — relative to hippo.yaml location or absolute

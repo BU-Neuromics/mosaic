@@ -1,7 +1,7 @@
 # SchemaConfig Pydantic Model Implementation
 
 ## Goal
-SchemaConfig Pydantic Model Implementation: Implement the SchemaConfig Pydantic model along with Hippo DSL YAML parser supporting base inheritance cycle detection for schema validation.
+SchemaConfig Pydantic Model Implementation: Implement the SchemaConfig Pydantic model along with LinkML YAML parser supporting base inheritance cycle detection for schema validation.
 
 ## Acceptance Criteria
 - Given a valid schema.yaml file with proper base inheritance, when the parser processes it, then the schema is successfully parsed into a SchemaConfig model with all fields correctly populated

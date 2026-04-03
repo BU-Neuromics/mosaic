@@ -21,7 +21,7 @@
 | `sec6_provenance.md` | 6. Provenance & Audit | ✅ Draft v0.1 | Event model, structured context, storage, history API, retention |
 | `sec7_nfr.md` | 7. Non-Functional Requirements | ✅ Draft v0.1 | Performance targets, scalability tiers, reliability, schema sync roadmap |
 | `sec8_auth_integration.md` | 8. Authentication & Authorization Integration | ✅ Draft v0.1 | Bridge-aware `AuthMiddleware` impl, actor propagation, audit trail split |
-| `appendix_a_example_schema_omics.md` | Appendix A. Example Schema (Omics) | ✅ Draft v0.1 | Complete DSL with `search:`, polymorphic extension example |
+| `appendix_a_example_schema_omics.md` | Appendix A. Example Schema (Omics) | ✅ Draft v0.1 | Complete LinkML schema with `search:`, polymorphic extension example |
 | `appendix_b_implementation_guide.md` | Appendix B. Implementation Guide | ✅ Draft v0.1 | Build order, module map, error hierarchy, invariants, test strategy, OpenSpec mapping |
 | `reference_hippo_yaml.md` | Reference: `hippo.yaml` Config Schema | ✅ Draft v0.1 | All valid keys, types, defaults, env var substitution, minimal configs |
 | `reference_validators_yaml.md` | Reference: `validators.yaml` Format | ✅ Draft v0.1 | Complete field spec, expand syntax, all built-in presets, execution semantics |
@@ -43,8 +43,7 @@
 | Entity lifecycle | `is_available` boolean; storage adapters optimize for this filter | sec3, sec3b |
 | Lifecycle semantics | Reason for unavailability stored in provenance events, not on entities | sec3, sec6 |
 | Supersession | System-level `superseded_by` relationship; atomic SDK operation | sec3 |
-| Schema authoring | Hippo DSL (YAML/JSON) compiled transiently to LinkML | sec3 |
-| LinkML output | On-demand via `hippo compile-schema`; not auto-committed | sec3 |
+| Schema authoring | Direct LinkML (YAML/JSON) — no intermediate DSL or compilation step | sec3 |
 | Graph DB | Future adapter option; not v0.1 scope | sec3 |
 | Multi-tenancy | Out of scope for v0.1 | sec3 |
 | Conceptual/storage separation | Sec3 defines conceptual data model only; relational storage mapping in sec3b | sec3, sec3b |

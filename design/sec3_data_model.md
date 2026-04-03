@@ -168,44 +168,29 @@ that requires explicit confirmation.
 
 ### 3.6 Schema Config Format
 
-#### Authoring formats
+#### Authoring format
 
-Hippo schema config is authored in the **Hippo DSL** — a concise YAML or JSON format designed
-for readability and hand-authoring. At migration time the DSL is compiled transiently to
-**LinkML** as an intermediate representation, which drives code generation (Pydantic models,
-storage adapter models, JSON Schema for API validation) and provides interoperability with
-other data systems.
-
-Users who prefer to author in LinkML directly may do so — Hippo accepts both formats,
-auto-detected by a `format` field in the file header or by filename convention
-(`*_linkml.yaml`).
+Hippo schema config is authored directly in **LinkML** — a YAML or JSON format that drives
+code generation (Pydantic models, storage adapter models, JSON Schema for API validation)
+and provides interoperability with other data systems.
 
 ```yaml
 # hippo.yaml
 schema:
-  path: ./schema.yaml           # Hippo DSL — compiled transiently at migrate time
-  # or:
-  path: ./schema_linkml.yaml    # LinkML directly — no compilation step
+  path: ./schema.yaml           # LinkML format
 ```
 
-Both YAML and JSON are valid for Hippo DSL. The config loader accepts `.yaml`, `.yml`, and
-`.json` extensions.
+Both YAML and JSON are valid. The config loader accepts `.yaml`, `.yml`, and `.json`
+extensions.
 
-**`hippo compile-schema`** explicitly outputs compiled LinkML for users who want it as a
-versioned artifact for documentation or downstream tooling:
-
-```bash
-hippo compile-schema schema.yaml --out schema_linkml.yaml
-```
-
-#### Entity type declaration (Hippo DSL)
+#### Entity type declaration
 
 > **Example (omics deployment):** The following is excerpted from the example omics
 > schema in Appendix A. See appendix_a_example_schema_omics.md for the complete schema.
 
 ```yaml
 version: "1.0"
-format: hippo-dsl        # optional — auto-detected if absent
+format: linkml            # optional — auto-detected if absent
 
 entities:
   Subject:
@@ -387,8 +372,8 @@ Every schema config carries a `version` string. Hippo tracks the deployed versio
 metadata. When versions differ, `hippo migrate` must run before the server starts.
 
 `hippo migrate` steps:
-1. If input is Hippo DSL, compile transiently to LinkML
-2. Diff compiled schema against deployed version
+1. Load and validate the LinkML schema
+2. Diff schema against deployed version
 3. Generate and print migration plan for human review
 4. On confirmation (or `--yes` flag), apply changes and update internal metadata
 5. Write a `MigrationApplied` provenance event

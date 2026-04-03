@@ -7,7 +7,7 @@ Complete reference for configuring Hippo, the Metadata Tracking Service (MTS) fo
 Hippo uses two primary configuration files:
 
 1. **`config.json`** — Main application configuration that specifies the schema path and storage settings
-2. **Schema files (YAML or JSON)** — Define entity types, fields, validators, and inheritance using the Hippo DSL
+2. **Schema files (YAML or JSON)** — Define entity types, fields, validators, and inheritance in LinkML format
 
 Configuration is loaded via `load_hippo_config()` from `config.json`, and schemas are loaded via `SchemaParser` or `load_schema()`.
 
@@ -107,9 +107,9 @@ Defines an entity type schema. Loaded from schema files in the schema directory.
 | `max_batch_size` | `int` | `10000` | Maximum number of entities that can be created/updated in a single batch operation |
 | `flatten_nested` | `bool` | `true` | Whether to flatten nested dict/list fields in storage |
 
-### Schema DSL Format
+### Schema Format
 
-Schema files use the **Hippo DSL** — a dict-of-dicts format where entity types and their fields are keyed by name, not listed. Both YAML and JSON are valid.
+Schema files use standard **LinkML** format — a dict-of-dicts structure where entity types and their fields are keyed by name, not listed. Both YAML and JSON are valid.
 
 ```yaml
 version: "1.0"

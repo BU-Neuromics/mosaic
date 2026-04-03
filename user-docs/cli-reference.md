@@ -347,44 +347,36 @@ hippo list-ref sample_ref
 
 ---
 
-## compile-schema
+## validate-schema
 
-Compile Hippo DSL schema to LinkML format.
+Validate a LinkML schema file.
 
 ### Usage
 
 ```bash
-hippo compile-schema <INPUT> [OPTIONS]
+hippo validate-schema <INPUT> [OPTIONS]
 ```
 
 ### Arguments
 
 | Argument | Type | Description |
 |----------|------|-------------|
-| `input` | `string` | **required** | Input Hippo DSL file path |
+| `input` | `string` | **required** | Input LinkML schema file path |
 
 ### Options
 
 | Option | Type | Default | Description |
 |--------|------|---------|-------------|
-| `--output`, `-o` | `string` | `None` | Output file path (stdout if not specified) |
-| `--validate` / `--no-validate` | `boolean` | `true` | Enable/disable validation |
-| `--format`, `-f` | `string` | `"yaml"` | Output format: `yaml` or `json` |
+| `--format`, `-f` | `string` | `"yaml"` | Input format: `yaml` or `json` |
 
 ### Example
 
 ```bash
-# Compile schema, output to stdout
-hippo compile-schema schema.yaml
+# Validate a LinkML schema
+hippo validate-schema schema.yaml
 
-# Compile to a specific output file
-hippo compile-schema schema.yaml --output linkml.yaml
-
-# Compile to JSON format
-hippo compile-schema schema.yaml --format json --output linkml.json
-
-# Skip validation
-hippo compile-schema schema.yaml --no-validate
+# Validate a JSON-format schema
+hippo validate-schema schema.json --format json
 ```
 
 ---

@@ -113,7 +113,7 @@ In v0.1, Hippo serves other applications only — there is no human-facing query
 | Term | Definition |
 |---|---|
 | **Entity** | Any top-level object tracked by Hippo. Entity types are defined in schema config (e.g., Project, Item, Attachment). |
-| **Schema config** | A YAML or JSON file defining the entity types, fields, and relationships for a Hippo deployment. Authored in Hippo DSL or LinkML. |
+| **Schema config** | A YAML or JSON file defining the entity types, fields, and relationships for a Hippo deployment, authored in LinkML format. |
 | **Field** | A named, typed attribute on an entity type, declared in schema config. See sec3 §3.5 for supported types. |
 | **Relationship** | A directional, typed edge connecting two entities. Declared in schema config with cardinality constraints. |
 | **External ID** | An identifier from an upstream system mapped to a Hippo entity UUID. Enables cross-system lookups. |
