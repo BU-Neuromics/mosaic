@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 import sys
 from pathlib import Path
 from unittest.mock import MagicMock, patch
@@ -13,6 +14,11 @@ from hippo.cli.main import app
 
 
 runner = CliRunner()
+
+
+def _strip_ansi(s: str) -> str:
+    """Remove ANSI escape sequences from a string."""
+    return re.sub(r'\x1b\[[0-9;]*m', '', s)
 
 
 # ---------------------------------------------------------------------------
@@ -30,25 +36,25 @@ def test_tui_help_available():
 def test_tui_help_shows_backend_option():
     """Help text lists --backend option."""
     result = runner.invoke(app, ["tui", "--help"])
-    assert "--backend" in result.output
+    assert "--backend" in _strip_ansi(result.output)
 
 
 def test_tui_help_shows_url_option():
     """Help text lists --url option."""
     result = runner.invoke(app, ["tui", "--help"])
-    assert "--url" in result.output
+    assert "--url" in _strip_ansi(result.output)
 
 
 def test_tui_help_shows_token_option():
     """Help text lists --token option."""
     result = runner.invoke(app, ["tui", "--help"])
-    assert "--token" in result.output
+    assert "--token" in _strip_ansi(result.output)
 
 
 def test_tui_help_shows_db_option():
     """Help text lists --db option."""
     result = runner.invoke(app, ["tui", "--help"])
-    assert "--db" in result.output
+    assert "--db" in _strip_ansi(result.output)
 
 
 # ---------------------------------------------------------------------------
