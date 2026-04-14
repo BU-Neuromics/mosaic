@@ -1,6 +1,6 @@
 """Integration tests for the schema_diff CLI command.
 
-Tests comparing two Hippo DSL schema files and verifying the diff output
+Tests comparing two schema files and verifying the diff output
 covers entity additions, removals, property changes, and type modifications.
 """
 

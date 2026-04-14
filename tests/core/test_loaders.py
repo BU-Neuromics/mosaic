@@ -270,46 +270,46 @@ class TestJSONLoader:
 
 
 # ---------------------------------------------------------------------------
-# HippoDSLLoader
+# EntityYAMLLoader
 # ---------------------------------------------------------------------------
 
-class TestHippoDSLLoader:
-    """HippoDSLLoader.fetch yields entity dicts from DSL YAML."""
+class TestEntityYAMLLoader:
+    """EntityYAMLLoader.fetch yields entity dicts from structured YAML."""
 
-    def _make_dsl(self, tmp_path: Path, entities: list) -> Path:
+    def _make_entity_file(self, tmp_path: Path, entities: list) -> Path:
         p = tmp_path / "entities.yaml"
         p.write_text(yaml.dump({"entities": entities}))
         return p
 
     def test_fetch_yields_entity_dicts(self, tmp_path):
-        from hippo.core.loaders.dsl import HippoDSLLoader
+        from hippo.core.loaders.entity_yaml import EntityYAMLLoader
 
-        p = self._make_dsl(tmp_path, [
+        p = self._make_entity_file(tmp_path, [
             {"type": "GenomeBuild", "data": {"name": "GRCh38"}},
             {"type": "GenomeBuild", "data": {"name": "CHM13"}},
         ])
 
-        loader = HippoDSLLoader(p)
+        loader = EntityYAMLLoader(p)
         records = list(loader.fetch())
         assert len(records) == 2
         assert records[0]["type"] == "GenomeBuild"
         assert records[0]["data"]["name"] == "GRCh38"
 
     def test_fetch_missing_entities_key_raises(self, tmp_path):
-        from hippo.core.loaders.dsl import HippoDSLLoader
+        from hippo.core.loaders.entity_yaml import EntityYAMLLoader
 
         p = tmp_path / "bad.yaml"
         p.write_text(yaml.dump({"records": []}))
 
-        loader = HippoDSLLoader(p)
+        loader = EntityYAMLLoader(p)
         with pytest.raises(ValueError, match="'entities'"):
             list(loader.fetch())
 
     def test_transform_passthrough(self, tmp_path):
-        from hippo.core.loaders.dsl import HippoDSLLoader
+        from hippo.core.loaders.entity_yaml import EntityYAMLLoader
 
-        p = self._make_dsl(tmp_path, [])
-        loader = HippoDSLLoader(p)
+        p = self._make_entity_file(tmp_path, [])
+        loader = EntityYAMLLoader(p)
         record = {"type": "GenomeBuild", "data": {"name": "GRCh38"}, "external_id": "grch38"}
         assert loader.transform(record) == record
 

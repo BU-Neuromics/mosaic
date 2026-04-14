@@ -12,7 +12,7 @@ from hippo.core.loaders.base import (
     TransformedRecord,
 )
 from hippo.core.loaders.csv import CSVLoader
-from hippo.core.loaders.dsl import HippoDSLLoader
+from hippo.core.loaders.entity_yaml import EntityYAMLLoader
 from hippo.core.loaders.json import JSONLoader
 from hippo.core.loaders.pipeline import IngestPipeline
 
@@ -25,5 +25,5 @@ __all__ = [
     "IngestPipeline",
     "CSVLoader",
     "JSONLoader",
-    "HippoDSLLoader",
+    "EntityYAMLLoader",
 ]

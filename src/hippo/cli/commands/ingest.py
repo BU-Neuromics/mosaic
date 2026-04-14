@@ -1,6 +1,6 @@
-"""DSL ingest command implementation for Hippo CLI.
+"""Entity YAML ingest command implementation for Hippo CLI.
 
-`hippo ingest` accepts structured Hippo DSL YAML files that declare entities
+`hippo ingest` accepts structured entity YAML files that declare entities
 to create or upsert. It does NOT accept raw CSV/JSON data files — those are
 Cappella's responsibility.
 """
@@ -15,13 +15,13 @@ import yaml
 from hippo.core.exceptions import EntityNotFoundError
 
 
-class IngestDSLError(Exception):
-    """Raised when a DSL ingest file is invalid or cannot be processed."""
+class IngestError(Exception):
+    """Raised when an entity ingest file is invalid or cannot be processed."""
 
 
 @dataclass
-class IngestDSLResult:
-    """Result of a DSL ingest operation."""
+class IngestResult:
+    """Result of an entity ingest operation."""
 
     source_file: str
     created: int = 0
@@ -43,8 +43,8 @@ class IngestDSLResult:
         }
 
 
-def ingest_dsl_file(path: Path | str, client: Any) -> IngestDSLResult:
-    """Ingest a Hippo DSL YAML file into Hippo via client.
+def ingest_entity_file(path: Path | str, client: Any) -> IngestResult:
+    """Ingest an entity YAML file into Hippo via client.
 
     The file must have a top-level ``entities`` key. Each entry must have:
     - ``type`` (str): entity type
@@ -58,34 +58,34 @@ def ingest_dsl_file(path: Path | str, client: Any) -> IngestDSLResult:
         client: HippoClient instance.
 
     Returns:
-        IngestDSLResult with per-entity counts.
+        IngestResult with per-entity counts.
 
     Raises:
-        IngestDSLError: If the file is not found, not valid DSL YAML, or has
-                        structural errors (missing 'entities', 'type', or 'data').
+        IngestError: If the file is not found, not valid YAML, or has
+                     structural errors (missing 'entities', 'type', or 'data').
     """
     path = Path(path)
 
     if not path.exists():
-        raise IngestDSLError(f"File not found: {path}")
+        raise IngestError(f"File not found: {path}")
 
     try:
         raw = path.read_text(encoding="utf-8")
         parsed = yaml.safe_load(raw)
     except Exception as exc:
-        raise IngestDSLError(f"Failed to parse YAML: {exc}") from exc
+        raise IngestError(f"Failed to parse YAML: {exc}") from exc
 
     if not isinstance(parsed, dict) or "entities" not in parsed:
-        raise IngestDSLError(
-            f"DSL file must have a top-level 'entities' key. Got: {type(parsed).__name__}. "
+        raise IngestError(
+            f"Entity file must have a top-level 'entities' key. Got: {type(parsed).__name__}. "
             "Note: CSV/JSON data files are not accepted by 'hippo ingest' — use Cappella for operational data."
         )
 
     entities = parsed["entities"]
     if not isinstance(entities, list):
-        raise IngestDSLError("'entities' must be a list of entity declarations.")
+        raise IngestError("'entities' must be a list of entity declarations.")
 
-    result = IngestDSLResult(source_file=str(path))
+    result = IngestResult(source_file=str(path))
 
     for idx, entry in enumerate(entities):
         if not isinstance(entry, dict):
@@ -94,10 +94,10 @@ def ingest_dsl_file(path: Path | str, client: Any) -> IngestDSLResult:
             continue
 
         if "type" not in entry:
-            raise IngestDSLError(f"Entry {idx}: missing 'type' field")
+            raise IngestError(f"Entry {idx}: missing 'type' field")
 
         if "data" not in entry:
-            raise IngestDSLError(f"Entry {idx}: missing 'data' field")
+            raise IngestError(f"Entry {idx}: missing 'data' field")
 
         entity_type = entry["type"]
         data = entry["data"]
@@ -117,7 +117,7 @@ def _upsert_entity(
     entity_type: str,
     data: dict[str, Any],
     external_id: str | None,
-    result: IngestDSLResult,
+    result: IngestResult,
 ) -> None:
     """Upsert a single entity, updating result counts in-place."""
     if external_id is None:

@@ -346,7 +346,7 @@ def _get_client(db_path: str | None = None):
 @app.command()
 def ingest(
     file: str = typer.Option(
-        None, "--file", "-f", help="Path to a Hippo DSL YAML file to ingest"
+        None, "--file", "-f", help="Path to an entity YAML file to ingest"
     ),
     loader_type: str = typer.Option(
         None, "--type", "-t", help="Loader type: csv, json, or sql"
@@ -358,7 +358,7 @@ def ingest(
 ) -> None:
     """Ingest entities into Hippo.
 
-    Accepts a Hippo DSL YAML file (--file) or a generic loader (--type + --config).
+    Accepts an entity YAML file (--file) or a generic loader (--type + --config).
 
     Examples:
 
@@ -368,7 +368,7 @@ def ingest(
 
         hippo ingest --type csv --file donors.csv --config donors_mapping.yaml
     """
-    from hippo.cli.commands.ingest import IngestDSLError, ingest_dsl_file
+    from hippo.cli.commands.ingest import IngestError, ingest_entity_file
 
     if file and not loader_type:
         # DSL YAML ingest
@@ -383,8 +383,8 @@ def ingest(
 
         client = _get_client()
         try:
-            result = ingest_dsl_file(file_path, client)
-        except IngestDSLError as e:
+            result = ingest_entity_file(file_path, client)
+        except IngestError as e:
             typer.echo(f"Error: {e}", err=True)
             raise typer.Exit(1)
 
@@ -839,55 +839,6 @@ def list_ref(
                 )
         else:
             typer.echo("No references found")
-
-
-@app.command()
-def compile_schema(
-    input: str = typer.Argument(..., help="Input Hippo DSL file"),
-    output: str = typer.Option(None, "--output", "-o"),
-    validate: bool = typer.Option(True, "--validate/--no-validate"),
-    format: str = typer.Option(
-        "yaml", "--format", "-f", help="Output format (yaml/json)"
-    ),
-) -> None:
-    """Compile Hippo DSL to LinkML."""
-    from pathlib import Path
-    import yaml
-
-    # Import the compiler dynamically to avoid circular imports
-    try:
-        from hippo.core.storage.schema_compiler import compile_schema_to_linkml
-    except ImportError:
-        # Fallback for when the module is not available
-        typer.echo("Error: Schema compilation engine not available", err=True)
-        raise typer.Exit(1)
-
-    input_path = Path(input)
-    typer.echo(f"Compiling {input_path} to LinkML...")
-
-    if not input_path.exists():
-        typer.echo(f"Error: File {input_path} not found", err=True)
-        raise typer.Exit(1)
-
-    try:
-        # Read and parse the input schema file
-        schema_content = yaml.safe_load(input_path.read_text())
-
-        # Compile to LinkML using the proper compiler function
-        linkml_output = compile_schema_to_linkml(schema_content, format=format)
-
-        output_path = Path(output) if output else None
-        if output_path:
-            output_path.write_text(linkml_output)
-            typer.echo(f"Written to {output_path}")
-        else:
-            typer.echo(linkml_output)
-
-        typer.echo("Compilation complete")
-
-    except Exception as e:
-        typer.echo(f"Error during compilation: {e}", err=True)
-        raise typer.Exit(1)
 
 
 @app.command()
