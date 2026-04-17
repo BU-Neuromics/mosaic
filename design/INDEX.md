@@ -4,7 +4,8 @@
 **Codename:** Hippo  
 **Component:** Metadata Tracking Service (MTS)  
 **Version:** 0.1 — Implementation Ready  
-**Status:** Ready for implementation
+**Status:** Ready for implementation  
+**In planning:** LinkML-centric redesign — see [§ LinkML-Centric Redesign (Proposed)](#linkml-centric-redesign-proposed) below.
 
 ---
 
@@ -26,6 +27,75 @@
 | `reference_hippo_yaml.md` | Reference: `hippo.yaml` Config Schema | ✅ Draft v0.1 | All valid keys, types, defaults, env var substitution, minimal configs |
 | `reference_validators_yaml.md` | Reference: `validators.yaml` Format | ✅ Draft v0.1 | Complete field spec, expand syntax, all built-in presets, execution semantics |
 | `reference_cel_context.md` | Reference: CEL Evaluation Context | ✅ Draft v0.1 | All context variables, CEL types, expanded field shapes, available functions, common patterns |
+
+---
+
+## LinkML-Centric Redesign (Proposed)
+
+**Status:** Proposal — not yet approved. Supersedes no content until this block is accepted and `sec9_linkml_redesign.md` is drafted and reviewed.
+
+### Motivation
+
+Recent refactors (`delete SchemaParser/SchemaConfig/FieldDefinition`, `swap DDL/migration/diff to SchemaRegistry`, `feat: LinkML-backed SchemaRegistry seam`) have been unwinding a pre-LinkML schema-abstraction layer. This proposal completes the direction by making LinkML the spine of Hippo: a three-layer schema stack (extension vocabulary → Hippo core schema → user schema) with `Entity` and `ProvenanceRecord` modeled as first-class LinkML classes rather than hand-coded Python constructs.
+
+### New Artifacts
+
+| File | Purpose |
+|---|---|
+| `sec9_linkml_redesign.md` | Vision doc — three-layer stack, provenance-as-LinkML-class, migration narrative, tradeoffs |
+| `reference_hippo_core.md` | Reference for `hippo_core.yaml` (Entity, ProvenanceRecord, Status/Operation enums, Validator) |
+| `reference_hippo_ext.md` | Reference for `hippo_ext.yaml` — the `hippo_*` annotation vocabulary (`hippo_unique`, `hippo_index`, `hippo_index_partial`, `hippo_search`, `hippo_default`, …) |
+
+### Per-Section Revision Plan
+
+Legend: 🟢 Light touch • 🟡 Moderate • 🔴 Major rewrite
+
+| Section | Treatment | Reason |
+|---|---|---|
+| sec1 Overview | 🟢 | Purpose/scope domain-neutral; touch only paragraphs citing removed `SchemaConfig`/`SchemaLoader` |
+| sec2 Architecture | 🟢 | Three-layer SDK-first reinforced, not changed; update `SchemaRegistry` seam and entry-point list |
+| sec3 Data Model | 🔴 | Conceptual model recast on LinkML primitives; `base:` polymorphic inheritance mapped onto `is_a`; namespace semantics reconciled with LinkML schema-level namespacing |
+| sec3b Relational Storage | 🔴 | DDL generation path fully LinkML-driven; polymorphic storage semantics revisited; partial-index annotations formalized |
+| sec4 API Layer | 🟡 | Typed (Pydantic-generated) client added alongside generic `HippoClient`; generated REST surface noted as roadmap; core interfaces stable |
+| sec5 Ingestion | 🟡 | Validation pipeline largely unchanged; reference-loader ABC reshaped around a LinkML-declared `ReferenceLoader` class |
+| sec6 Provenance & Audit | 🔴 | `ProvenanceRecord` becomes a LinkML class with a DDL-generated table; temporal fields formalized as computed reads/views |
+| sec7 NFR | 🟢 | Targets unchanged; schema-sync roadmap revisited if REST surface becomes generated |
+| sec8 Auth Integration | 🟢 | Orthogonal to schema design; no change expected |
+| Appendix A Example Schema (Omics) | 🟡 | Rework to `import: hippo_core`; demonstrate `is_a: Entity` on domain classes |
+| Appendix B Implementation Guide | 🔴 | Build order, module map, invariants, test strategy all shift |
+| `reference_hippo_yaml.md` | 🟢 | May gain `hippo_core_path` / extension-import config |
+| `reference_validators_yaml.md` | 🟡 | Clarify division between LinkML-native validation (types/patterns/enums/ranges) and CEL (cross-entity/dynamic rules) |
+| `reference_cel_context.md` | 🟢 | Context shape unchanged |
+
+### Preservation of Historical Design
+
+- **Git tag** `design-pre-linkml` applied to current HEAD before any section rewrite begins. `git checkout design-pre-linkml -- design/` always recovers the prior spec.
+- Major-rewrite sections preserved as `secN_pre_linkml.md` alongside new versions during the transition, removed once sec9 is merged and the OpenSpec changes have landed.
+- Superseded entries in the Key Decisions Log are not deleted — they gain a `Superseded by` pointer into sec9.
+
+### Decision-Log Impact (Preview)
+
+Existing decisions expected to be reaffirmed / reformulated (non-exhaustive, to be finalized in sec9):
+
+- *Data model approach* — reaffirmed; expressed via LinkML classes + `hippo_ext` annotations instead of config keys
+- *Temporal metadata: provenance-log only, computed at read time* — reaffirmed and formalized as views over a DDL-generated provenance table
+- *Schema authoring: direct LinkML* — reaffirmed and extended to Hippo's own core schema
+- *Namespace* decisions (inference, root canonicalization, backwards compatibility) — reconciled with LinkML schema-level namespacing; treatment deferred to sec9
+
+New decisions to be introduced in sec9 (preview):
+
+- Three-layer schema stack: `hippo_ext` → `hippo_core` → user schema
+- `ProvenanceRecord` is a first-class LinkML class; its table is DDL-generated via the same path as entity tables
+- `hippo_*` annotations formalized as a versioned LinkML extension vocabulary
+- Typed Pydantic-generated client available alongside generic `HippoClient`
+
+### Next Steps
+
+1. Review and approve this block.
+2. Tag `design-pre-linkml` on current HEAD.
+3. Draft `sec9_linkml_redesign.md` via the `doc-coauthoring` workflow.
+4. Decompose into OpenSpec changes (dependency-ordered): `hippo-ext-vocabulary` → `hippo-core-schema` → `provenance-as-linkml-class` → `computed-temporal-fields` → `typed-client` → *(later)* `generated-rest-surface`.
+5. Revise each section per the Revision Plan, coordinated with the OpenSpec change that triggers it.
 
 ---
 
