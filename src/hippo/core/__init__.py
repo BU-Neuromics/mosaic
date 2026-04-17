@@ -11,26 +11,17 @@ Key Components:
 Quick Start - Validation:
 ```python
 from hippo.core.validation import SchemaValidator, SchemaValidationConfig
-from hippo.config.models import SchemaConfig, FieldDefinition
+from hippo.linkml_bridge import SchemaRegistry
 
-schema = SchemaConfig(
-    name="Sample",
-    version="1.0",
-    fields=[
-        FieldDefinition(name="id", type="string", required=True),
-        FieldDefinition(name="name", type="string", required=True),
-    ]
-)
-
-config = SchemaValidationConfig(schemas={"Sample": schema})
+registry = SchemaRegistry.from_path("schemas/")
+config = SchemaValidationConfig(registry=registry)
 validator = SchemaValidator(config)
 
-# Validate write operations before persisting
 from hippo.core.validation import WriteOperation
 op = WriteOperation(
     operation="insert",
     entity_type="Sample",
-    data={"id": "123", "name": "Test"}
+    data={"id": "123", "name": "Test"},
 )
 result = validator.validate(op)
 if not result.is_valid:

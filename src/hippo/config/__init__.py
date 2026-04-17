@@ -1,10 +1,12 @@
-from pathlib import Path
-from typing import Any, Optional
-import re
-import os
+"""Hippo runtime configuration.
 
-from .models import HippoConfig, SchemaConfig, FieldDefinition
-from .loader import load_hippo_config, load_schema
+Entity schemas live in LinkML YAML and are loaded via
+``hippo.linkml_bridge.SchemaRegistry``; this package only covers the top-level
+``hippo.yaml`` runtime settings.
+"""
+
+from .models import HippoConfig, ValidatorDefinition
+from .loader import load_hippo_config
 from .core import (
     ConfigError,
     ValidationError,
@@ -14,12 +16,10 @@ from .core import (
 
 __all__ = [
     "HippoConfig",
-    "SchemaConfig",
-    "FieldDefinition",
+    "ValidatorDefinition",
     "ConfigError",
     "ValidationError",
     "SchemaError",
     "load_hippo_config",
-    "load_schema",
     "substitute_env_vars",
 ]

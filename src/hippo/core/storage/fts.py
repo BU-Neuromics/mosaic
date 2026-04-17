@@ -58,33 +58,6 @@ class FTSTableMetadata:
         """Generate the FTS table name for a field."""
         return f"fts_{entity_type.lower()}_{field_name.lower()}"
 
-    @classmethod
-    def from_field(
-        cls,
-        field,
-        entity_type: str,
-        content_table: str = "entities",
-    ) -> "FTSTableMetadata":
-        """Create FTS table metadata from a field definition."""
-        table_name = cls.generate_table_name(entity_type, field.name)
-        fts_version = field.search if field.search else "fts5"
-
-        field_metadata = FTSFieldMetadata(
-            field_name=field.name,
-            field_type=field.type,
-            search_type=fts_version,
-            source_entity_type=entity_type,
-        )
-
-        return cls(
-            table_name=table_name,
-            source_entity_type=entity_type,
-            fts_version=fts_version,
-            content_table=content_table,
-            content_rowid="rowid",
-            fields=[field_metadata],
-        )
-
     def create(self, conn: sqlite3.Connection) -> None:
         """Create the FTS table in the database."""
         cursor = conn.cursor()
