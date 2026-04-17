@@ -1,21 +1,20 @@
-"""PostgreSQL migration system for Hippo.
+"""PostgreSQL migration system using LinkML-backed SchemaRegistry."""
 
-Mirrors the SQLite migration module but uses PostgreSQL-specific DDL,
-psycopg3 connections, and PostgreSQL FTS (tsvector) instead of FTS5.
-"""
+from __future__ import annotations
 
 import json
 import re
-from dataclasses import dataclass
 from typing import Any, Optional
 
-from hippo.config.models import FieldDefinition, SchemaConfig
+from linkml_runtime.linkml_model.meta import SlotDefinition
+
 from hippo.core.storage.migration import MigrationPlan, MigrationResult
 from hippo.core.storage.pg_ddl_generator import (
     PostgresDDLGenerator,
     PostgresFTSMigrationPlanner,
 )
 from hippo.core.storage.schema_diff import SchemaDiff
+from hippo.linkml_bridge import HIPPO_DEFAULT, SchemaRegistry, annotation_value
 
 try:
     import psycopg
@@ -27,146 +26,138 @@ except ImportError:
 
 
 class PostgresMigrationPlanner:
-    """Plans migrations for PostgreSQL schema changes."""
-
-    def __init__(self):
+    def __init__(self) -> None:
         self._ddl_generator = PostgresDDLGenerator()
         self._fts_planner = PostgresFTSMigrationPlanner()
         self._existing_tables: set[str] = set()
         self._existing_fts_tables: set[str] = set()
 
     def load_existing_tables(self, cur: psycopg.Cursor) -> None:
-        cur.execute(
-            "SELECT tablename FROM pg_tables WHERE schemaname = 'public'"
-        )
+        cur.execute("SELECT tablename FROM pg_tables WHERE schemaname = 'public'")
         self._existing_tables = {row["tablename"] for row in cur.fetchall()}
 
     def load_existing_fts_tables(self, cur: psycopg.Cursor) -> None:
         cur.execute(
-            "SELECT tablename FROM pg_tables WHERE schemaname = 'public' AND tablename LIKE 'fts_%'"
+            "SELECT tablename FROM pg_tables "
+            "WHERE schemaname = 'public' AND tablename LIKE 'fts_%'"
         )
         self._existing_fts_tables = {row["tablename"] for row in cur.fetchall()}
 
-    def plan_migration(self, schemas: list[SchemaConfig]) -> MigrationPlan:
+    def plan_migration(self, registry: SchemaRegistry) -> MigrationPlan:
         plan = MigrationPlan()
-
-        ddl_statements = self._ddl_generator.generate(schemas)
-        plan.ddl_statements = ddl_statements
-
-        for schema in schemas:
-            self._fts_planner.add_schema(schema)
-
+        plan.ddl_statements = self._ddl_generator.generate(registry)
+        self._fts_planner.add_registry(registry)
         plan.fts_ddl_statements = self._fts_planner.generate_fts_ddl()
-
-        for entity_type, fts_tables in self._fts_planner.get_all_fts_tables().items():
-            for fts_meta in fts_tables:
-                if fts_meta["table_name"] not in self._existing_fts_tables:
+        for entity_type, entries in self._fts_planner.get_all_fts_tables().items():
+            for entry in entries:
+                if entry["table_name"] not in self._existing_fts_tables:
                     plan.backfill_tasks.append(
                         {
                             "entity_type": entity_type,
-                            "fts_table": fts_meta["table_name"],
-                            "field_name": fts_meta["field_name"],
+                            "fts_table": entry["table_name"],
+                            "field_name": entry["field_name"],
                         }
                     )
-
         return plan
 
     def plan_migration_from_diff(
         self,
         schema_diff: SchemaDiff,
-        schemas: list[SchemaConfig],
+        registry: SchemaRegistry,
         cur: psycopg.Cursor,
     ) -> MigrationPlan:
         plan = MigrationPlan()
-        schema_map = {s.name: s for s in schemas}
+        for class_name in schema_diff.new_tables:
+            self._ddl_generator._build_table(registry, class_name)
+        for class_name in schema_diff.new_tables:
+            table = self._ddl_generator._tables.get(class_name)
+            if table is None:
+                continue
+            plan.ddl_statements.append(
+                self._ddl_generator._render_create_table(table)
+            )
+            for index in table.indexes:
+                plan.ddl_statements.append(
+                    self._ddl_generator._render_create_index(class_name, index)
+                )
+            plan.new_tables.append(class_name)
+            self._fts_planner.add_class(registry, class_name)
 
-        for schema in schema_diff.new_tables:
-            if schema.name in schema_map:
-                table_ddl = self._ddl_generator.generate([schema_map[schema.name]])
-                plan.ddl_statements.extend(table_ddl)
-                plan.new_tables.append(schema.name)
+        plan.fts_ddl_statements.extend(self._fts_planner.generate_fts_ddl())
 
-                self._fts_planner.add_schema(schema)
-                fts_ddl = self._fts_planner.generate_fts_ddl()
-                plan.fts_ddl_statements.extend(fts_ddl)
+        for entity_type, entries in self._fts_planner.get_all_fts_tables().items():
+            for entry in entries:
+                if entry["table_name"] not in self._existing_fts_tables:
+                    plan.backfill_tasks.append(
+                        {
+                            "entity_type": entity_type,
+                            "fts_table": entry["table_name"],
+                            "field_name": entry["field_name"],
+                        }
+                    )
 
-                for (
-                    entity_type,
-                    fts_tables,
-                ) in self._fts_planner.get_all_fts_tables().items():
-                    for fts_meta in fts_tables:
-                        if fts_meta["table_name"] not in self._existing_fts_tables:
-                            plan.backfill_tasks.append(
-                                {
-                                    "entity_type": entity_type,
-                                    "fts_table": fts_meta["table_name"],
-                                    "field_name": fts_meta["field_name"],
-                                }
-                            )
-
-        for table_name, new_columns in schema_diff.new_columns.items():
-            for col in new_columns:
-                alter_stmt = self._generate_alter_table_add_column(table_name, col)
-                if alter_stmt:
-                    plan.alter_table_statements.append(alter_stmt)
+        for table_name, new_slots in schema_diff.new_columns.items():
+            for slot in new_slots:
+                alter = self._alter_table_add_column(registry, table_name, slot)
+                if alter:
+                    plan.alter_table_statements.append(alter)
                     if table_name not in plan.modified_tables:
                         plan.modified_tables.append(table_name)
 
         for table_name, new_indexes in schema_diff.new_indexes.items():
             for idx in new_indexes:
-                index_stmt = self._generate_create_index(table_name, idx)
-                if index_stmt:
-                    plan.create_index_statements.append(index_stmt)
+                plan.create_index_statements.append(
+                    self._create_index_statement(table_name, idx)
+                )
 
         plan.warnings.extend(schema_diff.warnings)
         return plan
 
-    def _generate_alter_table_add_column(
-        self, table_name: str, field_def: FieldDefinition
+    def _alter_table_add_column(
+        self, registry: SchemaRegistry, table_name: str, slot: SlotDefinition
     ) -> Optional[str]:
-        col_type = PostgresDDLGenerator.TYPE_MAPPING.get(field_def.type, "TEXT")
-        col_def = f'ALTER TABLE "{table_name}" ADD COLUMN IF NOT EXISTS "{field_def.name}" {col_type}'
+        known = set(registry.class_names())
+        rng = slot.range
+        col_type = (
+            "TEXT"
+            if rng in known or rng is None
+            else PostgresDDLGenerator.TYPE_MAPPING.get(rng, "TEXT")
+        )
+        sql = (
+            f'ALTER TABLE "{table_name}" ADD COLUMN IF NOT EXISTS '
+            f'"{slot.name}" {col_type}'
+        )
+        if slot.required:
+            sql += " NOT NULL"
+            default = annotation_value(slot, HIPPO_DEFAULT)
+            if default is None:
+                default = slot.ifabsent
+            if default is not None:
+                sql += f" DEFAULT {PostgresDDLGenerator._format_default(default)}"
+        return sql + ";"
 
-        if field_def.required:
-            col_def += " NOT NULL"
-            if field_def.default is not None:
-                col_def += f" DEFAULT {self._format_default(field_def.default)}"
-
-        return col_def + ";"
-
-    def _generate_create_index(
+    def _create_index_statement(
         self, table_name: str, index_def: dict[str, Any]
     ) -> str:
-        index_name = index_def.get(
+        name = index_def.get(
             "name", f"idx_{table_name}_{'_'.join(index_def.get('columns', []))}"
         )
-        columns = index_def.get("columns", [])
-        columns_str = ", ".join(f'"{c}"' for c in columns)
-
-        unique_str = "UNIQUE " if index_def.get("unique", False) else ""
-
-        if index_def.get("where"):
-            return f'CREATE {unique_str}INDEX IF NOT EXISTS "{index_name}" ON "{table_name}" ({columns_str}) WHERE {index_def.get("where")};'
-
-        return f'CREATE {unique_str}INDEX IF NOT EXISTS "{index_name}" ON "{table_name}" ({columns_str});'
-
-    def _format_default(self, default: Any) -> str:
-        if default is None:
-            return "NULL"
-        elif isinstance(default, bool):
-            return "TRUE" if default else "FALSE"
-        elif isinstance(default, str):
-            return f"'{default}'"
-        elif isinstance(default, (int, float)):
-            return str(default)
-        else:
-            return f"'{str(default)}'"
+        columns = ", ".join(f'"{c}"' for c in index_def.get("columns", []))
+        unique = "UNIQUE " if index_def.get("unique") else ""
+        where = index_def.get("where")
+        if where:
+            return (
+                f'CREATE {unique}INDEX IF NOT EXISTS "{name}" ON "{table_name}" '
+                f"({columns}) WHERE {where};"
+            )
+        return (
+            f'CREATE {unique}INDEX IF NOT EXISTS "{name}" '
+            f'ON "{table_name}" ({columns});'
+        )
 
 
 class PostgresMigrationExecutor:
-    """Executes migrations against PostgreSQL."""
-
-    def __init__(self, conn: psycopg.Connection):
+    def __init__(self, conn: psycopg.Connection) -> None:
         self._conn = conn
 
     def execute_migration(self, plan: MigrationPlan) -> MigrationResult:
@@ -179,7 +170,7 @@ class PostgresMigrationExecutor:
         try:
             for ddl in plan.ddl_statements:
                 cur.execute(ddl)
-                table_name = self._extract_table_name(ddl)
+                table_name = _extract_table_name(ddl)
                 if table_name:
                     tables_created.append(table_name)
 
@@ -197,14 +188,13 @@ class PostgresMigrationExecutor:
 
             for fts_ddl in plan.fts_ddl_statements:
                 cur.execute(fts_ddl)
-                table_name = self._extract_table_name(fts_ddl)
+                table_name = _extract_table_name(fts_ddl)
                 if table_name:
                     fts_tables_created.append(table_name)
 
             for task in plan.backfill_tasks:
                 try:
-                    count = self._backfill_fts_table(cur, task)
-                    records_backfilled += count
+                    records_backfilled += self._backfill_fts_table(cur, task)
                 except Exception as e:
                     errors.append(f"Backfill error for {task['fts_table']}: {e}")
 
@@ -221,16 +211,14 @@ class PostgresMigrationExecutor:
             warnings=plan.warnings,
         )
 
-    def _backfill_fts_table(
-        self, cur: psycopg.Cursor, task: dict[str, Any]
-    ) -> int:
+    def _backfill_fts_table(self, cur: psycopg.Cursor, task: dict[str, Any]) -> int:
         entity_type = task["entity_type"]
         fts_table = task["fts_table"]
         field_name = task.get("field_name")
 
-        # Check entities table exists
         cur.execute(
-            "SELECT EXISTS (SELECT 1 FROM pg_tables WHERE schemaname = 'public' AND tablename = 'entities')"
+            "SELECT EXISTS (SELECT 1 FROM pg_tables WHERE schemaname = 'public' "
+            "AND tablename = 'entities')"
         )
         if not cur.fetchone()["exists"]:
             return 0
@@ -261,9 +249,11 @@ class PostgresMigrationExecutor:
                     (entity_id, content),
                 )
                 count += 1
-
         return count
 
-    def _extract_table_name(self, ddl: str) -> Optional[str]:
-        match = re.search(r'CREATE TABLE(?:\s+IF NOT EXISTS)?\s+"?(\w+)"?', ddl, re.IGNORECASE)
-        return match.group(1) if match else None
+
+def _extract_table_name(ddl: str) -> Optional[str]:
+    match = re.search(
+        r'CREATE TABLE(?:\s+IF NOT EXISTS)?\s+"?(\w+)"?', ddl, re.IGNORECASE
+    )
+    return match.group(1) if match else None

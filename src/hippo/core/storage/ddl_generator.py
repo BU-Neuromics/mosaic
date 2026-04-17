@@ -1,17 +1,43 @@
+"""DDL generation from a LinkML-backed SchemaRegistry.
+
+Walks the classes exposed by a ``SchemaRegistry``, maps LinkML built-in types
+to SQLite column types, and emits ``CREATE TABLE`` / ``CREATE INDEX`` statements
+with Hippo's system columns (``is_available``, ``superseded_by``) and
+partial-index semantics. LinkML's own SQL generator is not used directly
+because we need Hippo-specific naming conventions and system columns.
+"""
+
 from __future__ import annotations
 
 from dataclasses import dataclass, field
 from typing import Any, Optional
 
-from hippo.config.models import FieldDefinition, SchemaConfig
-from hippo.core.storage.fts import FTSTableMetadata
+from hippo.core.storage.fts import FTSFieldMetadata, FTSTableMetadata
+from hippo.linkml_bridge import (
+    HIPPO_DEFAULT,
+    HIPPO_INDEX,
+    HIPPO_INDEX_PARTIAL,
+    HIPPO_UNIQUE,
+    SchemaRegistry,
+    annotation_value,
+)
 
 
 @dataclass
-class ColumnConstraint:
+class ColumnDefinition:
     name: str
-    type: str
-    params: dict[str, Any] = field(default_factory=dict)
+    column_type: str
+    not_null: bool = False
+    default: Any = None
+    primary_key: bool = False
+
+
+@dataclass
+class ForeignKeyDefinition:
+    columns: list[str]
+    references_table: str
+    references_columns: list[str]
+    on_delete: Optional[str] = None
 
 
 @dataclass
@@ -26,123 +52,112 @@ class IndexDefinition:
 class TableDefinition:
     name: str
     columns: list[ColumnDefinition] = field(default_factory=list)
-    primary_key: Optional[list[str]] = None
     foreign_keys: list[ForeignKeyDefinition] = field(default_factory=list)
     unique_constraints: list[list[str]] = field(default_factory=list)
     indexes: list[IndexDefinition] = field(default_factory=list)
 
 
-@dataclass
-class ForeignKeyDefinition:
-    columns: list[str]
-    references_table: str
-    references_columns: list[str]
-    on_delete: Optional[str] = None
-
-
-@dataclass
-class ColumnDefinition:
-    name: str
-    column_type: str
-    not_null: bool = False
-    default: Any = None
-    primary_key: bool = False
-
-
 class DDLGenerator:
+    """Generate SQLite DDL from a ``SchemaRegistry``."""
+
     TYPE_MAPPING = {
         "string": "TEXT",
         "integer": "INTEGER",
         "float": "REAL",
+        "double": "REAL",
+        "decimal": "REAL",
         "boolean": "INTEGER",
         "date": "TEXT",
         "datetime": "TEXT",
-        "list": "TEXT",
-        "dict": "TEXT",
+        "time": "TEXT",
         "uri": "TEXT",
-        "enum": "TEXT",
+        "uriorcurie": "TEXT",
+        "curie": "TEXT",
+        "ncname": "TEXT",
+        "jsonpointer": "TEXT",
+        "jsonpath": "TEXT",
+        "sparqlpath": "TEXT",
     }
 
-    def __init__(self):
-        self._table_definitions: dict[str, TableDefinition] = {}
+    IS_AVAILABLE_PREDICATE = "is_available = 1"
 
-    def generate(self, schemas: list[SchemaConfig]) -> list[str]:
-        self._table_definitions = {}
+    def __init__(self) -> None:
+        self._tables: dict[str, TableDefinition] = {}
 
-        schema_map = {s.name: s for s in schemas}
+    def generate(self, registry: SchemaRegistry) -> list[str]:
+        self._tables = {}
+        sv = registry.schema_view
 
-        for schema in schemas:
-            self._generate_table(schema, schema_map)
+        for class_name in registry.class_names():
+            cls = sv.get_class(class_name)
+            if cls is None or cls.abstract:
+                continue
+            self._build_table(registry, class_name)
 
-        ordered_tables = self._topological_sort()
-
-        ddl_statements = []
-        for table_name in ordered_tables:
-            table = self._table_definitions[table_name]
-            ddl_statements.append(self._generate_create_table(table))
+        ordered = self._topological_sort()
+        statements: list[str] = []
+        for name in ordered:
+            table = self._tables[name]
+            statements.append(self._render_create_table(table))
             for index in table.indexes:
-                ddl_statements.append(self._generate_create_index(table_name, index))
+                statements.append(self._render_create_index(name, index))
+        return statements
 
-        return ddl_statements
+    def _build_table(
+        self, registry: SchemaRegistry, class_name: str
+    ) -> TableDefinition:
+        if class_name in self._tables:
+            return self._tables[class_name]
 
-    def _generate_table(
-        self, schema: SchemaConfig, schema_map: dict[str, SchemaConfig]
-    ) -> None:
-        if schema.name in self._table_definitions:
-            return
+        sv = registry.schema_view
+        cls = sv.get_class(class_name)
+        table = TableDefinition(name=class_name)
 
-        for base_name in schema.get_bases():
-            if base_name in schema_map:
-                self._generate_table(schema_map[base_name], schema_map)
-
-        table = TableDefinition(name=schema.name)
-
+        id_slot = registry.identifier_slot(class_name)
+        id_name = id_slot.name if id_slot is not None else "id"
         table.columns.append(
             ColumnDefinition(
-                name="id",
-                column_type="TEXT",
-                not_null=True,
-                primary_key=True,
+                name=id_name, column_type="TEXT", not_null=True, primary_key=True
             )
         )
 
-        for field_def in schema.fields:
-            # Skip 'id' — the generator always adds it as the first column.
-            if field_def.name == "id":
+        known_classes = set(registry.class_names())
+        for slot in registry.induced_slots(class_name):
+            if slot.name == id_name:
                 continue
-            col = ColumnDefinition(
-                name=field_def.name,
-                column_type=self._map_type(field_def.type),
-                not_null=field_def.required,
-                default=field_def.default,
-                primary_key=field_def.primary_key,
+            col_type = self._map_slot_type(slot, known_classes)
+            default = annotation_value(slot, HIPPO_DEFAULT)
+            if default is None and slot.ifabsent is not None:
+                default = slot.ifabsent
+            column = ColumnDefinition(
+                name=slot.name,
+                column_type=col_type,
+                not_null=bool(slot.required),
+                default=default,
             )
-            table.columns.append(col)
+            table.columns.append(column)
 
-            if field_def.unique:
-                table.unique_constraints.append([field_def.name])
+            if annotation_value(slot, HIPPO_UNIQUE):
+                table.unique_constraints.append([slot.name])
 
-            if field_def.index:
-                # Create partial index for all indexed fields (WHERE is_available = true)
-                index = IndexDefinition(
-                    name=f"idx_{schema.name}_{field_def.name}",
-                    columns=[field_def.name],
-                    partial_where="is_available = 1",
-                )
-                table.indexes.append(index)
-
-            if field_def.references:
-                ref_table = field_def.references.get("table")
-                ref_column = field_def.references.get("column", "id")
-                on_delete = field_def.references.get("on_delete")
-                if ref_table:
-                    fk = ForeignKeyDefinition(
-                        columns=[field_def.name],
-                        references_table=ref_table,
-                        references_columns=[ref_column],
-                        on_delete=on_delete,
+            if annotation_value(slot, HIPPO_INDEX):
+                partial = bool(annotation_value(slot, HIPPO_INDEX_PARTIAL))
+                table.indexes.append(
+                    IndexDefinition(
+                        name=f"idx_{class_name}_{slot.name}",
+                        columns=[slot.name],
+                        partial_where=self.IS_AVAILABLE_PREDICATE if partial else None,
                     )
-                    table.foreign_keys.append(fk)
+                )
+
+            if slot.range in known_classes:
+                table.foreign_keys.append(
+                    ForeignKeyDefinition(
+                        columns=[slot.name],
+                        references_table=slot.range,
+                        references_columns=["id"],
+                    )
+                )
 
         table.columns.append(
             ColumnDefinition(
@@ -152,176 +167,174 @@ class DDLGenerator:
                 default=1,
             )
         )
-
-        # System column: superseded_by (nullable, applied generically to all entity types)
-        # Listed alongside is_available as a system column — not per-schema-declaration.
         table.columns.append(
             ColumnDefinition(
-                name="superseded_by",
-                column_type="TEXT",
-                not_null=False,
-                default=None,
+                name="superseded_by", column_type="TEXT", not_null=False, default=None
             )
         )
 
-        if schema.unique_constraints:
-            for constraint in schema.unique_constraints:
-                table.unique_constraints.append(constraint)
+        for uk in (cls.unique_keys or {}).values():
+            slots = list(uk.unique_key_slots or [])
+            if slots:
+                table.unique_constraints.append(slots)
 
-        if schema.indexes:
-            for idx_def in schema.indexes:
-                idx = IndexDefinition(
-                    name=idx_def.get(
-                        "name",
-                        f"idx_{schema.name}_{'_'.join(idx_def.get('columns', []))}",
-                    ),
-                    columns=idx_def.get("columns", []),
-                    unique=idx_def.get("unique", False),
-                    partial_where=idx_def.get("where", "is_available = 1")
-                    if idx_def.get("partial")
-                    else None,
-                )
-                table.indexes.append(idx)
-
-        if schema.get_bases():
-            for base_name in schema.get_bases():
-                base_schema = schema_map.get(base_name)
-                if base_schema:
-                    fk = ForeignKeyDefinition(
-                        columns=["id"],
-                        references_table=base_name,
-                        references_columns=["id"],
+        for parent_name in cls.is_a and [cls.is_a] or []:
+            parent_cls = sv.get_class(parent_name)
+            if parent_cls is not None and not parent_cls.abstract:
+                self._build_table(registry, parent_name)
+                table.foreign_keys.append(
+                    ForeignKeyDefinition(
+                        columns=[id_name],
+                        references_table=parent_name,
+                        references_columns=[id_name],
                         on_delete="CASCADE",
                     )
-                    table.foreign_keys.append(fk)
+                )
 
-        self._table_definitions[schema.name] = table
+        self._tables[class_name] = table
+        return table
 
-    def _map_type(self, field_type: str) -> str:
-        return self.TYPE_MAPPING.get(field_type, "TEXT")
+    def _map_slot_type(self, slot: Any, known_classes: set[str]) -> str:
+        rng = slot.range
+        if rng in known_classes:
+            return "TEXT"
+        if rng is None:
+            return "TEXT"
+        return self.TYPE_MAPPING.get(rng, "TEXT")
 
     def _topological_sort(self) -> list[str]:
-        visited = set()
-        result = []
+        visited: set[str] = set()
+        ordered: list[str] = []
 
         def visit(name: str) -> None:
             if name in visited:
                 return
             visited.add(name)
-            table = self._table_definitions.get(name)
-            if table:
+            table = self._tables.get(name)
+            if table is not None:
                 for fk in table.foreign_keys:
-                    if fk.references_table in self._table_definitions:
+                    if fk.references_table in self._tables:
                         visit(fk.references_table)
-            result.append(name)
+            ordered.append(name)
 
-        for name in self._table_definitions:
+        for name in self._tables:
             visit(name)
+        return ordered
 
-        return result
-
-    def _generate_create_table(self, table: TableDefinition) -> str:
-        column_defs = []
-
+    def _render_create_table(self, table: TableDefinition) -> str:
+        pieces: list[str] = []
         pk_cols = [c.name for c in table.columns if c.primary_key]
 
         for col in table.columns:
-            col_def = f'"{col.name}" {col.column_type}'
+            col_sql = f'"{col.name}" {col.column_type}'
             if col.primary_key and len(pk_cols) == 1:
-                col_def += " PRIMARY KEY"
+                col_sql += " PRIMARY KEY"
             if col.not_null and not col.primary_key:
-                col_def += " NOT NULL"
+                col_sql += " NOT NULL"
             if col.default is not None:
-                col_def += f" DEFAULT {self._format_default(col.default)}"
-            column_defs.append(col_def)
+                col_sql += f" DEFAULT {self._format_default(col.default)}"
+            pieces.append(col_sql)
 
         for fk in table.foreign_keys:
-            fk_cols = ", ".join(f'"{c}"' for c in fk.columns)
-            ref_cols = ", ".join(f'"{c}"' for c in fk.references_columns)
-            fk_def = f'FOREIGN KEY ({fk_cols}) REFERENCES "{fk.references_table}"({ref_cols})'
+            cols = ", ".join(f'"{c}"' for c in fk.columns)
+            refs = ", ".join(f'"{c}"' for c in fk.references_columns)
+            fk_sql = f'FOREIGN KEY ({cols}) REFERENCES "{fk.references_table}"({refs})'
             if fk.on_delete:
-                fk_def += f" ON DELETE {fk.on_delete}"
-            column_defs.append(fk_def)
+                fk_sql += f" ON DELETE {fk.on_delete}"
+            pieces.append(fk_sql)
 
-        if pk_cols and len(pk_cols) > 1:
-            pk_str = ", ".join(f'"{c}"' for c in pk_cols)
-            column_defs.append(f"PRIMARY KEY ({pk_str})")
+        if len(pk_cols) > 1:
+            pk_sql = ", ".join(f'"{c}"' for c in pk_cols)
+            pieces.append(f"PRIMARY KEY ({pk_sql})")
 
         for unique_cols in table.unique_constraints:
-            unique_str = ", ".join(f'"{c}"' for c in unique_cols)
-            column_defs.append(f"UNIQUE ({unique_str})")
+            cols = ", ".join(f'"{c}"' for c in unique_cols)
+            pieces.append(f"UNIQUE ({cols})")
 
-        return (
-            f'CREATE TABLE "{table.name}" (\n    '
-            + ",\n    ".join(column_defs)
-            + "\n);"
-        )
+        return f'CREATE TABLE "{table.name}" (\n    ' + ",\n    ".join(pieces) + "\n);"
 
-    def _generate_create_index(self, table_name: str, index: IndexDefinition) -> str:
-        columns_str = ", ".join(f'"{c}"' for c in index.columns)
-
+    def _render_create_index(self, table_name: str, index: IndexDefinition) -> str:
+        cols = ", ".join(f'"{c}"' for c in index.columns)
         if index.partial_where:
-            return f'CREATE INDEX "{index.name}" ON "{table_name}" ({columns_str}) WHERE {index.partial_where};'
+            return (
+                f'CREATE INDEX "{index.name}" ON "{table_name}" ({cols}) '
+                f"WHERE {index.partial_where};"
+            )
+        unique = "UNIQUE " if index.unique else ""
+        return f'CREATE {unique}INDEX "{index.name}" ON "{table_name}" ({cols});'
 
-        unique_str = "UNIQUE " if index.unique else ""
-        return f'CREATE {unique_str}INDEX "{index.name}" ON "{table_name}" ({columns_str});'
-
-    def _format_default(self, default: Any) -> str:
-        if default is None:
+    @staticmethod
+    def _format_default(value: Any) -> str:
+        if value is None:
             return "NULL"
-        elif isinstance(default, bool):
-            return "1" if default else "0"
-        elif isinstance(default, str):
-            return f"'{default}'"
-        elif isinstance(default, (int, float)):
-            return str(default)
-        else:
-            return f"'{str(default)}'"
+        if isinstance(value, bool):
+            return "1" if value else "0"
+        if isinstance(value, (int, float)):
+            return str(value)
+        return f"'{value}'"
 
 
 class FTSMigrationPlanner:
-    """Migration planner for FTS tables."""
+    """Plans FTS5 virtual tables from slot ``hippo_search`` annotations."""
 
-    def __init__(self):
-        self._fts_table_metadata: dict[str, list[FTSTableMetadata]] = {}
+    def __init__(self) -> None:
+        self._fts_tables: dict[str, list[FTSTableMetadata]] = {}
 
-    def add_schema(self, schema: SchemaConfig) -> None:
-        """Add a schema and generate FTS table metadata for it."""
-        fts_tables = []
-        for field in schema.get_fts_fields():
-            fts_metadata = FTSTableMetadata.from_field(
-                field=field,
-                entity_type=schema.name,
-                content_table="entities",
+    def add_class(self, registry: SchemaRegistry, class_name: str) -> None:
+        slots = registry.searchable_slots(class_name)
+        if not slots:
+            return
+        tables = []
+        for slot, mode in slots:
+            tables.append(
+                FTSTableMetadata(
+                    table_name=FTSTableMetadata.generate_table_name(
+                        class_name, slot.name
+                    ),
+                    source_entity_type=class_name,
+                    fts_version=mode,
+                    content_table="entities",
+                    content_rowid="rowid",
+                    fields=[
+                        FTSFieldMetadata(
+                            field_name=slot.name,
+                            field_type=slot.range or "string",
+                            search_type=mode,
+                            source_entity_type=class_name,
+                        )
+                    ],
+                )
             )
-            fts_tables.append(fts_metadata)
+        self._fts_tables[class_name] = tables
 
-        if fts_tables:
-            self._fts_table_metadata[schema.name] = fts_tables
+    def add_registry(self, registry: SchemaRegistry) -> None:
+        sv = registry.schema_view
+        for class_name in registry.class_names():
+            cls = sv.get_class(class_name)
+            if cls is None or cls.abstract:
+                continue
+            self.add_class(registry, class_name)
 
     def get_fts_tables_for_entity_type(
         self, entity_type: str
     ) -> list[FTSTableMetadata]:
-        """Get FTS table metadata for an entity type."""
-        return self._fts_table_metadata.get(entity_type, [])
+        return self._fts_tables.get(entity_type, [])
 
     def get_all_fts_tables(self) -> dict[str, list[FTSTableMetadata]]:
-        """Get all FTS table metadata."""
-        return self._fts_table_metadata
+        return self._fts_tables
 
     def generate_fts_ddl(self) -> list[str]:
-        """Generate DDL statements for all FTS tables."""
-        ddl_statements = []
-        for entity_type, fts_tables in self._fts_table_metadata.items():
-            for fts_metadata in fts_tables:
-                from hippo.core.storage.fts import generate_fts_create_sql
+        from hippo.core.storage.fts import generate_fts_create_sql
 
-                columns = fts_metadata.get_fts_columns()
-                sql = generate_fts_create_sql(
-                    table_name=fts_metadata.table_name,
-                    columns=["entity_id"] + columns,
-                    content_table=fts_metadata.content_table,
-                    content_rowid=fts_metadata.content_rowid,
+        statements: list[str] = []
+        for tables in self._fts_tables.values():
+            for meta in tables:
+                statements.append(
+                    generate_fts_create_sql(
+                        table_name=meta.table_name,
+                        columns=["entity_id"] + meta.get_fts_columns(),
+                        content_table=meta.content_table,
+                        content_rowid=meta.content_rowid,
+                    )
                 )
-                ddl_statements.append(sql)
-        return ddl_statements
+        return statements

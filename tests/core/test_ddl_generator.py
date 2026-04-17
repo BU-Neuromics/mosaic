@@ -1,314 +1,313 @@
+"""Tests for DDL generation from a LinkML-backed SchemaRegistry."""
+
 import pytest
-from hippo.config.models import FieldDefinition, SchemaConfig
+
 from hippo.core.storage.ddl_generator import DDLGenerator
+from tests.support.linkml_schemas import build_registry
 
 
 class TestTypeMapping:
-    def test_datetime_maps_to_text(self):
-        gen = DDLGenerator()
-        assert gen._map_type("datetime") == "TEXT"
+    @pytest.mark.parametrize(
+        "linkml_type,expected",
+        [
+            ("string", "TEXT"),
+            ("integer", "INTEGER"),
+            ("float", "REAL"),
+            ("double", "REAL"),
+            ("decimal", "REAL"),
+            ("boolean", "INTEGER"),
+            ("date", "TEXT"),
+            ("datetime", "TEXT"),
+            ("uri", "TEXT"),
+            ("uriorcurie", "TEXT"),
+        ],
+    )
+    def test_linkml_type_maps_to_sqlite(self, linkml_type: str, expected: str):
+        assert DDLGenerator.TYPE_MAPPING[linkml_type] == expected
 
-    def test_boolean_maps_to_integer(self):
-        gen = DDLGenerator()
-        assert gen._map_type("boolean") == "INTEGER"
-
-    def test_string_maps_to_text(self):
-        gen = DDLGenerator()
-        assert gen._map_type("string") == "TEXT"
-
-    def test_integer_maps_to_integer(self):
-        gen = DDLGenerator()
-        assert gen._map_type("integer") == "INTEGER"
-
-    def test_float_maps_to_real(self):
-        gen = DDLGenerator()
-        assert gen._map_type("float") == "REAL"
-
-    def test_date_maps_to_text(self):
-        gen = DDLGenerator()
-        assert gen._map_type("date") == "TEXT"
-
-    def test_list_maps_to_text(self):
-        gen = DDLGenerator()
-        assert gen._map_type("list") == "TEXT"
-
-    def test_dict_maps_to_text(self):
-        gen = DDLGenerator()
-        assert gen._map_type("dict") == "TEXT"
-
-    def test_uri_maps_to_text(self):
-        gen = DDLGenerator()
-        assert gen._map_type("uri") == "TEXT"
-
-    def test_enum_maps_to_text(self):
-        gen = DDLGenerator()
-        assert gen._map_type("enum") == "TEXT"
-
-    def test_unknown_type_defaults_to_text(self):
-        gen = DDLGenerator()
-        assert gen._map_type("unknown_type") == "TEXT"
+    def test_unknown_slot_range_defaults_to_text(self):
+        reg = build_registry(
+            {
+                "item": {
+                    "attributes": {
+                        "id": {"identifier": True},
+                        "mystery": {"range": "not-a-real-type"},
+                    }
+                }
+            }
+        )
+        ddl = DDLGenerator().generate(reg)
+        assert '"mystery" TEXT' in ddl[0]
 
 
 class TestBasicTableGeneration:
-    def test_single_entity_generates_table(self):
-        schema = SchemaConfig(
-            name="test_entity",
-            version="1.0.0",
-            fields=[
-                FieldDefinition(name="name", type="string"),
-            ],
+    def test_emits_create_table(self):
+        reg = build_registry(
+            {
+                "test_entity": {
+                    "attributes": {
+                        "id": {"identifier": True},
+                        "name": {"range": "string"},
+                    }
+                }
+            }
         )
-        gen = DDLGenerator()
-        ddl = gen.generate([schema])
-        assert len(ddl) >= 1
-        assert 'CREATE TABLE "test_entity"' in ddl[0]
+        ddl = DDLGenerator().generate(reg)
+        assert any('CREATE TABLE "test_entity"' in s for s in ddl)
 
-    def test_table_has_id_column(self):
-        schema = SchemaConfig(
-            name="test_entity",
-            version="1.0.0",
-            fields=[],
+    def test_includes_id_column(self):
+        reg = build_registry(
+            {"test_entity": {"attributes": {"id": {"identifier": True}}}}
         )
-        gen = DDLGenerator()
-        ddl = gen.generate([schema])
+        ddl = DDLGenerator().generate(reg)
         assert '"id" TEXT' in ddl[0]
 
-    def test_table_has_is_available_column(self):
-        schema = SchemaConfig(
-            name="test_entity",
-            version="1.0.0",
-            fields=[],
+    def test_includes_is_available_with_default_1(self):
+        reg = build_registry(
+            {"test_entity": {"attributes": {"id": {"identifier": True}}}}
         )
-        gen = DDLGenerator()
-        ddl = gen.generate([schema])
+        ddl = DDLGenerator().generate(reg)
         assert '"is_available" INTEGER' in ddl[0]
-
-    def test_is_available_has_default_1(self):
-        schema = SchemaConfig(
-            name="test_entity",
-            version="1.0.0",
-            fields=[],
-        )
-        gen = DDLGenerator()
-        ddl = gen.generate([schema])
         assert "DEFAULT 1" in ddl[0]
 
-
-class TestPrimaryKeyGeneration:
-    def test_id_is_primary_key(self):
-        schema = SchemaConfig(
-            name="test_entity",
-            version="1.0.0",
-            fields=[],
+    def test_includes_superseded_by_column(self):
+        reg = build_registry(
+            {"test_entity": {"attributes": {"id": {"identifier": True}}}}
         )
-        gen = DDLGenerator()
-        ddl = gen.generate([schema])
+        ddl = DDLGenerator().generate(reg)
+        assert '"superseded_by" TEXT' in ddl[0]
+
+    def test_abstract_class_is_skipped(self):
+        reg = build_registry(
+            {
+                "AbstractBase": {
+                    "abstract": True,
+                    "attributes": {"id": {"identifier": True}},
+                },
+                "Concrete": {
+                    "is_a": "AbstractBase",
+                    "attributes": {"name": {"range": "string"}},
+                },
+            }
+        )
+        ddl = DDLGenerator().generate(reg)
+        assert not any('CREATE TABLE "AbstractBase"' in s for s in ddl)
+        assert any('CREATE TABLE "Concrete"' in s for s in ddl)
+
+
+class TestPrimaryKey:
+    def test_identifier_slot_is_primary_key(self):
+        reg = build_registry(
+            {"test_entity": {"attributes": {"id": {"identifier": True}}}}
+        )
+        ddl = DDLGenerator().generate(reg)
         assert "PRIMARY KEY" in ddl[0]
 
-    def test_explicit_primary_key_field(self):
-        schema = SchemaConfig(
-            name="test_entity",
-            version="1.0.0",
-            fields=[
-                FieldDefinition(name="uuid", type="string", primary_key=True),
-            ],
+
+class TestForeignKey:
+    def test_class_range_becomes_foreign_key(self):
+        reg = build_registry(
+            {
+                "parent_entity": {"attributes": {"id": {"identifier": True}}},
+                "child_entity": {
+                    "attributes": {
+                        "id": {"identifier": True},
+                        "parent_id": {"range": "parent_entity"},
+                    }
+                },
+            }
         )
-        gen = DDLGenerator()
-        ddl = gen.generate([schema])
-        assert "PRIMARY KEY" in ddl[0]
+        ddl = "\n".join(DDLGenerator().generate(reg))
+        assert "FOREIGN KEY" in ddl
+        assert '"parent_entity"' in ddl
 
 
-class TestForeignKeyGeneration:
-    def test_field_references_foreign_key(self):
-        schema = SchemaConfig(
-            name="child_entity",
-            version="1.0.0",
-            fields=[
-                FieldDefinition(
-                    name="parent_id",
-                    type="string",
-                    references={"table": "parent_entity", "column": "id"},
-                ),
-            ],
+class TestUniqueConstraint:
+    def test_hippo_unique_annotation_emits_unique(self):
+        reg = build_registry(
+            {
+                "test_entity": {
+                    "attributes": {
+                        "id": {"identifier": True},
+                        "email": {
+                            "range": "string",
+                            "annotations": {"hippo_unique": True},
+                        },
+                    }
+                }
+            }
         )
-        gen = DDLGenerator()
-        parent_schema = SchemaConfig(
-            name="parent_entity",
-            version="1.0.0",
-            fields=[],
-        )
-        ddl = gen.generate([parent_schema, schema])
-        fk_ddl = "\n".join(ddl)
-        assert "FOREIGN KEY" in fk_ddl
-        assert "parent_entity" in fk_ddl
-
-
-class TestUniqueConstraintGeneration:
-    def test_unique_field_generates_unique_constraint(self):
-        schema = SchemaConfig(
-            name="test_entity",
-            version="1.0.0",
-            fields=[
-                FieldDefinition(name="email", type="string", unique=True),
-            ],
-        )
-        gen = DDLGenerator()
-        ddl = gen.generate([schema])
+        ddl = DDLGenerator().generate(reg)
         assert "UNIQUE" in ddl[0]
 
-
-class TestDefaultValueGeneration:
-    def test_field_with_default(self):
-        schema = SchemaConfig(
-            name="test_entity",
-            version="1.0.0",
-            fields=[
-                FieldDefinition(name="status", type="string", default="active"),
-            ],
+    def test_linkml_unique_keys_emit_composite_unique(self):
+        reg = build_registry(
+            {
+                "organization": {
+                    "attributes": {
+                        "id": {"identifier": True},
+                        "name": {"range": "string"},
+                        "code": {"range": "string"},
+                    },
+                    "unique_keys": {
+                        "name_code": {"unique_key_slots": ["name", "code"]}
+                    },
+                }
+            }
         )
-        gen = DDLGenerator()
-        ddl = gen.generate([schema])
+        ddl = DDLGenerator().generate(reg)
+        assert 'UNIQUE ("name", "code")' in ddl[0]
+
+
+class TestDefaultValue:
+    def test_string_default_via_hippo_default(self):
+        reg = build_registry(
+            {
+                "test_entity": {
+                    "attributes": {
+                        "id": {"identifier": True},
+                        "status": {
+                            "range": "string",
+                            "annotations": {"hippo_default": "active"},
+                        },
+                    }
+                }
+            }
+        )
+        ddl = DDLGenerator().generate(reg)
         assert "DEFAULT 'active'" in ddl[0]
-
-    def test_boolean_default(self):
-        schema = SchemaConfig(
-            name="test_entity",
-            version="1.0.0",
-            fields=[
-                FieldDefinition(name="active", type="boolean", default=True),
-            ],
-        )
-        gen = DDLGenerator()
-        ddl = gen.generate([schema])
-        assert "DEFAULT 1" in ddl[0]
 
 
 class TestIndexGeneration:
-    def test_indexed_field_generates_index(self):
-        schema = SchemaConfig(
-            name="test_entity",
-            version="1.0.0",
-            fields=[
-                FieldDefinition(name="name", type="string", index=True),
-            ],
+    def test_hippo_index_emits_create_index(self):
+        reg = build_registry(
+            {
+                "test_entity": {
+                    "attributes": {
+                        "id": {"identifier": True},
+                        "name": {
+                            "range": "string",
+                            "annotations": {"hippo_index": True},
+                        },
+                    }
+                }
+            }
         )
-        gen = DDLGenerator()
-        ddl = gen.generate([schema])
+        ddl = DDLGenerator().generate(reg)
         assert len(ddl) == 2
         assert "CREATE INDEX" in ddl[1]
+        assert "idx_test_entity_name" in ddl[1]
 
-    def test_partial_index_with_index_partial(self):
-        schema = SchemaConfig(
-            name="test_entity",
-            version="1.0.0",
-            fields=[
-                FieldDefinition(
-                    name="name", type="string", index=True, index_partial=True
-                ),
-            ],
+    def test_hippo_index_partial_adds_where(self):
+        reg = build_registry(
+            {
+                "test_entity": {
+                    "attributes": {
+                        "id": {"identifier": True},
+                        "name": {
+                            "range": "string",
+                            "annotations": {
+                                "hippo_index": True,
+                                "hippo_index_partial": True,
+                            },
+                        },
+                    }
+                }
+            }
         )
-        gen = DDLGenerator()
-        ddl = gen.generate([schema])
+        ddl = DDLGenerator().generate(reg)
         assert "WHERE is_available = 1" in ddl[1]
 
 
-class TestClassTableInheritance:
-    def test_child_table_with_base_has_foreign_key(self):
-        parent_schema = SchemaConfig(
-            name="parent_entity",
-            version="1.0.0",
-            fields=[
-                FieldDefinition(name="created_at", type="datetime"),
-            ],
+class TestInheritance:
+    def test_child_class_has_foreign_key_to_parent(self):
+        reg = build_registry(
+            {
+                "parent_entity": {
+                    "attributes": {
+                        "id": {"identifier": True},
+                        "created_at": {"range": "datetime"},
+                    }
+                },
+                "child_entity": {
+                    "is_a": "parent_entity",
+                    "attributes": {"name": {"range": "string"}},
+                },
+            }
         )
-        child_schema = SchemaConfig(
-            name="child_entity",
-            version="1.0.0",
-            base="parent_entity",
-            fields=[
-                FieldDefinition(name="name", type="string"),
-            ],
-        )
-        gen = DDLGenerator()
-        ddl = gen.generate([parent_schema, child_schema])
-        fk_ddl = "\n".join(ddl)
-        assert "FOREIGN KEY" in fk_ddl
-        assert "parent_entity" in fk_ddl
+        ddl = "\n".join(DDLGenerator().generate(reg))
+        assert "FOREIGN KEY" in ddl
+        assert '"parent_entity"' in ddl
 
-
-class TestDependencyOrdering:
-    def test_child_generated_after_parent(self):
-        parent_schema = SchemaConfig(
-            name="parent_entity",
-            version="1.0.0",
-            fields=[],
+    def test_parent_table_generated_before_child(self):
+        reg = build_registry(
+            {
+                "parent_entity": {"attributes": {"id": {"identifier": True}}},
+                "child_entity": {
+                    "is_a": "parent_entity",
+                    "attributes": {},
+                },
+            }
         )
-        child_schema = SchemaConfig(
-            name="child_entity",
-            version="1.0.0",
-            base="parent_entity",
-            fields=[],
-        )
-        gen = DDLGenerator()
-        ddl = gen.generate([child_schema, parent_schema])
-        parent_idx = next(i for i, d in enumerate(ddl) if "parent_entity" in d)
-        child_idx = next(i for i, d in enumerate(ddl) if "child_entity" in d)
+        ddl = DDLGenerator().generate(reg)
+        parent_idx = next(i for i, s in enumerate(ddl) if "parent_entity" in s)
+        child_idx = next(i for i, s in enumerate(ddl) if "child_entity" in s)
         assert parent_idx < child_idx
 
 
-class TestMultiEntitySchema:
-    def test_multiple_entities_generated(self):
-        schemas = [
-            SchemaConfig(
-                name="entity_a",
-                version="1.0.0",
-                fields=[FieldDefinition(name="field1", type="string")],
-            ),
-            SchemaConfig(
-                name="entity_b",
-                version="1.0.0",
-                fields=[FieldDefinition(name="field2", type="string")],
-            ),
-        ]
-        gen = DDLGenerator()
-        ddl = gen.generate(schemas)
+class TestMultiClass:
+    def test_two_unrelated_classes_both_generated(self):
+        reg = build_registry(
+            {
+                "entity_a": {
+                    "attributes": {
+                        "id": {"identifier": True},
+                        "field1": {"range": "string"},
+                    }
+                },
+                "entity_b": {
+                    "attributes": {
+                        "id": {"identifier": True},
+                        "field2": {"range": "string"},
+                    }
+                },
+            }
+        )
+        ddl = DDLGenerator().generate(reg)
         assert len(ddl) == 2
 
-    def test_complex_schema_with_all_features(self):
-        schemas = [
-            SchemaConfig(
-                name="organization",
-                version="1.0.0",
-                fields=[
-                    FieldDefinition(name="name", type="string", required=True),
-                    FieldDefinition(
-                        name="code", type="string", unique=True, index=True
-                    ),
-                    FieldDefinition(name="active", type="boolean", default=True),
-                ],
-                unique_constraints=[["name", "code"]],
-                indexes=[
-                    {"name": "idx_org_active", "columns": ["active"], "partial": True}
-                ],
-            ),
-            SchemaConfig(
-                name="user",
-                version="1.0.0",
-                fields=[
-                    FieldDefinition(name="username", type="string", required=True),
-                    FieldDefinition(
-                        name="org_id",
-                        type="string",
-                        references={"table": "organization", "column": "id"},
-                    ),
-                    FieldDefinition(name="created_at", type="datetime"),
-                ],
-            ),
-        ]
-        gen = DDLGenerator()
-        ddl = gen.generate(schemas)
-        assert len(ddl) == 4
-        full_ddl = "\n".join(ddl)
-        assert "UNIQUE" in full_ddl
-        assert "CREATE INDEX" in full_ddl
-        assert "FOREIGN KEY" in full_ddl
+    def test_full_schema_with_unique_index_and_fk(self):
+        reg = build_registry(
+            {
+                "organization": {
+                    "attributes": {
+                        "id": {"identifier": True},
+                        "name": {"range": "string", "required": True},
+                        "code": {
+                            "range": "string",
+                            "annotations": {
+                                "hippo_unique": True,
+                                "hippo_index": True,
+                            },
+                        },
+                        "active": {
+                            "range": "boolean",
+                            "annotations": {"hippo_default": True},
+                        },
+                    }
+                },
+                "user": {
+                    "attributes": {
+                        "id": {"identifier": True},
+                        "username": {"range": "string", "required": True},
+                        "org_id": {"range": "organization"},
+                        "created_at": {"range": "datetime"},
+                    }
+                },
+            }
+        )
+        ddl = DDLGenerator().generate(reg)
+        full = "\n".join(ddl)
+        assert "UNIQUE" in full
+        assert "CREATE INDEX" in full
+        assert "FOREIGN KEY" in full

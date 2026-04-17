@@ -1,116 +1,74 @@
-"""SQLite adapter for handling summary views in Hippo."""
+"""SQLite summary views generated from a LinkML-backed SchemaRegistry."""
 
-from typing import Any, Iterator, List, Optional
+from __future__ import annotations
+
 import sqlite3
-import json
+from typing import Iterable, Optional
 
-from hippo.config.models import SchemaConfig
+from hippo.linkml_bridge import SchemaRegistry
+
+
+NUMERIC_RANGES = {"integer", "float", "double", "decimal"}
 
 
 class SummaryViewGenerator:
-    """Generate and manage summary views for SQLite storage."""
-
-    def __init__(self, connection: sqlite3.Connection):
+    def __init__(self, connection: sqlite3.Connection) -> None:
         self.connection = connection
 
-    def generate_all_summary_views(self, schemas: List[SchemaConfig]) -> List[str]:
-        """Generate all summary views based on schema configuration."""
-        generated_ddl = []
+    def generate_summary_views(
+        self, registry: SchemaRegistry, class_names: Optional[Iterable[str]] = None
+    ) -> list[str]:
+        names = list(class_names) if class_names is not None else registry.class_names()
+        sv = registry.schema_view
+        ddl: list[str] = []
+        for class_name in names:
+            cls = sv.get_class(class_name)
+            if cls is None or cls.abstract:
+                continue
+            ddl.append(self._count_view_ddl(class_name))
+            agg = self._aggregate_view_ddl(registry, class_name)
+            if agg:
+                ddl.append(agg)
+        return ddl
 
-        for schema in schemas:
-            # Process entities that have indexed fields
-            view_ddl = self._generate_summary_views_for_schema(schema)
-            if view_ddl:
-                generated_ddl.extend(view_ddl)
+    def generate_all_summary_views(self, registry: SchemaRegistry) -> list[str]:
+        return self.generate_summary_views(registry)
 
-        return generated_ddl
+    def _count_view_ddl(self, class_name: str) -> str:
+        view = f"summary_{class_name}_count"
+        return (
+            f'\nCREATE VIEW IF NOT EXISTS "{view}" AS\n'
+            f"SELECT COUNT(*) as count\n"
+            f'FROM "{class_name}"\n'
+        )
 
-    def _generate_summary_views_for_schema(self, schema: SchemaConfig) -> List[str]:
-        """Generate summary views for a specific schema."""
-        ddl_statements = []
-
-        # Create a simple count view for each entity type
-        count_view_name = f"summary_{schema.name}_count"
-        table_name = schema.name
-
-        count_view_ddl = self._generate_count_view(table_name, count_view_name)
-        if count_view_ddl:
-            ddl_statements.append(count_view_ddl)
-
-        # Create a summary view with multiple aggregations for entities
-        agg_view_name = f"summary_{schema.name}_aggregate"
-        agg_view_ddl = self._generate_aggregate_view(table_name, agg_view_name, schema)
-        if agg_view_ddl:
-            ddl_statements.append(agg_view_ddl)
-
-        return ddl_statements
-
-    def _generate_count_view(self, table_name: str, view_name: str) -> Optional[str]:
-        """Generate a simple count view for the entity type."""
-        # Generate CREATE VIEW statement for total count (active and inactive)
-        sql = f"""
-        CREATE VIEW IF NOT EXISTS "{view_name}" AS
-        SELECT 
-            COUNT(*) as count
-        FROM "{table_name}"
-        """
-
-        return sql
-
-    def _generate_aggregate_view(
-        self, table_name: str, view_name: str, schema: SchemaConfig
+    def _aggregate_view_ddl(
+        self, registry: SchemaRegistry, class_name: str
     ) -> Optional[str]:
-        """Generate a comprehensive aggregate view with multiple aggregations."""
-        # Get all fields that can be aggregated (numeric types)
-        numeric_fields = []
-
-        for field in schema.fields:
-            if field.type in ["integer", "float"]:
-                numeric_fields.append(field.name)
-
-        if not numeric_fields:
+        numeric_slots = [
+            slot.name
+            for slot in registry.induced_slots(class_name)
+            if slot.range in NUMERIC_RANGES
+        ]
+        if not numeric_slots:
             return None
+        view = f"summary_{class_name}_aggregate"
+        cols = []
+        for name in numeric_slots:
+            cols.append(f"COUNT({name}) as {name}_count")
+            cols.append(f"SUM({name}) as {name}_sum")
+            cols.append(f"AVG({name}) as {name}_avg")
+        return (
+            f'\nCREATE VIEW IF NOT EXISTS "{view}" AS\nSELECT\n    '
+            + ",\n    ".join(cols)
+            + f'\nFROM "{class_name}"\n'
+        )
 
-        # Prepare aggregation columns - one set per numeric field
-        agg_columns = []
-        for field_name in numeric_fields:
-            # COUNT, SUM, AVG aggregations for each numeric field
-            agg_columns.append(f"COUNT({field_name}) as {field_name}_count")
-            agg_columns.append(f"SUM({field_name}) as {field_name}_sum")
-            agg_columns.append(f"AVG({field_name}) as {field_name}_avg")
-
-        if not agg_columns:
-            return None
-
-        # Create view with single table scan
-        view_sql = f"""
-        CREATE VIEW IF NOT EXISTS "{view_name}" AS
-        SELECT 
-        """
-
-        # Add the aggregate columns
-        view_sql += ",\n    ".join(agg_columns)
-        view_sql += f"""
-        FROM "{table_name}"
-        """
-
-        return view_sql
-
-    def create_views_in_migration(self, schemas: List[SchemaConfig]) -> None:
-        """Create summary views during schema migration."""
+    def create_views_in_migration(self, registry: SchemaRegistry) -> None:
         with self.connection:
             cursor = self.connection.cursor()
-
-            # For each schema in the set, generate and execute view DDL
-            for schema in schemas:
-                if not schema.name.endswith("s"):
-                    continue  # Skip non-table entities
-
-                # Generate specific views for this schema
-                view_ddl = self._generate_summary_views_for_schema(schema)
-
-                for ddl in view_ddl:
-                    try:
-                        cursor.execute(ddl)
-                    except Exception as e:
-                        print(f"Error creating view: {e}")
+            for ddl in self.generate_summary_views(registry):
+                try:
+                    cursor.execute(ddl)
+                except Exception as e:
+                    print(f"Error creating view: {e}")

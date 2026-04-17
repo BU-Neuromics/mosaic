@@ -135,24 +135,12 @@ def migrate(
         conn.row_factory = sqlite3.Row
         cursor = conn.cursor()
 
-        from hippo.core.storage.schema_diff import (
-            load_schemas_from_directory,
-            SchemaValidator,
-            SchemaValidationError,
-        )
+        from hippo.core.storage.schema_diff import diff_registry_against_database
         from hippo.core.storage.migration import MigrationPlanner, MigrationExecutor
+        from hippo.linkml_bridge import SchemaRegistry
 
-        engine, schema_diff, schemas = load_schemas_from_directory(schemas_path, cursor)
-
-        validator = SchemaValidator()
-        try:
-            validator.validate(schemas)
-        except SchemaValidationError as e:
-            typer.echo("Schema validation failed:", err=True)
-            for error in e.errors:
-                typer.echo(f"  - {error}", err=True)
-            conn.close()
-            raise typer.Exit(1)
+        registry = SchemaRegistry.from_path(schemas_path)
+        engine, schema_diff = diff_registry_against_database(registry, cursor)
 
         if (
             not schema_diff.new_tables
@@ -164,12 +152,9 @@ def migrate(
             conn.close()
             return
 
-        schemas = list(engine._schema_configs.values())
         planner = MigrationPlanner()
-        planner.load_existing_tables(cursor)
         planner.load_existing_fts_tables(cursor)
-
-        plan = planner.plan_migration_from_diff(schema_diff, schemas, cursor)
+        plan = planner.plan_migration_from_diff(schema_diff, registry, cursor)
 
         typer.echo("=== Migration Plan ===")
         typer.echo("")
@@ -536,35 +521,25 @@ def schema_safe_deploy(
         conn.row_factory = sqlite3.Row
         cursor = conn.cursor()
 
-        from hippo.core.storage.schema_diff import (
-            SchemaDiffEngine,
-            SchemaValidator,
-            SchemaValidationError,
-        )
+        from hippo.core.storage.schema_diff import SchemaDiffEngine
+        from hippo.linkml_bridge import SchemaRegistry
 
+        registry = SchemaRegistry.from_path(schemas_path)
         engine = SchemaDiffEngine(cursor=cursor)
         engine.load_existing_schema(cursor)
-        schemas = engine.load_schemas_from_files(schemas_path)
-
-        # Validate schema definitions first
-        validator = SchemaValidator()
-        try:
-            validator.validate(schemas)
-        except SchemaValidationError as e:
-            typer.echo("Schema validation failed:", err=True)
-            for error in e.errors:
-                typer.echo(f"  - {error}", err=True)
-            conn.close()
-            raise typer.Exit(1)
-
-        diff = engine.compute_diff(schemas)
+        diff = engine.compute_diff(registry)
 
         # Check for breaking changes
         breaking = []
 
         # Detect removed tables (entities defined in DB but not in schema)
         existing_tables = set(engine._existing_tables.keys())
-        schema_names = {s.name for s in schemas}
+        sv = registry.schema_view
+        schema_names = {
+            name
+            for name in registry.class_names()
+            if not (sv.get_class(name) and sv.get_class(name).abstract)
+        }
         # Only flag entity tables (skip system tables)
         system_tables = {
             "entities", "provenance", "relationships", "external_ids",
@@ -592,7 +567,7 @@ def schema_safe_deploy(
         # Report safe changes
         typer.echo("SAFE: All schema changes are backward-compatible.")
         if diff.new_tables:
-            typer.echo(f"  New tables: {', '.join(t.name for t in diff.new_tables)}")
+            typer.echo(f"  New tables: {', '.join(diff.new_tables)}")
         if diff.new_columns:
             for table, cols in diff.new_columns.items():
                 typer.echo(f"  New columns in '{table}': {', '.join(c.name for c in cols)}")
@@ -652,24 +627,12 @@ def schema_migrate(
         conn.row_factory = sqlite3.Row
         cursor = conn.cursor()
 
-        from hippo.core.storage.schema_diff import (
-            load_schemas_from_directory,
-            SchemaValidator,
-            SchemaValidationError,
-        )
+        from hippo.core.storage.schema_diff import diff_registry_against_database
         from hippo.core.storage.migration import MigrationPlanner, MigrationExecutor
+        from hippo.linkml_bridge import SchemaRegistry
 
-        engine, schema_diff, schemas = load_schemas_from_directory(schemas_path, cursor)
-
-        validator = SchemaValidator()
-        try:
-            validator.validate(schemas)
-        except SchemaValidationError as e:
-            typer.echo("Schema validation failed:", err=True)
-            for error in e.errors:
-                typer.echo(f"  - {error}", err=True)
-            conn.close()
-            raise typer.Exit(1)
+        registry = SchemaRegistry.from_path(schemas_path)
+        engine, schema_diff = diff_registry_against_database(registry, cursor)
 
         # Backward-compatibility check unless overridden
         if not allow_breaking:
@@ -694,12 +657,9 @@ def schema_migrate(
             conn.close()
             return
 
-        schemas_list = list(engine._schema_configs.values())
         planner = MigrationPlanner()
-        planner.load_existing_tables(cursor)
         planner.load_existing_fts_tables(cursor)
-
-        plan = planner.plan_migration_from_diff(schema_diff, schemas_list, cursor)
+        plan = planner.plan_migration_from_diff(schema_diff, registry, cursor)
 
         typer.echo("=== Migration Plan ===")
         if plan.new_tables:

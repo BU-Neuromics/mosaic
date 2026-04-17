@@ -22,9 +22,11 @@ HIPPO_SEARCH = "hippo_search"
 HIPPO_INDEX = "hippo_index"
 HIPPO_INDEX_PARTIAL = "hippo_index_partial"
 HIPPO_UNIQUE = "hippo_unique"
+HIPPO_DEFAULT = "hippo_default"
 
 
-def _annotation_value(element: Any, key: str) -> Optional[Any]:
+def annotation_value(element: Any, key: str) -> Optional[Any]:
+    """Return the ``.value`` of a named annotation, or ``None`` if absent."""
     ann = getattr(element, "annotations", None)
     if ann is None or key not in ann:
         return None
@@ -43,7 +45,46 @@ class SchemaRegistry:
 
     @classmethod
     def from_path(cls, path: Union[str, Path]) -> "SchemaRegistry":
-        return cls(SchemaView(str(path)))
+        p = Path(path)
+        if p.is_dir():
+            return cls._from_directory(p)
+        return cls(SchemaView(str(p)))
+
+    @classmethod
+    def _from_directory(cls, path: Path) -> "SchemaRegistry":
+        """Merge all ``*.yaml`` / ``*.yml`` files in ``path`` into one schema."""
+        files = sorted(list(path.glob("*.yaml")) + list(path.glob("*.yml")))
+        if not files:
+            raise FileNotFoundError(f"No schema files found in {path}")
+        merged: dict[str, Any] = {
+            "id": f"https://example.org/hippo/{path.name}",
+            "name": path.name,
+            "prefixes": {"linkml": "https://w3id.org/linkml/"},
+            "imports": ["linkml:types"],
+            "default_range": "string",
+            "classes": {},
+            "enums": {},
+            "slots": {},
+            "types": {},
+        }
+        for file_path in files:
+            doc = yaml.safe_load(file_path.read_text()) or {}
+            if "id" in doc and not doc.get("imports") is None:
+                merged["id"] = doc.get("id", merged["id"])
+            for section in ("classes", "enums", "slots", "types"):
+                merged[section].update(doc.get(section) or {})
+            for pfx, uri in (doc.get("prefixes") or {}).items():
+                merged["prefixes"].setdefault(pfx, uri)
+            for imp in doc.get("imports") or []:
+                if imp not in merged["imports"]:
+                    merged["imports"].append(imp)
+        if not merged["enums"]:
+            del merged["enums"]
+        if not merged["slots"]:
+            del merged["slots"]
+        if not merged["types"]:
+            del merged["types"]
+        return cls.from_dict(merged)
 
     @classmethod
     def from_dict(cls, data: dict) -> "SchemaRegistry":
@@ -79,7 +120,7 @@ class SchemaRegistry:
         """Slots annotated with ``hippo_search``; returns (slot, mode) pairs."""
         pairs: list[tuple[SlotDefinition, str]] = []
         for slot in self.induced_slots(class_name):
-            mode = _annotation_value(slot, HIPPO_SEARCH)
+            mode = annotation_value(slot, HIPPO_SEARCH)
             if mode is not None:
                 pairs.append((slot, str(mode)))
         return pairs
@@ -98,8 +139,8 @@ class SchemaRegistry:
         """(slot, partial) pairs for slots annotated with ``hippo_index``."""
         out: list[tuple[SlotDefinition, bool]] = []
         for slot in self.induced_slots(class_name):
-            if _annotation_value(slot, HIPPO_INDEX):
-                partial = bool(_annotation_value(slot, HIPPO_INDEX_PARTIAL))
+            if annotation_value(slot, HIPPO_INDEX):
+                partial = bool(annotation_value(slot, HIPPO_INDEX_PARTIAL))
                 out.append((slot, partial))
         return out
 
@@ -107,7 +148,7 @@ class SchemaRegistry:
         return [
             s.name
             for s in self.induced_slots(class_name)
-            if _annotation_value(s, HIPPO_UNIQUE)
+            if annotation_value(s, HIPPO_UNIQUE)
         ]
 
     def validate(self, instance: dict, target_class: str) -> list[str]:

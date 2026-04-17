@@ -1,279 +1,267 @@
-"""PostgreSQL DDL generator.
+"""PostgreSQL DDL generator using LinkML-backed SchemaRegistry.
 
-Adapts the base DDL generator for PostgreSQL dialect:
-- BOOLEAN instead of INTEGER for booleans
-- DOUBLE PRECISION instead of REAL for floats
-- JSONB for dict/list types
-- TIMESTAMPTZ for datetime
-- DATE for date
-- Partial index WHERE clauses use TRUE/FALSE not 1/0
-- FTS tables use tsvector/tsquery instead of FTS5 virtual tables
+Mirrors the SQLite DDL generator with PostgreSQL types and FTS handling based
+on tsvector/GIN indexes rather than FTS5 virtual tables.
 """
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
 from typing import Any, Optional
 
-from hippo.config.models import FieldDefinition, SchemaConfig
 from hippo.core.storage.ddl_generator import (
-    ColumnConstraint,
     ColumnDefinition,
+    DDLGenerator,
     ForeignKeyDefinition,
     IndexDefinition,
     TableDefinition,
 )
+from hippo.linkml_bridge import (
+    HIPPO_DEFAULT,
+    HIPPO_INDEX,
+    HIPPO_INDEX_PARTIAL,
+    HIPPO_UNIQUE,
+    SchemaRegistry,
+    annotation_value,
+)
 
 
 class PostgresDDLGenerator:
-    """Generates PostgreSQL DDL statements from schema configs."""
-
     TYPE_MAPPING = {
         "string": "TEXT",
         "integer": "INTEGER",
         "float": "DOUBLE PRECISION",
+        "double": "DOUBLE PRECISION",
+        "decimal": "NUMERIC",
         "boolean": "BOOLEAN",
         "date": "DATE",
         "datetime": "TIMESTAMPTZ",
-        "list": "JSONB",
-        "dict": "JSONB",
+        "time": "TIME",
         "uri": "TEXT",
-        "enum": "TEXT",
+        "uriorcurie": "TEXT",
+        "curie": "TEXT",
+        "ncname": "TEXT",
     }
 
-    def __init__(self):
-        self._table_definitions: dict[str, TableDefinition] = {}
+    IS_AVAILABLE_PREDICATE = "is_available = TRUE"
 
-    def generate(self, schemas: list[SchemaConfig]) -> list[str]:
-        self._table_definitions = {}
+    def __init__(self) -> None:
+        self._tables: dict[str, TableDefinition] = {}
 
-        schema_map = {s.name: s for s in schemas}
-
-        for schema in schemas:
-            self._generate_table(schema, schema_map)
-
-        ordered_tables = self._topological_sort()
-
-        ddl_statements = []
-        for table_name in ordered_tables:
-            table = self._table_definitions[table_name]
-            ddl_statements.append(self._generate_create_table(table))
-            for index in table.indexes:
-                ddl_statements.append(self._generate_create_index(table_name, index))
-
-        return ddl_statements
-
-    def _generate_table(
-        self, schema: SchemaConfig, schema_map: dict[str, SchemaConfig]
-    ) -> None:
-        if schema.name in self._table_definitions:
-            return
-
-        for base_name in schema.get_bases():
-            if base_name in schema_map:
-                self._generate_table(schema_map[base_name], schema_map)
-
-        table = TableDefinition(name=schema.name)
-
-        table.columns.append(
-            ColumnDefinition(
-                name="id",
-                column_type="TEXT",
-                not_null=True,
-                primary_key=True,
-            )
-        )
-
-        for field_def in schema.fields:
-            if field_def.name == "id":
+    def generate(self, registry: SchemaRegistry) -> list[str]:
+        self._tables = {}
+        sv = registry.schema_view
+        for class_name in registry.class_names():
+            cls = sv.get_class(class_name)
+            if cls is None or cls.abstract:
                 continue
-            col = ColumnDefinition(
-                name=field_def.name,
-                column_type=self._map_type(field_def.type),
-                not_null=field_def.required,
-                default=field_def.default,
-                primary_key=field_def.primary_key,
+            self._build_table(registry, class_name)
+        ordered = self._topological_sort()
+        statements: list[str] = []
+        for name in ordered:
+            table = self._tables[name]
+            statements.append(self._render_create_table(table))
+            for index in table.indexes:
+                statements.append(self._render_create_index(name, index))
+        return statements
+
+    def _build_table(
+        self, registry: SchemaRegistry, class_name: str
+    ) -> TableDefinition:
+        if class_name in self._tables:
+            return self._tables[class_name]
+        sv = registry.schema_view
+        cls = sv.get_class(class_name)
+        table = TableDefinition(name=class_name)
+
+        id_slot = registry.identifier_slot(class_name)
+        id_name = id_slot.name if id_slot is not None else "id"
+        table.columns.append(
+            ColumnDefinition(
+                name=id_name, column_type="TEXT", not_null=True, primary_key=True
             )
-            table.columns.append(col)
+        )
 
-            if field_def.unique:
-                table.unique_constraints.append([field_def.name])
-
-            if field_def.index:
-                index = IndexDefinition(
-                    name=f"idx_{schema.name}_{field_def.name}",
-                    columns=[field_def.name],
-                    partial_where="is_available = TRUE",
+        known_classes = set(registry.class_names())
+        for slot in registry.induced_slots(class_name):
+            if slot.name == id_name:
+                continue
+            rng = slot.range
+            col_type = (
+                "TEXT"
+                if rng in known_classes or rng is None
+                else self.TYPE_MAPPING.get(rng, "TEXT")
+            )
+            default = annotation_value(slot, HIPPO_DEFAULT)
+            if default is None and slot.ifabsent is not None:
+                default = slot.ifabsent
+            table.columns.append(
+                ColumnDefinition(
+                    name=slot.name,
+                    column_type=col_type,
+                    not_null=bool(slot.required),
+                    default=default,
                 )
-                table.indexes.append(index)
+            )
 
-            if field_def.references:
-                ref_table = field_def.references.get("table")
-                ref_column = field_def.references.get("column", "id")
-                on_delete = field_def.references.get("on_delete")
-                if ref_table:
-                    fk = ForeignKeyDefinition(
-                        columns=[field_def.name],
-                        references_table=ref_table,
-                        references_columns=[ref_column],
-                        on_delete=on_delete,
+            if annotation_value(slot, HIPPO_UNIQUE):
+                table.unique_constraints.append([slot.name])
+
+            if annotation_value(slot, HIPPO_INDEX):
+                partial = bool(annotation_value(slot, HIPPO_INDEX_PARTIAL))
+                table.indexes.append(
+                    IndexDefinition(
+                        name=f"idx_{class_name}_{slot.name}",
+                        columns=[slot.name],
+                        partial_where=self.IS_AVAILABLE_PREDICATE if partial else None,
                     )
-                    table.foreign_keys.append(fk)
-
-        table.columns.append(
-            ColumnDefinition(
-                name="is_available",
-                column_type="BOOLEAN",
-                not_null=True,
-                default=True,
-            )
-        )
-
-        table.columns.append(
-            ColumnDefinition(
-                name="superseded_by",
-                column_type="TEXT",
-                not_null=False,
-                default=None,
-            )
-        )
-
-        if schema.unique_constraints:
-            for constraint in schema.unique_constraints:
-                table.unique_constraints.append(constraint)
-
-        if schema.indexes:
-            for idx_def in schema.indexes:
-                idx = IndexDefinition(
-                    name=idx_def.get(
-                        "name",
-                        f"idx_{schema.name}_{'_'.join(idx_def.get('columns', []))}",
-                    ),
-                    columns=idx_def.get("columns", []),
-                    unique=idx_def.get("unique", False),
-                    partial_where=idx_def.get("where", "is_available = TRUE")
-                    if idx_def.get("partial")
-                    else None,
                 )
-                table.indexes.append(idx)
 
-        if schema.get_bases():
-            for base_name in schema.get_bases():
-                if base_name in schema_map:
-                    fk = ForeignKeyDefinition(
-                        columns=["id"],
-                        references_table=base_name,
+            if rng in known_classes:
+                table.foreign_keys.append(
+                    ForeignKeyDefinition(
+                        columns=[slot.name],
+                        references_table=rng,
                         references_columns=["id"],
+                    )
+                )
+
+        table.columns.append(
+            ColumnDefinition(
+                name="is_available", column_type="BOOLEAN", not_null=True, default=True
+            )
+        )
+        table.columns.append(
+            ColumnDefinition(
+                name="superseded_by", column_type="TEXT", not_null=False, default=None
+            )
+        )
+
+        for uk in (cls.unique_keys or {}).values():
+            slots = list(uk.unique_key_slots or [])
+            if slots:
+                table.unique_constraints.append(slots)
+
+        if cls.is_a:
+            parent_cls = sv.get_class(cls.is_a)
+            if parent_cls is not None and not parent_cls.abstract:
+                self._build_table(registry, cls.is_a)
+                table.foreign_keys.append(
+                    ForeignKeyDefinition(
+                        columns=[id_name],
+                        references_table=cls.is_a,
+                        references_columns=[id_name],
                         on_delete="CASCADE",
                     )
-                    table.foreign_keys.append(fk)
+                )
 
-        self._table_definitions[schema.name] = table
-
-    def _map_type(self, field_type: str) -> str:
-        return self.TYPE_MAPPING.get(field_type, "TEXT")
+        self._tables[class_name] = table
+        return table
 
     def _topological_sort(self) -> list[str]:
         visited: set[str] = set()
-        result: list[str] = []
+        ordered: list[str] = []
 
         def visit(name: str) -> None:
             if name in visited:
                 return
             visited.add(name)
-            table = self._table_definitions.get(name)
-            if table:
+            table = self._tables.get(name)
+            if table is not None:
                 for fk in table.foreign_keys:
-                    if fk.references_table in self._table_definitions:
+                    if fk.references_table in self._tables:
                         visit(fk.references_table)
-            result.append(name)
+            ordered.append(name)
 
-        for name in self._table_definitions:
+        for name in self._tables:
             visit(name)
+        return ordered
 
-        return result
-
-    def _generate_create_table(self, table: TableDefinition) -> str:
-        column_defs = []
+    def _render_create_table(self, table: TableDefinition) -> str:
+        pieces: list[str] = []
         pk_cols = [c.name for c in table.columns if c.primary_key]
 
         for col in table.columns:
-            col_def = f'"{col.name}" {col.column_type}'
+            sql = f'"{col.name}" {col.column_type}'
             if col.primary_key and len(pk_cols) == 1:
-                col_def += " PRIMARY KEY"
+                sql += " PRIMARY KEY"
             if col.not_null and not col.primary_key:
-                col_def += " NOT NULL"
+                sql += " NOT NULL"
             if col.default is not None:
-                col_def += f" DEFAULT {self._format_default(col.default)}"
-            column_defs.append(col_def)
+                sql += f" DEFAULT {self._format_default(col.default)}"
+            pieces.append(sql)
 
         for fk in table.foreign_keys:
-            fk_cols = ", ".join(f'"{c}"' for c in fk.columns)
-            ref_cols = ", ".join(f'"{c}"' for c in fk.references_columns)
-            fk_def = f'FOREIGN KEY ({fk_cols}) REFERENCES "{fk.references_table}"({ref_cols})'
+            cols = ", ".join(f'"{c}"' for c in fk.columns)
+            refs = ", ".join(f'"{c}"' for c in fk.references_columns)
+            fk_sql = f'FOREIGN KEY ({cols}) REFERENCES "{fk.references_table}"({refs})'
             if fk.on_delete:
-                fk_def += f" ON DELETE {fk.on_delete}"
-            column_defs.append(fk_def)
+                fk_sql += f" ON DELETE {fk.on_delete}"
+            pieces.append(fk_sql)
 
-        if pk_cols and len(pk_cols) > 1:
-            pk_str = ", ".join(f'"{c}"' for c in pk_cols)
-            column_defs.append(f"PRIMARY KEY ({pk_str})")
+        if len(pk_cols) > 1:
+            pk_sql = ", ".join(f'"{c}"' for c in pk_cols)
+            pieces.append(f"PRIMARY KEY ({pk_sql})")
 
         for unique_cols in table.unique_constraints:
-            unique_str = ", ".join(f'"{c}"' for c in unique_cols)
-            column_defs.append(f"UNIQUE ({unique_str})")
+            cols = ", ".join(f'"{c}"' for c in unique_cols)
+            pieces.append(f"UNIQUE ({cols})")
 
         return (
             f'CREATE TABLE IF NOT EXISTS "{table.name}" (\n    '
-            + ",\n    ".join(column_defs)
+            + ",\n    ".join(pieces)
             + "\n);"
         )
 
-    def _generate_create_index(self, table_name: str, index: IndexDefinition) -> str:
-        columns_str = ", ".join(f'"{c}"' for c in index.columns)
-
+    def _render_create_index(self, table_name: str, index: IndexDefinition) -> str:
+        cols = ", ".join(f'"{c}"' for c in index.columns)
         if index.partial_where:
-            return f'CREATE INDEX IF NOT EXISTS "{index.name}" ON "{table_name}" ({columns_str}) WHERE {index.partial_where};'
+            return (
+                f'CREATE INDEX IF NOT EXISTS "{index.name}" ON "{table_name}" '
+                f"({cols}) WHERE {index.partial_where};"
+            )
+        unique = "UNIQUE " if index.unique else ""
+        return (
+            f'CREATE {unique}INDEX IF NOT EXISTS "{index.name}" '
+            f'ON "{table_name}" ({cols});'
+        )
 
-        unique_str = "UNIQUE " if index.unique else ""
-        return f'CREATE {unique_str}INDEX IF NOT EXISTS "{index.name}" ON "{table_name}" ({columns_str});'
-
-    def _format_default(self, default: Any) -> str:
-        if default is None:
+    @staticmethod
+    def _format_default(value: Any) -> str:
+        if value is None:
             return "NULL"
-        elif isinstance(default, bool):
-            return "TRUE" if default else "FALSE"
-        elif isinstance(default, str):
-            return f"'{default}'"
-        elif isinstance(default, (int, float)):
-            return str(default)
-        else:
-            return f"'{str(default)}'"
+        if isinstance(value, bool):
+            return "TRUE" if value else "FALSE"
+        if isinstance(value, (int, float)):
+            return str(value)
+        return f"'{value}'"
 
 
 class PostgresFTSMigrationPlanner:
-    """Migration planner for PostgreSQL FTS tables.
+    """Plans PostgreSQL FTS tables (tsvector + GIN) from ``hippo_search`` annotations."""
 
-    Creates regular tables with tsvector columns and GIN indexes
-    instead of SQLite FTS5 virtual tables.
-    """
-
-    def __init__(self):
+    def __init__(self) -> None:
         self._fts_tables: dict[str, list[dict[str, str]]] = {}
 
-    def add_schema(self, schema: SchemaConfig) -> None:
-        fts_tables = []
-        for field_def in schema.get_fts_fields():
-            table_name = f"fts_{schema.name.lower()}_{field_def.name.lower()}"
-            fts_tables.append(
+    def add_class(self, registry: SchemaRegistry, class_name: str) -> None:
+        entries: list[dict[str, str]] = []
+        for slot, _mode in registry.searchable_slots(class_name):
+            entries.append(
                 {
-                    "table_name": table_name,
-                    "entity_type": schema.name,
-                    "field_name": field_def.name,
+                    "table_name": f"fts_{class_name.lower()}_{slot.name.lower()}",
+                    "entity_type": class_name,
+                    "field_name": slot.name,
                 }
             )
-        if fts_tables:
-            self._fts_tables[schema.name] = fts_tables
+        if entries:
+            self._fts_tables[class_name] = entries
+
+    def add_registry(self, registry: SchemaRegistry) -> None:
+        sv = registry.schema_view
+        for class_name in registry.class_names():
+            cls = sv.get_class(class_name)
+            if cls is None or cls.abstract:
+                continue
+            self.add_class(registry, class_name)
 
     def get_fts_tables_for_entity_type(
         self, entity_type: str
@@ -284,12 +272,11 @@ class PostgresFTSMigrationPlanner:
         return self._fts_tables
 
     def generate_fts_ddl(self) -> list[str]:
-        """Generate PostgreSQL FTS table DDL with tsvector and GIN indexes."""
-        ddl_statements = []
-        for entity_type, fts_tables in self._fts_tables.items():
-            for fts_meta in fts_tables:
-                table_name = fts_meta["table_name"]
-                ddl_statements.append(
+        statements: list[str] = []
+        for entries in self._fts_tables.values():
+            for meta in entries:
+                table_name = meta["table_name"]
+                statements.append(
                     f"""CREATE TABLE IF NOT EXISTS "{table_name}" (
     "entity_id" TEXT NOT NULL PRIMARY KEY,
     "content" TEXT NOT NULL DEFAULT '',
@@ -297,12 +284,12 @@ class PostgresFTSMigrationPlanner:
         GENERATED ALWAYS AS (to_tsvector('english', "content")) STORED
 );"""
                 )
-                ddl_statements.append(
+                statements.append(
                     f'CREATE INDEX IF NOT EXISTS "idx_{table_name}_tsvector" '
                     f'ON "{table_name}" USING GIN ("content_tsvector");'
                 )
-                ddl_statements.append(
+                statements.append(
                     f'CREATE INDEX IF NOT EXISTS "idx_{table_name}_trigram" '
                     f'ON "{table_name}" USING GIN ("content" gin_trgm_ops);'
                 )
-        return ddl_statements
+        return statements

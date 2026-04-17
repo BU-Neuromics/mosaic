@@ -1,12 +1,14 @@
+"""Integration tests for the ``hippo migrate`` CLI command."""
+
 import sqlite3
 import tempfile
 from pathlib import Path
 
 import pytest
-import yaml
 from typer.testing import CliRunner
 
 from hippo.cli.main import app
+from tests.support.linkml_schemas import write_schema_file
 
 runner = CliRunner()
 
@@ -23,7 +25,6 @@ def temp_project_dir():
         db_path = data_dir / "hippo.db"
         conn = sqlite3.connect(str(db_path))
         cursor = conn.cursor()
-
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS entities (
                 id TEXT PRIMARY KEY,
@@ -39,7 +40,8 @@ def temp_project_dir():
             CREATE TABLE IF NOT EXISTS test_entity (
                 id TEXT PRIMARY KEY,
                 name TEXT,
-                is_available INTEGER NOT NULL DEFAULT 1
+                is_available INTEGER NOT NULL DEFAULT 1,
+                superseded_by TEXT
             )
         """)
         conn.commit()
@@ -71,32 +73,37 @@ class TestMigrateCommand:
 
     def test_migrate_no_changes_detected(self, schema_dir, temp_project_dir):
         db_path = temp_project_dir / "data" / "hippo.db"
-
-        schema_content = {
-            "name": "test_entity",
-            "version": "1.0.0",
-            "fields": [{"name": "name", "type": "string"}],
-        }
-        schema_file = schema_dir / "test.yaml"
-        schema_file.write_text(yaml.dump(schema_content))
-
+        write_schema_file(
+            schema_dir,
+            classes={
+                "test_entity": {
+                    "attributes": {
+                        "id": {"identifier": True},
+                        "name": {"range": "string"},
+                    }
+                }
+            },
+            schema_name="test",
+        )
         result = runner.invoke(
             app, ["migrate", "--schema-dir", str(schema_dir), "--db-path", str(db_path)]
         )
-
         assert "No schema changes detected" in result.output
 
     def test_migrate_preview_new_table(self, schema_dir, temp_project_dir):
         db_path = temp_project_dir / "data" / "hippo.db"
-
-        schema_content = {
-            "name": "new_entity",
-            "version": "1.0.0",
-            "fields": [{"name": "name", "type": "string", "required": True}],
-        }
-        schema_file = schema_dir / "new_entity.yaml"
-        schema_file.write_text(yaml.dump(schema_content))
-
+        write_schema_file(
+            schema_dir,
+            classes={
+                "new_entity": {
+                    "attributes": {
+                        "id": {"identifier": True},
+                        "name": {"range": "string", "required": True},
+                    }
+                }
+            },
+            schema_name="new_entity",
+        )
         result = runner.invoke(
             app,
             [
@@ -108,60 +115,30 @@ class TestMigrateCommand:
                 "--preview",
             ],
         )
-
         assert "New tables to create" in result.output
         assert "new_entity" in result.output
         assert "CREATE TABLE" in result.output
-
-    def test_migrate_with_duplicate_schema(self, schema_dir, temp_project_dir):
-        db_path = temp_project_dir / "data" / "hippo.db"
-
-        schema_content = {"name": "entity1", "version": "1.0.0", "fields": []}
-        schema_file1 = schema_dir / "entity1.yaml"
-        schema_file1.write_text(yaml.dump(schema_content))
-
-        schema_file2 = schema_dir / "entity1_dup.yaml"
-        schema_file2.write_text(yaml.dump(schema_content))
-
-        result = runner.invoke(
-            app, ["migrate", "--schema-dir", str(schema_dir), "--db-path", str(db_path)]
-        )
-
-        assert "Duplicate entity type definition" in result.output
-
-    def test_migrate_with_invalid_field_type(self, schema_dir, temp_project_dir):
-        db_path = temp_project_dir / "data" / "hippo.db"
-
-        schema_content = {
-            "name": "entity1",
-            "version": "1.0.0",
-            "fields": [{"name": "field1", "type": "invalid_type"}],
-        }
-        schema_file = schema_dir / "entity1.yaml"
-        schema_file.write_text(yaml.dump(schema_content))
-
-        result = runner.invoke(
-            app, ["migrate", "--schema-dir", str(schema_dir), "--db-path", str(db_path)]
-        )
-
-        assert result.exit_code == 1
 
 
 class TestPreviewModeOutput:
     def test_preview_mode_shows_ddl(self, schema_dir, temp_project_dir):
         db_path = temp_project_dir / "data" / "hippo.db"
-
-        schema_content = {
-            "name": "preview_test",
-            "version": "1.0.0",
-            "fields": [
-                {"name": "name", "type": "string"},
-                {"name": "count", "type": "integer", "index": True},
-            ],
-        }
-        schema_file = schema_dir / "preview_test.yaml"
-        schema_file.write_text(yaml.dump(schema_content))
-
+        write_schema_file(
+            schema_dir,
+            classes={
+                "preview_test": {
+                    "attributes": {
+                        "id": {"identifier": True},
+                        "name": {"range": "string"},
+                        "count": {
+                            "range": "integer",
+                            "annotations": {"hippo_index": True},
+                        },
+                    }
+                }
+            },
+            schema_name="preview_test",
+        )
         result = runner.invoke(
             app,
             [
@@ -173,22 +150,24 @@ class TestPreviewModeOutput:
                 "--preview",
             ],
         )
-
         assert "DDL Statements (Preview)" in result.output
         assert "CREATE TABLE" in result.output
         assert "CREATE INDEX" in result.output
 
     def test_preview_does_not_modify_db(self, schema_dir, temp_project_dir):
         db_path = temp_project_dir / "data" / "hippo.db"
-
-        schema_content = {
-            "name": "preview_no_change",
-            "version": "1.0.0",
-            "fields": [{"name": "name", "type": "string"}],
-        }
-        schema_file = schema_dir / "preview_no_change.yaml"
-        schema_file.write_text(yaml.dump(schema_content))
-
+        write_schema_file(
+            schema_dir,
+            classes={
+                "preview_no_change": {
+                    "attributes": {
+                        "id": {"identifier": True},
+                        "name": {"range": "string"},
+                    }
+                }
+            },
+            schema_name="preview_no_change",
+        )
         result = runner.invoke(
             app,
             [
@@ -200,13 +179,14 @@ class TestPreviewModeOutput:
                 "--preview",
             ],
         )
-
         assert "Preview complete. No changes applied" in result.output
 
         conn = sqlite3.connect(str(db_path))
-        cursor = conn.cursor()
-        cursor.execute("SELECT name FROM sqlite_master WHERE type='table'")
-        tables = [row[0] for row in cursor.fetchall()]
+        tables = [
+            row[0]
+            for row in conn.execute(
+                "SELECT name FROM sqlite_master WHERE type='table'"
+            )
+        ]
         conn.close()
-
         assert "preview_no_change" not in tables
