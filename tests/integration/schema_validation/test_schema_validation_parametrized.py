@@ -10,11 +10,10 @@ from hippo.core.exceptions import ValidationFailure
 
 
 @pytest.fixture
-def entity_type_fixtures(sample_schemas):
+def entity_type_fixtures():
     """Provide entity type configurations for parametrized tests."""
     return {
         "sample": {
-            "schema": sample_schemas["sample"],
             "valid_data": {
                 "id": "param-sample-001",
                 "name": "Param Test Sample",
@@ -23,7 +22,6 @@ def entity_type_fixtures(sample_schemas):
             "required_fields": ["id", "name", "quantity"],
         },
         "project": {
-            "schema": sample_schemas["project"],
             "valid_data": {
                 "id": "param-project-001",
                 "name": "Param Test Project",

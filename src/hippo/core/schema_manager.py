@@ -1,33 +1,36 @@
-"""SchemaManager - Schema loading, validation pipeline, and FTS metadata facade."""
+"""SchemaManager — schema access, validation pipeline, and FTS metadata facade.
 
-from typing import Any, Optional
+Operates on a LinkML-backed :class:`SchemaRegistry`. All schema introspection
+(FTS slots, reference slots, search capabilities) reads from LinkML
+``annotations:`` via the registry.
+"""
 
-from hippo.config.models import SchemaConfig
+from __future__ import annotations
+
+from typing import Optional
+
 from hippo.core.pipeline import ValidationPipeline
 from hippo.core.storage.adapters.sqlite_adapter import SQLiteAdapter
-from hippo.core.storage.fts import FTSTableMetadata
+from hippo.core.storage.fts import FTSFieldMetadata, FTSTableMetadata
 from hippo.core.validation.validators import (
     ValidationResult,
     WriteOperation,
     WriteValidator,
 )
+from hippo.linkml_bridge import SchemaRegistry
 
 
 class SchemaManager:
-    """Manages schema loading, validation pipeline, DSL compilation, and FTS metadata.
-
-    This facade owns all schema-related state and validation logic extracted
-    from HippoClient.
-    """
+    """Owns schema access, the write-validation pipeline, and FTS metadata."""
 
     def __init__(
         self,
-        schemas: Optional[dict[str, SchemaConfig]] = None,
+        registry: Optional[SchemaRegistry] = None,
         pipeline: Optional[ValidationPipeline] = None,
         bypass_validation: bool = False,
         storage: Optional[SQLiteAdapter] = None,
     ) -> None:
-        self._schemas = schemas
+        self._registry = registry
         self._pipeline = pipeline
         self._bypass_validation = bypass_validation
         self._storage = storage
@@ -36,8 +39,8 @@ class SchemaManager:
         self._validate_search_capabilities()
 
     @property
-    def schemas(self) -> Optional[dict[str, SchemaConfig]]:
-        return self._schemas
+    def registry(self) -> Optional[SchemaRegistry]:
+        return self._registry
 
     @property
     def pipeline(self) -> Optional[ValidationPipeline]:
@@ -55,72 +58,86 @@ class SchemaManager:
     def fts_table_metadata(self) -> dict[str, list[FTSTableMetadata]]:
         return self._fts_table_metadata
 
+    def _non_abstract_class_names(self) -> list[str]:
+        if self._registry is None:
+            return []
+        sv = self._registry.schema_view
+        return [
+            name
+            for name in self._registry.class_names()
+            if not (sv.get_class(name) and sv.get_class(name).abstract)
+        ]
+
     def _build_fts_metadata(self) -> None:
-        """Populate _fts_table_metadata from self._schemas."""
-        if not self._schemas:
+        if self._registry is None:
             return
-        for entity_type, schema in self._schemas.items():
-            fts_tables = []
-            for field in schema.fields:
-                if field.search and "fts" in field.search.lower():
-                    meta = FTSTableMetadata.from_field(field, entity_type=entity_type)
-                    fts_tables.append(meta)
+        for class_name in self._non_abstract_class_names():
+            fts_tables: list[FTSTableMetadata] = []
+            for slot, mode in self._registry.searchable_slots(class_name):
+                fts_tables.append(
+                    FTSTableMetadata(
+                        table_name=FTSTableMetadata.generate_table_name(
+                            class_name, slot.name
+                        ),
+                        source_entity_type=class_name,
+                        fts_version=mode,
+                        content_table="entities",
+                        content_rowid="rowid",
+                        fields=[
+                            FTSFieldMetadata(
+                                field_name=slot.name,
+                                field_type=slot.range or "string",
+                                search_type=mode,
+                                source_entity_type=class_name,
+                            )
+                        ],
+                    )
+                )
             if fts_tables:
-                self._fts_table_metadata[entity_type] = fts_tables
+                self._fts_table_metadata[class_name] = fts_tables
 
     def _validate_search_capabilities(self) -> None:
-        """Validate that the storage adapter supports all search modes declared in schemas."""
         from hippo.core.exceptions import SearchCapabilityError
 
-        if self._storage is None:
-            return
-
-        if self._schemas is None:
+        if self._storage is None or self._registry is None:
             return
 
         adapter_capabilities = self._storage.search_capabilities()
-
         declared_modes: set[str] = set()
-        for schema in self._schemas.values():
-            for field in schema.fields:
-                if field.search is not None:
-                    normalized_mode = (
-                        "fts" if field.search in ("fts", "fts5") else field.search
-                    )
-                    declared_modes.add(normalized_mode)
+        for class_name in self._non_abstract_class_names():
+            for _slot, mode in self._registry.searchable_slots(class_name):
+                normalized = "fts" if mode in ("fts", "fts5") else mode
+                declared_modes.add(normalized)
 
-        unsupported_modes = declared_modes - adapter_capabilities
-        if unsupported_modes:
+        unsupported = declared_modes - adapter_capabilities
+        if unsupported:
             raise SearchCapabilityError(
-                message=f"Storage adapter does not support search modes: {', '.join(sorted(unsupported_modes))}",
-                unsupported_modes=list(unsupported_modes),
+                message=(
+                    "Storage adapter does not support search modes: "
+                    + ", ".join(sorted(unsupported))
+                ),
+                unsupported_modes=list(unsupported),
             )
 
     def schema_references(self, entity_type: str) -> list[dict]:
-        """Return reference edges for an entity type from the loaded schema."""
-        if not self._schemas or entity_type not in self._schemas:
+        if self._registry is None or not self._registry.has_class(entity_type):
             return []
-        schema = self._schemas[entity_type]
         return [
-            {"field": field.name, "target_entity_type": field.references["entity_type"]}
-            for field in schema.fields
-            if field.references and "entity_type" in field.references
+            {"field": slot_name, "target_entity_type": target}
+            for slot_name, target in self._registry.reference_slots(entity_type)
         ]
 
     def get_fts_tables_for_entity_type(
         self, entity_type: str
     ) -> list[FTSTableMetadata]:
-        """Get FTS table metadata for an entity type."""
         return self._fts_table_metadata.get(entity_type, [])
 
     def add_validator(self, validator: WriteValidator) -> None:
-        """Add a validator to the pipeline. Creates pipeline if needed."""
         if self._pipeline is None:
             self._pipeline = ValidationPipeline()
         self._pipeline.add_validator(validator)
 
     def validate(self, operation: WriteOperation) -> ValidationResult:
-        """Validate a write operation using the validation pipeline."""
         if self._bypass_validation or self._pipeline is None:
             return ValidationResult(is_valid=True, errors=[])
         return self._pipeline.execute(operation)

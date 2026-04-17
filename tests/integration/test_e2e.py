@@ -35,23 +35,18 @@ from hippo.serve.routers.health import router as health_router
 # Config fixtures
 # ---------------------------------------------------------------------------
 
-_SCHEMA_YAML = {
-    "entities": [
-        {
-            "name": "Sample",
-            "version": "1.0",
-            "fields": [
-                {"name": "name", "type": "string", "required": True},
-                {"name": "tissue", "type": "string", "required": True},
-                {
-                    "name": "notes",
-                    "type": "string",
-                    "required": False,
-                    "search": "fts5",
-                },
-            ],
+_SCHEMA_CLASSES = {
+    "Sample": {
+        "attributes": {
+            "id": {"identifier": True, "required": True},
+            "name": {"range": "string", "required": True},
+            "tissue": {"range": "string", "required": True},
+            "notes": {
+                "range": "string",
+                "annotations": {"hippo_search": "fts5"},
+            },
         }
-    ]
+    }
 }
 
 # CEL rule: name must match ^S\d{3}$
@@ -71,7 +66,11 @@ _VALIDATORS_YAML = {
 @pytest.fixture()
 def tmp_hippo(tmp_path: Path) -> Path:
     """Create a minimal Hippo project in a temp directory."""
-    (tmp_path / "schema.yaml").write_text(yaml.dump(_SCHEMA_YAML))
+    from tests.support.linkml_schemas import write_schema_file
+
+    schemas_dir = tmp_path / "schemas"
+    schemas_dir.mkdir()
+    write_schema_file(schemas_dir, _SCHEMA_CLASSES, schema_name="sample")
     (tmp_path / "validators.yaml").write_text(yaml.dump(_VALIDATORS_YAML))
     return tmp_path
 
@@ -107,6 +106,8 @@ def _make_client(
     fts: bool = False,
 ) -> HippoClient:
     """Instantiate a HippoClient backed by a real SQLite DB."""
+    from hippo.linkml_bridge import SchemaRegistry
+
     db_path = tmp_hippo / "hippo.db"
     storage = SQLiteAdapter(str(db_path))
 
@@ -116,47 +117,19 @@ def _make_client(
         cel = CELWriteValidator(validators_path=str(tmp_hippo / "validators.yaml"))
         pipeline.add_validator(cel)
 
-    # Parse schema from YAML file and pass to HippoClient
-    schema_file = tmp_hippo / "schema.yaml"
-    with open(schema_file, "r") as f:
-        schema_yaml = yaml.safe_load(f)
-
-    # Extract entity schemas
-    entities = schema_yaml.get("entities", [])
-    schemas = {}
-    for entity in entities:
-        from hippo.config.models import SchemaConfig
-
-        schemas[entity["name"]] = SchemaConfig(**entity)
-
-    client = HippoClient(storage=storage, pipeline=pipeline, schemas=schemas)
+    registry = SchemaRegistry.from_path(tmp_hippo / "schemas")
+    client = HippoClient(storage=storage, pipeline=pipeline, registry=registry)
 
     if fts:
-        # The FTS metadata will be auto-populated from the schema now
-        # Ensure the FTS virtual table exists in the DB - needs to be done after schema processing
         import sqlite3
 
-        # Get all entity types that have FTS fields from our current schemas
-        from hippo.core.storage.fts import FTSTableMetadata
-
-        fts_tables = []
-        if schemas:
-            for entity_type, schema in schemas.items():
-                for field in schema.fields:
-                    if field.search and "fts" in field.search.lower():
-                        # Create the metadata that would be created by our implementation
-                        meta = FTSTableMetadata.from_field(
-                            field, entity_type=entity_type
-                        )
-                        fts_tables.append(meta)
-
         conn = sqlite3.connect(str(db_path))
-        for fts_meta in fts_tables:
-            table_name = fts_meta.table_name
-            conn.execute(
-                f"CREATE VIRTUAL TABLE IF NOT EXISTS {table_name} "
-                "USING fts5(entity_id, content)"
-            )
+        for tables in client._fts_table_metadata.values():
+            for meta in tables:
+                conn.execute(
+                    f"CREATE VIRTUAL TABLE IF NOT EXISTS {meta.table_name} "
+                    "USING fts5(entity_id, content)"
+                )
         conn.commit()
         conn.close()
 
@@ -250,18 +223,21 @@ class TestValidationBlocks:
 # ---------------------------------------------------------------------------
 
 
+def _add_batch_field_to_schema(tmp_hippo: Path) -> None:
+    """Evolve the LinkML schema by adding an optional ``batch`` attribute."""
+    schema_file = tmp_hippo / "schemas" / "sample.yaml"
+    doc = yaml.safe_load(schema_file.read_text())
+    doc["classes"]["Sample"]["attributes"]["batch"] = {"range": "string"}
+    schema_file.write_text(yaml.safe_dump(doc, sort_keys=False))
+
+
 class TestAdditiveFieldAddition:
     def test_existing_entity_survives_new_optional_field(self, tmp_hippo):
         client1 = _make_client(tmp_hippo)
         result = client1.create("Sample", {"name": "S001", "tissue": "DLPFC"})
         entity_id = result["id"]
 
-        # Add optional "batch" field to schema (simulates schema evolution)
-        schema = yaml.safe_load((tmp_hippo / "schema.yaml").read_text())
-        schema["entities"][0]["fields"].append(
-            {"name": "batch", "type": "string", "required": False}
-        )
-        (tmp_hippo / "schema.yaml").write_text(yaml.dump(schema))
+        _add_batch_field_to_schema(tmp_hippo)
 
         # Re-open the same DB — simulates service restart after schema update
         client2 = _make_client(tmp_hippo)
@@ -273,11 +249,7 @@ class TestAdditiveFieldAddition:
         assert _data(fetched).get("batch") is None
 
     def test_new_entity_can_use_new_field(self, tmp_hippo):
-        schema = yaml.safe_load((tmp_hippo / "schema.yaml").read_text())
-        schema["entities"][0]["fields"].append(
-            {"name": "batch", "type": "string", "required": False}
-        )
-        (tmp_hippo / "schema.yaml").write_text(yaml.dump(schema))
+        _add_batch_field_to_schema(tmp_hippo)
 
         client = _make_client(tmp_hippo)
         result = client.create(

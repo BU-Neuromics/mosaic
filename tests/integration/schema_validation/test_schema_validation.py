@@ -201,65 +201,35 @@ class TestConstraintValidation:
     for future implementation.
     """
 
-    def test_string_exceeds_max_length_fails(
-        self, hippo_client_with_validation, sample_schemas
+    def test_string_exceeds_max_length_permitted(
+        self, hippo_client_with_validation
     ):
-        """Given a string exceeding max_length constraint, when creating an entity,
-        then the operation should fail with a constraint violation error.
+        """The current registry does not declare max_length; long strings pass.
 
-        NOTE: Current schema validator does not implement max_length validation.
-        This test documents expected behavior for future implementation."""
-        from hippo.config.models import FieldDefinition, SchemaConfig
-
-        sample_schemas["sample_with_constraints"] = SchemaConfig(
-            name="sample_with_constraints",
-            version="1.0.0",
-            fields=[
-                FieldDefinition(
-                    name="id", type="string", required=True, primary_key=True
-                ),
-                FieldDefinition(
-                    name="short_code",
-                    type="string",
-                    required=True,
-                ),
-            ],
-        )
-
+        Documents current behavior; future work may add pattern/length bounds
+        via LinkML's native slot metadata (``pattern``, ``maximum_value``).
+        """
         data = {
             "id": "sample-constraint-1",
             "short_code": "a" * 1000,
         }
-        result = hippo_client_with_validation.create("sample_with_constraints", data)
+        result = hippo_client_with_validation.create(
+            "sample_with_constraints", data
+        )
         assert result["id"] == data["id"]
 
-    def test_list_exceeds_max_items_fails(
-        self, hippo_client_with_validation, sample_schemas
+    def test_list_exceeds_max_items_permitted(
+        self, hippo_client_with_validation
     ):
-        """Given a list exceeding max_items constraint, when creating an entity,
-        then the operation should fail with a constraint violation error."""
-        from hippo.config.models import FieldDefinition, SchemaConfig
-
-        sample_schemas["sample_with_constraints"] = SchemaConfig(
-            name="sample_with_constraints",
-            version="1.0.0",
-            fields=[
-                FieldDefinition(
-                    name="id", type="string", required=True, primary_key=True
-                ),
-                FieldDefinition(
-                    name="tags",
-                    type="list",
-                    required=False,
-                ),
-            ],
-        )
-
+        """The current registry does not declare multivalued-cardinality bounds."""
         data = {
             "id": "sample-constraint-2",
+            "short_code": "abc",
             "tags": ["tag"] * 100,
         }
-        result = hippo_client_with_validation.create("sample_with_constraints", data)
+        result = hippo_client_with_validation.create(
+            "sample_with_constraints", data
+        )
         assert result["id"] == data["id"]
 
 
@@ -368,29 +338,6 @@ class TestListFieldValidation:
 class TestDictFieldValidation:
     """Tests for dict/object field validation."""
 
-    def test_valid_dict_succeeds(self, hippo_client_with_validation):
-        """Given a valid dict value, when creating an entity,
-        then the operation should succeed."""
-        data = {
-            "id": "sample-dict-1",
-            "name": "Test",
-            "quantity": 1,
-            "metadata": {"key1": "value1", "key2": 42},
-        }
-        result = hippo_client_with_validation.create("sample", data)
-        assert result["metadata"] == {"key1": "value1", "key2": 42}
-
-    def test_string_in_dict_field_fails(self, hippo_client_with_validation):
-        """Given a string value in a dict field, when creating an entity,
-        then the operation should fail."""
-        data = {
-            "id": "sample-dict-err",
-            "name": "Test",
-            "quantity": 1,
-            "metadata": "not-a-dict",
-        }
-        with pytest.raises(ValidationFailure) as exc_info:
-            hippo_client_with_validation.create("sample", data)
-        error_msg = str(exc_info.value)
-        assert "metadata" in error_msg.lower()
-        assert "object" in error_msg.lower()
+    # Note: LinkML has no native "dict" slot type. Historical tests that
+    # asserted dict/object validation have been removed; use structured
+    # classes or ``range: string`` + JSON-encoded values instead.

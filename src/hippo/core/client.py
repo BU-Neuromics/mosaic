@@ -15,7 +15,7 @@ from hippo.core.validation.validators import (
     WriteOperation,
     WriteValidator,
 )
-from hippo.config.models import SchemaConfig
+from hippo.linkml_bridge import SchemaRegistry
 
 
 class HippoClient:
@@ -26,8 +26,6 @@ class HippoClient:
     - ProvenanceService: version history, audit trail, supersession
     - QueryService: entity queries, FTS search, relationship traversal
     - IngestionService: entity writes (create, update, upsert, delete)
-
-    All existing public API signatures are preserved for backwards compatibility.
     """
 
     def __init__(
@@ -35,7 +33,7 @@ class HippoClient:
         pipeline: Optional[ValidationPipeline] = None,
         bypass_validation: bool = False,
         storage: Optional[SQLiteAdapter] = None,
-        schemas: Optional[dict[str, SchemaConfig]] = None,
+        registry: Optional[SchemaRegistry] = None,
     ) -> None:
         """Initialize HippoClient.
 
@@ -44,14 +42,12 @@ class HippoClient:
                 a default pipeline will be created when needed.
             bypass_validation: DEPRECATED. If True, skips validation pipeline.
                 This parameter is deprecated and will be removed in a future version.
-            storage: Storage adapter for persistence. If not provided,
-                a default SQLite adapter will be created.
-            schemas: Dictionary of schema configurations keyed by entity type.
-                Used for search capability validation at startup.
+            storage: Storage adapter for persistence.
+            registry: LinkML-backed schema registry. Used for schema
+                introspection, write-time validation, and FTS metadata.
         """
-        # Initialize facades
         self._schema_manager = SchemaManager(
-            schemas=schemas,
+            registry=registry,
             pipeline=pipeline,
             bypass_validation=bypass_validation,
             storage=storage,
@@ -67,11 +63,10 @@ class HippoClient:
             schema_manager=self._schema_manager,
         )
 
-        # Keep direct references for property accessors (backwards compat)
         self._storage = storage
         self._pipeline = pipeline
         self._bypass_validation = bypass_validation
-        self._schemas = schemas
+        self._registry = registry
         self._fts_table_metadata = self._schema_manager.fts_table_metadata
 
     # -- Property accessors (backwards compatibility) --
