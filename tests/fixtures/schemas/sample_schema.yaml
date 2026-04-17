@@ -1,0 +1,59 @@
+id: https://example.org/hippo/test/sample
+name: sample_schema
+description: Minimal LinkML schema exercising Hippo-relevant features.
+
+prefixes:
+  linkml: https://w3id.org/linkml/
+
+imports:
+  - linkml:types
+
+default_range: string
+
+classes:
+  Entity:
+    abstract: true
+    attributes:
+      id:
+        identifier: true
+        range: string
+        required: true
+
+  Project:
+    is_a: Entity
+    attributes:
+      name:
+        required: true
+        annotations:
+          hippo_search: fts5
+      description:
+        annotations:
+          hippo_search: fts5
+
+  Sample:
+    is_a: Entity
+    attributes:
+      name:
+        required: true
+        annotations:
+          hippo_search: fts5
+      project_id:
+        range: Project
+        annotations:
+          hippo_index: true
+      collected_at:
+        range: datetime
+        annotations:
+          hippo_index: true
+          hippo_index_partial: true
+      status:
+        range: SampleStatus
+      volume_ml:
+        range: float
+
+enums:
+  SampleStatus:
+    permissible_values:
+      active:
+      archived:
+      distributed:

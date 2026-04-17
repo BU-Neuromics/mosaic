@@ -16,6 +16,9 @@ dependencies = [
     "fastapi",
     "uvicorn[standard]",
     "common-expression-language",
+    "linkml>=1.8",
+    "linkml-runtime>=1.8",
+    "linkml-store>=0.3",
 ]
 
 [project.optional-dependencies]
