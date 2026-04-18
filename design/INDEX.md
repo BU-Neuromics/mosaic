@@ -5,7 +5,7 @@
 **Component:** Metadata Tracking Service (MTS)  
 **Version:** 0.1 — Implementation Ready  
 **Status:** Ready for implementation  
-**In planning:** LinkML-centric redesign — see [§ LinkML-Centric Redesign (Proposed)](#linkml-centric-redesign-proposed) below.
+**LinkML-centric redesign:** Approved 2026-04-18. See `sec9_linkml_redesign.md` (authoritative design) and `sec9_decisions.md` (drafting decision log). Pre-redesign state preserved at git tag `design-pre-linkml`. Section revisions land coordinated with each OpenSpec change per 9.12.
 
 ---
 
@@ -22,6 +22,8 @@
 | `sec6_provenance.md` | 6. Provenance & Audit | ✅ Draft v0.1 | Event model, structured context, storage, history API, retention |
 | `sec7_nfr.md` | 7. Non-Functional Requirements | ✅ Draft v0.1 | Performance targets, scalability tiers, reliability, schema sync roadmap |
 | `sec8_auth_integration.md` | 8. Authentication & Authorization Integration | ✅ Draft v0.1 | Bridge-aware `AuthMiddleware` impl, actor propagation, audit trail split |
+| `sec9_linkml_redesign.md` | 9. LinkML-Centric Redesign | ✅ Approved 2026-04-18 | Three-layer schema stack, first-class `Process`, PROV-O-aligned `ProvenanceRecord`, UUID identity model, namespace-aware typed client |
+| `sec9_decisions.md` | 9. (Companion) Decisions Log | ✅ Approved 2026-04-18 | Drafting decisions with alternatives, rationale, revert paths |
 | `appendix_a_example_schema_omics.md` | Appendix A. Example Schema (Omics) | ✅ Draft v0.1 | Complete LinkML schema with `search:`, polymorphic extension example |
 | `appendix_b_implementation_guide.md` | Appendix B. Implementation Guide | ✅ Draft v0.1 | Build order, module map, error hierarchy, invariants, test strategy, OpenSpec mapping |
 | `reference_hippo_yaml.md` | Reference: `hippo.yaml` Config Schema | ✅ Draft v0.1 | All valid keys, types, defaults, env var substitution, minimal configs |
@@ -30,9 +32,9 @@
 
 ---
 
-## LinkML-Centric Redesign (Proposed)
+## LinkML-Centric Redesign (Approved — Implementation Underway)
 
-**Status:** Proposal — not yet approved. Supersedes no content until this block is accepted and `sec9_linkml_redesign.md` is drafted and reviewed.
+**Status:** Approved 2026-04-18. `sec9_linkml_redesign.md` is the authoritative design; `sec9_decisions.md` captures drafting decisions. This block is the high-level treatment plan; specific design claims are owned by sec9. Section revisions land coordinated with each OpenSpec change (see sec9 §9.12).
 
 ### Motivation
 
@@ -44,7 +46,7 @@ Recent refactors (`delete SchemaParser/SchemaConfig/FieldDefinition`, `swap DDL/
 |---|---|
 | `sec9_linkml_redesign.md` | Vision doc — three-layer stack, provenance-as-LinkML-class, migration narrative, tradeoffs |
 | `reference_hippo_core.md` | Reference for `hippo_core.yaml` (Entity, ProvenanceRecord, Status/Operation enums, Validator) |
-| `reference_hippo_ext.md` | Reference for `hippo_ext.yaml` — the `hippo_*` annotation vocabulary (`hippo_unique`, `hippo_index`, `hippo_index_partial`, `hippo_search`, `hippo_default`, …) |
+| `reference_hippo_ext.md` | Reference for `hippo_ext.yaml` — the `hippo_*` annotation vocabulary (`hippo_unique`, `hippo_index`, `hippo_index_partial`, `hippo_search`, `hippo_append_only`, `hippo_summary_view`, `hippo_accessor`) |
 
 ### Per-Section Revision Plan
 
@@ -89,13 +91,13 @@ New decisions to be introduced in sec9 (preview):
 - `hippo_*` annotations formalized as a versioned LinkML extension vocabulary
 - Typed Pydantic-generated client available alongside generic `HippoClient`
 
-### Next Steps
+### Progress
 
-1. Review and approve this block.
-2. Tag `design-pre-linkml` on current HEAD.
-3. Draft `sec9_linkml_redesign.md` via the `doc-coauthoring` workflow.
-4. Decompose into OpenSpec changes (dependency-ordered): `hippo-ext-vocabulary` → `hippo-core-schema` → `provenance-as-linkml-class` → `computed-temporal-fields` → `typed-client` → *(later)* `generated-rest-surface`.
-5. Revise each section per the Revision Plan, coordinated with the OpenSpec change that triggers it.
+1. ~~Review and approve this block~~ — **Approved 2026-04-18**.
+2. ~~Tag `design-pre-linkml` on current HEAD~~ — **Applied 2026-04-18**.
+3. ~~Draft `sec9_linkml_redesign.md` via the `doc-coauthoring` workflow~~ — **Complete**; see `sec9_linkml_redesign.md` and `sec9_decisions.md`.
+4. **In progress.** Decompose into OpenSpec changes per sec9 §9.12. Ten changes grouped into three waves (foundation / data-model / consumer-facing). Scaffolding Wave 1 first: `hippo-ext-vocabulary` → `hippo-core-schema` → `id-registry-and-uuid-strategy` → `process-class`.
+5. **Pending.** Revise each section per the Revision Plan, coordinated with the OpenSpec change that triggers it.
 
 ---
 
@@ -139,8 +141,19 @@ New decisions to be introduced in sec9 (preview):
 | Entity namespaces | Optional `namespace:` key in schema files scopes entities to named namespaces; FQN = `namespace.EntityType`; root namespace is the only implicit namespace | sec3 |
 | NamespaceRegistry | Built by `SchemaLoader` at load time; maps `(namespace, entity_name)` → `EntityConfig`; fully populated before cross-namespace reference validation | sec3 |
 | Namespace dependency inference | Dependencies inferred from `references.entity_type` FQNs — no explicit `depends_on:` required; topological sort detects cycles | sec3 |
-| Root namespace canonicalization | `root.Donor` normalized to `"Donor"` at registry ingestion; only unqualified form in `SchemaConfig` and storage | sec3 |
+| Root namespace canonicalization | `root.Donor` normalized to `"Donor"` at registry ingestion; only unqualified form in `SchemaConfig` and storage. **Superseded at the client level by sec9.8** — typed client provides dual access (flat `client.samples` and explicit `client.root.samples`); storage-level canonicalization unchanged | sec3, sec9 |
 | Namespace backwards compatibility | Schemas without `namespace:` key load unchanged; no data migration required for existing deployments | sec3 |
+| Provenance event model | Typed events (EntityCreated/Updated/AvailabilityChanged/Superseded/Relationship*/ExternalId*/Migration*/ReferenceData*). **Reshaped by sec9.6** — `ProvenanceRecord` is now a first-class LinkML class with PROV-O alignment (`class_uri: prov:Activity`); event categories expressed as the `Operation` enum in `hippo_core` (`create`, `update`, `availability_change`, `supersede`, `relationship_add`/`remove`, `external_id_add`/`remove`, `migration_applied`, `reference_data_installed`) | sec6, sec9 |
+| Provenance-log-only temporal data | `created_at`, `updated_at`, `schema_version` never stored on entity tables; always computed from `ProvenanceRecord` at read time. **Formalized by sec9.7** — adds `created_by` and `updated_by` as computed fields; defines required indexes and batch aggregation primitives | sec3, sec6, sec9 |
+| Three-layer schema stack | `hippo_ext` (annotation vocabulary) → `hippo_core` (Entity, ProvenanceRecord, Process, Validator, ReferenceLoader, Status/Operation enums) → user schema. Imports flow downward only. `SchemaRegistry` produces one merged `SchemaView` consumed by every subsystem | sec9.3 |
+| `hippo_*` extension vocabulary | `hippo_ext` is a shipped-with-Hippo LinkML schema that declares every `hippo_*` annotation with `applies_to`, `value_type`, and `cardinality` constraints. Every used annotation MUST be declared; undeclared annotations fail at load time | sec9.4 |
+| `Process` as first-class class | Composite activity grouping atomic `ProvenanceRecord` entries under one logical execution (reference loads, pipeline runs, schema migrations). `is_a: Entity`, `class_uri: prov:Activity`. Minimum slots: `parent_process_id`, `operation_kind`, `started_at`, `ended_at`, `actor_id` | sec9.5 |
+| UUID identity model | Every `id` is a UUID, globally unique by collision probability. Polymorphic references carry a UUID alone. Type resolution: relational adapters maintain an `_entity_registry` table; Neo4j uses native labels | sec9.2, sec9.5 |
+| FQN parsing rule | Fully qualified class name = `<namespace>.<ClassName>`. The last dot-separated segment is always the class name; everything before is the namespace string. Dots in class names are forbidden | sec9.5 |
+| Provenance integrity transactional and loud | Entity mutation + `ProvenanceRecord` write are one atomic unit; either both land or neither does. Missing or inconsistent provenance at read time raises `ProvenanceIntegrityError` — no silent degradation | sec9.2, sec9.6 |
+| Namespace-aware typed client | Root classes accessible via flat `client.<accessor>` or explicit `client.root.<accessor>`. Non-root via `client.<namespace>.<accessor>`. Nested namespaces via dot notation (e.g. `assay.quant`) produce nested attributes. Accessor default: `snake_case(ClassName) + "s"`; `hippo_accessor` overrides per class | sec9.8 |
+| Validation tiering | Three tiers in fixed order: LinkML-native (static shape) → CEL (dynamic / cross-entity) → Python plugin (escape hatch). Fail-fast by default; opt-in collect-all for batch ingest. Unified `ValidationResult` envelope with tier annotation | sec9.9 |
+| LinkML ecosystem adopted as-is | Hippo uses `SchemaView`, `gen-sqlddl`, `gen-pydantic`, `linkml-validate`, `linkml-diff` directly. Shims strictly bounded to applying `hippo_*` annotation effects. LinkML bugs fixed upstream or by version upgrade — never reimplemented in Hippo. Exact version pinning; LinkML patch bump triggers Hippo version bump | sec9.10 |
 
 ---
 
@@ -153,7 +166,7 @@ out of scope for v0.1 and documented here for tracking.
 |---|---|---|---|
 | Where does the example omics schema ultimately live? | — | Low | Open — config repo, `schemas/omics/`, or community `hippo-reference-omics` package |
 | Entity type remapping / namespace migration path (OQ1) | sec3 §3.12 | High | Open — no migration path exists for moving `Sample` (root) to `tissue.Sample`; must be resolved before any production namespace adoption of existing entities. Options: `hippo migrate --remap`, namespace aliasing, or out-of-band migration script |
-| Canonical form for root-namespace entities in storage (OQ2) | sec3 §3.11 | Low | Decided — store as `"Donor"` (unqualified); registry normalizes `root.*` to unqualified at load time; documented as a firm invariant |
+| Canonical form for root-namespace entities in storage (OQ2) | sec3 §3.11 | Low | Decided — store as `"Donor"` (unqualified); registry normalizes `root.*` to unqualified at load time. Client-side access revisited by sec9.8 (dual `client.samples` + `client.root.samples` paths); storage behavior unchanged |
 | Ingestion idempotency for live webhook integrations | sec5 | High | Deferred — ExternalID upsert is the stable foundation; webhook retry deduplication needs a dedicated design session when live integrations are scoped |
 | Explicit update endpoint (PUT, 404-on-missing) | sec4 | Medium | **Planned v0.5 (Phase 1)** — `PUT /entities/{type}/{id}`; partial update semantics, 404 if entity absent; specced in sec4 §4.3 |
 | Bulk availability change endpoint | sec4 | Medium | **Planned v0.5 (Phase 1)** — `POST /entities/{type}/bulk-availability`; specced in sec4 §4.3 |
@@ -165,7 +178,7 @@ out of scope for v0.1 and documented here for tracking.
 | Expand-contract convention enforcement in `hippo migrate` | sec2/sec3 | Medium | Planned for v0.3+ — roadmap documented in sec7 §7.3 |
 | Cursor-based pagination | sec4 | Low | **Planned v0.5 (Phase 1)** — cursor-based mode specced in sec4 §4.4; offset mode remains the default |
 | GraphQL transport | sec2 | Low | Reserved in `hippo/graphql/`; deferred post-v0.1 |
-| Provenance system vs. entity events table split | sec6 | Low | Open — `MigrationApplied` and `ReferenceDataInstalled` stored with `entity_id = null`; separate `system_events` table is an alternative |
+| Provenance system vs. entity events table split | sec6 | Low | **Resolved by sec9.6** — single `ProvenanceRecord` table for both entity and system events; system operations (`migration_applied`, `reference_data_installed`) carry `entity_id = null`. One table, one code path |
 | Auth / RBAC | sec8 | **✅ Resolved (Phase 3)** | `BridgeAuthMiddleware` spec in sec8; Bridge owns auth, Hippo trusts injected headers; actor flows into provenance |
 | GA4GH DRS server (read-only) | sec4 | High | v0.4.0 target — `GET /ga4gh/drs/v1/objects/{entity_id}` resolves entity UUID → access_methods (s3/https/file). Thin read-only router over existing entity storage. No new data model; entity URI is the download target. Checksums from provenance if available. Enables external tools (Terra, Galaxy, other Canon instances) to resolve `drs://` URIs. Canon DRS client for consuming external DRS URIs deferred to Canon v0.3. |
 | `HippoClient.schema_references(entity_type)` | — | **✅ Implemented (Hippo v0.4)** | Reads `FieldDefinition.references` from already-loaded schema. Returns `[{field, target_entity_type}]` for each field with `references: {entity_type: <name>}` declared in schema YAML. REST endpoint: `GET /schemas/{entity_type}/references`. Works today — caller schemas must declare `references:` on foreign-key fields. |
