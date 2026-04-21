@@ -22,7 +22,6 @@ HIPPO_SEARCH = "hippo_search"
 HIPPO_INDEX = "hippo_index"
 HIPPO_INDEX_PARTIAL = "hippo_index_partial"
 HIPPO_UNIQUE = "hippo_unique"
-HIPPO_DEFAULT = "hippo_default"
 
 
 def annotation_value(element: Any, key: str) -> Optional[Any]:

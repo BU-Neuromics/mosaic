@@ -108,8 +108,7 @@ class SchemaDiffEngine:
                 continue
             diff.new_columns.setdefault(class_name, []).append(slot)
             if slot.required:
-                default = annotation_value(slot, "hippo_default")
-                if default is None and slot.ifabsent is None:
+                if slot.ifabsent is None:
                     if self._table_has_data(class_name):
                         diff.warnings.append(
                             f"Adding NOT NULL column '{slot.name}' to table '{class_name}' "

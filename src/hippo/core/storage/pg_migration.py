@@ -14,7 +14,7 @@ from hippo.core.storage.pg_ddl_generator import (
     PostgresFTSMigrationPlanner,
 )
 from hippo.core.storage.schema_diff import SchemaDiff
-from hippo.linkml_bridge import HIPPO_DEFAULT, SchemaRegistry, annotation_value
+from hippo.linkml_bridge import SchemaRegistry, annotation_value
 
 try:
     import psycopg
@@ -129,11 +129,8 @@ class PostgresMigrationPlanner:
         )
         if slot.required:
             sql += " NOT NULL"
-            default = annotation_value(slot, HIPPO_DEFAULT)
-            if default is None:
-                default = slot.ifabsent
-            if default is not None:
-                sql += f" DEFAULT {PostgresDDLGenerator._format_default(default)}"
+            if slot.ifabsent is not None:
+                sql += f" DEFAULT {PostgresDDLGenerator._format_default(slot.ifabsent)}"
         return sql + ";"
 
     def _create_index_statement(

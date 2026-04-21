@@ -16,7 +16,6 @@ from hippo.core.storage.ddl_generator import (
     TableDefinition,
 )
 from hippo.linkml_bridge import (
-    HIPPO_DEFAULT,
     HIPPO_INDEX,
     HIPPO_INDEX_PARTIAL,
     HIPPO_UNIQUE,
@@ -91,9 +90,7 @@ class PostgresDDLGenerator:
                 if rng in known_classes or rng is None
                 else self.TYPE_MAPPING.get(rng, "TEXT")
             )
-            default = annotation_value(slot, HIPPO_DEFAULT)
-            if default is None and slot.ifabsent is not None:
-                default = slot.ifabsent
+            default = slot.ifabsent
             table.columns.append(
                 ColumnDefinition(
                     name=slot.name,

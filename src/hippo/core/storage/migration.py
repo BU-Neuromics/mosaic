@@ -14,7 +14,7 @@ from linkml_runtime.linkml_model.meta import SlotDefinition
 
 from hippo.core.storage.ddl_generator import DDLGenerator, FTSMigrationPlanner
 from hippo.core.storage.schema_diff import SchemaDiff
-from hippo.linkml_bridge import HIPPO_DEFAULT, SchemaRegistry, annotation_value
+from hippo.linkml_bridge import SchemaRegistry, annotation_value
 
 
 @dataclass
@@ -140,11 +140,8 @@ class MigrationPlanner:
         sql = f'ALTER TABLE "{table_name}" ADD COLUMN "{slot.name}" {col_type}'
         if slot.required:
             sql += " NOT NULL"
-            default = annotation_value(slot, HIPPO_DEFAULT)
-            if default is None:
-                default = slot.ifabsent
-            if default is not None:
-                sql += f" DEFAULT {DDLGenerator._format_default(default)}"
+            if slot.ifabsent is not None:
+                sql += f" DEFAULT {DDLGenerator._format_default(slot.ifabsent)}"
         return sql + ";"
 
     def _create_index_statement(

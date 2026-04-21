@@ -160,7 +160,7 @@ class TestUniqueConstraint:
 
 
 class TestDefaultValue:
-    def test_string_default_via_hippo_default(self):
+    def test_string_default_via_ifabsent(self):
         reg = build_registry(
             {
                 "test_entity": {
@@ -168,7 +168,7 @@ class TestDefaultValue:
                         "id": {"identifier": True},
                         "status": {
                             "range": "string",
-                            "annotations": {"hippo_default": "active"},
+                            "ifabsent": "active",
                         },
                     }
                 }
@@ -292,7 +292,6 @@ class TestMultiClass:
                         },
                         "active": {
                             "range": "boolean",
-                            "annotations": {"hippo_default": True},
                         },
                     }
                 },

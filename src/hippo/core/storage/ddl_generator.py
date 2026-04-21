@@ -14,7 +14,6 @@ from typing import Any, Optional
 
 from hippo.core.storage.fts import FTSFieldMetadata, FTSTableMetadata
 from hippo.linkml_bridge import (
-    HIPPO_DEFAULT,
     HIPPO_INDEX,
     HIPPO_INDEX_PARTIAL,
     HIPPO_UNIQUE,
@@ -126,9 +125,7 @@ class DDLGenerator:
             if slot.name == id_name:
                 continue
             col_type = self._map_slot_type(slot, known_classes)
-            default = annotation_value(slot, HIPPO_DEFAULT)
-            if default is None and slot.ifabsent is not None:
-                default = slot.ifabsent
+            default = slot.ifabsent
             column = ColumnDefinition(
                 name=slot.name,
                 column_type=col_type,
