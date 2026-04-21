@@ -1,0 +1,5521 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="Bioinformatics Analysis Software System — platform documentation">
+      
+      
+      
+      
+      
+      
+        
+      
+      
+      <link rel="icon" href="../../../assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.6">
+    
+    
+      
+        <title>Sec9 linkml redesign - BASS Documentation</title>
+      
+    
+    
+      <link rel="stylesheet" href="../../../assets/stylesheets/main.484c7ddc.min.css">
+      
+        
+        <link rel="stylesheet" href="../../../assets/stylesheets/palette.ab4e12ef.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Inter:300,300i,400,400i,700,700i%7CJetBrains+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Inter";--md-code-font:"JetBrains Mono"}</style>
+      
+    
+    
+      <link rel="stylesheet" href="../../../stylesheets/custom.css">
+    
+    <script>__md_scope=new URL("../../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="teal" data-md-color-accent="cyan">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#9-linkml-centric-redesign" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+<header class="md-header" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href="../../.." title="BASS Documentation" class="md-header__button md-logo" aria-label="BASS Documentation" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            BASS Documentation
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Sec9 linkml redesign
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: light)" data-md-color-scheme="default" data-md-color-primary="teal" data-md-color-accent="cyan"  aria-label="Switch to dark mode"  type="radio" name="__palette" id="__palette_0">
+    
+      <label class="md-header__button md-icon" title="Switch to dark mode" for="__palette_1" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a4 4 0 0 0-4 4 4 4 0 0 0 4 4 4 4 0 0 0 4-4 4 4 0 0 0-4-4m0 10a6 6 0 0 1-6-6 6 6 0 0 1 6-6 6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: dark)" data-md-color-scheme="slate" data-md-color-primary="teal" data-md-color-accent="cyan"  aria-label="Switch to light mode"  type="radio" name="__palette" id="__palette_1">
+    
+      <label class="md-header__button md-icon" title="Switch to light mode" for="__palette_0" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 18c-.89 0-1.74-.2-2.5-.55C11.56 16.5 13 14.42 13 12s-1.44-4.5-3.5-5.45C10.26 6.2 11.11 6 12 6a6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+        <div class="md-search__suggest" data-md-component="search-suggest"></div>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+            
+<nav class="md-tabs" aria-label="Tabs" data-md-component="tabs">
+  <div class="md-grid">
+    <ul class="md-tabs__list">
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../../.." class="md-tabs__link">
+        
+  
+  
+    
+  
+  Home
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../../platform/" class="md-tabs__link">
+          
+  
+  
+  Platform
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../" class="md-tabs__link">
+          
+  
+  
+  Hippo
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../../cappella/" class="md-tabs__link">
+          
+  
+  
+  Cappella
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../../aperture/" class="md-tabs__link">
+          
+  
+  
+  Aperture
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../../bridge/" class="md-tabs__link">
+          
+  
+  
+  Bridge
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../../canon/" class="md-tabs__link">
+          
+  
+  
+  Canon
+
+        </a>
+      </li>
+    
+  
+
+      
+    </ul>
+  </div>
+</nav>
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+  
+
+
+<nav class="md-nav md-nav--primary md-nav--lifted" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href="../../.." title="BASS Documentation" class="md-nav__button md-logo" aria-label="BASS Documentation" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    BASS Documentation
+  </label>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../.." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Home
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_2" >
+        
+          
+          <label class="md-nav__link" for="__nav_2" id="__nav_2_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Platform
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_2_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_2">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Platform
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../platform/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    BASS Platform
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../platform/src/overview/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Overview
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../platform/src/architecture/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Architecture
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../platform/src/getting-started/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Getting Started
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../platform/src/deployment/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Deployment
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../platform/src/glossary/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Glossary
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_2_7" >
+        
+          
+          <label class="md-nav__link" for="__nav_2_7" id="__nav_2_7_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Design Spec
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_2_7_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_2_7">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Design Spec
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../platform/src/design/sec1_overview/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Platform Overview
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../platform/src/design/sec2_components/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Component Architecture
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../platform/src/design/sec3_integration/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Integration Patterns
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../platform/src/design/sec4_unified_ingestion/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Unified Ingestion
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../platform/src/design/sec5_integration_test_strategy/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Integration Test Strategy
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_3" >
+        
+          
+          <label class="md-nav__link" for="__nav_3" id="__nav_3_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Hippo
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Hippo
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Hippo — Metadata Tracking Service
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_3_2" >
+        
+          
+          <label class="md-nav__link" for="__nav_3_2" id="__nav_3_2_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    User Docs
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_3_2_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3_2">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    User Docs
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../docs/introduction/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Introduction
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../docs/installation/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Installation
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../docs/quickstart/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Quick Start
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../docs/schema-guide/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Schema Guide
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../docs/data-model/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Data Model
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../docs/configuration/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Configuration
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../docs/cli-reference/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    CLI Reference
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../docs/api-reference/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    API Reference
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_3_3" >
+        
+          
+          <label class="md-nav__link" for="__nav_3_3" id="__nav_3_3_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Design Spec
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_3_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3_3">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Design Spec
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../sec1_overview/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Overview & Scope
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../sec2_architecture/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Architecture
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../sec3_data_model/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Data Model
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../sec3b_relational_storage/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Relational Storage
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../sec4_api_layer/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    API Layer
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../sec5_ingestion/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Ingestion & Integration
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../sec6_provenance/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Provenance & Audit
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../sec7_nfr/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Non-Functional Requirements
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../sec8_auth_integration/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Auth Integration
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../appendix_a_example_schema_omics/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Appendix A: Example Schema
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../appendix_b_implementation_guide/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Appendix B: Implementation Guide
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../reference_hippo_yaml/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Reference: hippo.yaml
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../reference_validators_yaml/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Reference: validators.yaml
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../reference_cel_context/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Reference: CEL Context
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_4" >
+        
+          
+          <label class="md-nav__link" for="__nav_4" id="__nav_4_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Cappella
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_4">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Cappella
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../cappella/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Cappella — Integration &amp; Harmonization Engine
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_4_2" >
+        
+          
+          <label class="md-nav__link" for="__nav_4_2" id="__nav_4_2_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    User Docs
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_4_2_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_4_2">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    User Docs
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../cappella/docs/introduction/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Introduction
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../cappella/docs/installation/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Installation
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../cappella/docs/overview/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Overview
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../cappella/docs/quickstart/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Quick Start
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../cappella/docs/user_guide/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    User Guide
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../cappella/docs/workflows/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Workflows
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_4_3" >
+        
+          
+          <label class="md-nav__link" for="__nav_4_3" id="__nav_4_3_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Design Spec
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_4_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_4_3">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Design Spec
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../cappella/design/sec1_overview/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Overview & Scope
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../cappella/design/sec2_architecture/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Architecture
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../cappella/design/sec3_adapters/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Adapter System
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../cappella/design/sec4_audit/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Audit & Observability
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../cappella/design/sec5_workflows/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Collection Resolution
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../cappella/design/sec6_nfr/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Non-Functional Requirements
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../cappella/design/sec7_testing/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Trigger Engine Testing
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_5" >
+        
+          
+          <label class="md-nav__link" for="__nav_5" id="__nav_5_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Aperture
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_5_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_5">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Aperture
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../aperture/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Aperture — Interface Layer
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_5_2" >
+        
+          
+          <label class="md-nav__link" for="__nav_5_2" id="__nav_5_2_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    User Docs
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_5_2_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_5_2">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    User Docs
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../aperture/docs/introduction/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Introduction
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../aperture/docs/quickstart/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Quick Start
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../aperture/docs/cli-reference/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    CLI Reference
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_5_3" >
+        
+          
+          <label class="md-nav__link" for="__nav_5_3" id="__nav_5_3_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Design Spec
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_5_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_5_3">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Design Spec
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../aperture/design/sec1_overview/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Overview & Scope
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../aperture/design/sec2_architecture/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Architecture
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../aperture/design/sec3_cli/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    CLI Design
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../aperture/design/sec4_web_ui/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Web Interface (v0.2)
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../aperture/design/sec5_api_clients/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    API Clients (v0.2)
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../aperture/design/sec6_nfr/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Non-Functional Requirements
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_6" >
+        
+          
+          <label class="md-nav__link" for="__nav_6" id="__nav_6_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Bridge
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_6_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_6">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Bridge
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../bridge/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Bridge — Integration Middleware
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_6_2" >
+        
+          
+          <label class="md-nav__link" for="__nav_6_2" id="__nav_6_2_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    User Docs
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_6_2_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_6_2">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    User Docs
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../bridge/docs/introduction/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Introduction
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../bridge/docs/auth/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Authentication
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../bridge/docs/security-model/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Security Model
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../bridge/docs/admin-guide/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Admin Guide
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_6_3" >
+        
+          
+          <label class="md-nav__link" for="__nav_6_3" id="__nav_6_3_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Design Spec
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_6_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_6_3">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Design Spec
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../bridge/design/sec1_overview/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Overview & Scope
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../bridge/design/sec2_architecture/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Architecture
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../bridge/design/sec3_api_unification/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Unified API Design
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../bridge/design/sec4_auth/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Authentication & Authorization
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../bridge/design/sec5_sync/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Cross-Component Sync
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../bridge/design/sec6_nfr/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Non-Functional Requirements
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_7" >
+        
+          
+          <label class="md-nav__link" for="__nav_7" id="__nav_7_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Canon
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_7_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_7">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Canon
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../canon/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Canon — Semantic Artifact Resolver
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_7_2" >
+        
+          
+          <label class="md-nav__link" for="__nav_7_2" id="__nav_7_2_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    User Docs
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_7_2_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_7_2">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    User Docs
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../canon/docs/introduction/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Introduction
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../canon/docs/quickstart/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Quick Start
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../canon/docs/user-guide/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    User Guide
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_7_3" >
+        
+          
+          <label class="md-nav__link" for="__nav_7_3" id="__nav_7_3_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Design Spec
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_7_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_7_3">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Design Spec
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../canon/design/sec1_overview/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Overview & Scope
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../canon/design/sec2_architecture/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Architecture
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../canon/design/sec3_rules_dsl/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Rules DSL
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../canon/design/sec3b_cwl_integration/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    CWL Integration
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../canon/design/sec4_resolution_algorithm/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Resolution Algorithm
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../canon/design/sec5_executor_adapters/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Executor Adapters
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../canon/design/sec5b_storage_adapters/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Storage Adapters
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../canon/design/sec6_hippo_integration/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Hippo Integration
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../canon/design/sec7_nfr/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Non-Functional Requirements
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../canon/design/sec8_dynamic_rules/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Dynamic Rules
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../canon/design/reference_canon_yaml/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Reference: canon.yaml
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../canon/design/reference_canon_rules_yaml/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Reference: canon_rules.yaml
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../canon/design/appendix_a_rnaseq_example/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Appendix A: RNA-seq Example
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#9-linkml-centric-redesign" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        9. LinkML-Centric Redesign
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="9. LinkML-Centric Redesign">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#91-motivation-goals" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        9.1 Motivation &amp; Goals
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#92-design-principles" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        9.2 Design Principles
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#93-three-layer-schema-stack" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        9.3 Three-Layer Schema Stack
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#94-hippo_ext-extension-vocabulary" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        9.4 hippo_ext Extension Vocabulary
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#95-hippo_core-schema" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        9.5 hippo_core Schema
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#96-provenance-as-a-linkml-class" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        9.6 Provenance as a LinkML Class
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#97-computed-temporal-fields" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        9.7 Computed Temporal Fields
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#98-typed-client" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        9.8 Typed Client
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#99-validation-division-of-labor" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        9.9 Validation Division of Labor
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#910-linkml-ecosystem-integration" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        9.10 LinkML Ecosystem Integration
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#911-migration-narrative" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        9.11 Migration Narrative
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#912-openspec-decomposition" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        9.12 OpenSpec Decomposition
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#913-non-goals-deferred-concerns" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        9.13 Non-Goals &amp; Deferred Concerns
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+
+  <h1>Sec9 linkml redesign</h1>
+
+<h2 id="9-linkml-centric-redesign">9. LinkML-Centric Redesign<a class="headerlink" href="#9-linkml-centric-redesign" title="Permanent link">&para;</a></h2>
+<p><strong>Document status:</strong> Draft v0.1
+<strong>Depends on:</strong> sec2_architecture.md, sec3_data_model.md, sec3b_relational_storage.md, sec6_provenance.md
+<strong>Feeds into:</strong> sec1_overview.md, sec2_architecture.md, sec3_data_model.md, sec3b_relational_storage.md, sec4_api_layer.md, sec5_ingestion.md, sec6_provenance.md, sec7_nfr.md, appendix_a_example_schema_omics.md, appendix_b_implementation_guide.md, reference_hippo_yaml.md, reference_validators_yaml.md, reference_hippo_core.md, reference_hippo_ext.md</p>
+<hr />
+<h3 id="91-motivation-goals">9.1 Motivation &amp; Goals<a class="headerlink" href="#91-motivation-goals" title="Permanent link">&para;</a></h3>
+<p>Hippo's schema system predates its adoption of LinkML. The original design shipped a bespoke trio — <code>SchemaConfig</code>, <code>SchemaParser</code>, <code>FieldDefinition</code> — that duplicated concepts LinkML had already formalized: schema loading, slot definitions, type ranges, inheritance, constraints. Direct LinkML authoring was adopted mid-course (commits <code>49a11c9</code> "rewrite all schema examples to valid LinkML format" and <code>04f1448</code> "remove Hippo DSL — rename to EntityYAML, delete compiler") — a substantial correction, applied incrementally.</p>
+<p>The trajectory that began with those commits has been extending ever since through a series of schema-adjacent refactors. This redesign is its natural endpoint: sec9 names the destination so we can reach it deliberately, not by gradual accretion, and so downstream decisions — provenance modeling, annotation vocabulary, typed client surface — can be made coherently rather than one refactor at a time.</p>
+<p><strong>Current pain points.</strong> The adoption so far has covered user schemas and the schema-loading pipeline. Hippo's own internal concepts — <code>Entity</code>, <code>ProvenanceRecord</code>, status enums, validator definitions — and several schema-adjacent behaviors still sit outside the LinkML model. Concretely:</p>
+<ul>
+<li><strong>Duplicated concepts.</strong> <code>FieldDefinition</code> and its adjacent config types shadowed LinkML's <code>SlotDefinition</code>; two representations of the same idea had to be kept in sync by hand. Most have been deleted, but analogous duplication persists for <code>ProvenanceRecord</code> and the entity base concept.</li>
+<li><strong>Hand-rolled tooling.</strong> DDL generation, schema diff, and schema-evolution plumbing are implemented from scratch where LinkML ships mature equivalents (<code>gen-sqlddl</code>, <code>linkml-diff</code>).</li>
+<li><strong>Stringly-typed annotations.</strong> <code>hippo_*</code> annotations are flat keys inside LinkML <code>annotations:</code> blocks — no formal vocabulary, no versioning, no spec. Adding a new annotation is a convention, not a contract.</li>
+<li><strong>Provenance outside the schema.</strong> <code>ProvenanceRecord</code> is modeled entirely outside the schema system — its shape cannot be introspected, validated, evolved, or queried through the same tooling as entity data.</li>
+<li><strong>No typed client.</strong> Callers interact with entities as generic dicts and kwargs, with no IDE, type-checker, or refactor support.</li>
+<li><strong>No formal schema validation.</strong> Schema correctness is checked by ad-hoc Python, not by LinkML's own schema-level checkers.</li>
+<li><strong>No formal data validation.</strong> Runtime instances are not validated against the schema through a single standard pipeline; type, pattern, enum, and range checks are partial and inconsistent.</li>
+</ul>
+<p><strong>Goals.</strong> The redesign is guided by principles, not a rewrite schedule. Every goal below is a principle that should survive the specific change sequence that implements it.</p>
+<ul>
+<li><strong>Single source of truth.</strong> The LinkML schema describes data shape for everything Hippo models — user schemas <em>and</em> Hippo's own primitives (<code>Entity</code>, <code>ProvenanceRecord</code>, status/operation enums, validator definitions).</li>
+<li><strong>No shadow abstractions.</strong> Pre-LinkML abstractions that duplicate or shadow LinkML equivalents are eliminated; the LinkML representation is preferred in every case.</li>
+<li><strong>Adopt, don't rebuild.</strong> LinkML's generator and validator ecosystem is used wherever it meets Hippo's requirements; custom code is justified only by a genuine expressiveness gap.</li>
+<li><strong>Provenance in the schema system.</strong> <code>ProvenanceRecord</code> is a first-class LinkML class and benefits from the same tooling — DDL generation, introspection, validation, diff — as user data.</li>
+<li><strong>Annotations as contracts.</strong> The <code>hippo_*</code> vocabulary is formalized as a versioned LinkML extension schema; annotations become contracts rather than conventions.</li>
+<li><strong>Typed client surface.</strong> A typed client is generated from the merged schema, offered alongside (not in place of) the generic dynamic client.</li>
+<li><strong>Preserve what works.</strong> The existing three-layer architecture, SDK-first layering, plugin storage adapters, CEL for dynamic and cross-entity rules, and provenance-log-only temporal data all carry forward.</li>
+<li><strong>Uniform introspection.</strong> Anything describable in LinkML is discoverable through one pipeline — entity definitions, provenance structure, and validator metadata alike — including at the REST introspection surface.</li>
+</ul>
+<hr />
+<h3 id="92-design-principles">9.2 Design Principles<a class="headerlink" href="#92-design-principles" title="Permanent link">&para;</a></h3>
+<p>These principles are the decision rules that apply when implementing and evolving sec9. They give a coding agent a consistent set of tie-breakers when a concrete choice arises. 9.1 states what the redesign pursues; 9.2 states how to pursue it.</p>
+<p><strong>Schema as source of truth.</strong></p>
+<ul>
+<li><strong>Schema-first.</strong> Any new data concept — entity class, slot, enum, annotation — is expressed in LinkML first. Implementation code follows the schema, never the reverse. A change that adds behavior without a corresponding schema change is a defect.</li>
+<li><strong>Prefer LinkML tooling over bespoke code.</strong> If LinkML ships a generator or validator for the task (<code>gen-sqlddl</code>, <code>gen-pydantic</code>, <code>linkml-validate</code>, <code>linkml-diff</code>), use it. Custom Python is justified only by a documented expressiveness gap — see 9.10.</li>
+<li><strong>No shadow abstractions.</strong> Do not introduce Python classes that mirror LinkML concepts (as <code>FieldDefinition</code> once did for <code>SlotDefinition</code>). If a typed Python view of schema data is needed, it is generated from the schema, not hand-authored.</li>
+</ul>
+<p><strong>Layering.</strong></p>
+<ul>
+<li><strong>One merged schema at runtime.</strong> Exactly one merged <code>SchemaView</code>, produced by the <code>SchemaRegistry</code> from the three layers. Code reads from it. Code never constructs parallel schema representations.</li>
+<li><strong>Layer independence.</strong> <code>hippo_ext</code> imports nothing. <code>hippo_core</code> imports <code>hippo_ext</code>. User schemas import <code>hippo_core</code>. Imports flow downward only — no sideways, no upward.</li>
+<li><strong>Annotations are contracts.</strong> Every <code>hippo_*</code> annotation used in a user schema MUST be declared in <code>hippo_ext</code>. Undocumented annotations are a defect, not a convention.</li>
+</ul>
+<p><strong>Subsystem behavior.</strong></p>
+<ul>
+<li><strong>Validation is tiered.</strong> Static shape (types, patterns, enums, ranges, required, multivalued) is validated by LinkML. Dynamic and cross-entity rules are validated by CEL. Python validators exist only for capabilities neither expresses — see 9.9.</li>
+<li><strong>Provenance is data.</strong> <code>ProvenanceRecord</code> is processed by the same DDL generation, validation, introspection, and migration code paths as user entities. No provenance-shape-aware special cases in Python — see 9.6.</li>
+<li><strong>Provenance integrity is transactional and loud.</strong> A mutation that cannot emit a valid <code>ProvenanceRecord</code> MUST fail atomically — the entity write does not complete. Missing, partial, or inconsistent provenance detected at read time raises an error rather than degrading silently. Incomplete provenance is a critical data-integrity defect, not a degraded state — see 9.6, 9.7.</li>
+<li><strong>Temporal fields are read-time.</strong> <code>created_at</code>, <code>updated_at</code>, and <code>schema_version</code> are never stored as columns on entity tables; they are always computed from the provenance log — see 9.7.</li>
+<li><strong>Typed and dynamic clients are coequal.</strong> Every SDK capability is reachable from both the Pydantic-generated typed client and the generic dynamic <code>HippoClient</code>. Neither is the "real" one — see 9.8.</li>
+<li><strong>Identifiers are globally unique UUIDs.</strong> Every entity <code>id</code> is a UUID, unique across the system by collision probability. Polymorphic references (<code>entity_id</code>, <code>process_id</code>, <code>actor_id</code>, <code>parent_process_id</code>, <code>derived_from_id</code>) carry a UUID alone — no tagged union, no prefix convention. Type resolution is adapter-specific: a lightweight registry table in relational adapters, native labels in Neo4j — see 9.5.</li>
+</ul>
+<p><strong>Evolution discipline.</strong></p>
+<ul>
+<li><strong>Additive before breaking.</strong> Schema changes are additive (new optional slot, new class, new annotation) unless a breaking change is explicitly scoped in an OpenSpec proposal. Breaking changes to <code>hippo_core</code> or <code>hippo_ext</code> are major events and carry version bumps.</li>
+<li><strong>SDK-first layering is preserved.</strong> Transport layers (REST, future GraphQL) and storage adapters contain no schema logic; they call the Core SDK. This principle carries forward from sec2 and is not revisited by sec9.</li>
+</ul>
+<hr />
+<h3 id="93-three-layer-schema-stack">9.3 Three-Layer Schema Stack<a class="headerlink" href="#93-three-layer-schema-stack" title="Permanent link">&para;</a></h3>
+<p>Hippo's schema data lives in three LinkML schemas layered by import. Each layer has a clear ownership and a single role. Together they form the one merged <code>SchemaView</code> consumed by every subsystem.</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>┌──────────────────────────────────────────────────────────────┐
+<a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>│  user_schema.yaml          (per-deployment)                  │
+<a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>│  · domain classes (Sample, Project, Aliquot, ...)            │
+<a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>│  · is_a: Entity on every domain class                        │
+<a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a>│  · imports: hippo_core                                       │
+<a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a>└──────────────────────────┬───────────────────────────────────┘
+<a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a>                           │  imports
+<a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a>┌──────────────────────────▼───────────────────────────────────┐
+<a id="__codelineno-0-9" name="__codelineno-0-9" href="#__codelineno-0-9"></a>│  hippo_core.yaml           (ships with Hippo)                │
+<a id="__codelineno-0-10" name="__codelineno-0-10" href="#__codelineno-0-10"></a>│  · Entity, ProvenanceRecord, Process, Validator,             │
+<a id="__codelineno-0-11" name="__codelineno-0-11" href="#__codelineno-0-11"></a>│    ReferenceLoader                                           │
+<a id="__codelineno-0-12" name="__codelineno-0-12" href="#__codelineno-0-12"></a>│  · Status, Operation enums                                   │
+<a id="__codelineno-0-13" name="__codelineno-0-13" href="#__codelineno-0-13"></a>│  · imports: hippo_ext                                        │
+<a id="__codelineno-0-14" name="__codelineno-0-14" href="#__codelineno-0-14"></a>└──────────────────────────┬───────────────────────────────────┘
+<a id="__codelineno-0-15" name="__codelineno-0-15" href="#__codelineno-0-15"></a>                           │  imports
+<a id="__codelineno-0-16" name="__codelineno-0-16" href="#__codelineno-0-16"></a>┌──────────────────────────▼───────────────────────────────────┐
+<a id="__codelineno-0-17" name="__codelineno-0-17" href="#__codelineno-0-17"></a>│  hippo_ext.yaml            (ships with Hippo)                │
+<a id="__codelineno-0-18" name="__codelineno-0-18" href="#__codelineno-0-18"></a>│  · annotation vocabulary: hippo_unique, hippo_index,         │
+<a id="__codelineno-0-19" name="__codelineno-0-19" href="#__codelineno-0-19"></a>│    hippo_index_partial, hippo_search, hippo_append_only,     │
+<a id="__codelineno-0-20" name="__codelineno-0-20" href="#__codelineno-0-20"></a>│    hippo_accessor                                            │
+<a id="__codelineno-0-21" name="__codelineno-0-21" href="#__codelineno-0-21"></a>│  · imports: nothing                                          │
+<a id="__codelineno-0-22" name="__codelineno-0-22" href="#__codelineno-0-22"></a>└──────────────────────────────────────────────────────────────┘
+</code></pre></div>
+<p><strong>Layer contents.</strong></p>
+<table>
+<thead>
+<tr>
+<th>Layer</th>
+<th>Ships with</th>
+<th>Purpose</th>
+<th>Imports</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>hippo_ext</code></td>
+<td>Hippo</td>
+<td>Formal vocabulary for <code>hippo_*</code> annotations used in user schemas</td>
+<td>none</td>
+</tr>
+<tr>
+<td><code>hippo_core</code></td>
+<td>Hippo</td>
+<td><code>Entity</code> base class, <code>ProvenanceRecord</code>, <code>Process</code>, <code>Validator</code> and <code>ReferenceLoader</code> classes, <code>Status</code> / <code>Operation</code> enums</td>
+<td><code>hippo_ext</code></td>
+</tr>
+<tr>
+<td>user schema</td>
+<td>deployment</td>
+<td>Domain classes expressing what a deployment tracks</td>
+<td><code>hippo_core</code></td>
+</tr>
+</tbody>
+</table>
+<p>Deployments author only the user schema. <code>hippo_core</code> and <code>hippo_ext</code> are shipped artifacts; they change only through Hippo releases and carry their own versions (see below, 9.4, 9.5).</p>
+<p><strong>Layering rules.</strong></p>
+<ul>
+<li>Imports are unidirectional (user → core → ext) and transitive. No schema may import a higher layer; no schema may import sideways within a layer. (See 9.2 <em>Layer independence</em>.)</li>
+<li><code>hippo_core</code> MUST NOT reference any domain class. A domain concept appearing in <code>hippo_core</code> is a layering violation.</li>
+<li>User schemas MUST NOT redefine classes, slots, enums, or annotations owned by <code>hippo_core</code> or <code>hippo_ext</code>. Extending via <code>is_a</code> or <code>slot_usage</code> is allowed; replacing is not.</li>
+<li>Every <code>hippo_*</code> annotation used in any schema MUST be declared in <code>hippo_ext</code>. An undeclared annotation is a defect. (See 9.2 <em>Annotations are contracts</em>.)</li>
+</ul>
+<p><strong>Runtime merging.</strong></p>
+<p>At startup, <code>SchemaRegistry</code> loads the three layers through LinkML's <code>SchemaView</code> and produces one merged view. Every downstream subsystem — DDL generation, validation pipeline, typed-client generation, REST introspection — reads from this merged view. No subsystem loads LinkML schemas directly; no subsystem caches parallel derived state.</p>
+<p>The merged view is the only schema representation held in memory. Requests for per-layer slices (e.g., "only the user classes") are served by filtering the merged view, not by re-parsing.</p>
+<p><strong>Versioning semantics.</strong></p>
+<p>Each layer declares a LinkML <code>version:</code> attribute. Bump discipline:</p>
+<table>
+<thead>
+<tr>
+<th>Layer</th>
+<th>Additive (minor bump)</th>
+<th>Breaking (major bump)</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>hippo_ext</code></td>
+<td>New annotation; documentation refinement</td>
+<td>Renamed or removed annotation; semantic change to an existing annotation</td>
+</tr>
+<tr>
+<td><code>hippo_core</code></td>
+<td>New optional slot on <code>Entity</code>, new enum value, new class</td>
+<td>Change to existing class shape, newly required slot, enum value removal, class removal</td>
+</tr>
+<tr>
+<td>user schema</td>
+<td>New class, new optional slot, new enum value</td>
+<td>Removed or renamed class/slot, newly required slot with existing rows, enum value removal</td>
+</tr>
+</tbody>
+</table>
+<p><code>hippo_core</code> declares which <code>hippo_ext</code> major version it targets; a user schema declares which <code>hippo_core</code> major version it targets. <code>SchemaRegistry</code> refuses to merge against an incompatible major version and reports the mismatch at load time — a running Hippo instance therefore pins a specific <code>(hippo_ext, hippo_core)</code> pair, and user schemas are validated against that pair before any data operation.</p>
+<p>Any breaking change to <code>hippo_core</code> or <code>hippo_ext</code> is a major event and requires an OpenSpec proposal scoping the migration path (see 9.12).</p>
+<hr />
+<h3 id="94-hippo_ext-extension-vocabulary">9.4 <code>hippo_ext</code> Extension Vocabulary<a class="headerlink" href="#94-hippo_ext-extension-vocabulary" title="Permanent link">&para;</a></h3>
+<p><code>hippo_ext</code> is a LinkML schema whose sole role is to declare the <code>hippo_*</code> annotations consumed elsewhere in the stack. It owns no classes, no slots, and no enums — it is a vocabulary schema.</p>
+<p>Before this redesign, <code>hippo_*</code> keys appeared directly inside LinkML <code>annotations:</code> blocks on user schemas with no formal declaration. <code>hippo_ext</code> replaces that convention with a contract: every annotation name, its value type, which elements it may attach to, and its semantics are declared in one place and version-controlled.</p>
+<p><strong>Declaration pattern.</strong></p>
+<p>Each annotation in <code>hippo_ext</code> is declared with, at minimum:</p>
+<table>
+<thead>
+<tr>
+<th>Attribute</th>
+<th>Purpose</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>name</code></td>
+<td>The bare annotation key (e.g., <code>hippo_index</code>). The <code>hippo_</code> prefix is literal; no implicit prefixing.</td>
+</tr>
+<tr>
+<td><code>value_type</code></td>
+<td>LinkML type of the annotation value (boolean, string, integer, enum).</td>
+</tr>
+<tr>
+<td><code>applies_to</code></td>
+<td>Which LinkML element types the annotation is valid on: class, slot, enum, permissible_value, or a combination.</td>
+</tr>
+<tr>
+<td><code>cardinality</code></td>
+<td>Whether the annotation is a singleton or multivalued on a given element.</td>
+</tr>
+<tr>
+<td><code>default</code></td>
+<td>Value assumed when the annotation is omitted, if any.</td>
+</tr>
+<tr>
+<td><code>description</code></td>
+<td>Human-readable semantics.</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Usage pattern.</strong></p>
+<p>A user schema applies an annotation from <code>hippo_ext</code> via an <code>annotations:</code> block on the target element. At schema-load time, <code>SchemaRegistry</code> validates that every applied annotation is declared in <code>hippo_ext</code>, that its value type matches the declaration, and that its <code>applies_to</code> permits the target element. Undeclared annotations, mistyped values, and wrong-target attachments are reported as load-time errors. No annotation is silently ignored.</p>
+<p><strong>Current vocabulary.</strong></p>
+<table>
+<thead>
+<tr>
+<th>Annotation</th>
+<th>Applies to</th>
+<th>Value type</th>
+<th>Semantics</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>hippo_unique</code></td>
+<td>slot</td>
+<td>boolean</td>
+<td>Emit a single-column <code>UNIQUE</code> constraint for this slot. Composite uniqueness uses LinkML-native <code>unique_keys</code>.</td>
+</tr>
+<tr>
+<td><code>hippo_index</code></td>
+<td>slot</td>
+<td>boolean</td>
+<td>Emit a single-column index for this slot.</td>
+</tr>
+<tr>
+<td><code>hippo_index_partial</code></td>
+<td>slot</td>
+<td>boolean</td>
+<td>When <code>hippo_index: true</code>, emit the index as partial with <code>WHERE is_available = 1</code>. Ignored if <code>hippo_index</code> is false.</td>
+</tr>
+<tr>
+<td><code>hippo_search</code></td>
+<td>slot</td>
+<td>enum (<code>fts5</code>, …)</td>
+<td>Include this slot in a full-text index of the declared mode.</td>
+</tr>
+<tr>
+<td><code>hippo_append_only</code></td>
+<td>class</td>
+<td>boolean</td>
+<td>Storage adapter MUST reject updates and deletes on rows of this class. Used by <code>ProvenanceRecord</code> (see 9.6).</td>
+</tr>
+<tr>
+<td><code>hippo_accessor</code></td>
+<td>class</td>
+<td>string</td>
+<td>Override the derived typed-client accessor name. Optional escape hatch used only when the default derivation produces a collision or when a deployment prefers a non-default name. See 9.8.</td>
+</tr>
+</tbody>
+</table>
+<p>The authoritative reference — default values, exact enum ranges, interactions between annotations — lives in <code>reference_hippo_ext.md</code>.</p>
+<p>Some capabilities intentionally have no <code>hippo_*</code> annotation because LinkML covers them natively. Default values use LinkML's <code>ifabsent</code> (literal values or expressions like <code>uuid()</code>, <code>datetime(now)</code>, <code>int(0)</code>). Composite uniqueness uses LinkML's <code>unique_keys</code>. Required slots use LinkML's <code>required: true</code>. An agent implementing a user schema should reach for the LinkML-native attribute first and only use a <code>hippo_*</code> annotation when no LinkML equivalent exists.</p>
+<p><strong>Extensibility.</strong></p>
+<p>Adding a new annotation is a four-step change, scoped in an OpenSpec proposal:</p>
+<ol>
+<li>Declare the annotation in <code>hippo_ext</code> (name, value type, <code>applies_to</code>, cardinality, default, description).</li>
+<li>Implement its effect in the subsystem that consumes it (DDL generator, validator, typed-client generator, etc.).</li>
+<li>Document it in <code>reference_hippo_ext.md</code>.</li>
+<li>Bump <code>hippo_ext</code> minor version.</li>
+</ol>
+<p>Removing or renaming an annotation bumps <code>hippo_ext</code> major version and requires an OpenSpec proposal that scopes the migration path for user schemas using the affected annotation.</p>
+<p>The vocabulary above is the starting set. <code>hippo_ext</code> is expected to grow as new cross-cutting concerns surface; it is not a closed list.</p>
+<hr />
+<h3 id="95-hippo_core-schema">9.5 <code>hippo_core</code> Schema<a class="headerlink" href="#95-hippo_core-schema" title="Permanent link">&para;</a></h3>
+<p><code>hippo_core</code> is the LinkML schema that declares Hippo's built-in classes and enums. Every user schema imports <code>hippo_core</code>; every domain class uses <code>is_a: Entity</code>. <code>hippo_core</code> carries no domain knowledge — it is the minimal set of primitives the rest of the system needs to operate.</p>
+<p><strong>Class and enum inventory.</strong></p>
+<table>
+<thead>
+<tr>
+<th>Element</th>
+<th>Kind</th>
+<th>Purpose</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>Entity</code></td>
+<td>abstract class</td>
+<td>Base class for all domain entities. Provides <code>id</code> and <code>is_available</code>.</td>
+</tr>
+<tr>
+<td><code>ProvenanceRecord</code></td>
+<td>class</td>
+<td>Immutable record of an operation on an entity. Drives the audit log, computed temporal fields, and schema-version tracking. Detailed in 9.6.</td>
+</tr>
+<tr>
+<td><code>Process</code></td>
+<td>class</td>
+<td>Composite activity — a grouping of atomic operations under one logical execution (reference loads, pipeline runs, migrations). Detailed below.</td>
+</tr>
+<tr>
+<td><code>Validator</code></td>
+<td>class</td>
+<td>Declarative validator definition. Instances are loaded from <code>validators.yaml</code> and validated against this class at load time.</td>
+</tr>
+<tr>
+<td><code>ReferenceLoader</code></td>
+<td>class</td>
+<td>Metadata for a reference-data loader plugin. Instances are contributed by plugins registered under the <code>hippo.reference_loaders</code> entry point.</td>
+</tr>
+<tr>
+<td><code>Status</code></td>
+<td>enum</td>
+<td>Lifecycle state of an entity: <code>active</code>, <code>archived</code>, <code>superseded</code>, <code>deleted</code>, <code>distributed</code>, <code>removed</code>.</td>
+</tr>
+<tr>
+<td><code>Operation</code></td>
+<td>enum</td>
+<td>Operation kinds recorded in <code>ProvenanceRecord</code>. Full set enumerated in 9.6.</td>
+</tr>
+</tbody>
+</table>
+<p>The authoritative slot-level reference lives in <code>reference_hippo_core.md</code>. The summaries below cover design-relevant slots; field-level details (types, cardinality, examples) are deferred.</p>
+<p><strong>Identity model.</strong></p>
+<p>Every <code>id</code> slot across the system carries a UUID (v4 random or v7 time-ordered; SDK-assigned on create, opaque to callers). UUIDs are globally unique by collision probability; no Hippo-specific uniqueness enforcement is required beyond the per-class primary-key constraint each adapter emits.</p>
+<p>Polymorphic references — slots whose target class is not fixed at schema-definition time — are uniformly UUID-typed. <code>ProvenanceRecord.entity_id</code>, <code>ProvenanceRecord.actor_id</code>, <code>ProvenanceRecord.process_id</code>, <code>ProvenanceRecord.derived_from_id</code>, and <code>Process.parent_process_id</code> are all of this form. A caller holding a UUID can resolve it to a specific entity class without any information beyond the UUID itself.</p>
+<p>Type resolution is adapter-specific:</p>
+<table>
+<thead>
+<tr>
+<th>Adapter</th>
+<th>Mechanism</th>
+<th>Cost</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>SQLite / PostgreSQL (relational)</td>
+<td>A lightweight <code>_entity_registry</code> table keyed on <code>id</code>, populated in the same transaction as every entity create. Maps <code>id → entity_type</code>. Indexed on <code>id</code> (primary key) and optionally on <code>entity_type</code>.</td>
+<td>~O(log n) indexed lookup; well-cacheable; ~10% write overhead on create. Negligible at Hippo's target scale.</td>
+</tr>
+<tr>
+<td>Neo4j (graph)</td>
+<td>Native node labels. Every node carries its concrete class label plus a shared <code>:Entity</code> label. <code>MATCH (n:Entity {id: $uuid}) RETURN labels(n)</code> resolves both the node and its type in one operation.</td>
+<td>Native index lookup; no separate registry maintained by the adapter.</td>
+</tr>
+<tr>
+<td>Future adapters</td>
+<td>Free to implement type resolution optimally for the backend; SDK contract is uniform.</td>
+<td>—</td>
+</tr>
+</tbody>
+</table>
+<p>The SDK contract <code>client.get(uuid)</code> is uniform across adapters; only the internal resolution strategy differs. Foreign-key integrity for polymorphic slots is validated at the SDK layer on write, not at the adapter DDL level — adapters that can express conditional FKs (e.g., Neo4j via labels) MAY strengthen this, but the cross-adapter contract assumes SDK-level validation.</p>
+<p><strong>Fully qualified class names.</strong></p>
+<p>A class is referred to by its fully qualified name (FQN) — the namespace string joined to the class name with a dot. The final segment of an FQN is always the class name; everything before the last dot is the namespace string. This rule makes FQN parsing unambiguous: a parser always splits on the last dot.</p>
+<ul>
+<li><code>Sample</code> — root-namespace class <code>Sample</code>. Equivalent to <code>root.Sample</code>.</li>
+<li><code>tissue.Sample</code> — class <code>Sample</code> in namespace <code>tissue</code>.</li>
+<li><code>assay.quant.Measurement</code> — class <code>Measurement</code> in namespace <code>assay.quant</code>.</li>
+</ul>
+<p>Hippo namespace strings MAY contain dots for organizational convenience (see 9.8 for the typed-client consequences); dots in <em>class names</em> are forbidden and rejected at schema load. <code>root</code> is a reserved namespace name — a user schema MUST NOT declare <code>namespace: root</code>; root-namespace classes are declared by omitting the <code>namespace:</code> key or by a deployment convention that Hippo treats as equivalent.</p>
+<p>FQNs appear on <code>ProvenanceRecord.entity_type</code> (9.6), in cross-class references, and in introspection APIs. The FQN rule above is the single source of truth for parsing them.</p>
+<p><strong><code>Entity</code>.</strong></p>
+<p><code>Entity</code> is abstract. It MUST NOT be instantiated directly; it exists to be specialized by user-schema classes via <code>is_a: Entity</code>. It carries exactly two slots:</p>
+<table>
+<thead>
+<tr>
+<th>Slot</th>
+<th>Type</th>
+<th>Required</th>
+<th>Semantics</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>id</code></td>
+<td>string (identifier)</td>
+<td>yes</td>
+<td>Stable primary key. Assigned by the SDK on create; treated as opaque by callers.</td>
+</tr>
+<tr>
+<td><code>is_available</code></td>
+<td>boolean</td>
+<td>yes</td>
+<td>Lifecycle flag. <code>true</code> means the entity participates in normal reads; <code>false</code> means it has been superseded, archived, deleted, distributed, or removed. The reason lives in provenance, not on the entity.</td>
+</tr>
+</tbody>
+</table>
+<p>No temporal fields, no status enum, no foreign-key columns. Temporal state (<code>created_at</code>, <code>updated_at</code>, <code>schema_version</code>) is computed from <code>ProvenanceRecord</code> at read time (see 9.7); status transitions are recorded as <code>ProvenanceRecord</code> entries with an <code>availability_change</code> operation (see 9.6). Domain classes add their own slots and MAY annotate them with <code>hippo_*</code> vocabulary from <code>hippo_ext</code>.</p>
+<p><strong><code>ProvenanceRecord</code>.</strong></p>
+<p>Detailed in 9.6. Summary: an append-only class annotated <code>hippo_append_only: true</code>, with slots carrying the operation, the target entity, the actor, the timestamp, the schema version, and the change payload. It is DDL-generated by the same pipeline as user entities and uses formal PROV-O alignment.</p>
+<p><strong><code>Process</code>.</strong></p>
+<p><code>Process</code> represents a composite activity — a grouping of atomic operations that together constitute one logical execution. Reference-data loads, schema migrations, and caller-side activities like Cappella pipelines each emit one <code>Process</code> and associate their atomic <code>ProvenanceRecord</code> entries with it via the records' <code>process_id</code> slot (see 9.6).</p>
+<p><code>Process is_a Entity</code> and carries <code>class_uri: prov:Activity</code>. The shared PROV-O class URI across <code>Process</code> and <code>ProvenanceRecord</code> reflects PROV-O's treatment of activities at both composite and atomic scales — both are legitimately <code>prov:Activity</code>, differing only in granularity.</p>
+<p>Minimum slot set for sec9 (callers specialize via <code>is_a: Process</code> to add domain-specific attributes such as pipeline parameters, input/output manifests, runtime metadata):</p>
+<table>
+<thead>
+<tr>
+<th>Slot</th>
+<th>Type</th>
+<th>Required</th>
+<th>Semantics</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>id</code></td>
+<td>string (UUID)</td>
+<td>yes</td>
+<td>Inherited from <code>Entity</code>.</td>
+</tr>
+<tr>
+<td><code>is_available</code></td>
+<td>boolean</td>
+<td>yes</td>
+<td>Inherited from <code>Entity</code>. Processes are archived, not hard-deleted.</td>
+</tr>
+<tr>
+<td><code>parent_process_id</code></td>
+<td>string (UUID)</td>
+<td>no</td>
+<td>Self-reference for process composition. Processes form a tree; if a caller needs shared dependencies, the same mechanism supports a DAG.</td>
+</tr>
+<tr>
+<td><code>operation_kind</code></td>
+<td>string</td>
+<td>yes</td>
+<td>Caller-defined categorization (e.g., <code>reference_data_installed</code>, <code>pipeline_run</code>, <code>schema_migration</code>, <code>manual_edit</code>). Not a closed enum — deployments categorize freely.</td>
+</tr>
+<tr>
+<td><code>started_at</code></td>
+<td>datetime</td>
+<td>yes</td>
+<td>UTC wall-clock time at which the process began.</td>
+</tr>
+<tr>
+<td><code>ended_at</code></td>
+<td>datetime</td>
+<td>no</td>
+<td>UTC wall-clock time at which the process completed. Null while running or after failure without completion.</td>
+</tr>
+<tr>
+<td><code>actor_id</code></td>
+<td>string (UUID)</td>
+<td>yes</td>
+<td>Identifier of the entity responsible for initiating this process. Resolved via the identity model above.</td>
+</tr>
+</tbody>
+</table>
+<p>Processes themselves emit <code>ProvenanceRecord</code> entries for their own lifecycle (creation, state updates, archival). This is recursive but terminates: a root process has <code>parent_process_id: null</code>, and its own creation/update <code>ProvenanceRecord</code> entries have <code>process_id: null</code> (or are associated with an enclosing system-level process, caller's choice).</p>
+<p>Caller specializations are encouraged to add domain-specific slots. Hippo_core intentionally does not enumerate inputs, outputs, or execution state machines — those are caller concerns.</p>
+<p><strong><code>Validator</code>.</strong></p>
+<p><code>Validator</code> is the LinkML-declared shape of an entry in <code>validators.yaml</code>. The config file declares <em>instances</em> of <code>Validator</code>; the runtime loads each instance and validates it against this class before registering it in the validation pipeline. Design-relevant slots:</p>
+<ul>
+<li><code>name</code> — stable identifier for the validator.</li>
+<li><code>entity_types</code> — domain class(es) the validator applies to; subtype-aware.</li>
+<li><code>condition</code> — CEL expression returning boolean.</li>
+<li><code>error_message</code> — message surfaced on failure.</li>
+<li><code>when</code>, <code>expand</code>, <code>requires</code> — pre-condition, path pre-fetching, and ergonomic shorthand carried forward from the existing design (see <code>reference_validators_yaml.md</code>).</li>
+<li><code>priority</code> — ordering hint when multiple validators apply.</li>
+</ul>
+<p>LinkML-native type, pattern, enum, range, and required-slot checks run upstream of any <code>Validator</code>. A <code>Validator</code> exists only for logic that is dynamic or cross-entity — see 9.9.</p>
+<p><strong><code>ReferenceLoader</code>.</strong></p>
+<p><code>ReferenceLoader</code> exists in <code>hippo_core</code> so that a deployment can answer the question "what reference-data loaders are installed, and what do they populate?" through the same introspection pipeline used for every other concept — <code>SchemaRegistry</code>, REST introspection, the typed client. Plugin code continues to live in Python and to register under the <code>hippo.reference_loaders</code> entry point; <code>ReferenceLoader</code> is the introspectable metadata shape for each registered plugin.</p>
+<p>The exact slot inventory is deferred to a subsequent OpenSpec change (see 9.12). Two design questions must be resolved before the shape is finalized:</p>
+<ul>
+<li><strong>Multi-class loaders.</strong> A single reference-data source frequently populates several entity classes simultaneously (e.g., an ontology loader contributing <code>Organism</code>, <code>Tissue</code>, and <code>Assay</code>). The <code>entity_type</code> slot must be multivalued; the exact cardinality semantics (ordered? set?) and whether per-class metadata is carried alongside each entry remain open.</li>
+<li><strong>Referential boundary of <code>schema_fragment</code>.</strong> A <code>ReferenceLoader</code> instance may reference classes declared in its own <code>schema_fragment</code>. Those classes do not exist in the merged <code>SchemaView</code> until the plugin's fragment is installed. The load-order contract — when the fragment is merged, when the <code>ReferenceLoader</code> instance is validated, what the error surface is if validation fails — requires a deliberate design, not an implicit ordering.</li>
+</ul>
+<p>Until these are resolved, <code>ReferenceLoader</code> is treated as a placeholder entry in <code>hippo_core</code> with no committed slot inventory. User-facing plugin registration continues unchanged from sec5; it is not blocked on this design.</p>
+<p><strong>Enums.</strong></p>
+<p><code>Status</code> and <code>Operation</code> are closed enums in <code>hippo_core</code>. Adding a value is additive (minor bump); removing a value is breaking (major bump) per 9.3.</p>
+<p><strong>Design notes.</strong></p>
+<ul>
+<li><code>Entity</code> is intentionally sparse. The SDK needs exactly <code>id</code> and <code>is_available</code> on every entity; everything else is either domain-specific (user schema) or derived from provenance (9.7). Resist adding slots to <code>Entity</code>.</li>
+<li><code>hippo_core</code> contains no foreign keys into user-schema classes. A relationship from a domain entity to its provenance is expressed via the <code>entity_id</code> slot on <code>ProvenanceRecord</code>, not by a reference in the opposite direction.</li>
+<li><code>hippo_core</code> MUST validate against itself. Its own shape satisfies the LinkML meta-model, and <code>SchemaRegistry</code> verifies this at load time. A malformed <code>hippo_core</code> is a startup failure, not a silent degradation.</li>
+</ul>
+<hr />
+<h3 id="96-provenance-as-a-linkml-class">9.6 Provenance as a LinkML Class<a class="headerlink" href="#96-provenance-as-a-linkml-class" title="Permanent link">&para;</a></h3>
+<p><code>ProvenanceRecord</code> is declared in <code>hippo_core</code> as a first-class LinkML class. It is DDL-generated by the same pipeline as user entities, validated against the same schema machinery, and introspectable through the same <code>SchemaRegistry</code> view. There is no provenance-specific code path in the core SDK.</p>
+<p><strong>PROV-O alignment.</strong></p>
+<p><code>ProvenanceRecord</code> maps to the W3C PROV-O ontology via LinkML URI alignment. Each instance is a <code>prov:Activity</code>: an operation that occurred over a conceptually instantaneous period, associated with an agent, that generated, invalidated, or derived one or more <code>prov:Entity</code> instances.</p>
+<table>
+<thead>
+<tr>
+<th>LinkML element</th>
+<th>PROV-O URI</th>
+<th>Role</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>ProvenanceRecord</code> (class)</td>
+<td><code>prov:Activity</code> (atomic)</td>
+<td>The operation itself — an atomic PROV-O activity. Composite activities are modeled by <code>Process</code> (see 9.5), which shares the same class URI at the composite scale.</td>
+</tr>
+<tr>
+<td><code>entity_id</code> (slot)</td>
+<td><code>prov:wasGeneratedBy</code> / <code>prov:wasInvalidatedBy</code> (operation-dependent)</td>
+<td>Target entity. Direction of the relationship is implicit in the operation kind.</td>
+</tr>
+<tr>
+<td><code>actor_id</code> (slot)</td>
+<td><code>prov:wasAssociatedWith</code></td>
+<td>Identifier of the <code>prov:Agent</code> responsible for the operation. Resolves via the identity model in 9.5.</td>
+</tr>
+<tr>
+<td><code>timestamp</code> (slot)</td>
+<td><code>prov:endedAtTime</code></td>
+<td>Wall-clock time at which the operation completed.</td>
+</tr>
+<tr>
+<td><code>derived_from_id</code> (slot, optional)</td>
+<td><code>prov:wasDerivedFrom</code></td>
+<td>For supersession: identifier of the previous entity version.</td>
+</tr>
+<tr>
+<td><code>process_id</code> (slot, optional)</td>
+<td><code>prov:wasInformedBy</code> (conventionally)</td>
+<td>Enclosing <code>Process</code> that contained this operation. Gives atomic activities their composite-activity context.</td>
+</tr>
+</tbody>
+</table>
+<p>Slots without a direct PROV-O equivalent (<code>operation</code>, <code>schema_version</code>, <code>patch</code>, <code>context</code>, <code>entity_type</code>) are Hippo-specific extensions; they sit alongside the PROV-O-aligned slots without interfering with PROV-O interpretation.</p>
+<p><strong>Slot inventory.</strong></p>
+<table>
+<thead>
+<tr>
+<th>Slot</th>
+<th>Type</th>
+<th>Required</th>
+<th>Semantics</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>id</code></td>
+<td>string (UUID)</td>
+<td>yes</td>
+<td>Stable identifier for this provenance record.</td>
+</tr>
+<tr>
+<td><code>entity_id</code></td>
+<td>string (UUID)</td>
+<td>no</td>
+<td>Identifier of the entity the operation targets. Null only for system operations (see <code>Operation</code> enum below).</td>
+</tr>
+<tr>
+<td><code>entity_type</code></td>
+<td>string</td>
+<td>no</td>
+<td>Fully qualified class name of the target entity at write time. Denormalized onto the record so audit queries don't need to resolve type through the identity registry. Null when <code>entity_id</code> is null.</td>
+</tr>
+<tr>
+<td><code>operation</code></td>
+<td><code>Operation</code> enum</td>
+<td>yes</td>
+<td>Kind of operation.</td>
+</tr>
+<tr>
+<td><code>actor_id</code></td>
+<td>string (UUID)</td>
+<td>yes</td>
+<td>Identifier of the entity responsible for this operation. Resolves through the identity model (9.5) to an agent entity — a user-schema <code>User</code>/<code>Service</code> class, a <code>Process</code> (for autonomous execution), or a system entity. Deployments that need rich actor modeling define agent classes in their user schema; <code>hippo_core</code> prescribes only the reference.</td>
+</tr>
+<tr>
+<td><code>timestamp</code></td>
+<td>datetime</td>
+<td>yes</td>
+<td>When the operation completed, in UTC.</td>
+</tr>
+<tr>
+<td><code>schema_version</code></td>
+<td>string</td>
+<td>yes</td>
+<td>Version of the merged schema at the moment of write. Captured by the SDK; not caller-supplied.</td>
+</tr>
+<tr>
+<td><code>derived_from_id</code></td>
+<td>string (UUID)</td>
+<td>no</td>
+<td>For supersession operations, the previous entity version.</td>
+</tr>
+<tr>
+<td><code>process_id</code></td>
+<td>string (UUID)</td>
+<td>no</td>
+<td>Identifier of the enclosing <code>Process</code> (9.5). Provides schema-level correlation for operations that belong to the same logical execution. Null for operations outside any <code>Process</code> (e.g., direct human edits).</td>
+</tr>
+<tr>
+<td><code>patch</code></td>
+<td>JSON blob</td>
+<td>no</td>
+<td>Operation-specific change payload (diff, new values, relationship target). Unstructured; schema intentionally open.</td>
+</tr>
+<tr>
+<td><code>context</code></td>
+<td>JSON blob</td>
+<td>no</td>
+<td>Caller-supplied contextual metadata. Structured at the caller's discretion; conventions documented in sec6.</td>
+</tr>
+</tbody>
+</table>
+<p><strong><code>Operation</code> enum.</strong></p>
+<table>
+<thead>
+<tr>
+<th>Value</th>
+<th>Semantics</th>
+<th>Associated PROV-O pattern</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>create</code></td>
+<td>Entity was created.</td>
+<td><code>prov:wasGeneratedBy</code> (entity → this activity)</td>
+</tr>
+<tr>
+<td><code>update</code></td>
+<td>Entity's slot values were modified in place.</td>
+<td>(Hippo extension; no direct PROV-O predicate for mutation)</td>
+</tr>
+<tr>
+<td><code>availability_change</code></td>
+<td><code>is_available</code> flag transitioned. <code>patch</code> carries the new value and the driving <code>Status</code> enum value.</td>
+<td><code>prov:wasInvalidatedBy</code> when transitioning to unavailable</td>
+</tr>
+<tr>
+<td><code>supersede</code></td>
+<td>Entity superseded by another. <code>derived_from_id</code> carries the predecessor.</td>
+<td><code>prov:wasDerivedFrom</code> (new entity → predecessor)</td>
+</tr>
+<tr>
+<td><code>relationship_add</code></td>
+<td>A relationship slot gained a value. <code>patch</code> carries <code>{slot, target_id}</code>.</td>
+<td>(Hippo-specific)</td>
+</tr>
+<tr>
+<td><code>relationship_remove</code></td>
+<td>A relationship slot lost a value. <code>patch</code> carries <code>{slot, target_id}</code>.</td>
+<td>(Hippo-specific)</td>
+</tr>
+<tr>
+<td><code>external_id_add</code></td>
+<td>An ExternalID was associated with the entity.</td>
+<td>(Hippo-specific)</td>
+</tr>
+<tr>
+<td><code>external_id_remove</code></td>
+<td>An ExternalID was disassociated.</td>
+<td>(Hippo-specific)</td>
+</tr>
+<tr>
+<td><code>migration_applied</code></td>
+<td>A schema migration was applied. <code>entity_id</code> is null; system operation.</td>
+<td>(Hippo-specific)</td>
+</tr>
+<tr>
+<td><code>reference_data_installed</code></td>
+<td>A reference loader installed data. <code>entity_id</code> is null; system operation.</td>
+<td>(Hippo-specific)</td>
+</tr>
+</tbody>
+</table>
+<p>This section takes the position, on the long-open question of whether system events should live in a separate table, that all events — entity events and system events alike — live in one <code>ProvenanceRecord</code> table. System operations (<code>migration_applied</code>, <code>reference_data_installed</code>) carry <code>entity_id = null</code> and a non-null <code>patch</code> with operation-specific context. One table, one code path; consistent with 9.2 <em>Provenance is data</em>.</p>
+<p><strong>Multi-entity activities.</strong></p>
+<p>A pure PROV-O encoding lets a single <code>prov:Activity</code> <code>prov:used</code> or generate several <code>prov:Entity</code> instances — one activity, many entity relationships. <code>ProvenanceRecord</code> is deliberately 1:1 with entity: <code>entity_id</code> is single-valued and each row records one operation on one entity. Atomic and composite activities live in different classes — <code>ProvenanceRecord</code> (atomic) and <code>Process</code> (composite, 9.5). Both map to <code>prov:Activity</code>; they differ only in granularity.</p>
+<p>Activities that touch multiple entities — reference-data loads, schema migrations, Cappella pipelines, batch upserts — are represented as a <em>set</em> of <code>ProvenanceRecord</code> rows sharing a <code>process_id</code> that points to one <code>Process</code> instance. The <code>Process</code> itself (with <code>class_uri: prov:Activity</code>) carries start/end times, the responsible actor, operation kind, and optionally a parent process; domain-specific attributes (pipeline parameters, input/output manifests, runtime metadata) are added by caller specializations via <code>is_a: Process</code>.</p>
+<table>
+<thead>
+<tr>
+<th>Scenario</th>
+<th>Hippo encoding</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1 predecessor → 1 successor (supersession)</td>
+<td>One <code>ProvenanceRecord</code>, <code>operation: supersede</code>, <code>derived_from_id</code> set. <code>process_id</code> optional.</td>
+</tr>
+<tr>
+<td>N predecessors → 1 successor (merge)</td>
+<td>Multiple records sharing a <code>process_id</code>. Per-record <code>operation</code> is caller's choice (<code>supersede</code> or domain-specific); <code>derived_from_id</code> is single-valued, so merging history is reconstructed by joining on <code>process_id</code>. First-class merge (multivalued <code>derived_from_ids</code>) is additive-compatible and deferred until a concrete use case arises.</td>
+</tr>
+<tr>
+<td>1 predecessor → N successors (fission)</td>
+<td>Multiple <code>supersede</code> records sharing <code>process_id</code>, each with <code>derived_from_id</code> pointing to the common predecessor.</td>
+</tr>
+<tr>
+<td>Pipeline activity producing multiple outputs (Cappella)</td>
+<td>A <code>PipelineRun is_a Process</code> instance; multiple <code>ProvenanceRecord</code> rows (one per entity touched) each with <code>process_id = PipelineRun.id</code>. <code>PipelineRun</code> carries pipeline-specific attributes and has its own independent provenance history.</td>
+</tr>
+<tr>
+<td>Reference-data load (Hippo itself)</td>
+<td>A <code>Process</code> instance (e.g., <code>operation_kind: reference_data_installed</code>); one <code>ProvenanceRecord</code> per entity loaded, all with <code>process_id</code> set to the <code>Process</code>. System-level provenance records for the <code>Process</code> itself have <code>entity_id</code> pointing at the <code>Process.id</code>.</td>
+</tr>
+</tbody>
+</table>
+<p>Reconstructing a logical activity's full entity trail is <code>SELECT * FROM ProvenanceRecord WHERE process_id = &lt;id&gt;</code>. Traversal in the other direction — entity → processes it participated in — is <code>SELECT DISTINCT process_id FROM ProvenanceRecord WHERE entity_id = &lt;id&gt;</code>. Process composition (a reference load that internally spawns sub-processes, a pipeline with sub-stages) is captured by <code>Process.parent_process_id</code>; the call-graph DAG lives on <code>Process</code>, not on <code>ProvenanceRecord</code>, keeping atomic records flat and cheap to query.</p>
+<p>Activity chains across Processes (<code>prov:wasInformedBy</code> between distinct Processes) are caller-modeled relationships on user-schema subclasses of <code>Process</code>; <code>hippo_core</code> does not prescribe the predicate.</p>
+<p>The current shape is additive-compatible with future extensions — <code>derived_from_ids</code> as multivalued, a dedicated generation/use join class, richer Process lifecycle state slots. None are needed as long as the 1:1 atomic record model holds.</p>
+<p><strong>Storage semantics.</strong></p>
+<p><code>ProvenanceRecord</code> is a normal entity table from the adapter's perspective, generated by the same DDL pipeline used for user entities. It is distinguished by the class-level annotation <code>hippo_append_only: true</code> (declared in <code>hippo_ext</code>; see 9.4), which imposes two rules the storage adapter MUST enforce:</p>
+<ol>
+<li><code>INSERT</code> is permitted. <code>UPDATE</code> and <code>DELETE</code> are rejected at the adapter layer.</li>
+<li>Partial-index and summary-view annotations do not apply to <code>ProvenanceRecord</code>; rows are read linearly by entity, by time window, or by operation kind.</li>
+</ol>
+<p>Append-only enforcement is a runtime check in the adapter, not a DDL constraint — LinkML annotations declare intent; the adapter honors them. A violation is a defect in the adapter, not in <code>hippo_core</code>.</p>
+<p><strong>Write atomicity.</strong></p>
+<p>Every entity mutation and its accompanying <code>ProvenanceRecord</code> write are one transactional unit. Either both land or neither does. If the adapter cannot append the provenance record, the entity write MUST roll back and the caller MUST receive a failure — the caller's operation does not complete. This applies to every operation that emits provenance: <code>create</code>, <code>update</code>, <code>supersede</code>, <code>availability_change</code>, <code>relationship_add</code>, <code>relationship_remove</code>, <code>external_id_add</code>, <code>external_id_remove</code>.</p>
+<p>Storage adapters that cannot provide transactional semantics spanning the entity table and the <code>ProvenanceRecord</code> table are unacceptable. For relational adapters this is a standard transaction. For Neo4j it is a single Cypher transaction spanning the entity node and the provenance node. For any future adapter, this is a conformance requirement.</p>
+<p>Provenance integrity is not a best-effort property. A deployment that encounters missing or inconsistent provenance has a critical defect in its adapter or in the SDK, not an acceptable degraded state.</p>
+<p><strong>Schema-version tracking.</strong></p>
+<p>Every <code>ProvenanceRecord</code> carries the <code>schema_version</code> in effect at write time. This enables:</p>
+<ul>
+<li>Read-time determination of which schema an entity was written under (relevant during and after migrations).</li>
+<li>Audit queries of the form "which records were written against schema version X?"</li>
+<li>Migration verification: a schema migration emits a <code>migration_applied</code> record whose <code>patch</code> identifies the before/after versions.</li>
+</ul>
+<p>The SDK captures <code>schema_version</code> from the merged <code>SchemaView</code> at write time. Callers cannot supply it.</p>
+<p><strong>Relationship to <code>Entity</code>.</strong></p>
+<p><code>ProvenanceRecord.entity_id</code> points from provenance to entity, not the other way. An <code>Entity</code> has no slot referencing its provenance records. This is deliberate:</p>
+<ul>
+<li>It preserves the "<code>Entity</code> is sparse" invariant from 9.5.</li>
+<li>It keeps <code>hippo_core</code> free of cross-layer references (no slot on <code>Entity</code> points into system-level data).</li>
+<li>It matches the PROV-O pattern: entities are entities; activities point at the entities they affect.</li>
+</ul>
+<p>Provenance for a given entity is retrieved by querying <code>ProvenanceRecord</code> filtered by <code>entity_id</code> — a cheap, indexed read pattern. See 9.7 for how this supports computed temporal fields.</p>
+<p><strong>Query patterns.</strong></p>
+<p>Every downstream use of provenance reduces to one of:</p>
+<ul>
+<li>Latest N events by <code>timestamp</code> for a given <code>entity_id</code> (history viewer, audit trail).</li>
+<li>Earliest <code>create</code> event for a given <code>entity_id</code> (computed <code>created_at</code>).</li>
+<li>Latest event for a given <code>entity_id</code> (computed <code>updated_at</code>).</li>
+<li>Events by <code>operation</code> kind within a time window (audit/reporting).</li>
+<li>System events (<code>entity_id = null</code>) filtered by <code>operation</code> (migration/reference-data history).</li>
+</ul>
+<p>Indexes supporting these queries are declared on <code>ProvenanceRecord</code> slots via <code>hippo_index</code> from <code>hippo_ext</code>. The specific index set is implementation detail, deferred to the OpenSpec change that introduces the class.</p>
+<hr />
+<h3 id="97-computed-temporal-fields">9.7 Computed Temporal Fields<a class="headerlink" href="#97-computed-temporal-fields" title="Permanent link">&para;</a></h3>
+<p>Temporal state — <code>created_at</code>, <code>updated_at</code>, <code>schema_version</code>, <code>created_by</code>, <code>updated_by</code> — is never stored as columns on entity tables. It is computed at read time by aggregating over <code>ProvenanceRecord</code> entries for the target entity. This is a direct consequence of 9.2 <em>Temporal fields are read-time</em> and 9.6's append-only provenance log.</p>
+<p><strong>Computed fields.</strong></p>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Source aggregation</th>
+<th>Null when</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>created_at</code></td>
+<td><code>timestamp</code> of the earliest <code>ProvenanceRecord</code> with <code>operation = create</code> for this entity</td>
+<td>No <code>create</code> record exists (indicates a data integrity defect).</td>
+</tr>
+<tr>
+<td><code>updated_at</code></td>
+<td><code>timestamp</code> of the latest <code>ProvenanceRecord</code> for this entity (any operation)</td>
+<td>No provenance record exists.</td>
+</tr>
+<tr>
+<td><code>schema_version</code></td>
+<td><code>schema_version</code> from the latest <code>ProvenanceRecord</code> for this entity</td>
+<td>No provenance record exists.</td>
+</tr>
+<tr>
+<td><code>created_by</code></td>
+<td><code>actor_id</code> from the <code>create</code> record</td>
+<td>No <code>create</code> record exists.</td>
+</tr>
+<tr>
+<td><code>updated_by</code></td>
+<td><code>actor_id</code> from the latest record</td>
+<td>No provenance record exists.</td>
+</tr>
+</tbody>
+</table>
+<p>Temporal fields are always included on entity reads. The SDK computes them regardless of adapter — callers see the same entity shape whether the adapter is SQLite, PostgreSQL, or Neo4j.</p>
+<p><strong>Computation strategy.</strong></p>
+<p>Aggregation happens at read time, from two point-in-time queries against <code>ProvenanceRecord</code>:</p>
+<ol>
+<li>Earliest <code>create</code> record for the entity: <code>MIN(timestamp) WHERE entity_id = ? AND operation = 'create'</code> → provides <code>created_at</code> and <code>created_by</code>.</li>
+<li>Latest record for the entity: <code>MAX(timestamp) WHERE entity_id = ?</code> → provides <code>updated_at</code>, <code>schema_version</code>, and <code>updated_by</code>.</li>
+</ol>
+<p>Both are indexed lookups. The required indexes on <code>ProvenanceRecord</code> are:</p>
+<ul>
+<li><code>(entity_id, timestamp)</code> — supports both queries with range scans.</li>
+<li><code>(entity_id, operation, timestamp)</code> — supports the <code>create</code>-filtered query without a secondary scan.</li>
+</ul>
+<p>Adapters MAY materialize these aggregates as views or cached columns for hot read paths; the SDK does not prescribe materialization. The Neo4j adapter, for example, can expose <code>created_at</code> / <code>updated_at</code> as read-time traversals across provenance relationships without any special caching — graph traversal is native.</p>
+<p><strong>Batch reads.</strong></p>
+<p>For entity-list queries (returning N entities with temporal fields), the SDK MUST batch the aggregation — one query per entity is unacceptable at scale. The adapter contract exposes a <code>get_temporal(entity_ids)</code> primitive that returns the aggregated fields for a set of entity IDs in one round-trip. Adapter-specific implementation:</p>
+<ul>
+<li>Relational: <code>GROUP BY entity_id</code> with window functions or a correlated subquery; one SQL statement per batch.</li>
+<li>Neo4j: single Cypher query with <code>MATCH (e:Entity) WHERE e.id IN $ids</code> followed by aggregation across provenance relationships.</li>
+</ul>
+<p><strong>Degenerate cases.</strong></p>
+<p>An entity with no <code>ProvenanceRecord</code> entries is a critical data-integrity error. Every mutation emits a record (9.6), and mutations are transactional with their provenance writes — this state cannot be produced by normal operation. When the SDK encounters it at read time, it raises <code>ProvenanceIntegrityError</code> and refuses to return the entity. The same applies to other inconsistency shapes: a non-<code>create</code> record as the earliest entry, missing <code>actor_id</code> on a record, or a <code>schema_version</code> unrecognized by the merged view.</p>
+<p>Rationale: provenance is the audit guarantee the system exists to provide. Silent degradation would compromise every downstream audit, compliance, and debugging use case. Loud failure on any inconsistency — even if it surfaces in a read path rather than a write path — is the only acceptable behavior. See 9.2 <em>Provenance integrity is transactional and loud</em>.</p>
+<p><strong>Interaction with supersession and availability changes.</strong></p>
+<ul>
+<li><code>supersede</code> records advance <code>updated_at</code> and <code>updated_by</code>, as expected. The superseded-by chain is followed via <code>derived_from_id</code>, not through computed fields.</li>
+<li><code>availability_change</code> records advance <code>updated_at</code> and <code>updated_by</code> on the target entity. <code>is_available</code> itself is a stored column (per 9.5); temporal fields describe when the flag last changed, not its current value.</li>
+</ul>
+<p><strong>Schema-version tracking across evolution.</strong></p>
+<p>Because <code>schema_version</code> is recorded on every <code>ProvenanceRecord</code>, a single entity can carry provenance from multiple schema versions. The computed <code>schema_version</code> always reflects the latest write. Migration queries that need to partition records by schema version filter <code>ProvenanceRecord.schema_version</code> directly — no traversal needed.</p>
+<hr />
+<h3 id="98-typed-client">9.8 Typed Client<a class="headerlink" href="#98-typed-client" title="Permanent link">&para;</a></h3>
+<p>The typed client is a Pydantic-generated surface that gives callers class-specific accessors over the SDK — <code>client.samples.create(Sample(name="S001"))</code> — alongside the generic <code>HippoClient.create("sample", {...})</code> that already exists. Per 9.2 <em>Typed and dynamic clients are coequal</em>, both surfaces have identical capabilities; neither is deprecated in favor of the other.</p>
+<p><strong>Generation trigger.</strong></p>
+<p>Pydantic classes are generated at <code>SchemaRegistry</code> load time via LinkML's <code>PythonGenerator</code> (the same tool that produces <code>gen-pydantic</code> artifacts). Generation is in-memory — no file artifacts are written for user code. The generated namespace is exposed through a stable SDK entry point (e.g., <code>hippo.models</code>) and regenerates when the schema reloads. Static file generation for IDE autocomplete is a possible future supplement; it is not part of the base contract.</p>
+<p><strong>Accessor shape.</strong></p>
+<p>The typed client mirrors the schema's namespace structure. Root-namespace classes are reachable both directly on <code>client</code> (flat) and via an explicit <code>client.root.*</code> path (dual access). Non-root-namespace classes are reached through a namespace path that matches their declared <code>namespace:</code> string.</p>
+<table>
+<thead>
+<tr>
+<th>Declared namespace</th>
+<th>Access form</th>
+<th>Example</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>root (no <code>namespace:</code>)</td>
+<td>Flat (default)</td>
+<td><code>client.samples.create(Sample(...))</code></td>
+</tr>
+<tr>
+<td>root</td>
+<td>Explicit</td>
+<td><code>client.root.samples.create(Sample(...))</code></td>
+</tr>
+<tr>
+<td><code>tissue</code></td>
+<td>—</td>
+<td><code>client.tissue.samples.create(Sample(...))</code></td>
+</tr>
+<tr>
+<td><code>assay.quant</code></td>
+<td>—</td>
+<td><code>client.assay.quant.measurements.create(Measurement(...))</code></td>
+</tr>
+<tr>
+<td><code>sequencing</code></td>
+<td>—</td>
+<td><code>client.sequencing.runs.query(...)</code></td>
+</tr>
+</tbody>
+</table>
+<p><code>client.samples</code> and <code>client.root.samples</code> resolve to the same underlying method — <code>client.root</code> is an alias for the flat root attributes. <code>root</code> is a reserved namespace name; a user schema MUST NOT declare <code>namespace: root</code>.</p>
+<p>The generated Pydantic classes mirror the same layout — each namespace becomes a submodule under <code>hippo.models</code>:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">hippo.models</span><span class="w"> </span><span class="kn">import</span> <span class="n">Sample</span>                   <span class="c1"># root.Sample</span>
+<a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a><span class="kn">from</span><span class="w"> </span><span class="nn">hippo.models.root</span><span class="w"> </span><span class="kn">import</span> <span class="n">Sample</span>              <span class="c1"># equivalent</span>
+<a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a><span class="kn">from</span><span class="w"> </span><span class="nn">hippo.models.tissue</span><span class="w"> </span><span class="kn">import</span> <span class="n">Sample</span> <span class="k">as</span> <span class="n">TissueSample</span>
+<a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a><span class="kn">from</span><span class="w"> </span><span class="nn">hippo.models.assay.quant</span><span class="w"> </span><span class="kn">import</span> <span class="n">Measurement</span>
+</code></pre></div>
+<p><strong>Nested namespaces via dot notation.</strong></p>
+<p>Hippo namespace strings MAY contain dots for organizational convenience. A namespace like <code>assay.quant</code> is literally the string <code>"assay.quant"</code>; the typed-client generator splits on dots when building attribute structures, producing <code>client.assay.quant</code>. Two namespaces that share a dot-prefix (e.g., <code>assay</code> and <code>assay.quant</code>) are formally independent — the shared prefix is convention, not a declared parent-child relationship — but the client presents them as a nested hierarchy.</p>
+<p>Consequence: a namespace <code>assay.quant</code> causes <code>client.assay</code> to materialize as a container attribute even if no classes are declared in the <code>assay</code> namespace. The container hosts only the <code>.quant</code> sub-attribute. This is legal; empty parent containers of this kind are not an error.</p>
+<p>FQN parsing follows the rule in 9.5: the final dot-separated segment is the class name; everything before is the namespace string.</p>
+<p><strong>Accessor-name derivation.</strong></p>
+<p>Within a namespace, accessor names are derived from class names via a deterministic default rule, with an optional override annotation for cases where the default is unsuitable.</p>
+<p>Default rule: accessor = <code>snake_case(ClassName) + "s"</code>.</p>
+<table>
+<thead>
+<tr>
+<th>Class</th>
+<th>Default accessor</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>Sample</code></td>
+<td><code>samples</code></td>
+</tr>
+<tr>
+<td><code>Project</code></td>
+<td><code>projects</code></td>
+</tr>
+<tr>
+<td><code>ProvenanceRecord</code></td>
+<td><code>provenance_records</code></td>
+</tr>
+<tr>
+<td><code>DNASample</code></td>
+<td><code>dna_samples</code></td>
+</tr>
+<tr>
+<td><code>Datum</code></td>
+<td><code>datums</code></td>
+</tr>
+</tbody>
+</table>
+<p>The rule is intentionally simple (no dependency on an inflection library) and predictable (an agent can compute the accessor for any class). It does not attempt to produce linguistically correct plurals for irregular cases — deployments that want <code>data</code> instead of <code>datums</code>, or need to resolve a genuine collision, use the override annotation.</p>
+<p>Override: <code>hippo_accessor</code> (declared in <code>hippo_ext</code>; see 9.4). Class-level string annotation. Optional and rare — a typical deployment, including one with many namespaces, adds zero <code>hippo_accessor</code> annotations.</p>
+<p><strong>Collision detection at schema load.</strong></p>
+<p><code>SchemaRegistry</code> validates the combined attribute space on <code>client</code> and on every namespace level at schema load and fails loudly on any collision. A collision is a load-time error; there is no first-wins resolution and no silent override. Four cases, each with a distinct error template:</p>
+<ol>
+<li><strong>Same-namespace accessor duplication.</strong> Two classes in the same namespace whose names (or <code>hippo_accessor</code> overrides) resolve to the same accessor.</li>
+<li><strong>Class accessor vs. sub-namespace segment.</strong> At some attribute level, a class accessor conflicts with a sub-namespace name at the same level.</li>
+<li><strong>Namespace name vs. SDK-reserved attribute.</strong> A namespace (or sub-namespace segment) uses a reserved name: <code>root</code>, <code>query</code>, <code>create</code>, <code>get</code>, <code>update</code>, <code>supersede</code>, <code>schemas</code>, <code>metadata</code>, or any other existing attribute on <code>HippoClient</code>.</li>
+<li><strong>Accessor vs. SDK-reserved name.</strong> A class's derived or override accessor conflicts with an existing client attribute.</li>
+</ol>
+<p>Error templates:</p>
+<p>Case 1:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a>SchemaRegistry load error: typed-client accessor collision.
+<a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a>  Classes `tissue.DNASample` and `tissue.DnaSample` both resolve to
+<a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a>  accessor `dna_samples` in namespace `tissue`.
+<a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a>  Add `hippo_accessor` to at least one class to disambiguate, e.g.:
+<a id="__codelineno-2-5" name="__codelineno-2-5" href="#__codelineno-2-5"></a>
+<a id="__codelineno-2-6" name="__codelineno-2-6" href="#__codelineno-2-6"></a>    classes:
+<a id="__codelineno-2-7" name="__codelineno-2-7" href="#__codelineno-2-7"></a>      DnaSample:
+<a id="__codelineno-2-8" name="__codelineno-2-8" href="#__codelineno-2-8"></a>        annotations:
+<a id="__codelineno-2-9" name="__codelineno-2-9" href="#__codelineno-2-9"></a>          hippo_accessor: dna_samples_legacy
+</code></pre></div>
+<p>Case 2:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a>SchemaRegistry load error: accessor/sub-namespace collision.
+<a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a>  Class `tissue.Protocol` (accessor `protocol`) conflicts with
+<a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a>  sub-namespace `tissue.protocol`.
+<a id="__codelineno-3-4" name="__codelineno-3-4" href="#__codelineno-3-4"></a>  `client.tissue.protocol` would be ambiguous.
+<a id="__codelineno-3-5" name="__codelineno-3-5" href="#__codelineno-3-5"></a>  Resolve by renaming the class, renaming the sub-namespace, or
+<a id="__codelineno-3-6" name="__codelineno-3-6" href="#__codelineno-3-6"></a>  adding `hippo_accessor`:
+<a id="__codelineno-3-7" name="__codelineno-3-7" href="#__codelineno-3-7"></a>
+<a id="__codelineno-3-8" name="__codelineno-3-8" href="#__codelineno-3-8"></a>    classes:
+<a id="__codelineno-3-9" name="__codelineno-3-9" href="#__codelineno-3-9"></a>      Protocol:   # in namespace: tissue
+<a id="__codelineno-3-10" name="__codelineno-3-10" href="#__codelineno-3-10"></a>        annotations:
+<a id="__codelineno-3-11" name="__codelineno-3-11" href="#__codelineno-3-11"></a>          hippo_accessor: protocol_templates
+</code></pre></div>
+<p>Case 3:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a>SchemaRegistry load error: reserved namespace name.
+<a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a>  Namespace `root` is reserved for root-namespace dual access.
+<a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a>  Rename the namespace to a non-reserved value.
+</code></pre></div>
+<p>Case 4:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a>SchemaRegistry load error: accessor conflicts with SDK-reserved name.
+<a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a>  Class `root.Query` (accessor `query`) conflicts with the SDK-reserved
+<a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a>  attribute `query`.
+<a id="__codelineno-5-4" name="__codelineno-5-4" href="#__codelineno-5-4"></a>  Add `hippo_accessor` to the class with a non-reserved value:
+<a id="__codelineno-5-5" name="__codelineno-5-5" href="#__codelineno-5-5"></a>
+<a id="__codelineno-5-6" name="__codelineno-5-6" href="#__codelineno-5-6"></a>    classes:
+<a id="__codelineno-5-7" name="__codelineno-5-7" href="#__codelineno-5-7"></a>      Query:
+<a id="__codelineno-5-8" name="__codelineno-5-8" href="#__codelineno-5-8"></a>        annotations:
+<a id="__codelineno-5-9" name="__codelineno-5-9" href="#__codelineno-5-9"></a>          hippo_accessor: search_queries
+</code></pre></div>
+<p>Collision detection is part of schema validation — it runs before any subsystem sees the merged view.</p>
+<p><strong>Type checking and IDE support.</strong></p>
+<p>The generated classes are Pydantic v2 models (LinkML's current target). Static type checkers (mypy, pyright) see the full class surface via the generated module. IDE autocomplete works against the in-memory module once <code>SchemaRegistry</code> has loaded. Pre-load autocomplete (before a running process) requires the optional static generation supplement mentioned above.</p>
+<p><strong>Validation during write.</strong></p>
+<ul>
+<li>Pydantic v2 validates LinkML-native shape (types, patterns, enums, required slots) at construction time — before the call reaches the SDK.</li>
+<li>The SDK runs the full validation pipeline (LinkML re-check for safety, CEL validators, Python plugins) as described in 9.9.</li>
+<li>Failures from Pydantic surface as <code>ValidationError</code>; failures from the pipeline surface as the SDK's unified <code>ValidationResult</code> envelope. Callers see both paths with clear origin annotations.</li>
+</ul>
+<p><strong>Coexistence contract.</strong></p>
+<ul>
+<li>The generic <code>HippoClient</code> surface is unchanged by sec9. Every dynamic call continues to work.</li>
+<li>New features land in both surfaces at the same time. A capability that exists only in the typed accessor is a defect, and vice versa.</li>
+<li>The typed accessors delegate to the same SDK internals; there is no duplicate code path.</li>
+</ul>
+<p><strong>What the typed client does NOT provide.</strong></p>
+<ul>
+<li>Query-builder syntax beyond what the generic client supports. <code>client.samples.query(...)</code> takes the same filter dict as the generic <code>query</code>; a typed query-builder is a possible future refinement, not a sec9 deliverable.</li>
+<li>Relationship traversal helpers. Those live on the query engine, which is adapter-agnostic.</li>
+<li>Compile-time schema checks. The Pydantic classes are only as static as the schema loaded at runtime; if the schema changes, the accessors change.</li>
+</ul>
+<hr />
+<h3 id="99-validation-division-of-labor">9.9 Validation Division of Labor<a class="headerlink" href="#99-validation-division-of-labor" title="Permanent link">&para;</a></h3>
+<p>Hippo runs three tiers of validation in a fixed order. Each tier has a bounded responsibility; the boundaries are design rules an agent can apply mechanically when deciding where to add a new validation concern.</p>
+<p><strong>The three tiers.</strong></p>
+<table>
+<thead>
+<tr>
+<th>Tier</th>
+<th>Validator type</th>
+<th>Responsibility</th>
+<th>Examples</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1</td>
+<td>LinkML-native</td>
+<td>Static shape of the data</td>
+<td>Types, patterns (regex), enum membership, <code>minimum_value</code>/<code>maximum_value</code>, <code>required: true</code>, <code>multivalued</code> cardinality, <code>unique_keys</code></td>
+</tr>
+<tr>
+<td>2</td>
+<td>CEL validator</td>
+<td>Dynamic or cross-entity rules expressible as a boolean expression</td>
+<td>"Aliquot volume must not exceed parent sample volume"; "project must be active when sample created under it"; "ExternalID must match source-specific pattern"</td>
+</tr>
+<tr>
+<td>3</td>
+<td>Python plugin</td>
+<td>Rules that require capabilities neither LinkML nor CEL can express</td>
+<td>External I/O (reachability checks against a remote service); complex computation not expressible as a single boolean expression; multi-step workflows</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Boundary rules.</strong></p>
+<p>These rules tell an agent where a new validation concern belongs:</p>
+<ul>
+<li>If LinkML can express it, it MUST be in LinkML. Moving a pattern or enum check out of LinkML into CEL is a defect.</li>
+<li>If CEL can express it (pure function over entity data, possibly with <code>expand</code> pre-fetching), it MUST be in CEL. Writing a Python plugin for a CEL-expressible rule is a defect.</li>
+<li>Python plugins are the escape hatch. Their existence is justified by specific use cases (e.g., an external-service reachability check that CEL cannot model), not by developer preference.</li>
+</ul>
+<p><strong>Execution order.</strong></p>
+<p>Tier 1 runs first (cheapest, purely schema-derived), tier 2 second, tier 3 last. The pipeline fails fast on the first tier that reports a failure by default — later tiers only run when earlier tiers passed. An opt-in collect-all mode (for batch ingest that wants to report every error in a batch) runs all tiers and aggregates results.</p>
+<p><strong>Unified result envelope.</strong></p>
+<p>Every tier reports through a common <code>ValidationResult</code> envelope:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a>ValidationResult:
+<a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a>  passed: bool
+<a id="__codelineno-6-3" name="__codelineno-6-3" href="#__codelineno-6-3"></a>  failures: [ValidationFailure]
+<a id="__codelineno-6-4" name="__codelineno-6-4" href="#__codelineno-6-4"></a>
+<a id="__codelineno-6-5" name="__codelineno-6-5" href="#__codelineno-6-5"></a>ValidationFailure:
+<a id="__codelineno-6-6" name="__codelineno-6-6" href="#__codelineno-6-6"></a>  tier: enum (linkml | cel | python)
+<a id="__codelineno-6-7" name="__codelineno-6-7" href="#__codelineno-6-7"></a>  rule: str         # rule name (validator name, slot name, or plugin identifier)
+<a id="__codelineno-6-8" name="__codelineno-6-8" href="#__codelineno-6-8"></a>  field: str|null   # offending slot, if applicable
+<a id="__codelineno-6-9" name="__codelineno-6-9" href="#__codelineno-6-9"></a>  message: str      # human-readable
+<a id="__codelineno-6-10" name="__codelineno-6-10" href="#__codelineno-6-10"></a>  details: dict     # tier-specific structured detail
+</code></pre></div>
+<p>Callers consume results uniformly; the <code>tier</code> annotation preserves debugging context. REST responses map <code>ValidationResult</code> to a structured HTTP 400/422 body; the typed client raises a typed <code>ValidationFailed</code> exception carrying the envelope.</p>
+<p><strong>Interactions.</strong></p>
+<ul>
+<li>The validation pipeline runs on every write: <code>create</code>, <code>update</code>, <code>supersede</code>, <code>relationship_add</code>, <code>relationship_remove</code>, <code>external_id_add</code>, <code>external_id_remove</code>. Read operations do not invoke validators.</li>
+<li>Temporal fields (9.7) are not re-validated — they are computed, not authored.</li>
+<li><code>ProvenanceRecord</code> and <code>Process</code> writes skip CEL and Python tiers (they have no caller-authored CEL validators); LinkML tier still applies.</li>
+</ul>
+<p><strong>Reference to existing <code>validators.yaml</code>.</strong></p>
+<p>The existing <code>validators.yaml</code> config format continues to describe CEL validators as instances of the <code>Validator</code> class (see 9.5). <code>expand</code>, <code>when</code>, <code>requires</code>, <code>priority</code>, and <code>entity_types</code> semantics carry forward unchanged; <code>reference_validators_yaml.md</code> remains the authoritative reference for the file format.</p>
+<hr />
+<h3 id="910-linkml-ecosystem-integration">9.10 LinkML Ecosystem Integration<a class="headerlink" href="#910-linkml-ecosystem-integration" title="Permanent link">&para;</a></h3>
+<p>This section names the specific LinkML tools Hippo adopts, where Hippo retains custom code, and how the seams between them work. The operating principle (from 9.2 <em>Adopt, don't rebuild</em>) is: use LinkML's ecosystem wherever it fits; justify custom code by a specific gap.</p>
+<p><strong>Adopted tools.</strong></p>
+<table>
+<thead>
+<tr>
+<th>LinkML component</th>
+<th>Hippo's use</th>
+<th>Replaces</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>SchemaView</code> (linkml-runtime)</td>
+<td>Loading, merging, and introspecting the three-layer schema stack at runtime</td>
+<td>The previous <code>SchemaConfig</code> / <code>SchemaParser</code> / <code>FieldDefinition</code> trio</td>
+</tr>
+<tr>
+<td><code>gen-sqlddl</code></td>
+<td>Base DDL generation for entity and <code>ProvenanceRecord</code> / <code>Process</code> tables</td>
+<td>Bespoke DDL generator (legacy path)</td>
+</tr>
+<tr>
+<td><code>gen-pydantic</code> (PythonGenerator)</td>
+<td>Generating the typed client's Pydantic classes at <code>SchemaRegistry</code> load time</td>
+<td>No prior equivalent — this is new capability</td>
+</tr>
+<tr>
+<td><code>linkml-validate</code></td>
+<td>Validating user-schema syntax/structure at load time; validating instance data against the schema for tier-1 checks (9.9)</td>
+<td>Bespoke type/pattern/enum validation logic</td>
+</tr>
+<tr>
+<td><code>linkml-diff</code></td>
+<td>Computing the diff between two schema versions for migration planning</td>
+<td>Bespoke schema-diff code</td>
+</tr>
+<tr>
+<td>LinkML's <code>Annotation</code> metamodel</td>
+<td>Declaring <code>hippo_ext</code> vocabulary with typed values and <code>applies_to</code> constraints</td>
+<td>The previous convention of flat keys inside <code>annotations:</code> blocks</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Operating rule: adopt, do not reimplement.</strong></p>
+<p>Hippo uses LinkML's ecosystem as-is. Bugs, missing features, and quality gaps in LinkML are addressed by upgrading LinkML or contributing upstream — never by reimplementing the affected capability in Hippo. The alternative would be a slow drift into a parallel LinkML maintained by this project, which contradicts 9.1's motivation and negates the point of adopting LinkML in the first place.</p>
+<p><strong>Hippo-specific shims — strictly bounded.</strong></p>
+<p>Shims exist for exactly one reason: to apply the effects of <code>hippo_*</code> annotations that LinkML generators have no knowledge of. The shim layer is bounded by this scope; it is not a general-purpose place to absorb LinkML bugs or limitations.</p>
+<p>Shims permitted:</p>
+<ul>
+<li><strong>DDL shim.</strong> Post-pass over <code>gen-sqlddl</code> output that applies <code>hippo_*</code> annotation effects: <code>hippo_unique</code> → <code>UNIQUE</code> column constraints, <code>hippo_index</code> → <code>CREATE INDEX</code>, <code>hippo_index_partial</code> → partial indexes, <code>hippo_search</code> → FTS indexes, <code>hippo_append_only</code> → adapter-side write-guard registration. The base DDL is unchanged from LinkML's output.</li>
+<li><strong>Validation result mapping.</strong> <code>linkml-validate</code> output is mapped into Hippo's <code>ValidationResult</code> envelope (9.9). No semantic translation; LinkML error messages are preserved verbatim.</li>
+<li><strong>Diff consumption.</strong> <code>linkml-diff</code> structured output is consumed by Hippo's migration planner, which decides which adapter operations (DDL alter, data migration, version bump) the diff implies.</li>
+</ul>
+<p>Shims explicitly NOT permitted:</p>
+<ul>
+<li>Workarounds for LinkML generator bugs. The fix path is upstream or version-upgrade, not a local patch.</li>
+<li>Replacements for LinkML tools. If a tool is inadequate, the remedy is contribution or version change.</li>
+<li>Selective reimplementation of LinkML's schema loading, type system, enum handling, or inheritance resolution.</li>
+</ul>
+<p>Expanding the shim surface beyond these bounds is a major architectural change and requires its own OpenSpec proposal that scopes the new shim and justifies why upstream change or version upgrade is insufficient.</p>
+<p><strong>Retained custom code.</strong></p>
+<p>Where LinkML genuinely has no equivalent, Hippo's custom code stays:</p>
+<ul>
+<li><strong>CEL evaluation</strong> (<code>cel-python</code>-backed validators). Outside LinkML's scope by design; carries forward unchanged.</li>
+<li><strong>Storage adapters</strong> (<code>SQLiteAdapter</code>, <code>PostgresAdapter</code>, future <code>Neo4jAdapter</code>). LinkML does not ship adapters.</li>
+<li><strong><code>hippo_ext</code> vocabulary itself</strong>, as a schema artifact. LinkML provides the mechanism (annotation metamodel); Hippo provides the vocabulary.</li>
+<li><strong>Append-only enforcement, partial-index predicates, FTS adapter bindings.</strong> Adapter-layer behaviors that LinkML annotations declare but adapters enforce.</li>
+</ul>
+<p><strong>Version pinning — exact versions, deliberate upgrades.</strong></p>
+<p><code>pyproject.toml</code> pins LinkML and every LinkML tool dependency to exact versions (e.g., <code>linkml == 1.8.2</code>, <code>linkml-runtime == 1.8.2</code>). Exact pinning guarantees reproducibility across environments and avoids surprise behavior change from upstream releases. The <code>SchemaRegistry</code> reports the LinkML version it loaded against at startup; a mismatch between the declared pin and the installed LinkML is a startup failure.</p>
+<p>Upgrade discipline:</p>
+<ul>
+<li>Any LinkML version bump — including patch-level — is treated as a potential behavior change. The full Hippo test suite must pass against the new version before the pin is updated.</li>
+<li>Every LinkML pin update triggers a Hippo version bump, even when Hippo's own code is unchanged. Rationale: the released artifact is the combined <code>(Hippo, LinkML)</code> pair; a different LinkML is a different artifact and the version must reflect that.</li>
+<li>Security-relevant LinkML releases are prioritized. The version-bump workflow is fast-tracked but not skipped — tests must still pass before release.</li>
+<li>If LinkML introduces a breaking change that requires Hippo source changes, the upgrade is scoped in an OpenSpec proposal before the pin moves.</li>
+</ul>
+<p><strong>Upstream contribution.</strong></p>
+<p><code>hippo_ext</code> annotations that prove general (not Hippo-specific) are candidate contributions to LinkML upstream. When a pattern is adopted upstream, <code>hippo_ext</code> phases out its local version in the next major bump with a migration note. Contributions happen opportunistically; they are not a prerequisite for any sec9 work.</p>
+<p><strong>What the integration is NOT.</strong></p>
+<ul>
+<li>Hippo does not become a LinkML tool. It uses LinkML as a library; LinkML does not dictate Hippo's architecture.</li>
+<li>Hippo does not vendor LinkML. The dependency is declared in <code>pyproject.toml</code> like any other.</li>
+<li>Hippo does not re-export LinkML's public API. Callers that need LinkML directly import <code>linkml_runtime</code>; Hippo's SDK exposes Hippo-level concepts only.</li>
+</ul>
+<hr />
+<h3 id="911-migration-narrative">9.11 Migration Narrative<a class="headerlink" href="#911-migration-narrative" title="Permanent link">&para;</a></h3>
+<p>This section tells the story of how Hippo's schema system evolved, what is already in place, and what sec9 asks to change. The narrative is in three stages: pre-LinkML, the current SchemaRegistry-seam transitional state, and the sec9 target state.</p>
+<p><strong>Stage 1 — Pre-LinkML (initial design).</strong></p>
+<p>Hippo's first schema system was bespoke. <code>SchemaConfig</code> loaded YAML. <code>SchemaParser</code> parsed it. <code>FieldDefinition</code> represented a slot. Classes were hand-rolled Python types; validation was a mix of type checks and CEL-backed rules; DDL was a custom generator; schema diff was a custom module. Entity types were registered through a plugin system. Provenance was handled entirely outside the schema system by a <code>ProvenanceManager</code> that knew its own data shape.</p>
+<p>This design worked but carried significant duplication of concepts LinkML already formalized: schema loading, slot shape, inheritance, enum modeling, constraint semantics. The duplication was maintenance cost.</p>
+<p><strong>Stage 2 — The SchemaRegistry seam (where we are now).</strong></p>
+<p>Direct LinkML authoring was adopted mid-course (commits <code>49a11c9</code> "rewrite all schema examples to valid LinkML format" and <code>04f1448</code> "remove Hippo DSL — rename to EntityYAML, delete compiler"). User schemas became LinkML YAML files; the compiler step disappeared.</p>
+<p>A subsequent series of refactors introduced <code>SchemaRegistry</code> as a LinkML-backed seam and migrated the user-facing schema plumbing onto it:</p>
+<ul>
+<li><code>67f798e</code> — <code>feat(hippo): add LinkML-backed SchemaRegistry seam</code></li>
+<li><code>3b1722d</code> — <code>refactor(hippo): swap DDL/migration/diff path to SchemaRegistry</code></li>
+<li><code>3726938</code> — <code>refactor(hippo): swap HippoClient/validator/manager to SchemaRegistry</code></li>
+<li><code>f65fef4</code> — <code>refactor(hippo): delete SchemaParser, SchemaConfig, FieldDefinition</code></li>
+</ul>
+<p>After these, the user-schema loading pipeline runs on LinkML. User classes are authored directly in LinkML; SchemaRegistry wraps <code>SchemaView</code>; DDL generation and schema diff consume the merged view. The bespoke abstractions that shadowed LinkML are deleted.</p>
+<p>What remains outside the LinkML model:</p>
+<ul>
+<li>Hippo's own primitives (<code>Entity</code>, <code>ProvenanceRecord</code>, status/operation enums, <code>Validator</code>, <code>ReferenceLoader</code>) are not yet declared in a LinkML schema shipped with Hippo. They exist as Python constructs that a hand-written DDL path produces tables for.</li>
+<li>The <code>hippo_*</code> annotation vocabulary is used but not formally declared anywhere — it is a stringly-typed convention.</li>
+<li>No typed client surface exists; callers use the generic <code>HippoClient</code> exclusively.</li>
+<li>Temporal fields are partially computed from provenance but not uniformly formalized as read-time aggregations.</li>
+<li>Validation is tiered (LinkML → CEL → Python) by behavior but not formalized by contract.</li>
+</ul>
+<p><strong>Stage 3 — sec9 target state.</strong></p>
+<p>sec9 completes the direction. Hippo's primitives move into a shipped-with-Hippo LinkML schema (<code>hippo_core</code>). The annotation vocabulary moves into a separate shipped-with-Hippo LinkML schema (<code>hippo_ext</code>). <code>Process</code> joins <code>Entity</code> and <code>ProvenanceRecord</code> as a first-class class in <code>hippo_core</code>, formalizing the multi-entity activity grouping that reference loads, pipelines, and migrations need. Temporal fields become a uniform read-time computation. The validation tiering becomes an explicit contract. A typed Pydantic client surface becomes available alongside the dynamic <code>HippoClient</code>.</p>
+<p>After sec9:</p>
+<ul>
+<li>Three LinkML schemas form the spine: <code>hippo_ext</code> (vocabulary), <code>hippo_core</code> (primitives), user schema (domain).</li>
+<li>The merged <code>SchemaView</code> is the only schema representation in memory; every subsystem reads from it.</li>
+<li><code>ProvenanceRecord</code> and <code>Process</code> are DDL-generated by the same pipeline as user entities.</li>
+<li>Identifiers are UUIDs everywhere; type resolution is adapter-specific; the SDK contract is uniform across adapters including the future Neo4j adapter.</li>
+<li>The typed client and the generic client are coequal surfaces over the same SDK.</li>
+<li>LinkML's ecosystem tools (<code>gen-sqlddl</code>, <code>gen-pydantic</code>, <code>linkml-validate</code>, <code>linkml-diff</code>) handle the bulk of the work; Hippo-specific code is limited to adapter logic, CEL evaluation, and the shims that apply <code>hippo_*</code> annotation effects.</li>
+</ul>
+<p><strong>What sec9 does NOT require.</strong></p>
+<ul>
+<li>No data migration. Existing provenance records and entities remain readable. <code>hippo_core</code> is introduced additively; its tables are created at first migration; existing tables keep their shape.</li>
+<li>No API break. <code>HippoClient</code>'s existing surface is preserved; the typed accessors are additive.</li>
+<li>No storage-adapter rewrite. Adapters gain a registry table (relational) or labeling convention (Neo4j) but the core interface is unchanged.</li>
+<li>No cross-component changes. Cappella, Bridge, and Aperture are untouched; their integration with Hippo continues through the existing REST and SDK surfaces.</li>
+</ul>
+<p>The work is scoped into OpenSpec changes in 9.12. Each change is independently reviewable; the sequence produces the target state incrementally without intermediate states that are broken for callers.</p>
+<hr />
+<h3 id="912-openspec-decomposition">9.12 OpenSpec Decomposition<a class="headerlink" href="#912-openspec-decomposition" title="Permanent link">&para;</a></h3>
+<p>sec9 is decomposed into ten OpenSpec changes, grouped into three waves by dependency. Each change is independently reviewable; later changes assume the earlier ones have landed.</p>
+<p><strong>Wave 1 — Foundation.</strong> Introduce the schemas and the identity model. No observable behavior change for callers, but the groundwork for everything in Waves 2 and 3.</p>
+<p><strong>Wave 2 — Data model.</strong> Move Hippo's internal concepts (Process, ProvenanceRecord, temporal computation) onto the LinkML spine.</p>
+<p><strong>Wave 3 — Consumer-facing.</strong> Improvements visible to SDK and REST callers.</p>
+<p><strong>Dependency graph.</strong></p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a>Wave 1: hippo-ext-vocabulary  ─┐
+<a id="__codelineno-7-2" name="__codelineno-7-2" href="#__codelineno-7-2"></a>                               ├─► hippo-core-schema ──► id-registry-and-uuid-strategy ──► process-class
+<a id="__codelineno-7-3" name="__codelineno-7-3" href="#__codelineno-7-3"></a>                                                                                              │
+<a id="__codelineno-7-4" name="__codelineno-7-4" href="#__codelineno-7-4"></a>                                                                                              ▼
+<a id="__codelineno-7-5" name="__codelineno-7-5" href="#__codelineno-7-5"></a>Wave 2:                                                         provenance-as-linkml-class ──► computed-temporal-fields
+<a id="__codelineno-7-6" name="__codelineno-7-6" href="#__codelineno-7-6"></a>                                                                                                      │
+<a id="__codelineno-7-7" name="__codelineno-7-7" href="#__codelineno-7-7"></a>                                                                                                      ▼
+<a id="__codelineno-7-8" name="__codelineno-7-8" href="#__codelineno-7-8"></a>Wave 3:                                                         validation-tiering-clarification ─► typed-client
+<a id="__codelineno-7-9" name="__codelineno-7-9" href="#__codelineno-7-9"></a>                                                                                                      │
+<a id="__codelineno-7-10" name="__codelineno-7-10" href="#__codelineno-7-10"></a>                                                                reference-loader-shape                │
+<a id="__codelineno-7-11" name="__codelineno-7-11" href="#__codelineno-7-11"></a>                                                                (parallel, independent)                │
+<a id="__codelineno-7-12" name="__codelineno-7-12" href="#__codelineno-7-12"></a>                                                                                                      ▼
+<a id="__codelineno-7-13" name="__codelineno-7-13" href="#__codelineno-7-13"></a>                                                                                            generated-rest-surface (optional, later)
+</code></pre></div>
+<p><strong>Wave 1 — Foundation</strong></p>
+<table>
+<thead>
+<tr>
+<th>Change</th>
+<th>Scope</th>
+<th>Dependencies</th>
+<th>Deliverables</th>
+<th>Acceptance</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>hippo-ext-vocabulary</code></td>
+<td>Create <code>hippo_ext.yaml</code> declaring the current <code>hippo_*</code> annotations as typed, <code>applies_to</code>-constrained LinkML annotations. Add <code>reference_hippo_ext.md</code>. Update <code>SchemaRegistry</code> to validate every <code>hippo_*</code> use against the declaration.</td>
+<td>none</td>
+<td><code>hippo_ext.yaml</code>; reference doc; SchemaRegistry validation hook; tests covering declared/undeclared/mistyped annotations.</td>
+<td>Every existing <code>hippo_*</code> usage in the codebase validates against <code>hippo_ext</code>. Undeclared annotations surface as load-time errors.</td>
+</tr>
+<tr>
+<td><code>hippo-core-schema</code></td>
+<td>Create <code>hippo_core.yaml</code> with <code>Entity</code>, <code>Status</code>, <code>Operation</code> enums. Deployments' user schemas declare <code>imports: hippo_core</code> and use <code>is_a: Entity</code> on domain classes. <code>SchemaRegistry</code> merges the three layers. <code>Validator</code> and <code>ReferenceLoader</code> added as placeholder classes (slot-finalization deferred).</td>
+<td><code>hippo-ext-vocabulary</code></td>
+<td><code>hippo_core.yaml</code>; updated user-schema import pattern; reference doc; migration of existing user schemas to <code>is_a: Entity</code>.</td>
+<td>All existing user schemas load against the merged view. No observable SDK behavior change.</td>
+</tr>
+<tr>
+<td><code>id-registry-and-uuid-strategy</code></td>
+<td>Formalize UUID-only identifiers. Relational adapters add an <code>_entity_registry</code> table populated on every create. SDK exposes type-resolution helpers. Neo4j adapter (when implemented) uses labels.</td>
+<td><code>hippo-core-schema</code></td>
+<td>Registry table migration; SDK helpers; updated entity-creation code paths; tests covering cold UUID resolution.</td>
+<td><code>client.get(uuid)</code> works without <code>entity_type</code> hint. Polymorphic references resolve correctly.</td>
+</tr>
+<tr>
+<td><code>process-class</code></td>
+<td>Add <code>Process</code> to <code>hippo_core</code> (minimum slot set: <code>parent_process_id</code>, <code>operation_kind</code>, <code>started_at</code>, <code>ended_at</code>, <code>actor_id</code>). DDL generates the table. Callers can declare <code>is_a: Process</code> subclasses. No consumers yet — foundation for Wave 2.</td>
+<td><code>id-registry-and-uuid-strategy</code></td>
+<td><code>Process</code> class in <code>hippo_core</code>; DDL generation coverage; tests.</td>
+<td><code>Process</code> table exists; instances can be created; <code>is_a: Process</code> user-schema subclasses work.</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Wave 2 — Data model</strong></p>
+<table>
+<thead>
+<tr>
+<th>Change</th>
+<th>Scope</th>
+<th>Dependencies</th>
+<th>Deliverables</th>
+<th>Acceptance</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>provenance-as-linkml-class</code></td>
+<td>Declares <code>hippo_append_only</code> in <code>hippo_ext</code> (minor bump) alongside its consumer. Moves <code>ProvenanceRecord</code> into <code>hippo_core</code> with the PROV-O alignment, <code>hippo_append_only: true</code>, and the full <code>Operation</code> enum. DDL generation runs through the same pipeline as user entities. Append-only enforcement in adapters. System events live in the same table with <code>entity_id = null</code>.</td>
+<td><code>process-class</code></td>
+<td><code>ProvenanceRecord</code> in <code>hippo_core</code>; <code>hippo_append_only</code> in <code>hippo_ext</code>; adapter enforcement; migration to unified event table; tests.</td>
+<td><code>ProvenanceRecord</code> is DDL-generated. Updates and deletes are rejected. Migration/reference-data events coexist with entity events. <code>hippo_append_only</code> is validated against <code>hippo_ext</code>.</td>
+</tr>
+<tr>
+<td><code>computed-temporal-fields</code></td>
+<td>Formalize read-time aggregation for <code>created_at</code>, <code>updated_at</code>, <code>schema_version</code>, <code>created_by</code>, <code>updated_by</code>. Add <code>(entity_id, timestamp)</code> and <code>(entity_id, operation, timestamp)</code> indexes. Batch aggregation primitives. Remove any stored temporal columns on entity tables if any exist.</td>
+<td><code>provenance-as-linkml-class</code></td>
+<td>SDK aggregation code; batch primitive; index migration; tests covering batch and degenerate cases.</td>
+<td>Entity reads include temporal fields. Batch reads use one aggregation query per request.</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Wave 3 — Consumer-facing</strong></p>
+<table>
+<thead>
+<tr>
+<th>Change</th>
+<th>Scope</th>
+<th>Dependencies</th>
+<th>Deliverables</th>
+<th>Acceptance</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>validation-tiering-clarification</code></td>
+<td>Formalize the three-tier validation pipeline (LinkML → CEL → Python) with unified <code>ValidationResult</code> envelope and tier annotation on failures. REST surface maps failures to structured HTTP 400/422.</td>
+<td><code>computed-temporal-fields</code> (soft)</td>
+<td>Pipeline code with tier annotation; REST error mapping; typed exception in SDK; documentation in <code>reference_validators_yaml.md</code>.</td>
+<td>Every validation failure reports its tier. REST clients get structured error bodies. Existing validators run unchanged.</td>
+</tr>
+<tr>
+<td><code>typed-client</code></td>
+<td>Declares <code>hippo_accessor</code> in <code>hippo_ext</code> (minor bump) alongside its consumer. Generates Pydantic classes from merged schema at <code>SchemaRegistry</code> load time. Exposes class-specific accessors on <code>HippoClient</code> (<code>client.samples.create(...)</code>). Generic client unchanged.</td>
+<td><code>validation-tiering-clarification</code></td>
+<td>Generation code; typed accessors; <code>hippo_accessor</code> in <code>hippo_ext</code>; documentation; tests covering typed + generic parity and <code>hippo_accessor</code> override behavior.</td>
+<td>Every generic call has a typed equivalent; every typed call works. <code>hippo_accessor</code> is validated against <code>hippo_ext</code> and overrides the default accessor derivation.</td>
+</tr>
+<tr>
+<td><code>reference-loader-shape</code></td>
+<td>Finalize <code>ReferenceLoader</code> slot inventory (multivalued <code>entity_type</code>, load-order contract for <code>schema_fragment</code>). Independent of Wave 2 ordering; can land in parallel once Wave 1 is complete.</td>
+<td><code>hippo-core-schema</code></td>
+<td>Finalized <code>ReferenceLoader</code> slots; tests; migration of existing loaders.</td>
+<td>Existing loaders continue to work under the new shape.</td>
+</tr>
+<tr>
+<td><code>generated-rest-surface</code> <em>(optional, deferred)</em></td>
+<td>Generate REST endpoints and OpenAPI from the merged schema instead of hand-wrapping.</td>
+<td><code>typed-client</code></td>
+<td>Generated router; OpenAPI; migration of hand-written endpoints.</td>
+<td>REST callers see the same surface; maintenance cost of REST layer drops.</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Per-change artifacts.</strong></p>
+<p>Each change carries its standard OpenSpec artifacts: a proposal (motivation, scope, non-goals), a design sketch (architecture diagrams if relevant), a task list, an acceptance-criteria checklist, and a migration plan if data or schema shape changes. See <code>openspec/changes/</code> for the template.</p>
+<p><strong>Sequencing constraint.</strong></p>
+<p>Waves 1 and 2 MUST land in order — later changes have hard dependencies on earlier ones. Wave 3 changes CAN be parallelized once their Wave 2 dependencies are complete, but <code>validation-tiering-clarification</code> is recommended before <code>typed-client</code> so the typed client's error surface matches the pipeline's.</p>
+<p><strong>Rollback discipline.</strong></p>
+<p>Every change MUST be revertible in isolation. Wave 1 changes are additive-only (new schemas, new tables) and trivially revertible. Wave 2 changes include DDL changes that require down-migrations; the migration plan in each proposal documents the revert path. Wave 3 changes touch consumer-facing surfaces but preserve the generic client as a fallback.</p>
+<hr />
+<h3 id="913-non-goals-deferred-concerns">9.13 Non-Goals &amp; Deferred Concerns<a class="headerlink" href="#913-non-goals-deferred-concerns" title="Permanent link">&para;</a></h3>
+<p>This section distinguishes what sec9 explicitly excludes (non-goals) from what it touches but does not finalize (deferred). An agent reading sec9 should treat non-goals as out-of-bounds and deferred items as "coming later, not in this change."</p>
+<p><strong>Explicit non-goals.</strong></p>
+<p>sec9 does NOT do any of the following. If the work is tempting during implementation, it belongs in a separate proposal, not inside a sec9-scoped OpenSpec change.</p>
+<table>
+<thead>
+<tr>
+<th>Non-goal</th>
+<th>Reason</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Replace CEL validation with a LinkML-native rule language</td>
+<td>LinkML does not offer an equivalent; CEL serves its tier well. Removing it would force complex business rules into Python plugins, an anti-pattern per 9.9.</td>
+</tr>
+<tr>
+<td>Change GraphQL semantics or introduce new GraphQL features</td>
+<td>GraphQL remains reserved in <code>hippo/graphql/</code> (sec2) and is outside sec9's scope.</td>
+</tr>
+<tr>
+<td>Reopen multi-tenancy</td>
+<td>Explicitly out of scope per sec3's Key Decisions; nothing in sec9 requires or enables multi-tenant semantics.</td>
+</tr>
+<tr>
+<td>Coordinate with Cappella, Bridge, or Aperture</td>
+<td>Cross-component coordination is handled separately; sec9 is Hippo-internal. Bridge's actor-propagation contract is assumed unchanged.</td>
+</tr>
+<tr>
+<td>Import the full PROV-O ontology into <code>hippo_core</code></td>
+<td>Only selective URIs (<code>prov:Activity</code>, <code>prov:wasGeneratedBy</code>, etc.) are used for alignment. A full PROV-O import would bloat the schema and conflate Hippo's primitives with PROV-O's broader ontological commitments.</td>
+</tr>
+<tr>
+<td>Adopt human-readable or prefixed IDs (Stripe-style ULIDs)</td>
+<td>UUIDs are the committed ID strategy (9.5). Migrating to prefixed IDs would be a distinct proposal.</td>
+</tr>
+<tr>
+<td>Add first-class merge or fission primitives to <code>ProvenanceRecord</code></td>
+<td>9.6 shows these scenarios are representable with <code>process_id</code> correlation. First-class primitives are deferred until a use case requires them.</td>
+</tr>
+<tr>
+<td>Replace the storage-adapter architecture</td>
+<td>Adapters carry forward from sec2; sec9 adds a registry obligation for relational adapters but does not reshape the adapter interface.</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Deferred concerns.</strong></p>
+<p>sec9 touches these but does not finalize them. Each has its own OpenSpec change (or open question) to resolve later.</p>
+<table>
+<thead>
+<tr>
+<th>Deferred concern</th>
+<th>Where addressed</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Final slot inventory for <code>ReferenceLoader</code> (multivalued <code>entity_type</code>, <code>schema_fragment</code> load-order contract)</td>
+<td>OpenSpec change <code>reference-loader-shape</code> (9.12), Wave 3</td>
+</tr>
+<tr>
+<td>First-class multi-entity activity primitives (multivalued <code>derived_from_ids</code>, join class for <code>wasGeneratedBy</code>/<code>used</code>)</td>
+<td>Not scheduled; triggered by a concrete use case</td>
+</tr>
+<tr>
+<td>Materialized temporal-field views for hot read paths</td>
+<td>Adapter-internal optimization; not scheduled</td>
+</tr>
+<tr>
+<td>REST-surface generation from schema</td>
+<td>OpenSpec change <code>generated-rest-surface</code> (9.12), optional and deferred</td>
+</tr>
+<tr>
+<td>Upstream contribution of <code>hippo_ext</code> annotations to LinkML</td>
+<td>Aspirational (9.10); not scheduled</td>
+</tr>
+<tr>
+<td>Cross-deployment ID federation / DRS URI resolution across deployments</td>
+<td>Out of sec9 scope; would build on the UUID foundation</td>
+</tr>
+<tr>
+<td>Typed query-builder syntax on the typed client</td>
+<td>Possible future refinement (9.8); not in the first typed-client change</td>
+</tr>
+<tr>
+<td>Extended lifecycle state machine on <code>Process</code> (inputs/outputs slots, state transitions)</td>
+<td>Caller-extension territory (9.5); user schemas add these via <code>is_a: Process</code> subclasses</td>
+</tr>
+<tr>
+<td>Per-validator timeout tuning</td>
+<td>Existing open question from sec2, unchanged by sec9</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Cross-reference to existing open questions.</strong></p>
+<p>The INDEX.md Open Questions table includes items that sec9 relates to but does not resolve:</p>
+<ul>
+<li><em>Entity type remapping / namespace migration path (OQ1)</em> — sec9's namespace semantics reconcile with LinkML but do not provide a migration path. Remains open.</li>
+<li><em><code>hippo_poll</code> efficiency at scale</em> — unchanged by sec9.</li>
+<li><em>GraphQL transport</em> — unchanged.</li>
+<li><em>Schema version check on writes (503 on mismatch)</em> — benefits from 9.6's <code>schema_version</code> tracking but is scheduled separately.</li>
+<li><em>Dynamic schema reload via polling</em> — benefits from the <code>SchemaRegistry</code> seam but is scheduled separately.</li>
+</ul>
+<p>Items resolved or reaffirmed by sec9 are tagged <code>Reaffirmed by sec9</code> or <code>Resolved by sec9</code> in the INDEX decision log after approval.</p>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+          <button type="button" class="md-top md-icon" data-md-component="top" hidden>
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8z"/></svg>
+  Back to top
+</button>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": "../../..", "features": ["navigation.tabs", "navigation.sections", "navigation.expand", "navigation.top", "search.highlight", "search.suggest", "content.code.copy"], "search": "../../../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+    
+    
+      <script src="../../../assets/javascripts/bundle.79ae519e.min.js"></script>
+      
+    
+  </body>
+</html>
