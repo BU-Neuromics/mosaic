@@ -14,7 +14,6 @@ from linkml_runtime.linkml_model.meta import SlotDefinition
 
 from hippo.core.storage.ddl_generator import DDLGenerator, FTSMigrationPlanner
 from hippo.core.storage.schema_diff import SchemaDiff
-from hippo.core.storage.view_generator import SummaryViewGenerator
 from hippo.linkml_bridge import HIPPO_DEFAULT, SchemaRegistry, annotation_value
 
 
@@ -96,11 +95,6 @@ class MigrationPlanner:
                         self._ddl_generator._render_create_index(class_name, index)
                     )
                 plan.new_tables.append(class_name)
-
-            view_generator = SummaryViewGenerator(cursor.connection)
-            plan.ddl_statements.extend(
-                view_generator.generate_summary_views(registry, schema_diff.new_tables)
-            )
 
             for class_name in schema_diff.new_tables:
                 self._fts_planner.add_class(registry, class_name)

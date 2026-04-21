@@ -39,6 +39,18 @@ Review this file before sec9 is considered approved. If any decision is unwelcom
 
 ---
 
+## 9.4 `hippo_ext` Extension Vocabulary
+
+### Decision 9.4.A — Scrub `hippo_summary_view` and auto-emitted summary views entirely [NEW 2026-04-19]
+
+- **Finding (from the 2026-04-18 autonomous session):** sec9 §9.4 listed `hippo_summary_view` as a class-level annotation that opts in to summary-view emission, but reality disagreed. `src/hippo/core/storage/view_generator.py` auto-emitted count + aggregate SQLite views for every non-abstract class during migration, with no annotation consumed. Nothing in the codebase consumed those views.
+- **Alternatives considered:** (A) make the annotation a real opt-in by retiring auto-emission; (B) annotation-driven opt-out with auto-emission as default; (C) drop the annotation from sec9, keep auto-emission; (D) scrub summary views and the annotation entirely.
+- **Chosen:** (D). No consumer existed; keeping dead DDL is not justified.
+- **Actions landed:** Deleted `src/hippo/core/storage/view_generator.py`; removed the `generate_summary_views` call and import from `src/hippo/core/storage/migration.py`; removed `TestSummaryViews` from `tests/integration/test_partial_indexes_and_views.py` (partial-index tests retained, module docstring updated); removed the annotation from the sec9 §9.3 ASCII diagram, the sec9 §9.4 vocabulary table, and the sec9 §9.10 DDL-shim list; removed it from the `hippo-ext-vocabulary` proposal / tasks / draft `hippo_ext.yaml`; removed it from the `reference_hippo_ext.md` annotation list in `INDEX.md`.
+- **Revert:** `view_generator.py` remains in git history (reachable from any commit before this one). To resurrect, restore the file, reinstate the call in `migration.py`, re-declare the annotation with a chosen option (A/B/C). The design-doc changes revert mechanically via `git revert`.
+
+---
+
 ## 9.8 Typed Client
 
 ### Decision 9.8.A — Generation at `SchemaRegistry` load time, in-memory only

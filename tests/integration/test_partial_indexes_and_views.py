@@ -1,4 +1,4 @@
-"""Integration tests for partial indexes and summary views through the migrate CLI."""
+"""Integration tests for partial indexes through the migrate CLI."""
 
 import sqlite3
 from pathlib import Path
@@ -65,53 +65,6 @@ class TestPartialIndexes:
         assert len(indexes) >= 2
         sqls = [row[1] for row in indexes]
         assert any("WHERE is_available = 1" in (sql or "") for sql in sqls)
-
-
-class TestSummaryViews:
-    def test_summary_views_created_during_migration(self, tmp_path):
-        project_dir = Path(tmp_path) / "test_project"
-        project_dir.mkdir()
-        data_dir = project_dir / "data"
-        data_dir.mkdir()
-        db_path = data_dir / "hippo.db"
-        sqlite3.connect(str(db_path)).close()
-
-        schemas_dir = project_dir / "schemas"
-        schemas_dir.mkdir()
-        write_schema_file(
-            schemas_dir,
-            classes={
-                "product": {
-                    "attributes": {
-                        "id": {"identifier": True},
-                        "name": {"range": "string"},
-                        "price": {"range": "integer"},
-                        "quantity": {"range": "float"},
-                    }
-                }
-            },
-            schema_name="product",
-        )
-
-        result = runner.invoke(
-            app,
-            ["migrate", "--schema-dir", str(schemas_dir), "--db-path", str(db_path)],
-        )
-        assert result.exit_code == 0, result.output
-
-        conn = sqlite3.connect(str(db_path))
-        views = conn.execute(
-            "SELECT name, sql FROM sqlite_master "
-            "WHERE type='view' AND name LIKE 'summary_product%'"
-        ).fetchall()
-        conn.close()
-        assert len(views) >= 1
-        sqls = [v[1] for v in views]
-        has_count_view = any("COUNT(*)" in sql for sql in sqls)
-        has_aggregate_view = any(
-            "COUNT(" in sql and "SUM(" in sql for sql in sqls
-        )
-        assert has_count_view or has_aggregate_view
 
 
 class TestQueryPlanExplain:

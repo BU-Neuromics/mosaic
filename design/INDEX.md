@@ -46,7 +46,7 @@ Recent refactors (`delete SchemaParser/SchemaConfig/FieldDefinition`, `swap DDL/
 |---|---|
 | `sec9_linkml_redesign.md` | Vision doc — three-layer stack, provenance-as-LinkML-class, migration narrative, tradeoffs |
 | `reference_hippo_core.md` | Reference for `hippo_core.yaml` (Entity, ProvenanceRecord, Status/Operation enums, Validator) |
-| `reference_hippo_ext.md` | Reference for `hippo_ext.yaml` — the `hippo_*` annotation vocabulary (`hippo_unique`, `hippo_index`, `hippo_index_partial`, `hippo_search`, `hippo_append_only`, `hippo_summary_view`, `hippo_accessor`) |
+| `reference_hippo_ext.md` | Reference for `hippo_ext.yaml` — the `hippo_*` annotation vocabulary (`hippo_unique`, `hippo_index`, `hippo_index_partial`, `hippo_search`, `hippo_append_only`, `hippo_accessor`) |
 
 ### Per-Section Revision Plan
 

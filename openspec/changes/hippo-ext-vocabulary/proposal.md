@@ -2,7 +2,7 @@
 
 ## Why
 
-Hippo's `hippo_*` annotations (`hippo_unique`, `hippo_index`, `hippo_index_partial`, `hippo_search`, `hippo_append_only`, `hippo_summary_view`, `hippo_accessor`) currently live as stringly-typed keys inside LinkML `annotations:` blocks on user schemas. There is no formal declaration, no typed values, no `applies_to` constraint, and no versioning. Adding a new annotation is a convention, not a contract; misspelling an annotation silently does nothing.
+Hippo's `hippo_*` annotations (`hippo_unique`, `hippo_index`, `hippo_index_partial`, `hippo_search`, `hippo_append_only`, `hippo_accessor`) currently live as stringly-typed keys inside LinkML `annotations:` blocks on user schemas. There is no formal declaration, no typed values, no `applies_to` constraint, and no versioning. Adding a new annotation is a convention, not a contract; misspelling an annotation silently does nothing.
 
 sec9 §9.4 formalizes the vocabulary as a shipped-with-Hippo LinkML schema (`hippo_ext.yaml`) that every `hippo_*` annotation must be declared in. Every use is validated at `SchemaRegistry` load time against this declaration.
 
@@ -34,7 +34,6 @@ Each declared annotation carries:
 | `hippo_index_partial` | slot | boolean | `false` | Makes `hippo_index` a partial index with `WHERE is_available = 1`. No effect unless `hippo_index: true`. |
 | `hippo_search` | slot | enum (`fts5`) | *(none)* | Include in a full-text index of the declared mode. |
 | `hippo_append_only` | class | boolean | `false` | Storage adapter MUST reject updates and deletes on rows of this class. |
-| `hippo_summary_view` | class | string | *(none)* | Emit a summary view of the named shape alongside the entity table. |
 | `hippo_accessor` | class | string | *(derived)* | Override the typed-client accessor name (see 9.8). Optional escape hatch. |
 
 ### New reference doc: `design/reference_hippo_ext.md`
@@ -70,18 +69,17 @@ Missing annotations fall back to their declared default. Annotations without a d
 
 - `hippo-data-model` — documents that every `hippo_*` annotation has a formal declaration in `hippo_ext`.
 
-## Migration: retire `hippo_default`
+## Cleanup: delete `hippo_default`
 
-`hippo_default` is currently read by the SQLite and PostgreSQL DDL generators, the migration module, and schema_diff (see `src/hippo/core/storage/{ddl_generator,pg_ddl_generator,migration,pg_migration,schema_diff}.py` and the `HIPPO_DEFAULT` constant in `src/hippo/linkml_bridge.py`). sec9 §9.4 *removes* `hippo_default` in favor of LinkML's native `ifabsent`.
+`hippo_default` is read in six files (`src/hippo/linkml_bridge.py` exports the `HIPPO_DEFAULT` constant; the DDL generators, migration modules, and schema_diff consume it). sec9 §9.4 retires it in favor of LinkML's native `ifabsent`, which is strictly more expressive (supports literals *and* constructor forms like `uuid()`, `datetime(now)`, `int(0)`).
 
-Declaring `hippo_ext.yaml` without `hippo_default` would break any user schema that currently uses it. To keep this change self-contained:
+Hippo is not deployed to production and has no data-migration concerns, so this is a straight deletion rather than a backwards-compatible migration:
 
-- Audit existing user schemas for `hippo_default` usage. Migrate each to `ifabsent` (literal value → quoted string; `uuid()`, `datetime(now)`, `int(0)` for the constructor forms where applicable).
-- Delete the `HIPPO_DEFAULT` constant from `linkml_bridge.py`.
-- Update the DDL generators (both adapters) and migration/diff paths to consume `slot.ifabsent` instead of the `hippo_default` annotation. LinkML's `SlotDefinition` already exposes `ifabsent`; the DDL shim simply reads that instead.
-- After the migration, declaring `hippo_ext.yaml` without `hippo_default` is safe — no schema uses the removed annotation.
+- Delete `HIPPO_DEFAULT` and every reference to it.
+- Update the DDL generators (both adapters), migration modules, and schema_diff to read `slot.ifabsent` instead. LinkML's `SlotDefinition` already exposes `ifabsent`; the DDL shim simply reads the native attribute.
+- For any `hippo_default:` occurrences in user-schema fixtures: replace with `ifabsent: <value>` if the default is genuinely desired, or delete the line outright if it isn't.
 
-This migration is part of this change, not a separate OpenSpec. The proposal's scope stays "formalize the vocabulary" with the retire-`hippo_default` work as a prerequisite handled within.
+This cleanup is scoped inside `hippo-ext-vocabulary` so the vocabulary declaration is self-contained — once the change lands, `hippo_ext.yaml` correctly enumerates the full set of supported annotations with no legacy exceptions.
 
 ## Open Questions
 

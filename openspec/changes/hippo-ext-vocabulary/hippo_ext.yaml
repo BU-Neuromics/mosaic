@@ -80,16 +80,6 @@ annotations:
     ifabsent: "false"
     applies_to: [class]
 
-  hippo_summary_view:
-    description: >-
-      Emit a summary view of the named shape alongside the entity table.
-      Value is the shape name (e.g., `count`, `aggregate`). Adapter-specific
-      implementation. Reserved for explicit opt-in when the current
-      "views for every non-abstract class" behavior (see view_generator.py)
-      is narrowed to annotation-driven opt-in.
-    range: string
-    applies_to: [class]
-
   hippo_accessor:
     description: >-
       Override the derived typed-client accessor name for this class.

@@ -91,7 +91,7 @@ Hippo's schema data lives in three LinkML schemas layered by import. Each layer 
 │  hippo_ext.yaml            (ships with Hippo)                │
 │  · annotation vocabulary: hippo_unique, hippo_index,         │
 │    hippo_index_partial, hippo_search, hippo_append_only,     │
-│    hippo_summary_view, hippo_accessor                        │
+│    hippo_accessor                                            │
 │  · imports: nothing                                          │
 └──────────────────────────────────────────────────────────────┘
 ```
@@ -167,7 +167,6 @@ A user schema applies an annotation from `hippo_ext` via an `annotations:` block
 | `hippo_index_partial` | slot | boolean | When `hippo_index: true`, emit the index as partial with `WHERE is_available = 1`. Ignored if `hippo_index` is false. |
 | `hippo_search` | slot | enum (`fts5`, …) | Include this slot in a full-text index of the declared mode. |
 | `hippo_append_only` | class | boolean | Storage adapter MUST reject updates and deletes on rows of this class. Used by `ProvenanceRecord` (see 9.6). |
-| `hippo_summary_view` | class | string | Emit a summary view of the named shape alongside the entity table. |
 | `hippo_accessor` | class | string | Override the derived typed-client accessor name. Optional escape hatch used only when the default derivation produces a collision or when a deployment prefers a non-default name. See 9.8. |
 
 The authoritative reference — default values, exact enum ranges, interactions between annotations — lives in `reference_hippo_ext.md`.
@@ -711,7 +710,7 @@ Shims exist for exactly one reason: to apply the effects of `hippo_*` annotation
 
 Shims permitted:
 
-- **DDL shim.** Post-pass over `gen-sqlddl` output that applies `hippo_*` annotation effects: `hippo_unique` → `UNIQUE` column constraints, `hippo_index` → `CREATE INDEX`, `hippo_index_partial` → partial indexes, `hippo_search` → FTS indexes, `hippo_summary_view` → summary views, `hippo_append_only` → adapter-side write-guard registration. The base DDL is unchanged from LinkML's output.
+- **DDL shim.** Post-pass over `gen-sqlddl` output that applies `hippo_*` annotation effects: `hippo_unique` → `UNIQUE` column constraints, `hippo_index` → `CREATE INDEX`, `hippo_index_partial` → partial indexes, `hippo_search` → FTS indexes, `hippo_append_only` → adapter-side write-guard registration. The base DDL is unchanged from LinkML's output.
 - **Validation result mapping.** `linkml-validate` output is mapped into Hippo's `ValidationResult` envelope (9.9). No semantic translation; LinkML error messages are preserved verbatim.
 - **Diff consumption.** `linkml-diff` structured output is consumed by Hippo's migration planner, which decides which adapter operations (DDL alter, data migration, version bump) the diff implies.
 
