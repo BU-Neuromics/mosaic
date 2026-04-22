@@ -11,7 +11,10 @@ from pydantic import ValidationError
 from hippo.api.exceptions import EntityNotFoundError
 from hippo.api.schemas import ErrorResponse
 from hippo.core.client import HippoClient
-from hippo.core.exceptions import ValidationError as HippoValidationError
+from hippo.core.exceptions import (
+    ValidationError as HippoValidationError,
+    ValidationFailed,
+)
 from hippo.core.middleware import PassThroughAuthMiddleware
 
 logger = logging.getLogger(__name__)
@@ -98,6 +101,26 @@ def create_app(
             ).model_dump(),
         ),
     )
+
+    # sec9 §9.9: ValidationFailed carries the full tier-tagged envelope.
+    # REST response body includes `passed`, `failures[].tier`,
+    # `failures[].rule`, `failures[].field`, `failures[].message`,
+    # `failures[].details`. 400 for request-shape issues surfaced
+    # through this path; 422 for semantic (CEL / Python) failures.
+    def _validation_failed_handler(request: Request, exc: ValidationFailed):
+        envelope: dict[str, Any] = {
+            "error": "Validation Failed",
+            "detail": exc.message,
+            "passed": False,
+            "failures": [],
+        }
+        result = getattr(exc, "result", None)
+        if result is not None and hasattr(result, "to_envelope"):
+            envelope.update(result.to_envelope())
+        # 422 for semantic validation failures (sec9 §9.9 boundary rules).
+        return JSONResponse(status_code=422, content=envelope)
+
+    app.add_exception_handler(ValidationFailed, _validation_failed_handler)
 
     async def generic_exception_handler(request: Request, exc: Exception):
         logger.exception("Unhandled exception: %s", exc)

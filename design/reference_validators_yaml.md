@@ -1,11 +1,54 @@
 ## Reference: `validators.yaml` Format
 
-**Document status:** Draft v0.1
-**Depends on:** sec2_architecture.md §2.13, reference_cel_context.md
+**Document status:** Draft v0.2 (sec9 §9.9 tiering contract added)
+**Depends on:** sec2_architecture.md §2.13, reference_cel_context.md,
+sec9 §9.9 (validation-tiering-clarification)
 
 This document is the authoritative format reference for `validators.yaml` — the
 config-driven business rule validator file. See sec2 §2.13 for the validation
-architecture overview and execution model.
+architecture overview and execution model; see sec9 §9.9 and Decision 9.9.A for
+the three-tier contract this file participates in.
+
+---
+
+### The three-tier pipeline (sec9 §9.9)
+
+Hippo runs three tiers of write validation in a fixed order. `validators.yaml`
+is the CEL tier. The other two are listed here so coding agents can decide
+where a new rule belongs without round-tripping.
+
+| Tier | What it expresses | Where it lives |
+|---|---|---|
+| `linkml` | Static shape: types, patterns, enums, ranges, `required`, multivalued, `unique_keys`. | User schema YAML. Enforced by `SchemaRegistry.validate_envelope()`. |
+| `cel` | Dynamic, pure-function predicates over entity data. Optionally pre-fetches via `expand`. | `validators.yaml` — this file. |
+| `python` | Escape hatch for rules neither tier above can express (network calls, stateful checks, cross-cluster consistency). | `hippo.write_validators` entry-point plugins. |
+
+Execution: cheapest first, `fail_fast=True` by default. Batch ingest can
+opt into `collect_all=True` to aggregate failures across tiers.
+
+**Boundary rules.** Pick the cheapest tier that can express the rule.
+If LinkML can express it, it MUST be in LinkML. If CEL can express it
+(pure function over entity data, optionally with `expand`-pre-fetched
+references), it MUST be in CEL. Python plugins are the last resort.
+
+**Result envelope.** Every tier returns a `ValidationResult` (defined in
+`hippo.core.validation.validators`) carrying a list of `ValidationFailure`
+objects. Each failure records its producing `tier` so the REST layer and
+typed client can render tier-aware errors uniformly.
+
+```python
+@dataclass
+class ValidationFailure:
+    tier: Literal["linkml", "cel", "python"]
+    rule: str
+    message: str
+    field: Optional[str] = None
+    details: dict = {}
+```
+
+REST surface: `ValidationFailed` maps to HTTP 422 with a structured body
+(`passed`, `failures[].tier`, `failures[].rule`, `failures[].field`,
+`failures[].message`, `failures[].details`). See `src/hippo/api/factory.py`.
 
 ---
 

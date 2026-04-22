@@ -288,6 +288,23 @@ Review this file before sec9 is considered approved. If any decision is unwelcom
 - **Why:** Callers consume results uniformly; origin is visible for debugging; tier-specific types would fragment the error surface.
 - **Revert:** Split into per-tier types; callers would need a union.
 
+### Decision 9.9.D — Backward-compatible envelope extension; do NOT break existing `ValidationResult` callers [NEW 2026-04-22]
+
+- **Finding (validation-tiering-clarification implementation):** The legacy `ValidationResult` in `hippo.core.validation.validators` carried `is_valid: bool` and `errors: list[str]`. Dozens of callers (service-layer paths, REST handlers, TUI, plugin API) consume those two fields. Replacing the shape wholesale would fan out into a multi-day port; blocking the sec9 §9.9 envelope on that port would gate Wave 3.
+- **Alternatives considered:** (A) Hard swap — rename legacy fields, retype to the new envelope, fix every caller. (B) Parallel class (`ValidationEnvelope`) alongside the legacy `ValidationResult` with conversion at boundaries. (C) Extend the existing dataclass — add `failures: list[ValidationFailure]`, keep `is_valid` / `errors` as the legacy view; reconcile both views in `__post_init__`.
+- **Chosen:** (C). `ValidationResult` grows `failures: list[ValidationFailure]`; `__post_init__` synthesizes whichever view the caller didn't supply. `errors` carries raw messages (no tier prefix) so legacy substring-based test assertions continue to work; tier-aware callers read `failures`.
+- **Why:** Keeps every existing caller working with zero changes while making the tier-annotated envelope available to sec9-era consumers (REST error surface, typed-client `ValidationFailed` exception, batch-ingest reporting). Callers can migrate to `failures` at their own pace.
+- **Back-compat contract:** Legacy callers constructing `ValidationResult(is_valid=False, errors=["msg"])` get `failures=[ValidationFailure(tier="python", rule="legacy", message="msg")]` synthesized. Tier-aware callers constructing `ValidationResult(failures=[...])` get `errors=[f.message for f in failures]` synthesized. Both sides are always populated after construction.
+- **Revert:** Promote to (A) or (B) once a dedicated port pass retires legacy `.errors` readers. Low-cost later; additive-compatible.
+
+### Decision 9.9.E — `ValidationFailed` exception (new) vs. `ValidationFailure` exception (existing) [NEW 2026-04-22]
+
+- **Finding:** The sec9 §9.9 proposal specs `ValidationFailed` as the exception that carries the envelope. `hippo.core.exceptions` already had a `ValidationFailure` exception with a different shape (`rule_id`, `input_context`, `entity_type`, `entity_id`) used by existing callers.
+- **Alternatives considered:** (A) Rename the existing `ValidationFailure` exception and break callers. (B) Add `ValidationFailed` as the new envelope-carrying exception; leave `ValidationFailure` (the exception) untouched. Callers transition by site.
+- **Chosen:** (B). `ValidationFailed` is the sec9 envelope-aware exception; `ValidationFailure` (exception) remains as-is; `ValidationFailure` (dataclass, in `validation/validators.py`) is the envelope entry. Three names, three roles, each distinct.
+- **Why:** Name collisions between the existing exception and the new dataclass (`ValidationFailure`) are tolerable because they live in different modules; the new exception (`ValidationFailed`) is a verb-past-tense distinguishable from both. Any alternative involved renaming something, and renaming the oldest identifier (`ValidationFailure` the exception) would cascade into every caller.
+- **Revert:** Rename the existing exception to something like `ValidationRuleFailure` in a future cleanup; update all callers.
+
 ---
 
 ## 9.10 LinkML Ecosystem Integration

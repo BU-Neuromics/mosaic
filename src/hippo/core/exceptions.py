@@ -176,6 +176,31 @@ class ValidationFailure(HippoError):
         return " | ".join(parts)
 
 
+class ValidationFailed(HippoError):
+    """Raised by typed-client write methods when validation fails.
+
+    Carries the full sec9 §9.9 envelope (``ValidationResult``) so callers
+    can introspect per-tier failures rather than parsing concatenated
+    error strings. The REST layer catches this and maps to HTTP 400/422
+    with a structured body (see ``hippo.api.app``).
+    """
+
+    def __init__(
+        self,
+        message: str,
+        result: Any = None,
+        entity_type: Optional[str] = None,
+        entity_id: Optional[str] = None,
+        **context: Any,
+    ):
+        self.result = result
+        self.entity_type = entity_type
+        self.entity_id = entity_id
+        context["entity_type"] = entity_type
+        context["entity_id"] = entity_id
+        super().__init__(message, **context)
+
+
 class TemporalQueryError(HippoError):
     """Exception raised for temporal query errors.
 

@@ -427,6 +427,41 @@ class SchemaRegistry:
         return out
 
     def validate(self, instance: dict, target_class: str) -> list[str]:
-        """Validate an instance dict; return a list of error messages (empty=valid)."""
+        """Validate an instance dict; return a list of error messages (empty=valid).
+
+        Kept for backward compatibility. New code should call
+        :meth:`validate_envelope` to get the sec9 §9.9 envelope with
+        tier-annotated failures.
+        """
         report = self._validator.validate(instance, target_class)
         return [r.message for r in report.results]
+
+    def validate_envelope(
+        self, instance: dict, target_class: str
+    ) -> "list[ValidationFailure]":
+        """Validate an instance dict; return a list of ``ValidationFailure``
+        objects with ``tier="linkml"`` for every schema-shape violation.
+
+        Per sec9 §9.9 this is the LinkML-native tier output — types,
+        patterns, enums, ranges, required, multivalued, unique_keys.
+        """
+        from hippo.core.validation.validators import ValidationFailure
+
+        report = self._validator.validate(instance, target_class)
+        failures: list[ValidationFailure] = []
+        for r in report.results:
+            # LinkML's ``ValidationResult`` carries ``.instantiates`` (the
+            # class), ``.type`` (rule category), and ``.message``. The
+            # rule string is derived from the type; the field from the
+            # message prefix when available.
+            rule = getattr(r, "type", None) or "schema_violation"
+            failures.append(
+                ValidationFailure(
+                    tier="linkml",
+                    rule=str(rule),
+                    message=r.message,
+                    field=getattr(r, "source", None),
+                    details={"target_class": target_class},
+                )
+            )
+        return failures
