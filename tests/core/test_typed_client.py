@@ -448,3 +448,24 @@ class TestNoRegistry:
             assert not hasattr(client, "root")
         finally:
             storage.close()
+
+
+class TestReservedNamesGuard:
+    """CI guard against drift: `SDK_RESERVED_NAMES` must cover every
+    public attribute of ``HippoClient``. If Hippo gains a new public
+    method/property, this test fails until the reserved set is
+    updated. Prevents silent shadowing of HippoClient attributes by
+    user-schema class accessors."""
+
+    def test_reserved_set_covers_every_hippoclient_public_attribute(self):
+        public_attrs = {
+            name for name in dir(HippoClient) if not name.startswith("_")
+        }
+        missing = public_attrs - SDK_RESERVED_NAMES
+        assert not missing, (
+            f"HippoClient has public attributes not covered by "
+            f"SDK_RESERVED_NAMES: {sorted(missing)}. A user schema "
+            f"could declare a class whose accessor shadows one of "
+            f"these. Add them to SDK_RESERVED_NAMES in "
+            f"src/hippo/core/typed_client.py."
+        )

@@ -31,30 +31,51 @@ from hippo.linkml_bridge import (
 # Names reserved on ``HippoClient`` or at namespace containers. A class
 # whose accessor would shadow one of these, or a namespace name matching
 # one of these, raises at schema load.
+#
+# Two sources populate this set:
+#   1. Every public (non-underscored) attribute of ``HippoClient``.
+#   2. Forward-compat names sec9 §9.8 reserves for future typed-client
+#      surfaces (``root``, ``models``, ``schemas``, ``metadata``) even if
+#      they aren't currently on ``HippoClient``.
+#
+# ``tests/core/test_typed_client.py::TestReservedNamesGuard`` asserts
+# that every ``HippoClient`` public attribute is covered — if Hippo
+# gains a new public method/property, CI fails until it's added here.
 SDK_RESERVED_NAMES: frozenset[str] = frozenset(
     {
-        # Core HippoClient methods / attributes
-        "storage",
-        "pipeline",
-        "registry",
-        "history",
-        "state_at",
-        "query",
-        "get",
-        "put",
+        # Core HippoClient attributes currently on the class (verified
+        # by TestReservedNamesGuard)
+        "add_validator",
         "create",
-        "update",
         "delete",
+        "get",
+        "get_by_external_id",
+        "history",
+        "list_external_ids",
+        "pipeline",
+        "put",
+        "query",
+        "register_external_id",
+        "relationships",
         "replace",
-        "supersede_entity",
-        "set_availability_bulk",
         "resolve_type",
         "resolve_types",
-        # Schema/metadata accessors
+        "schema_references",
+        "search",
+        "set_availability_bulk",
+        "state_at",
+        "storage",
+        "supersede",
+        "supersede_entity",
+        "update",
+        "validate",
+        # sec9 §9.8 forward-reserved names — protect against future
+        # HippoClient surface additions that callers could already
+        # anticipate
+        "models",
         "schemas",
         "metadata",
-        # Typed-client surface itself
-        "models",
+        "registry",
     }
 )
 
