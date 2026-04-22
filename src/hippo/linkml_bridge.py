@@ -4,10 +4,18 @@ Thin wrapper around ``linkml_runtime.SchemaView`` and ``linkml.validator`` that
 exposes the handful of projections Hippo needs. Hippo-specific slot metadata is
 carried via LinkML annotations under flat ``hippo_<name>`` keys (e.g.
 ``hippo_search: fts5``). User-authored schema YAML stays 100% valid LinkML.
+
+Every ``hippo_*`` annotation used in a user schema must be declared in
+``hippo_ext`` (ships with the package at ``src/hippo/schemas/hippo_ext.yaml``).
+``SchemaRegistry`` validates this at construction time — undeclared annotations,
+value-type mismatches, and wrong-target attachments surface as
+``SchemaError`` at load. See sec9 §9.4 for the design rationale and
+``design/reference_hippo_ext.md`` for the per-annotation reference.
 """
 
 from __future__ import annotations
 
+import importlib.resources
 from pathlib import Path
 from typing import Any, Optional, Union
 
@@ -23,6 +31,10 @@ HIPPO_INDEX = "hippo_index"
 HIPPO_INDEX_PARTIAL = "hippo_index_partial"
 HIPPO_UNIQUE = "hippo_unique"
 
+HIPPO_ANNOTATION_PREFIX = "hippo_"
+_CLASS_ANNOTATION_SUBSET = "class_annotation"
+_SLOT_ANNOTATION_SUBSET = "slot_annotation"
+
 
 def annotation_value(element: Any, key: str) -> Optional[Any]:
     """Return the ``.value`` of a named annotation, or ``None`` if absent."""
@@ -32,10 +44,167 @@ def annotation_value(element: Any, key: str) -> Optional[Any]:
     return ann[key].value
 
 
+# ---------------------------------------------------------------------------
+# hippo_ext annotation vocabulary — loaded once, used by SchemaRegistry to
+# validate every hippo_* annotation in a user schema at construction time.
+# ---------------------------------------------------------------------------
+
+_HIPPO_EXT_SV: Optional[SchemaView] = None
+
+
+def _load_hippo_ext_schema() -> SchemaView:
+    resource = importlib.resources.files("hippo.schemas").joinpath("hippo_ext.yaml")
+    return SchemaView(str(resource))
+
+
+def _hippo_ext_schema_view() -> SchemaView:
+    global _HIPPO_EXT_SV
+    if _HIPPO_EXT_SV is None:
+        _HIPPO_EXT_SV = _load_hippo_ext_schema()
+    return _HIPPO_EXT_SV
+
+
+def _check_value_type(slot_decl: SlotDefinition, value: Any, enums: dict) -> Optional[str]:
+    """Return an error message if ``value`` doesn't match ``slot_decl.range``; else None."""
+    rng = slot_decl.range
+    if rng is None:
+        return None
+    if rng == "boolean":
+        if not isinstance(value, bool):
+            return f"expected boolean, got {type(value).__name__} ({value!r})"
+        return None
+    if rng == "integer":
+        # bool is a subclass of int in Python — reject bool under integer
+        if isinstance(value, bool) or not isinstance(value, int):
+            return f"expected integer, got {type(value).__name__} ({value!r})"
+        return None
+    if rng == "string":
+        if not isinstance(value, str):
+            return f"expected string, got {type(value).__name__} ({value!r})"
+        return None
+    if rng in enums:
+        permissible = set(enums[rng].permissible_values.keys())
+        if str(value) not in permissible:
+            return (
+                f"value {value!r} not in enum {rng} "
+                f"(permissible: {sorted(permissible)})"
+            )
+        return None
+    # Unknown range — tolerant.
+    return None
+
+
+def _validate_one_annotation(
+    ext_slots: dict,
+    ext_enums: dict,
+    key: str,
+    ann: Any,
+    target_kind: str,
+    target_path: str,
+) -> Optional[str]:
+    decl = ext_slots.get(key)
+    if decl is None:
+        known = sorted(k for k in ext_slots if k.startswith(HIPPO_ANNOTATION_PREFIX))
+        return (
+            f"annotation `{key}` on {target_kind} `{target_path}` is not "
+            f"declared in hippo_ext. Known annotations: {known}"
+        )
+    expected_subset = (
+        _CLASS_ANNOTATION_SUBSET if target_kind == "class" else _SLOT_ANNOTATION_SUBSET
+    )
+    in_subset = list(decl.in_subset) if decl.in_subset else []
+    if expected_subset not in in_subset:
+        return (
+            f"annotation `{key}` on {target_kind} `{target_path}` is invalid — "
+            f"`{key}` may only attach to {', '.join(in_subset) or '(nothing)'}"
+        )
+    value = getattr(ann, "value", ann)
+    type_err = _check_value_type(decl, value, ext_enums)
+    if type_err:
+        return f"annotation `{key}` on {target_kind} `{target_path}`: {type_err}"
+    return None
+
+
+def _iter_hippo_annotations(element: Any):
+    """Yield (key, annotation) pairs for every hippo_* annotation on ``element``.
+
+    LinkML exposes ``.annotations`` as a ``JsonObj`` which supports ``in`` and
+    ``[]`` indexing but doesn't implement ``.items()``. We iterate by filtering
+    to keys that start with the hippo_ prefix.
+    """
+    annotations = getattr(element, "annotations", None)
+    if annotations is None:
+        return
+    for key in list(annotations):
+        key = str(key)
+        if not key.startswith(HIPPO_ANNOTATION_PREFIX):
+            continue
+        try:
+            ann = annotations[key]
+        except KeyError:
+            continue
+        yield key, ann
+
+
+def _validate_hippo_annotations(sv: SchemaView) -> None:
+    """Validate every hippo_* annotation in ``sv`` against hippo_ext.
+
+    Raises ``SchemaError`` aggregating all failures if any annotation is
+    undeclared, mistyped, or attached to the wrong kind of element.
+    """
+    # Skip validation if we're loading hippo_ext itself (circular).
+    if sv.schema.name == "hippo_ext":
+        return
+
+    ext = _hippo_ext_schema_view()
+    ext_slots = ext.all_slots()
+    ext_enums = ext.all_enums()
+
+    failures: list[str] = []
+
+    for class_name, cls in sv.all_classes().items():
+        for key, ann in _iter_hippo_annotations(cls):
+            err = _validate_one_annotation(
+                ext_slots, ext_enums, key, ann, "class", class_name
+            )
+            if err:
+                failures.append(err)
+
+        try:
+            induced = sv.class_induced_slots(class_name)
+        except Exception:
+            # A malformed class may throw during induction; skip and let
+            # LinkML's own validation surface the deeper problem.
+            continue
+        for slot in induced:
+            for key, ann in _iter_hippo_annotations(slot):
+                err = _validate_one_annotation(
+                    ext_slots,
+                    ext_enums,
+                    key,
+                    ann,
+                    "slot",
+                    f"{class_name}.{slot.name}",
+                )
+                if err:
+                    failures.append(err)
+
+    if failures:
+        # Deferred import to avoid a module-load cycle with core.exceptions.
+        from hippo.core.exceptions import SchemaError
+
+        raise SchemaError(
+            f"{len(failures)} hippo_* annotation error(s) in schema:\n  - "
+            + "\n  - ".join(failures),
+            error_code="HIPPO_EXT_VALIDATION",
+        )
+
+
 class SchemaRegistry:
     """Hippo-facing schema registry backed by a LinkML ``SchemaView``."""
 
     def __init__(self, schema_view: SchemaView) -> None:
+        _validate_hippo_annotations(schema_view)
         self._sv = schema_view
         self._validator = Validator(
             schema=schema_view.schema,

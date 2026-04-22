@@ -58,6 +58,14 @@ Review this file before sec9 is considered approved. If any decision is unwelcom
 - **Actions landed:** Removed `hippo_append_only` and `hippo_accessor` from the Wave 1 draft `hippo_ext.yaml` (with a comment pointer to their owning changes). Updated the `hippo-ext-vocabulary` proposal's "Why" line, initial-vocabulary table, and tasks.md §1.2 to reflect four initial annotations. Updated sec9 §9.12's scope/deliverables/acceptance columns for `provenance-as-linkml-class` and `typed-client` to include their respective `hippo_ext` extension.
 - **Revert:** Declare both annotations up front in Wave 1 (option A). Update the three Wave 1 files and the two §9.12 rows. Low blast radius.
 
+### Decision 9.4.C — `hippo_search` declared with `range: string`, not a closed enum [NEW 2026-04-21]
+
+- **Finding (during hippo-ext-vocabulary implementation):** sec9 §9.4's draft table showed `hippo_search` with value type `enum (fts5, …)`. The initial `hippo_ext.yaml` declared a `hippo_search_mode` enum with only `fts5` as a permissible value. Existing tests (`test_search_capability.py`, `test_fts_migration.py`) intentionally use non-`fts5` mode values (`embedding`, `fts`) to exercise adapter-layer validation — those tests failed at schema load with the new enum-backed validation.
+- **Alternatives considered:** (A) keep the enum closed at `fts5`, rewrite the tests to assert on the new load-time failure path; (B) expand the enum to include every mode any adapter might support (impractical — the set is open across deployments); (C) loosen the range to `string`, let the adapter enforce which modes it supports.
+- **Chosen:** (C). Matches sec9 §9.10's division of labor — schemas declare intent, adapters enforce capability. Different adapters (SQLite FTS5, PostgreSQL GIN, Neo4j full-text, future vector indexes) will genuinely support different modes; pinning a schema-level enum would force every deployment onto a single vocabulary.
+- **Consequences:** `hippo_search` accepts any string value at schema load. A typo like `fts6` passes validation and fails later at adapter startup with "unsupported mode" — the error is clear and points at the right layer. sec9 §9.4, `reference_hippo_ext.md`, and the installed `hippo_ext.yaml` all reflect the `string` range; the `hippo_search_mode` enum has been removed entirely. Existing search-capability tests continue to pass unchanged.
+- **Revert:** Reintroduce the `hippo_search_mode` enum and change `hippo_search.range` back to it. Rewrite `test_startup_raises_error_with_embedding_search_mode` and `test_fts_migration_planner::test_add_class_registers_fts_tables` to assert the schema-load-time failure instead of the adapter-startup failure. Moderate blast radius — any test fixture using an unsupported mode would need updating.
+
 ---
 
 ## 9.8 Typed Client

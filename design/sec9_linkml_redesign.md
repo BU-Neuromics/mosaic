@@ -165,7 +165,7 @@ A user schema applies an annotation from `hippo_ext` via an `annotations:` block
 | `hippo_unique` | slot | boolean | Emit a single-column `UNIQUE` constraint for this slot. Composite uniqueness uses LinkML-native `unique_keys`. |
 | `hippo_index` | slot | boolean | Emit a single-column index for this slot. |
 | `hippo_index_partial` | slot | boolean | When `hippo_index: true`, emit the index as partial with `WHERE is_available = 1`. Ignored if `hippo_index` is false. |
-| `hippo_search` | slot | enum (`fts5`, …) | Include this slot in a full-text index of the declared mode. |
+| `hippo_search` | slot | string | Include this slot in a full-text index of the declared mode. Adapter enforces which modes it supports (current canonical mode: `fts5`). |
 | `hippo_append_only` | class | boolean | Storage adapter MUST reject updates and deletes on rows of this class. Used by `ProvenanceRecord` (see 9.6). |
 | `hippo_accessor` | class | string | Override the derived typed-client accessor name. Optional escape hatch used only when the default derivation produces a collision or when a deployment prefers a non-default name. See 9.8. |
 

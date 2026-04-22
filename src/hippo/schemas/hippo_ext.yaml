@@ -76,9 +76,14 @@ slots:
   hippo_search:
     description: >-
       Include this slot in a full-text search index of the declared
-      mode. Current supported mode: `fts5` (SQLite). Adapters that do
-      not support the requested mode fail at startup with a clear error.
-    range: hippo_search_mode
+      mode. The mode value is a free-form string — the adapter is the
+      authority on which modes it supports and MUST fail at startup with
+      a clear error when it cannot serve the requested mode. Schema-level
+      validation does not constrain the value (different adapters may
+      support different modes; per sec9 §9.10, schemas declare intent
+      and adapters enforce capability). Current canonical mode: `fts5`
+      (SQLite FTS5).
+    range: string
     in_subset:
       - slot_annotation
 
@@ -87,12 +92,3 @@ slots:
   #   - hippo_append_only: introduced by `provenance-as-linkml-class` (Wave 2)
   #   - hippo_accessor:    introduced by `typed-client` (Wave 3)
   # See sec9 §9.12 for the schedule.
-
-enums:
-  hippo_search_mode:
-    description: Supported full-text search modes.
-    permissible_values:
-      fts5:
-        description: >-
-          SQLite FTS5 full-text index. The only currently-supported mode.
-          Additional modes will be added as adapters gain support.
