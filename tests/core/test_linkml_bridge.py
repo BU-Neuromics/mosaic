@@ -129,3 +129,150 @@ class TestAnnotationConstants:
         assert HIPPO_SEARCH == "hippo_search"
         assert HIPPO_INDEX == "hippo_index"
         assert HIPPO_INDEX_PARTIAL == "hippo_index_partial"
+
+
+class TestHippoExtValidation:
+    """SchemaRegistry validates every hippo_* annotation against hippo_ext at load.
+
+    See sec9 §9.4 and design/reference_hippo_ext.md for the declared vocabulary.
+    """
+
+    def _build(self, extra_annotations: dict, on: str = "slot") -> str:
+        """Construct a minimal user-schema YAML with the given annotations.
+
+        `on` is either "slot" (attach to `Thing.name`) or "class" (attach to
+        `Thing` itself).
+        """
+        def _fmt(v):
+            if isinstance(v, bool):
+                return "true" if v else "false"
+            if isinstance(v, str):
+                return f'"{v}"'
+            return str(v)
+
+        if on == "slot":
+            # annotations under Thing.name require 10-space indent
+            ann_yaml = "\n".join(
+                f"          {k}: {_fmt(v)}" for k, v in extra_annotations.items()
+            )
+            return (
+                "id: https://example.org/test\n"
+                "name: test\n"
+                "prefixes: {linkml: 'https://w3id.org/linkml/'}\n"
+                "default_range: string\n"
+                "imports: [linkml:types]\n"
+                "classes:\n"
+                "  Thing:\n"
+                "    attributes:\n"
+                "      id: {identifier: true}\n"
+                "      name:\n"
+                "        range: string\n"
+                "        annotations:\n"
+                f"{ann_yaml}\n"
+            )
+        # class-level annotations on Thing require 6-space indent
+        ann_yaml = "\n".join(
+            f"      {k}: {_fmt(v)}" for k, v in extra_annotations.items()
+        )
+        return (
+            "id: https://example.org/test\n"
+            "name: test\n"
+            "prefixes: {linkml: 'https://w3id.org/linkml/'}\n"
+            "default_range: string\n"
+            "imports: [linkml:types]\n"
+            "classes:\n"
+            "  Thing:\n"
+            "    annotations:\n"
+            f"{ann_yaml}\n"
+            "    attributes:\n"
+            "      id: {identifier: true}\n"
+        )
+
+    def test_declared_annotation_passes(self):
+        # hippo_index: true is valid on a slot
+        yaml_text = self._build({"hippo_index": True})
+        reg = SchemaRegistry.from_yaml(yaml_text)
+        assert "Thing" in reg.class_names()
+
+    def test_undeclared_annotation_fails_with_actionable_message(self):
+        from hippo.core.exceptions import SchemaError
+
+        yaml_text = self._build({"hippo_bogus": True})
+        with pytest.raises(SchemaError) as exc:
+            SchemaRegistry.from_yaml(yaml_text)
+        msg = str(exc.value)
+        assert "hippo_bogus" in msg
+        assert "Thing.name" in msg
+        assert "not declared in hippo_ext" in msg
+
+    def test_wrong_value_type_fails(self):
+        from hippo.core.exceptions import SchemaError
+
+        # hippo_index expects boolean, got string
+        yaml_text = self._build({"hippo_index": "yes"})
+        with pytest.raises(SchemaError) as exc:
+            SchemaRegistry.from_yaml(yaml_text)
+        msg = str(exc.value)
+        assert "hippo_index" in msg
+        assert "expected boolean" in msg
+
+    def test_class_annotation_on_slot_fails(self):
+        # hippo_append_only is a class-only annotation, but in Wave 1 it's
+        # not yet declared in hippo_ext — so this surfaces as "undeclared"
+        # rather than "wrong applies_to". When Wave 2 lands and declares
+        # hippo_append_only, this test would shift to the wrong-target case.
+        from hippo.core.exceptions import SchemaError
+
+        yaml_text = self._build({"hippo_append_only": True})
+        with pytest.raises(SchemaError) as exc:
+            SchemaRegistry.from_yaml(yaml_text)
+        msg = str(exc.value)
+        assert "hippo_append_only" in msg
+
+    def test_slot_annotation_on_class_fails(self):
+        # hippo_index is a slot annotation; attaching it to a class should fail.
+        from hippo.core.exceptions import SchemaError
+
+        yaml_text = self._build({"hippo_index": True}, on="class")
+        with pytest.raises(SchemaError) as exc:
+            SchemaRegistry.from_yaml(yaml_text)
+        msg = str(exc.value)
+        assert "hippo_index" in msg
+        # The error message mentions the annotation may only attach to slots
+        assert "slot_annotation" in msg or "slot" in msg.lower()
+
+    def test_multiple_errors_aggregate_into_one_exception(self):
+        from hippo.core.exceptions import SchemaError
+
+        yaml_text = self._build(
+            {"hippo_bogus1": True, "hippo_bogus2": True, "hippo_index": "not-bool"}
+        )
+        with pytest.raises(SchemaError) as exc:
+            SchemaRegistry.from_yaml(yaml_text)
+        msg = str(exc.value)
+        assert "3 hippo_* annotation error(s)" in msg
+        assert "hippo_bogus1" in msg
+        assert "hippo_bogus2" in msg
+        assert "hippo_index" in msg
+
+    def test_non_hippo_annotations_are_not_validated(self):
+        # Only hippo_* keys get validated against hippo_ext. Custom user
+        # annotations in other namespaces (prov:, skos:, custom_*) pass
+        # through unchecked.
+        yaml_text = self._build({"custom_tag": "anything"})
+        reg = SchemaRegistry.from_yaml(yaml_text)
+        assert "Thing" in reg.class_names()
+
+    def test_hippo_search_accepts_any_string_value(self):
+        # Per Decision 9.4.C: hippo_search range is `string`, not an enum.
+        # The adapter is the authority on which modes it supports; schema-level
+        # validation is permissive.
+        yaml_text = self._build({"hippo_search": "fts5"})
+        reg1 = SchemaRegistry.from_yaml(yaml_text)
+        assert "Thing" in reg1.class_names()
+
+        # Non-canonical mode also passes at schema load (adapter would fail
+        # at startup if it doesn't support this mode).
+        yaml_text2 = self._build({"hippo_search": "embedding"})
+        reg2 = SchemaRegistry.from_yaml(yaml_text2)
+        assert "Thing" in reg2.class_names()
