@@ -68,6 +68,34 @@ Review this file before sec9 is considered approved. If any decision is unwelcom
 
 ---
 
+## 9.5 `hippo_core` Schema
+
+### Decision 9.5.A — Keep `is_available` hardcoded as a fallback when not induced [NEW 2026-04-21]
+
+- **Finding (during hippo-core-schema implementation):** sec9 §9.5 declares `is_available` as a required slot on Entity, flowing into every domain class via `is_a: Entity`. DDLGenerator and PostgresDDLGenerator previously hardcoded the column unconditionally. With the schema-driven path, the column should come from induced_slots — but many test fixtures use `build_registry` to construct ad-hoc classes without `is_a: Entity`, and their tests rely on `is_available` being present in the generated DDL.
+- **Alternatives considered:** (A) require all schemas (including ad-hoc test fixtures) to use `is_a: Entity`; (B) keep the hardcoded column as an unconditional fallback; (C) keep it as a fallback only when the class didn't already declare `is_available` via induction.
+- **Chosen:** (C). Classes that inherit from Entity get `is_available` through the normal slot path; classes that don't fall through to a hardcoded append. Preserves the sec9 design goal (schema is source of truth) for proper schemas while keeping existing tests working without a sweeping migration.
+- **Consequences:** `DDLGenerator._build_table` and `PostgresDDLGenerator._build_table` check `existing_column_names` before appending a hardcoded `is_available`. `superseded_by` remains unconditionally hardcoded; sec9 §9.6's provenance redesign will remove it in Wave 2.
+- **Revert:** Remove the guard, restore unconditional hardcoding. Low blast radius. The principled alternative — Option A, requiring `is_a: Entity` everywhere — is deferred until Wave 2 consolidation of test fixtures.
+
+### Decision 9.5.B — `slot_default()` helper coerces boolean `ifabsent` strings [NEW 2026-04-21]
+
+- **Finding:** LinkML stores `ifabsent` as a string even for boolean slots (`ifabsent: "true"` / `"false"`). DDL generators format defaults via `_format_default(value)`; passing a raw string produces `DEFAULT 'true'` — a quoted string literal, not a native boolean — which is wrong for SQLite (`1`/`0`) and Postgres (`TRUE`/`FALSE`).
+- **Alternatives considered:** (A) make `_format_default` LinkML-ifabsent-aware, parsing `"true"`/`"false"`/`"int(0)"`/`"uuid()"` inline; (B) a thin `slot_default(slot)` helper in `linkml_bridge` that coerces known LinkML ifabsent forms to Python values; (C) change `hippo_core` to use `ifabsent: "1"` / `"0"` instead of `"true"` / `"false"`.
+- **Chosen:** (B), minimal form. Current coverage: `range: boolean` + `ifabsent` in `{"true", "false"}` returns Python `True`/`False`; everything else passes through unchanged. Richer parsing (integer/datetime/uuid constructor forms) is deferred until a concrete slot needs it.
+- **Consequences:** `slot_default()` lives in `hippo.linkml_bridge` and is called by `DDLGenerator`, `PostgresDDLGenerator`, `migration.py`, and `pg_migration.py`. Schema authors write `ifabsent: true` in their YAML (standard LinkML idiom) and the DDL output is native SQL on both adapters.
+- **Revert:** Inline the coercion at each call site or expand `_format_default` to handle ifabsent forms. The helper is a thin wrapper; removing it is mechanical.
+
+### Decision 9.5.C — `_flatten_for_validator` materializes imports inline for `linkml.validator` [NEW 2026-04-21]
+
+- **Finding:** LinkML's `Validator` (and `JsonschemaValidationPlugin`) resolve `imports:` independently of `SchemaView`'s `importmap`. When the user schema says `imports: [hippo_core]` and hippo_core lives outside the user-schema directory (inside `src/hippo/schemas/` as a bundled resource), the validator tries to open `hippo_core.yaml` relative to the user schema's directory and fails with `FileNotFoundError`. `SchemaView.materialize_derived_schema()` re-triggers the same import resolution.
+- **Alternatives considered:** (A) pass the importmap to `Validator` (not supported in the current `linkml.validator` API); (B) pre-flatten the merged `SchemaView` into a self-contained dict with all classes/slots/enums/types inlined and `imports:` stripped, then hand that dict to `Validator`; (C) write the merged schema to a temp file with all imports resolved, then load from there.
+- **Chosen:** (B). A module-level `_flatten_for_validator(sv)` helper reads `sv.all_classes(imports=True)`, `sv.all_slots(imports=True)`, `sv.all_enums(imports=True)`, `sv.all_types(imports=True)`, dumps each via `yaml_dumper`, and rebuilds a flat dict with only `linkml:types` as an import. The dict is passed to `Validator` which no longer needs to resolve imports from disk.
+- **Consequences:** `Validator` works regardless of where `hippo_core` lives on disk. Flattening runs once per `SchemaRegistry` construction (schema load is already a slow path; the extra round-trip is negligible). No behavior change visible to callers.
+- **Revert:** Pass `sv.schema` directly to `Validator` again. Would break any setup where bundled schemas are imported, so not a practical revert.
+
+---
+
 ## 9.8 Typed Client
 
 ### Decision 9.8.A — Generation at `SchemaRegistry` load time, in-memory only

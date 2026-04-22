@@ -289,3 +289,73 @@ class TestHippoExtValidation:
         yaml_text2 = self._build({"hippo_search": "embedding"})
         reg2 = SchemaRegistry.from_yaml(yaml_text2)
         assert "Thing" in reg2.class_names()
+
+
+class TestHippoCoreImport:
+    """Tests that `imports: [hippo_core]` resolves and user classes can
+    `is_a: Entity`. See sec9 §9.3 and §9.5.
+    """
+
+    def _user_schema(self, include_hippo_core_import: bool = True) -> str:
+        imports = ["linkml:types"]
+        if include_hippo_core_import:
+            imports.append("hippo_core")
+        imports_block = "\n".join(f"  - {i}" for i in imports)
+        return (
+            "id: https://example.org/test\n"
+            "name: test\n"
+            "prefixes: {linkml: 'https://w3id.org/linkml/'}\n"
+            "default_range: string\n"
+            "imports:\n"
+            f"{imports_block}\n"
+            "classes:\n"
+            "  MySample:\n"
+            "    is_a: Entity\n"
+            "    attributes:\n"
+            "      barcode:\n"
+            "        range: string\n"
+            "        required: true\n"
+        )
+
+    def test_hippo_core_importable_and_entity_resolves(self):
+        reg = SchemaRegistry.from_yaml(self._user_schema())
+        # Entity flows in from hippo_core; MySample inherits id + is_available.
+        names = set(reg.class_names())
+        assert "Entity" in names
+        assert "MySample" in names
+        slot_names = {s.name for s in reg.induced_slots("MySample")}
+        assert {"id", "is_available", "barcode"}.issubset(slot_names)
+
+    def test_hippo_core_enums_available_in_user_view(self):
+        reg = SchemaRegistry.from_yaml(self._user_schema())
+        sv = reg.schema_view
+        enums = sv.all_enums()
+        assert "Status" in enums
+        assert "Operation" in enums
+        op_values = set(enums["Operation"].permissible_values.keys())
+        assert {"create", "update", "supersede", "migration_applied"}.issubset(
+            op_values
+        )
+
+    def test_without_hippo_core_import_entity_unresolved(self):
+        # Without `imports: hippo_core`, SchemaView loads successfully but
+        # LinkML can't resolve `is_a: Entity` when induced slots are
+        # requested — SchemaView raises ValueError("No such class: Entity").
+        # This is acceptable load-time failure behavior; the error points at
+        # the missing import.
+        reg = SchemaRegistry.from_yaml(
+            self._user_schema(include_hippo_core_import=False)
+        )
+        with pytest.raises(ValueError, match="Entity"):
+            reg.induced_slots("MySample")
+
+    def test_entity_is_available_inherited_with_default(self):
+        reg = SchemaRegistry.from_yaml(self._user_schema())
+        slots = {s.name: s for s in reg.induced_slots("MySample")}
+        assert "is_available" in slots
+        is_avail = slots["is_available"]
+        assert is_avail.required is True
+        # ifabsent is stored as a string form in LinkML; slot_default coerces
+        # boolean-ranged strings back to Python bools.
+        from hippo.linkml_bridge import slot_default
+        assert slot_default(is_avail) is True

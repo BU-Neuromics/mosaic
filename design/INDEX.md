@@ -26,6 +26,7 @@
 | `sec9_decisions.md` | 9. (Companion) Decisions Log | ✅ Approved 2026-04-18 | Drafting decisions with alternatives, rationale, revert paths |
 | `appendix_a_example_schema_omics.md` | Appendix A. Example Schema (Omics) | ✅ Draft v0.1 | Complete LinkML schema with `search:`, polymorphic extension example |
 | `appendix_b_implementation_guide.md` | Appendix B. Implementation Guide | ✅ Draft v0.1 | Build order, module map, error hierarchy, invariants, test strategy, OpenSpec mapping |
+| `reference_hippo_core.md` | Reference: `hippo_core` Classes and Enums | ✅ Draft v0.1 | Entity + Status + Operation + placeholder Validator / ReferenceLoader; design invariants; what's deferred to later changes |
 | `reference_hippo_ext.md` | Reference: `hippo_ext` Annotation Vocabulary | ✅ Draft v0.1 | Per-annotation reference (range, applies_to, default, semantics), modeling note, version discipline, extensibility process |
 | `reference_hippo_yaml.md` | Reference: `hippo.yaml` Config Schema | ✅ Draft v0.1 | All valid keys, types, defaults, env var substitution, minimal configs |
 | `reference_validators_yaml.md` | Reference: `validators.yaml` Format | ✅ Draft v0.1 | Complete field spec, expand syntax, all built-in presets, execution semantics |
