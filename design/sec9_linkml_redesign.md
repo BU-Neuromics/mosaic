@@ -811,7 +811,7 @@ The work is scoped into OpenSpec changes in 9.12. Each change is independently r
 
 ### 9.12 OpenSpec Decomposition
 
-sec9 is decomposed into ten OpenSpec changes, grouped into three waves by dependency. Each change is independently reviewable; later changes assume the earlier ones have landed.
+sec9 is decomposed into eleven OpenSpec changes, grouped into three waves by dependency. Each change is independently reviewable; later changes assume the earlier ones have landed. (The eleventh change — `provenance-migration` — was scoped during Wave 2 implementation per Decision 9.6.A to split the `ProvenanceRecord` declaration from its storage migration.)
 
 **Wave 1 — Foundation.** Introduce the schemas and the identity model. No observable behavior change for callers, but the groundwork for everything in Waves 2 and 3.
 
@@ -826,7 +826,8 @@ Wave 1: hippo-ext-vocabulary  ─┐
                                ├─► hippo-core-schema ──► id-registry-and-uuid-strategy ──► process-class
                                                                                               │
                                                                                               ▼
-Wave 2:                                                         provenance-as-linkml-class ──► computed-temporal-fields
+Wave 2:                     provenance-as-linkml-class ──► provenance-migration ──► computed-temporal-fields
+                            (declaration-only; Decision 9.6.A)
                                                                                                       │
                                                                                                       ▼
 Wave 3:                                                         validation-tiering-clarification ─► typed-client
@@ -850,7 +851,8 @@ Wave 3:                                                         validation-tieri
 
 | Change | Scope | Dependencies | Deliverables | Acceptance |
 |---|---|---|---|---|
-| `provenance-as-linkml-class` | Declares `hippo_append_only` in `hippo_ext` (minor bump) alongside its consumer. Moves `ProvenanceRecord` into `hippo_core` with the PROV-O alignment, `hippo_append_only: true`, and the full `Operation` enum. DDL generation runs through the same pipeline as user entities. Append-only enforcement in adapters. System events live in the same table with `entity_id = null`. | `process-class` | `ProvenanceRecord` in `hippo_core`; `hippo_append_only` in `hippo_ext`; adapter enforcement; migration to unified event table; tests. | `ProvenanceRecord` is DDL-generated. Updates and deletes are rejected. Migration/reference-data events coexist with entity events. `hippo_append_only` is validated against `hippo_ext`. |
+| `provenance-as-linkml-class` | Declares `hippo_append_only` in `hippo_ext` and `ProvenanceRecord` in `hippo_core` (PROV-O alignment, all sec9 §9.6 slots, class-level `hippo_append_only: true`). **Declaration-only per Decision 9.6.A** — introspection, typed-client support, and `hippo_append_only` vocabulary availability land here; the actual storage migration is a dedicated follow-up. | `process-class` | `ProvenanceRecord` class in `hippo_core`; `hippo_append_only` in `hippo_ext`; reference docs; tests for declaration + applies_to enforcement. | LinkML declaration complete; `ProvenanceRecord` present via `imports: [hippo_core]`; `hippo_append_only` validates via the existing `SchemaRegistry` annotation-validation hook. |
+| `provenance-migration` | Migrates the legacy `provenance` table + `ProvenanceStore` onto the LinkML-declared `ProvenanceRecord` shape. Drops `previous_state_hash` / `state_snapshot` / `operation_id`; maps `operation_type` strings to the `Operation` enum; captures `schema_version`; adds `derived_from_id` / `process_id` / `context`. Adapter runtime write-guard for `hippo_append_only`. | `provenance-as-linkml-class` | `provenance_record` table DDL-generated; `ProvenanceStore` API rewrite; adapter write-guard; ~40 test updates; one-time data migration. | Legacy `provenance` table gone; append-only enforced; no legacy operation strings remain; full suite green. |
 | `computed-temporal-fields` | Formalize read-time aggregation for `created_at`, `updated_at`, `schema_version`, `created_by`, `updated_by`. Add `(entity_id, timestamp)` and `(entity_id, operation, timestamp)` indexes. Batch aggregation primitives. Remove any stored temporal columns on entity tables if any exist. | `provenance-as-linkml-class` | SDK aggregation code; batch primitive; index migration; tests covering batch and degenerate cases. | Entity reads include temporal fields. Batch reads use one aggregation query per request. |
 
 **Wave 3 — Consumer-facing**

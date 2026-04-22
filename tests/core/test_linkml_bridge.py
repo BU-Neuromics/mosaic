@@ -453,3 +453,151 @@ class TestHippoCoreProcess:
         from hippo.linkml_bridge import annotation_value, HIPPO_INDEX
         assert annotation_value(slots["operation_kind"], HIPPO_INDEX) is True
         assert annotation_value(slots["started_at"], HIPPO_INDEX) is True
+
+
+class TestHippoCoreProvenanceRecord:
+    """ProvenanceRecord class shipped in hippo_core (sec9 §9.6). Declared for
+    introspection and downstream use (typed-client, REST surface). The
+    adapter-side enforcement and ProvenanceStore migration land with the
+    `provenance-migration` change per Decision 9.6.A.
+    """
+
+    def _schema_importing_hippo_core(self) -> str:
+        return (
+            "id: https://example.org/test\n"
+            "name: test\n"
+            "prefixes: {linkml: 'https://w3id.org/linkml/'}\n"
+            "default_range: string\n"
+            "imports:\n"
+            "  - linkml:types\n"
+            "  - hippo_core\n"
+            "classes: {}\n"
+        )
+
+    def test_provenance_record_present_in_hippo_core(self):
+        reg = SchemaRegistry.from_yaml(self._schema_importing_hippo_core())
+        assert "ProvenanceRecord" in reg.class_names()
+
+    def test_provenance_record_is_a_entity(self):
+        reg = SchemaRegistry.from_yaml(self._schema_importing_hippo_core())
+        slot_names = {s.name for s in reg.induced_slots("ProvenanceRecord")}
+        # Inherited from Entity
+        assert "id" in slot_names
+        assert "is_available" in slot_names
+
+    def test_provenance_record_has_sec9_slots(self):
+        reg = SchemaRegistry.from_yaml(self._schema_importing_hippo_core())
+        slot_names = {s.name for s in reg.induced_slots("ProvenanceRecord")}
+        expected = {
+            "entity_id",
+            "entity_type",
+            "operation",
+            "actor_id",
+            "timestamp",
+            "schema_version",
+            "derived_from_id",
+            "process_id",
+            "patch",
+            "context",
+        }
+        assert expected.issubset(slot_names)
+
+    def test_provenance_record_class_uri_is_prov_activity(self):
+        reg = SchemaRegistry.from_yaml(self._schema_importing_hippo_core())
+        cls = reg.get_class("ProvenanceRecord")
+        assert cls is not None
+        assert cls.class_uri == "prov:Activity" or "Activity" in (
+            cls.class_uri or ""
+        )
+
+    def test_provenance_record_has_hippo_append_only_annotation(self):
+        reg = SchemaRegistry.from_yaml(self._schema_importing_hippo_core())
+        cls = reg.get_class("ProvenanceRecord")
+        assert cls is not None
+        from hippo.linkml_bridge import annotation_value
+        assert annotation_value(cls, "hippo_append_only") is True
+
+    def test_provenance_record_slots_are_indexed(self):
+        reg = SchemaRegistry.from_yaml(self._schema_importing_hippo_core())
+        slots = {s.name: s for s in reg.induced_slots("ProvenanceRecord")}
+        from hippo.linkml_bridge import annotation_value, HIPPO_INDEX
+        # Slots that sec9 §9.6 and §9.7 say should be indexed for the
+        # canonical query paths
+        assert annotation_value(slots["entity_id"], HIPPO_INDEX) is True
+        assert annotation_value(slots["timestamp"], HIPPO_INDEX) is True
+        assert annotation_value(slots["operation"], HIPPO_INDEX) is True
+        assert annotation_value(slots["process_id"], HIPPO_INDEX) is True
+
+    def test_operation_enum_available(self):
+        # ProvenanceRecord.operation references the Operation enum declared
+        # in hippo_core. The user view should see both.
+        reg = SchemaRegistry.from_yaml(self._schema_importing_hippo_core())
+        sv = reg.schema_view
+        enums = sv.all_enums()
+        assert "Operation" in enums
+
+
+class TestHippoAppendOnlyAnnotation:
+    """Validates the hippo_append_only annotation declaration in hippo_ext."""
+
+    def _schema_with_annotation(self, target: str, value: object) -> str:
+        """Build a schema attaching hippo_append_only to a class or slot."""
+        if target == "class":
+            return (
+                "id: https://example.org/t\n"
+                "name: t\n"
+                "prefixes: {linkml: 'https://w3id.org/linkml/'}\n"
+                "default_range: string\n"
+                "imports: [linkml:types]\n"
+                "classes:\n"
+                "  LogEntry:\n"
+                "    annotations:\n"
+                f"      hippo_append_only: {str(value).lower()}\n"
+                "    attributes:\n"
+                "      id: {identifier: true}\n"
+            )
+        # target == "slot"
+        return (
+            "id: https://example.org/t\n"
+            "name: t\n"
+            "prefixes: {linkml: 'https://w3id.org/linkml/'}\n"
+            "default_range: string\n"
+            "imports: [linkml:types]\n"
+            "classes:\n"
+            "  Thing:\n"
+            "    attributes:\n"
+            "      id: {identifier: true}\n"
+            "      name:\n"
+            "        range: string\n"
+            "        annotations:\n"
+            f"          hippo_append_only: {str(value).lower()}\n"
+        )
+
+    def test_hippo_append_only_true_on_class_passes(self):
+        reg = SchemaRegistry.from_yaml(
+            self._schema_with_annotation("class", True)
+        )
+        cls = reg.get_class("LogEntry")
+        from hippo.linkml_bridge import annotation_value
+        assert annotation_value(cls, "hippo_append_only") is True
+
+    def test_hippo_append_only_false_on_class_passes(self):
+        reg = SchemaRegistry.from_yaml(
+            self._schema_with_annotation("class", False)
+        )
+        cls = reg.get_class("LogEntry")
+        from hippo.linkml_bridge import annotation_value
+        assert annotation_value(cls, "hippo_append_only") is False
+
+    def test_hippo_append_only_on_slot_fails(self):
+        # hippo_append_only is a class_annotation; attaching it to a slot
+        # must fail at schema load with an applies_to violation.
+        from hippo.core.exceptions import SchemaError
+
+        with pytest.raises(SchemaError) as exc:
+            SchemaRegistry.from_yaml(
+                self._schema_with_annotation("slot", True)
+            )
+        msg = str(exc.value)
+        assert "hippo_append_only" in msg
+        assert "slot" in msg.lower() or "class_annotation" in msg

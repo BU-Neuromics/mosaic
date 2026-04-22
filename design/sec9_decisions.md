@@ -105,6 +105,18 @@ Review this file before sec9 is considered approved. If any decision is unwelcom
 
 ---
 
+## 9.6 Provenance as a LinkML Class
+
+### Decision 9.6.A — Split `provenance-as-linkml-class` into declaration-only + dedicated `provenance-migration` change [NEW 2026-04-21]
+
+- **Finding (Wave 2 kickoff):** The original `provenance-as-linkml-class` proposal bundled the LinkML declaration of `ProvenanceRecord` with the storage migration. The legacy `ProvenanceStore` + `provenance` table has ~40 deeply-coupled test references and concepts sec9 §9.6 doesn't model (`previous_state_hash`, `state_snapshot`, `operation_id` as a separate field, `source`). Bundling all of that into one OpenSpec change would make the opinionated calls about legacy-field retirement (drop vs. preserve) invisible — they'd be buried inside a sprawling change.
+- **Alternatives considered:** (A) Full rewrite now — declare `ProvenanceRecord` in `hippo_core`, rewrite `ProvenanceStore`, migrate ~40 tests in one change. (B) Narrow — declare only, keep `ProvenanceStore` on the legacy `provenance` table indefinitely. (C) Staged — declare only now as `provenance-as-linkml-class`; split the storage migration into a dedicated `provenance-migration` change where the legacy-field retirement decisions get explicit review.
+- **Chosen:** (C). The LinkML declaration has independent value (introspection, typed-client support in Wave 3, `hippo_append_only` annotation lands in the vocabulary, `Operation` enum becomes importable). Splitting the migration into its own change makes the opinionated calls (drop `previous_state_hash`, drop `state_snapshot`, rename `user_context` → `actor_id`, etc.) reviewable in isolation.
+- **Consequences:** `provenance-as-linkml-class` is scoped to: declare `hippo_append_only` in `hippo_ext` (0.1.0 → 0.2.0); declare `ProvenanceRecord` in `hippo_core` (0.2.0 → 0.3.0) with all sec9 §9.6 slots including `class_uri: prov:Activity` and `hippo_append_only: true`; update reference docs; tests for the declaration. Adapter-side enforcement and `ProvenanceStore` rewrite move to the new `provenance-migration` change. sec9 §9.12 decomposition updated from 10 changes to 11; the Wave 2 dependency graph now reads `provenance-as-linkml-class → provenance-migration → computed-temporal-fields`.
+- **Revert:** Merge `provenance-migration` back into `provenance-as-linkml-class`. Low-cost but doesn't address the scope concern that motivated the split.
+
+---
+
 ## 9.8 Typed Client
 
 ### Decision 9.8.A — Generation at `SchemaRegistry` load time, in-memory only

@@ -34,11 +34,14 @@ annotations via the standard `annotations:` block on their own classes / slots.
 
 ---
 
-### Vocabulary (Wave 1)
+### Vocabulary
 
-The four annotations below have live consumers today. Two more
-(`hippo_append_only`, `hippo_accessor`) are introduced by later OpenSpec changes
-alongside their consumers — see *Deferred annotations* below.
+Five annotations are currently declared. `hippo_unique`, `hippo_index`,
+`hippo_index_partial`, and `hippo_search` landed with Wave 1
+(`hippo-ext-vocabulary`); `hippo_append_only` landed with Wave 2
+(`provenance-as-linkml-class`) as a declaration — adapter enforcement
+follows in `provenance-migration`. `hippo_accessor` joins the vocabulary
+with Wave 3's `typed-client` — see *Deferred annotations* below.
 
 #### `hippo_unique`
 
@@ -140,28 +143,57 @@ classes:
           hippo_search: fts5
 ```
 
+#### `hippo_append_only`
+
+| Attribute | Value |
+|---|---|
+| Applies to | class |
+| Value type | boolean |
+| Default | `false` |
+| Consumer | Storage adapter write-guard |
+
+Classes annotated `hippo_append_only: true` are append-only: the storage
+adapter MUST reject `UPDATE` and `DELETE` against rows of the class. Only
+`INSERT` is permitted. Enforcement is a runtime check in the adapter;
+LinkML annotations declare intent, adapters honor it. Applied in
+`hippo_core` to `ProvenanceRecord` (see `reference_hippo_core.md`).
+
+Scope note: this annotation was introduced in Wave 2's
+`provenance-as-linkml-class` as a declaration. The concrete adapter-side
+enforcement (rejecting `UPDATE` / `DELETE` on `ProvenanceRecord`'s
+backing table) lands with the subsequent `provenance-migration` change
+per Decision 9.6.A.
+
+**Example.**
+```yaml
+classes:
+  ProvenanceRecord:
+    is_a: Entity
+    annotations:
+      hippo_append_only: true
+```
+
 ---
 
 ### Deferred annotations
 
-The following annotations are part of the target vocabulary in sec9 but are
-introduced by later OpenSpec changes — each declared by the change that
-introduces its consumer, per Decision 9.4.B in `sec9_decisions.md`.
+The following annotation is part of the target vocabulary in sec9 but is
+introduced by a later OpenSpec change — declared alongside its consumer,
+per Decision 9.4.B in `sec9_decisions.md`.
 
 | Annotation | Applies to | Introduced by | Wave |
 |---|---|---|---|
-| `hippo_append_only` | class | `provenance-as-linkml-class` | 2 |
 | `hippo_accessor` | class | `typed-client` | 3 |
 
-Neither is currently declared in `hippo_ext.yaml`. Using them in a user schema
-before the corresponding OpenSpec change lands will fail at schema load with
-an undeclared-annotation error.
+Not currently declared in `hippo_ext.yaml`. Using it in a user schema
+before `typed-client` lands will fail at schema load with an
+undeclared-annotation error.
 
 ---
 
 ### Version discipline
 
-`hippo_ext` declares a `version:` attribute (currently `0.1.0`). Bump rules
+`hippo_ext` declares a `version:` attribute (currently `0.2.0`). Bump rules
 (per sec9 §9.3):
 
 | Change | Bump |

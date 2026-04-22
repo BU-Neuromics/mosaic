@@ -20,6 +20,7 @@ reference to the shipped file.
 | Element | Kind | Purpose |
 |---|---|---|
 | `Entity` | abstract class | Base class for every domain entity. Provides `id` and `is_available`. |
+| `ProvenanceRecord` | class | Atomic audit record of an operation on an entity. Annotated `hippo_append_only: true`; PROV-O-aligned. `is_a: Entity`. |
 | `Process` | class | Composite activity grouping atomic operations under one logical execution (reference loads, migrations, pipeline runs). `is_a: Entity`. |
 | `Validator` | class (placeholder) | Declarative validator definition; slot inventory finalized later. |
 | `ReferenceLoader` | class (placeholder) | Metadata for reference-data loader plugins; slot inventory finalized by the `reference-loader-shape` OpenSpec change. |
@@ -60,11 +61,54 @@ classes:
 
 ---
 
+### `ProvenanceRecord`
+
+Atomic audit record of an operation on an entity. `is_a: Entity`
+(participates in the normal identity model — UUID id, lifecycle) but
+annotated `hippo_append_only: true` — adapters MUST reject `UPDATE` and
+`DELETE` against the backing table. Only `INSERT` is permitted.
+
+`class_uri: prov:Activity` at the atomic scale. `Process` shares the
+same class URI at the composite scale; PROV-O treats activities at
+multiple granularities uniformly.
+
+| Slot | Type | Required | PROV-O | Semantics |
+|---|---|---|---|---|
+| `id` | string (UUID) | yes | — | Inherited from `Entity`. |
+| `is_available` | boolean | yes | — | Inherited from `Entity`. |
+| `entity_id` | string (UUID) | no | `prov:wasGeneratedBy` / `prov:wasInvalidatedBy` (operation-dependent) | UUID of the target entity. Null ONLY for system operations (`migration_applied`, `reference_data_installed`). |
+| `entity_type` | string | no | — | FQN of the target entity at write time. Denormalized onto the record so audit queries can avoid a registry lookup. Null when `entity_id` is null. |
+| `operation` | `Operation` enum | yes | — | Kind of operation — see the `Operation` enum below. |
+| `actor_id` | string (UUID) | yes | `prov:wasAssociatedWith` | UUID of the responsible entity (user-schema agent, Process, or system entity). |
+| `timestamp` | datetime | yes | `prov:endedAtTime` | UTC wall-clock time at which the operation completed. |
+| `schema_version` | string | yes | — | Version of the merged schema at the moment of write. Captured by the SDK; never caller-supplied. |
+| `derived_from_id` | string (UUID) | no | `prov:wasDerivedFrom` | For `supersede` operations, the previous entity version. |
+| `process_id` | Process | no | `prov:wasInformedBy` (convention) | Enclosing `Process`. Used to reconstruct multi-entity activities from their atomic members. |
+| `patch` | string (JSON) | no | — | Operation-specific change payload. Shape varies by operation. Unstructured by design. |
+| `context` | string (JSON) | no | — | Caller-supplied contextual metadata. Structure at the caller's discretion. |
+
+**Indexes** (via `hippo_index: true` annotations): `entity_id`,
+`operation`, `timestamp`, `process_id`. Wave 2 `computed-temporal-fields`
+adds composite indexes as needed for the read-time aggregation paths.
+
+**Scope note (Decision 9.6.A).** This declaration lands with Wave 2's
+`provenance-as-linkml-class`. The actual storage migration — moving
+the legacy `provenance` table and `ProvenanceStore` implementation onto
+this shape — is scoped as a separate `provenance-migration` OpenSpec
+change. Until that change lands, the legacy `provenance` table (with its
+`operation_type` / `previous_state_hash` / `state_snapshot` columns)
+continues to back the existing `ProvenanceStore` API; the LinkML-declared
+`ProvenanceRecord` shape is authoritative for introspection and
+downstream uses (typed-client generation, REST surface, `hippo_core`
+consumers).
+
+---
+
 ### `Process`
 
 Composite activity — a grouping of atomic operations under one logical
 execution. `is_a: Entity`; `class_uri: prov:Activity` for PROV-O alignment.
-Shares the class URI with `ProvenanceRecord` (Wave 2) at the atomic scale;
+Shares the class URI with `ProvenanceRecord` at the atomic scale;
 PROV-O treats activities at multiple granularities uniformly.
 
 Use cases: reference-data loads, schema migrations, Cappella pipeline runs,
@@ -184,7 +228,7 @@ Current declared slots:
 
 ### Version and compatibility
 
-`hippo_core.version` is `0.1.0`. Bump rules (per sec9 §9.3):
+`hippo_core.version` is `0.3.0` (0.1.0 initial → 0.2.0 added `Process` → 0.3.0 added `ProvenanceRecord`). Bump rules (per sec9 §9.3):
 
 | Change | Bump |
 |---|---|
@@ -222,9 +266,9 @@ adding the concept to `hippo_core` ad-hoc.
 
 | Concept | Owning change |
 |---|---|
-| `ProvenanceRecord` class (full PROV-O alignment, slot inventory, `hippo_append_only` enforcement) | `provenance-as-linkml-class` (Wave 2) |
-| `Process` class (composite activity, `parent_process_id`, PROV-O alignment) | `process-class` (Wave 1, subsequent) |
-| UUID-identity invariant and `_entity_registry` table | `id-registry-and-uuid-strategy` (Wave 1, subsequent) |
-| `superseded_by` as a proper provenance-derived relationship | `provenance-as-linkml-class` (Wave 2) |
+| `ProvenanceRecord` adapter-side write-guard + `ProvenanceStore` migration onto the LinkML-declared shape | `provenance-migration` (Wave 2, follow-up to `provenance-as-linkml-class` per Decision 9.6.A) |
+| `superseded_by` as a proper provenance-derived relationship | `provenance-migration` (Wave 2) |
 | Computed temporal fields on entity reads | `computed-temporal-fields` (Wave 2) |
+| Final `Validator` slot inventory | Later OpenSpec change; deferred pending `validators.yaml` reconciliation |
+| Final `ReferenceLoader` slot inventory | `reference-loader-shape` (Wave 3) |
 | Typed client Pydantic generation | `typed-client` (Wave 3) |

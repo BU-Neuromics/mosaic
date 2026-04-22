@@ -17,7 +17,7 @@ description: >-
   slots as data slots.
 
 license: https://creativecommons.org/publicdomain/zero/1.0/
-version: 0.1.0
+version: 0.2.0
 
 prefixes:
   linkml: https://w3id.org/linkml/
@@ -87,8 +87,25 @@ slots:
     in_subset:
       - slot_annotation
 
-  # hippo_append_only and hippo_accessor are declared by later changes
-  # alongside their consumers:
-  #   - hippo_append_only: introduced by `provenance-as-linkml-class` (Wave 2)
-  #   - hippo_accessor:    introduced by `typed-client` (Wave 3)
-  # See sec9 §9.12 for the schedule.
+  hippo_append_only:
+    description: >-
+      Storage adapter MUST reject UPDATE and DELETE against rows of the
+      annotated class — only INSERT is permitted. Used by
+      `ProvenanceRecord` (see sec9 §9.6) and any caller-declared
+      log-shaped entity. Enforcement is a runtime check in the adapter;
+      LinkML annotations declare intent, adapters honor it. A violation
+      is a defect in the adapter, not in the schema.
+
+      Note: `provenance-as-linkml-class` (Wave 2) declares this
+      annotation and applies it to `ProvenanceRecord`. The concrete
+      adapter-side enforcement lands with the subsequent
+      `provenance-migration` change that restructures the provenance
+      storage; until then, append-only semantics for the legacy
+      `provenance` table are implicit (ProvenanceStore only INSERTs).
+    range: boolean
+    ifabsent: "false"
+    in_subset:
+      - class_annotation
+
+  # hippo_accessor is declared by typed-client (Wave 3) alongside its
+  # consumer. See sec9 §9.12 for the schedule.

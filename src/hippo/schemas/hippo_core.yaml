@@ -11,7 +11,7 @@ description: >-
   `design/reference_hippo_core.md` for the per-class reference.
 
 license: https://creativecommons.org/publicdomain/zero/1.0/
-version: 0.2.0
+version: 0.3.0
 
 prefixes:
   linkml: https://w3id.org/linkml/
@@ -62,6 +62,112 @@ classes:
           reads; `false` means it has been superseded, archived, deleted,
           distributed, or removed. The reason lives in provenance, not on
           the entity.
+
+  ProvenanceRecord:
+    is_a: Entity
+    class_uri: prov:Activity
+    annotations:
+      hippo_append_only: true
+    description: >-
+      Atomic audit record of an operation on an entity. `is_a: Entity` so
+      it participates in the usual identity model (UUID id, lifecycle),
+      but annotated `hippo_append_only: true` — adapters MUST reject
+      UPDATE and DELETE on the backing table; only INSERT is permitted.
+
+      PROV-O alignment: each instance is a `prov:Activity` at the atomic
+      scale (composite activities are modeled by `Process`, which shares
+      the same class_uri at a different granularity). Slot URIs map onto
+      PROV-O predicates (wasGeneratedBy / wasInvalidatedBy / wasAssociatedWith /
+      endedAtTime / wasDerivedFrom / wasInformedBy) per sec9 §9.6.
+
+      Scope note (Decision 9.6.A): this change (`provenance-as-linkml-class`)
+      declares ProvenanceRecord for introspection and downstream use
+      (typed-client, REST surface). The actual storage migration — moving
+      the legacy `provenance` table and `ProvenanceStore` implementation
+      onto this shape — is scoped as a separate `provenance-migration`
+      OpenSpec change.
+    attributes:
+      entity_id:
+        range: string
+        required: false
+        description: >-
+          UUID of the entity the operation targets. Null ONLY for system
+          operations (`migration_applied`, `reference_data_installed`).
+          For entity-scoped operations, points into the `_entity_registry`
+          (relational adapters) or the user-schema entity by label (Neo4j).
+        slot_uri: prov:wasGeneratedBy
+        annotations:
+          hippo_index: true
+      entity_type:
+        range: string
+        required: false
+        description: >-
+          Fully-qualified class name of the target entity at write time.
+          Denormalized onto the record so audit queries can avoid a
+          registry lookup. Null when `entity_id` is null.
+      operation:
+        range: Operation
+        required: true
+        description: Kind of operation. See the `Operation` enum.
+        annotations:
+          hippo_index: true
+      actor_id:
+        range: string
+        required: true
+        description: >-
+          UUID of the entity responsible for this operation. Resolves via
+          the identity model (sec9 §9.5) to an agent — a user-schema
+          `User`/`Service` class, a `Process` (for autonomous execution),
+          or a system entity. Deployments that need rich actor modeling
+          define their own agent classes; hippo_core prescribes only the
+          reference.
+        slot_uri: prov:wasAssociatedWith
+      timestamp:
+        range: datetime
+        required: true
+        description: >-
+          UTC wall-clock time at which the operation completed.
+        slot_uri: prov:endedAtTime
+        annotations:
+          hippo_index: true
+      schema_version:
+        range: string
+        required: true
+        description: >-
+          Version of the merged schema at the moment of write. Captured by
+          the SDK; never caller-supplied. Enables queries by schema
+          version across migrations.
+      derived_from_id:
+        range: string
+        required: false
+        description: >-
+          For `supersede` operations, UUID of the previous entity version.
+        slot_uri: prov:wasDerivedFrom
+      process_id:
+        range: Process
+        required: false
+        description: >-
+          Enclosing `Process` that contained this operation. Used to
+          reconstruct multi-entity activities (reference loads, pipeline
+          runs) from their atomic members. Null when the operation is not
+          inside any Process.
+        annotations:
+          hippo_index: true
+      patch:
+        range: string
+        required: false
+        description: >-
+          Operation-specific change payload as a JSON string. Shape
+          varies by operation: diff for `update`, new value + driver
+          `Status` for `availability_change`, `{slot, target_id}` for
+          `relationship_add`/`_remove`, etc. Unstructured by design.
+      context:
+        range: string
+        required: false
+        description: >-
+          Caller-supplied contextual metadata as a JSON string. Structure
+          at the caller's discretion; Cappella conventions documented in
+          sec6.
 
   Process:
     is_a: Entity
