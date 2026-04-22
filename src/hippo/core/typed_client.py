@@ -379,22 +379,22 @@ def generate_pydantic_models(registry: SchemaRegistry) -> dict[str, type]:
     """Generate Pydantic classes from the merged SchemaView.
 
     Runs LinkML's ``PydanticGenerator`` in memory and returns a mapping
-    of ``class_name → Pydantic class``. Errors from the generator are
-    swallowed per class — a class that fails to generate is simply
-    absent from the map; the corresponding typed accessor still works
-    against plain dicts. sec9 Decision 9.8.A confirms the in-memory
-    strategy and tolerates per-class generation gaps during the
-    transition.
+    of ``class_name → Pydantic class``. The schema is a compulsory
+    contract (Decision 9.8.H, revised 2026-04-22): any failure —
+    generator import, serialization, Pydantic import, or exec of the
+    generated module — raises :class:`TypedClientError` at
+    ``HippoClient.__init__``. A deployment whose schema can't be
+    generated has a schema defect, not a transition gap.
     """
     try:
         from linkml.generators.pydanticgen import PydanticGenerator
     except Exception as exc:
-        logger.warning(
-            "typed-client: PydanticGenerator unavailable (%s); accessors "
-            "will fall back to dict-only; see Decision 9.8.H.",
-            exc,
-        )
-        return {}
+        raise TypedClientError(
+            f"typed-client: PydanticGenerator unavailable ({exc}). "
+            "LinkML's Pydantic generator is a hard dependency of the "
+            "typed-client surface per Decision 9.8.H.",
+            case="pydantic_generator_unavailable",
+        ) from exc
 
     try:
         # PydanticGenerator reads from a schema file path or a yaml string;
@@ -409,35 +409,36 @@ def generate_pydantic_models(registry: SchemaRegistry) -> dict[str, type]:
         gen = PydanticGenerator(yaml_text)
         code = gen.serialize()
     except Exception as exc:
-        logger.warning(
-            "typed-client: Pydantic generation failed (%s); accessors will "
-            "fall back to dict-only; see Decision 9.8.H.",
-            exc,
-        )
-        return {}
+        raise TypedClientError(
+            f"typed-client: Pydantic generation failed ({exc}). The "
+            "merged schema is not accepted by LinkML's PydanticGenerator. "
+            "Fix the schema; the Pydantic surface is a compulsory "
+            "contract (Decision 9.8.H).",
+            case="pydantic_generation_failed",
+        ) from exc
 
-    # Execute the generated module in an isolated namespace and harvest
-    # every Pydantic class from it by matching against BaseModel.
     try:
         from pydantic import BaseModel
     except Exception as exc:
-        logger.warning(
-            "typed-client: Pydantic unavailable (%s); accessors will fall "
-            "back to dict-only.",
-            exc,
-        )
-        return {}
+        raise TypedClientError(
+            f"typed-client: Pydantic unavailable ({exc}). Pydantic is a "
+            "hard dependency of the typed-client surface.",
+            case="pydantic_unavailable",
+        ) from exc
 
+    # Execute the generated module in an isolated namespace and harvest
+    # every Pydantic class from it by matching against BaseModel.
     module_globals: dict[str, Any] = {}
     try:
         exec(textwrap.dedent(code), module_globals)  # noqa: S102
     except Exception as exc:
-        logger.warning(
-            "typed-client: generated Pydantic module failed to import "
-            "(%s); accessors will fall back to dict-only.",
-            exc,
-        )
-        return {}
+        raise TypedClientError(
+            f"typed-client: generated Pydantic module failed to import "
+            f"({exc}). The generated code is inconsistent; this is either "
+            "a LinkML PydanticGenerator defect or a schema pattern the "
+            "generator can't express.",
+            case="generated_module_invalid",
+        ) from exc
 
     out: dict[str, type] = {}
     for name, value in module_globals.items():

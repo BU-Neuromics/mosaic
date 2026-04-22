@@ -357,9 +357,11 @@ class TestInfrastructureExcluded:
 
 
 class TestPydanticGeneration:
-    def test_model_class_attached_when_generation_succeeds(
-        self, client_factory
-    ):
+    def test_model_class_attached(self, client_factory):
+        """Pydantic generation is a compulsory contract (Decision 9.8.H
+        revised): every non-abstract domain class MUST have an
+        attached Pydantic model. Schemas the generator can't handle
+        raise at load."""
         reg = _reg(
             "  Sample:\n"
             "    is_a: Entity\n"
@@ -370,15 +372,10 @@ class TestPydanticGeneration:
         client = client_factory(reg)
 
         accessor = client.samples
-        # Generation is best-effort — we assert on the contract
-        # (model_class is either None or a Pydantic class with the
-        # expected __name__). Successful generation should attach.
-        if accessor.model_class is not None:
-            assert accessor.model_class.__name__ == "Sample"
+        assert accessor.model_class is not None
+        assert accessor.model_class.__name__ == "Sample"
 
-    def test_create_accepts_pydantic_instance_when_available(
-        self, client_factory
-    ):
+    def test_create_accepts_pydantic_instance(self, client_factory):
         reg = _reg(
             "  Sample:\n"
             "    is_a: Entity\n"
@@ -389,10 +386,10 @@ class TestPydanticGeneration:
         client = client_factory(reg)
 
         accessor = client.samples
-        if accessor.model_class is not None:
-            instance = accessor.model_class(id="x1", name="via-pydantic")
-            result = accessor.create(instance)
-            assert result["data"]["name"] == "via-pydantic"
+        assert accessor.model_class is not None
+        instance = accessor.model_class(id="x1", name="via-pydantic")
+        result = accessor.create(instance)
+        assert result["data"]["name"] == "via-pydantic"
 
 
 # ---------------------------------------------------------------------------
