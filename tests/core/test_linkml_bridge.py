@@ -359,3 +359,97 @@ class TestHippoCoreImport:
         # boolean-ranged strings back to Python bools.
         from hippo.linkml_bridge import slot_default
         assert slot_default(is_avail) is True
+
+
+class TestHippoCoreProcess:
+    """Process class shipped in hippo_core (sec9 §9.5). Composite activity
+    grouping that callers can `is_a: Process` for domain-specific executions
+    like Cappella PipelineRuns.
+    """
+
+    def _schema_with_process_subclass(self) -> str:
+        return (
+            "id: https://example.org/test\n"
+            "name: test\n"
+            "prefixes: {linkml: 'https://w3id.org/linkml/'}\n"
+            "default_range: string\n"
+            "imports:\n"
+            "  - linkml:types\n"
+            "  - hippo_core\n"
+            "classes:\n"
+            "  PipelineRun:\n"
+            "    is_a: Process\n"
+            "    attributes:\n"
+            "      pipeline_name:\n"
+            "        range: string\n"
+            "        required: true\n"
+        )
+
+    def test_process_class_present_in_hippo_core(self):
+        # A user schema that imports hippo_core sees Process available.
+        reg = SchemaRegistry.from_yaml(
+            "id: https://example.org/t\n"
+            "name: t\n"
+            "prefixes: {linkml: 'https://w3id.org/linkml/'}\n"
+            "default_range: string\n"
+            "imports:\n  - linkml:types\n  - hippo_core\n"
+            "classes: {}\n"
+        )
+        assert "Process" in reg.class_names()
+
+    def test_process_inherits_entity_slots(self):
+        reg = SchemaRegistry.from_yaml(self._schema_with_process_subclass())
+        slot_names = {s.name for s in reg.induced_slots("Process")}
+        # id + is_available from Entity
+        assert "id" in slot_names
+        assert "is_available" in slot_names
+        # Process-specific slots
+        expected = {
+            "parent_process_id",
+            "operation_kind",
+            "started_at",
+            "ended_at",
+            "actor_id",
+        }
+        assert expected.issubset(slot_names)
+
+    def test_process_subclass_inherits_all_slots(self):
+        reg = SchemaRegistry.from_yaml(self._schema_with_process_subclass())
+        slot_names = {s.name for s in reg.induced_slots("PipelineRun")}
+        # Entity-inherited
+        assert "id" in slot_names
+        assert "is_available" in slot_names
+        # Process-inherited
+        assert "operation_kind" in slot_names
+        assert "started_at" in slot_names
+        assert "actor_id" in slot_names
+        assert "parent_process_id" in slot_names
+        # PipelineRun-declared
+        assert "pipeline_name" in slot_names
+
+    def test_process_class_uri_is_prov_activity(self):
+        reg = SchemaRegistry.from_yaml(self._schema_with_process_subclass())
+        proc_cls = reg.get_class("Process")
+        assert proc_cls is not None
+        # class_uri may be returned as the literal string or the expanded form;
+        # accept either.
+        assert (
+            proc_cls.class_uri == "prov:Activity"
+            or "Activity" in (proc_cls.class_uri or "")
+        )
+
+    def test_parent_process_id_is_self_reference(self):
+        reg = SchemaRegistry.from_yaml(self._schema_with_process_subclass())
+        slots = {s.name: s for s in reg.induced_slots("Process")}
+        ppid = slots["parent_process_id"]
+        assert ppid.range == "Process"
+        assert ppid.required is False
+
+    def test_process_operation_kind_is_indexed(self):
+        # operation_kind annotated hippo_index: true — verify annotation reaches
+        # the induced slot via the existing annotation_value helper.
+        reg = SchemaRegistry.from_yaml(self._schema_with_process_subclass())
+        slots = {s.name: s for s in reg.induced_slots("Process")}
+        from hippo.linkml_bridge import annotation_value, HIPPO_INDEX
+        assert annotation_value(slots["operation_kind"], HIPPO_INDEX) is True
+        assert annotation_value(slots["started_at"], HIPPO_INDEX) is True

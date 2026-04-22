@@ -20,6 +20,7 @@ reference to the shipped file.
 | Element | Kind | Purpose |
 |---|---|---|
 | `Entity` | abstract class | Base class for every domain entity. Provides `id` and `is_available`. |
+| `Process` | class | Composite activity grouping atomic operations under one logical execution (reference loads, migrations, pipeline runs). `is_a: Entity`. |
 | `Validator` | class (placeholder) | Declarative validator definition; slot inventory finalized later. |
 | `ReferenceLoader` | class (placeholder) | Metadata for reference-data loader plugins; slot inventory finalized by the `reference-loader-shape` OpenSpec change. |
 | `Status` | enum | Lifecycle state of an entity. |
@@ -55,6 +56,53 @@ classes:
         range: string
         annotations:
           hippo_unique: true
+```
+
+---
+
+### `Process`
+
+Composite activity — a grouping of atomic operations under one logical
+execution. `is_a: Entity`; `class_uri: prov:Activity` for PROV-O alignment.
+Shares the class URI with `ProvenanceRecord` (Wave 2) at the atomic scale;
+PROV-O treats activities at multiple granularities uniformly.
+
+Use cases: reference-data loads, schema migrations, Cappella pipeline runs,
+batch upserts. Callers specialize via `is_a: Process` for domain-specific
+attributes (pipeline parameters, input/output manifests, runtime metadata).
+
+| Slot | Type | Required | Semantics |
+|---|---|---|---|
+| `id` | string (UUID) | yes | Inherited from `Entity`. |
+| `is_available` | boolean | yes | Inherited from `Entity`. Processes are archived, not hard-deleted. |
+| `parent_process_id` | Process (self-ref) | no | Process composition. Processes form a tree; caller can model a DAG by adding further references on subclasses. Null for root processes. |
+| `operation_kind` | string | yes | Caller-defined category (`reference_data_installed`, `pipeline_run`, `schema_migration`, `manual_edit`, …). Not a closed enum. Annotated `hippo_index: true`. |
+| `started_at` | datetime | yes | UTC wall-clock time at process start. Annotated `hippo_index: true`. |
+| `ended_at` | datetime | no | UTC wall-clock time at process completion. Null while running or after failure without completion. |
+| `actor_id` | string (UUID) | yes | UUID of the entity responsible for initiating this process. Resolvable via `HippoClient.resolve_type(uuid)` per sec9 §9.5. |
+
+**Lifecycle via provenance (Wave 2).** Process creation emits a `create`
+ProvenanceRecord (like any other entity). State transitions (setting
+`ended_at`, archival via `availability_change`) emit further records.
+Recursion bottoms out at root processes whose creation record has
+`process_id: null`. See sec9 §9.6 for the full semantics.
+
+**Example.**
+```yaml
+# Cappella schema fragment
+imports:
+  - hippo_core
+classes:
+  PipelineRun:
+    is_a: Process
+    attributes:
+      pipeline_name:
+        range: string
+        required: true
+      parameters:
+        range: string   # JSON blob
+      run_host:
+        range: string
 ```
 
 ---

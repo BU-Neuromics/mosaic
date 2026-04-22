@@ -11,7 +11,7 @@ description: >-
   `design/reference_hippo_core.md` for the per-class reference.
 
 license: https://creativecommons.org/publicdomain/zero/1.0/
-version: 0.1.0
+version: 0.2.0
 
 prefixes:
   linkml: https://w3id.org/linkml/
@@ -62,6 +62,64 @@ classes:
           reads; `false` means it has been superseded, archived, deleted,
           distributed, or removed. The reason lives in provenance, not on
           the entity.
+
+  Process:
+    is_a: Entity
+    class_uri: prov:Activity
+    description: >-
+      Composite activity — a grouping of atomic `ProvenanceRecord` entries
+      under one logical execution. Reference-data loads, schema migrations,
+      pipeline runs (Cappella), and other multi-entity operations emit a
+      `Process` and associate their records with it via the record's
+      `process_id` slot (Wave 2). `Process` `is_a: Entity` so it
+      participates in the normal entity lifecycle (id, is_available,
+      provenance); callers can `is_a: Process` their domain-specific
+      activity classes (e.g., `PipelineRun is_a: Process`) to add
+      parameters, input/output manifests, runtime metadata.
+
+      `class_uri: prov:Activity` expresses PROV-O alignment. Atomic
+      (ProvenanceRecord, Wave 2) and composite (Process) activities share
+      the same PROV-O class URI — differing only in granularity, which
+      matches PROV-O's treatment of activities at multiple scales.
+
+      See sec9 §9.5 (class summary) and §9.6 (interaction with
+      ProvenanceRecord).
+    attributes:
+      parent_process_id:
+        range: Process
+        required: false
+        description: >-
+          Self-reference for process composition. Processes form a tree
+          (or DAG if a caller models shared dependencies). Null for root
+          processes.
+      operation_kind:
+        range: string
+        required: true
+        description: >-
+          Caller-defined categorization (e.g. `reference_data_installed`,
+          `pipeline_run`, `schema_migration`, `manual_edit`). Not a closed
+          enum — deployments categorize freely.
+        annotations:
+          hippo_index: true
+      started_at:
+        range: datetime
+        required: true
+        description: UTC wall-clock time at which the process began.
+        annotations:
+          hippo_index: true
+      ended_at:
+        range: datetime
+        required: false
+        description: >-
+          UTC wall-clock time at which the process completed. Null while
+          running or after failure without completion.
+      actor_id:
+        range: string
+        required: true
+        description: >-
+          UUID of the entity responsible for initiating this process.
+          Resolvable via `HippoClient.resolve_type(uuid)` per sec9 §9.5's
+          identity model.
 
   Validator:
     description: >-
