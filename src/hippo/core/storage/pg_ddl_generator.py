@@ -21,6 +21,7 @@ from hippo.linkml_bridge import (
     HIPPO_UNIQUE,
     SchemaRegistry,
     annotation_value,
+    slot_default,
 )
 
 
@@ -90,7 +91,7 @@ class PostgresDDLGenerator:
                 if rng in known_classes or rng is None
                 else self.TYPE_MAPPING.get(rng, "TEXT")
             )
-            default = slot.ifabsent
+            default = slot_default(slot)
             table.columns.append(
                 ColumnDefinition(
                     name=slot.name,
@@ -122,11 +123,20 @@ class PostgresDDLGenerator:
                     )
                 )
 
-        table.columns.append(
-            ColumnDefinition(
-                name="is_available", column_type="BOOLEAN", not_null=True, default=True
+        # is_available: preferred path is declared on Entity in hippo_core
+        # (flows in via induced_slots above). Fallback hardcoded here for
+        # schemas that don't `is_a: Entity`. superseded_by stays hardcoded
+        # for now; redesigned in Wave 2 provenance-as-linkml-class.
+        existing_column_names = {col.name for col in table.columns}
+        if "is_available" not in existing_column_names:
+            table.columns.append(
+                ColumnDefinition(
+                    name="is_available",
+                    column_type="BOOLEAN",
+                    not_null=True,
+                    default=True,
+                )
             )
-        )
         table.columns.append(
             ColumnDefinition(
                 name="superseded_by", column_type="TEXT", not_null=False, default=None

@@ -7,18 +7,11 @@ prefixes:
 
 imports:
   - linkml:types
+  - hippo_core
 
 default_range: string
 
 classes:
-  Entity:
-    abstract: true
-    attributes:
-      id:
-        identifier: true
-        range: string
-        required: true
-
   Project:
     is_a: Entity
     attributes:

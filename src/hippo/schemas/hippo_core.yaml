@@ -1,0 +1,146 @@
+id: https://w3id.org/hippo/hippo_core
+name: hippo_core
+title: Hippo Core Schema — Primitives
+description: >-
+  Hippo's built-in classes and enums declared as a LinkML schema. Every
+  user schema imports `hippo_core`; every domain class uses `is_a: Entity`.
+  `hippo_core` carries no domain knowledge — it is the minimal set of
+  primitives the rest of the system needs to operate.
+
+  See sec9 §9.5 of the Hippo design spec for the design rationale and
+  `design/reference_hippo_core.md` for the per-class reference.
+
+license: https://creativecommons.org/publicdomain/zero/1.0/
+version: 0.1.0
+
+prefixes:
+  linkml: https://w3id.org/linkml/
+  hippo: https://w3id.org/hippo/
+  prov: http://www.w3.org/ns/prov#
+default_prefix: hippo
+default_range: string
+
+imports:
+  - linkml:types
+
+#
+# ---------------------------------------------------------------------------
+# Classes
+# ---------------------------------------------------------------------------
+#
+classes:
+
+  Entity:
+    abstract: true
+    class_uri: prov:Entity
+    description: >-
+      Base class for every domain entity in a user schema. Provides the two
+      system slots — `id` and `is_available` — that the SDK requires on every
+      entity. Domain classes specialize via `is_a: Entity` and add their own
+      slots.
+
+      Temporal state (`created_at`, `updated_at`, `schema_version`) is NOT
+      declared here — it is computed at read time from ProvenanceRecord per
+      sec9 §9.7. Status transitions are recorded as ProvenanceRecord entries
+      with an `availability_change` operation; the reason for unavailability
+      lives in provenance, not on the entity (per sec9 §9.5).
+    attributes:
+      id:
+        identifier: true
+        range: string
+        required: true
+        description: >-
+          Stable primary key. UUID-typed (SDK-assigned on create; opaque to
+          callers). Per sec9 §9.5, the UUID invariant enables uniform
+          polymorphic references across the system.
+      is_available:
+        range: boolean
+        required: true
+        ifabsent: "true"
+        description: >-
+          Lifecycle flag. `true` means the entity participates in normal
+          reads; `false` means it has been superseded, archived, deleted,
+          distributed, or removed. The reason lives in provenance, not on
+          the entity.
+
+  Validator:
+    description: >-
+      Declarative validator definition. Instances are loaded from
+      `validators.yaml` and validated against this class at load time.
+      Placeholder — full slot inventory is finalized in a later OpenSpec
+      change that reconciles this class with the existing validators.yaml
+      shape. Until then, only `name` is declared.
+    attributes:
+      name:
+        identifier: true
+        range: string
+        required: true
+
+  ReferenceLoader:
+    description: >-
+      Metadata for a reference-data loader plugin. Instances are contributed
+      by plugins registered under the `hippo.reference_loaders` entry point.
+      Placeholder — full slot inventory is finalized in the
+      `reference-loader-shape` OpenSpec change (Wave 3). Two open design
+      questions block the final shape:
+        - multi-class loaders (entity_type must be multivalued; exact
+          cardinality semantics open)
+        - referential boundary of `schema_fragment` (load-order contract
+          between plugin schema merge and ReferenceLoader instance
+          validation)
+      See sec9 §9.5.
+    attributes:
+      name:
+        identifier: true
+        range: string
+        required: true
+
+#
+# ---------------------------------------------------------------------------
+# Enums
+# ---------------------------------------------------------------------------
+#
+enums:
+
+  Status:
+    description: >-
+      Lifecycle state of an entity. Recorded in provenance via
+      `availability_change` operations; not stored on the entity itself.
+    permissible_values:
+      active:
+        description: Entity is live and participates in normal reads.
+      archived:
+        description: Entity retained but not available for active use.
+      superseded:
+        description: Entity replaced by another (pointer in provenance via derived_from_id).
+      deleted:
+        description: Soft-deleted. Data retained; is_available is false.
+      distributed:
+        description: Entity has been sent elsewhere (e.g., external distribution).
+      removed:
+        description: Entity has been physically removed (rare; normally superseded/deleted).
+
+  Operation:
+    description: >-
+      Kind of operation recorded on a ProvenanceRecord. See sec9 §9.6.
+    permissible_values:
+      create:
+        description: Entity created.
+      update:
+        description: Entity slot values modified in place.
+      availability_change:
+        description: is_available flag transitioned; new value + Status driver in patch.
+      supersede:
+        description: Entity superseded by another; derived_from_id carries the predecessor.
+      relationship_add:
+        description: A relationship slot gained a value; patch carries {slot, target_id}.
+      relationship_remove:
+        description: A relationship slot lost a value; patch carries {slot, target_id}.
+      external_id_add:
+        description: An ExternalID was associated with the entity.
+      external_id_remove:
+        description: An ExternalID was disassociated.
+      migration_applied:
+        description: A schema migration was applied (system event; entity_id is null).
+      reference_data_installed:
+        description: A reference loader installed data (system event; entity_id is null).

@@ -44,24 +44,66 @@ def annotation_value(element: Any, key: str) -> Optional[Any]:
     return ann[key].value
 
 
+def slot_default(slot: Any) -> Optional[Any]:
+    """Return a slot's default value in a DDL-friendly Python form, or None.
+
+    LinkML stores `ifabsent` as a string (e.g. "true", "false", "active",
+    "int(0)", "uuid()"). For boolean-ranged slots we coerce the literal
+    "true"/"false" to Python booleans so the downstream ``_format_default``
+    helpers emit native SQL (``1``/``0`` for SQLite, ``TRUE``/``FALSE`` for
+    Postgres) rather than quoting the string. Other ifabsent forms pass
+    through unchanged for now; richer parsing (e.g. ``uuid()``, ``int(0)``)
+    is a later concern.
+    """
+    value = getattr(slot, "ifabsent", None)
+    if value is None:
+        return None
+    if getattr(slot, "range", None) == "boolean" and isinstance(value, str):
+        lowered = value.strip().lower()
+        if lowered == "true":
+            return True
+        if lowered == "false":
+            return False
+    return value
+
+
 # ---------------------------------------------------------------------------
-# hippo_ext annotation vocabulary — loaded once, used by SchemaRegistry to
-# validate every hippo_* annotation in a user schema at construction time.
+# Shipped-with-Hippo schemas — hippo_ext (annotation vocabulary) and hippo_core
+# (Entity, Status, Operation, Validator, ReferenceLoader). Both are loaded as
+# bundled resources; hippo_core is made available to user schemas through
+# SchemaView's importmap so callers can declare `imports: [hippo_core]` and
+# `is_a: Entity`.
 # ---------------------------------------------------------------------------
 
 _HIPPO_EXT_SV: Optional[SchemaView] = None
 
 
-def _load_hippo_ext_schema() -> SchemaView:
+def _hippo_ext_resource_path() -> str:
     resource = importlib.resources.files("hippo.schemas").joinpath("hippo_ext.yaml")
-    return SchemaView(str(resource))
+    return str(resource)
+
+
+def _hippo_core_resource_path() -> str:
+    resource = importlib.resources.files("hippo.schemas").joinpath("hippo_core.yaml")
+    return str(resource)
 
 
 def _hippo_ext_schema_view() -> SchemaView:
     global _HIPPO_EXT_SV
     if _HIPPO_EXT_SV is None:
-        _HIPPO_EXT_SV = _load_hippo_ext_schema()
+        _HIPPO_EXT_SV = SchemaView(_hippo_ext_resource_path())
     return _HIPPO_EXT_SV
+
+
+def _bundled_importmap() -> dict[str, str]:
+    """Importmap that lets user schemas say `imports: [hippo_core]`.
+
+    SchemaView resolves import names against this map and appends `.yaml`
+    when opening the file, so values must omit the extension.
+    """
+    return {
+        "hippo_core": _hippo_core_resource_path().removesuffix(".yaml"),
+    }
 
 
 def _check_value_type(slot_decl: SlotDefinition, value: Any, enums: dict) -> Optional[str]:
@@ -200,14 +242,59 @@ def _validate_hippo_annotations(sv: SchemaView) -> None:
         )
 
 
+def _flatten_for_validator(sv: SchemaView) -> dict[str, Any]:
+    """Build a self-contained schema dict with all imports resolved inline.
+
+    LinkML's ``Validator`` re-resolves ``imports:`` when it processes a
+    SchemaDefinition, which fails for bundled schemas like ``hippo_core``
+    that live outside the user-schema directory and are only visible via
+    the ``SchemaRegistry``'s importmap. We work around this by flattening
+    the merged ``SchemaView`` back into a dict that has every class, slot,
+    enum, and type inlined and no ``imports:`` remaining.
+    """
+    from linkml_runtime.dumpers import yaml_dumper
+
+    flat: dict[str, Any] = {
+        "id": sv.schema.id or "https://example.org/hippo/flat",
+        "name": sv.schema.name or "flat",
+        "prefixes": dict(sv.schema.prefixes or {}),
+        "default_range": sv.schema.default_range or "string",
+        "imports": ["linkml:types"],
+        "classes": {},
+        "slots": {},
+        "enums": {},
+        "types": {},
+    }
+
+    def _to_plain(obj: Any) -> Any:
+        return yaml.safe_load(yaml_dumper.dumps(obj))
+
+    for name, cls in sv.all_classes(imports=True).items():
+        flat["classes"][name] = _to_plain(cls)
+    for name, slot in sv.all_slots(imports=True).items():
+        flat["slots"][name] = _to_plain(slot)
+    for name, enum in sv.all_enums(imports=True).items():
+        flat["enums"][name] = _to_plain(enum)
+    for name, typ in (sv.all_types(imports=True) or {}).items():
+        flat["types"][name] = _to_plain(typ)
+
+    for section in ("slots", "enums", "types"):
+        if not flat[section]:
+            del flat[section]
+    return flat
+
+
 class SchemaRegistry:
     """Hippo-facing schema registry backed by a LinkML ``SchemaView``."""
 
     def __init__(self, schema_view: SchemaView) -> None:
         _validate_hippo_annotations(schema_view)
         self._sv = schema_view
+        # Validator needs a self-contained schema (no unresolved imports) so
+        # it can generate JSON Schema without re-reading files from disk.
+        # See _flatten_for_validator for the rationale.
         self._validator = Validator(
-            schema=schema_view.schema,
+            schema=_flatten_for_validator(schema_view),
             validation_plugins=[JsonschemaValidationPlugin(closed=True)],
         )
 
@@ -216,7 +303,7 @@ class SchemaRegistry:
         p = Path(path)
         if p.is_dir():
             return cls._from_directory(p)
-        return cls(SchemaView(str(p)))
+        return cls(SchemaView(str(p), importmap=_bundled_importmap()))
 
     @classmethod
     def _from_directory(cls, path: Path) -> "SchemaRegistry":
@@ -256,11 +343,11 @@ class SchemaRegistry:
 
     @classmethod
     def from_dict(cls, data: dict) -> "SchemaRegistry":
-        return cls(SchemaView(yaml.safe_dump(data)))
+        return cls(SchemaView(yaml.safe_dump(data), importmap=_bundled_importmap()))
 
     @classmethod
     def from_yaml(cls, yaml_text: str) -> "SchemaRegistry":
-        return cls(SchemaView(yaml_text))
+        return cls(SchemaView(yaml_text, importmap=_bundled_importmap()))
 
     @property
     def schema_view(self) -> SchemaView:

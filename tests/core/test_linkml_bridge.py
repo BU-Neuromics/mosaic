@@ -77,34 +77,47 @@ class TestReferenceSlots:
 
 
 class TestValidation:
+    """Tests use sample_schema.yaml which imports hippo_core (sec9). Sample
+    inherits `is_available` from Entity, so every valid instance must include
+    it. Typically the SDK fills it in on create; these tests exercise the raw
+    validator interface directly and therefore supply it explicitly.
+    """
+
     def test_valid_instance_passes(self, registry: SchemaRegistry):
         errors = registry.validate(
-            {"id": "s1", "name": "tissue A"}, "Sample"
+            {"id": "s1", "name": "tissue A", "is_available": True}, "Sample"
         )
         assert errors == []
 
     def test_missing_required_field_rejected(self, registry: SchemaRegistry):
-        errors = registry.validate({"id": "s1"}, "Sample")
+        errors = registry.validate({"id": "s1", "is_available": True}, "Sample")
         assert len(errors) == 1
         assert "'name'" in errors[0]
         assert "required" in errors[0]
 
     def test_wrong_type_rejected(self, registry: SchemaRegistry):
         errors = registry.validate(
-            {"id": "s1", "name": "ok", "volume_ml": "not-a-number"}, "Sample"
+            {
+                "id": "s1",
+                "name": "ok",
+                "is_available": True,
+                "volume_ml": "not-a-number",
+            },
+            "Sample",
         )
         assert any("not of type" in e for e in errors)
 
     def test_bad_enum_value_rejected(self, registry: SchemaRegistry):
         errors = registry.validate(
-            {"id": "s1", "name": "ok", "status": "bogus"}, "Sample"
+            {"id": "s1", "name": "ok", "is_available": True, "status": "bogus"},
+            "Sample",
         )
         assert any("not one of" in e for e in errors)
         assert any("active" in e for e in errors)
 
     def test_closed_schema_rejects_extra_fields(self, registry: SchemaRegistry):
         errors = registry.validate(
-            {"id": "s1", "name": "ok", "nope": 1}, "Sample"
+            {"id": "s1", "name": "ok", "is_available": True, "nope": 1}, "Sample"
         )
         assert any("Additional properties" in e for e in errors)
 
