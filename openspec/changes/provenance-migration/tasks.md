@@ -22,14 +22,13 @@
 - [ ] 3.2 `"SOFT_DELETE"` and `"AVAILABILITY_CHANGE"` both map to `Operation.availability_change`; the Status driver (soft-delete vs archive vs distribute) is carried in `patch`.
 - [ ] 3.3 Confirm: no remaining references to legacy operation strings in the codebase.
 
-## 4. Adapter write-guard for `hippo_append_only`
+## 4. `hippo_append_only` enforcement via SQL triggers (Decision 9.6.C)
 
-- [ ] 4.1 Add `SchemaRegistry.append_only_classes()` returning the set of class names with `hippo_append_only: true`.
-- [ ] 4.2 `SQLiteAdapter` receives the set at startup (passed through from `HippoClient.__init__` or computed on demand).
-- [ ] 4.3 On UPDATE: if the target class is in `append_only_classes`, raise a Hippo-level error before touching the DB; message names the class.
-- [ ] 4.4 On DELETE: same.
-- [ ] 4.5 PostgresAdapter: same logic.
-- [ ] 4.6 Tests: UPDATE and DELETE against ProvenanceRecord raise; INSERT succeeds.
+- [x] 4.1 Add `SchemaRegistry.append_only_classes()` returning the set of class names with `hippo_append_only: true`. (landed in commit 1 — available for future DDL-generator-driven trigger emission but not consumed by adapters in this commit.)
+- [ ] 4.2 Update `sqlite_triggers.py` to target the new `ProvenanceRecord` table with new column names. Replace the five column-specific UPDATE triggers with a single `BEFORE UPDATE` trigger covering any column, any row. Retain the `BEFORE DELETE` trigger.
+- [ ] 4.3 Update `SQLiteAdapter._init_schema` to create triggers after the LinkML-generated `ProvenanceRecord` table exists.
+- [ ] 4.4 PostgresAdapter: equivalent `CREATE TRIGGER` definitions (PL/pgSQL `RAISE EXCEPTION` replaces SQLite's `RAISE ABORT`).
+- [ ] 4.5 Tests: UPDATE and DELETE against `ProvenanceRecord` raise; INSERT succeeds. Test message format ("hippo_append_only class").
 
 ## 5. Test suite updates
 

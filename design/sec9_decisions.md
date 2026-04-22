@@ -115,6 +115,59 @@ Review this file before sec9 is considered approved. If any decision is unwelcom
 - **Consequences:** `provenance-as-linkml-class` is scoped to: declare `hippo_append_only` in `hippo_ext` (0.1.0 → 0.2.0); declare `ProvenanceRecord` in `hippo_core` (0.2.0 → 0.3.0) with all sec9 §9.6 slots including `class_uri: prov:Activity` and `hippo_append_only: true`; update reference docs; tests for the declaration. Adapter-side enforcement and `ProvenanceStore` rewrite move to the new `provenance-migration` change. sec9 §9.12 decomposition updated from 10 changes to 11; the Wave 2 dependency graph now reads `provenance-as-linkml-class → provenance-migration → computed-temporal-fields`.
 - **Revert:** Merge `provenance-migration` back into `provenance-as-linkml-class`. Low-cost but doesn't address the scope concern that motivated the split.
 
+### Decision 9.6.B — Legacy operation-string mapping to the `Operation` enum [NEW 2026-04-18]
+
+- **Finding (provenance-migration commit 2 prep):** A grep across `src/hippo/` surfaces eleven distinct operation strings passed to `ProvenanceStore.record()`, not the six the sec9 §9.6 `Operation` enum declares. The extras (`"EntitySuperseded"`, `"EntityUpdated"`, `"REPLACED"`, `"RELATE"`, `"UNRELATE"`, `"AvailabilityChanged"`) accreted as ad-hoc strings in different subsystems over time. A mechanical rename would lose semantic information; each call site needs per-site review.
+- **Per-site mapping table** (verified by reading each call site):
+
+  | Legacy string | Site | sec9 `Operation` | Notes |
+  |---|---|---|---|
+  | `"CREATE"` | sqlite_adapter.py:1190, postgres_adapter.py:1093 | `create` | direct map |
+  | `"UPDATE"` | ingestion_service.py:174 | `update` | direct map |
+  | `"EntityUpdated"` | provenance_service.py:190 | `update` | entity fields modified |
+  | `"REPLACED"` | ingestion_service.py:299 | `update` | ingest-replace semantics: same entity_id, new data — not supersession (which requires distinct replacement_id) |
+  | `"EntitySuperseded"` | provenance_service.py:173 | `supersede` | `derived_from_id` now carries the replacement; patch retains `{reason}` |
+  | `"AvailabilityChanged"` | ingestion_service.py:420 | `availability_change` | patch carries `{is_available, reason}` |
+  | `"SOFT_DELETE"` | sqlite_adapter.py:1305, postgres_adapter.py:1203 | `availability_change` | patch carries `{status: "deleted"}` per sec9 §9.6 |
+  | `"RELATE"` | relationship.py:158 | `relationship_add` | patch carries `{slot, target_id}` |
+  | `"UNRELATE"` | relationship.py:229 | `relationship_remove` | patch carries `{slot, target_id}` |
+  | `"external_id_add"` | future | `external_id_add` | |
+  | `"external_id_remove"` | future | `external_id_remove` | |
+
+- **Chosen:** Apply the mapping table above at rewrite time. A small `_legacy_operation_string_map: dict[str, Operation]` helper lives in `ProvenanceStore` for the transition period; removed once all callers pass `Operation` enum values natively.
+- **Why:** The per-site review surfaces the `"REPLACED"` nuance (mapped to `update`, not `supersede`) and the `"EntitySuperseded"` lineage (now carries `derived_from_id` instead of a patch field). Both are judgment calls that a mechanical rename would have missed.
+- **Revert:** Per-row. If a caller wants different semantics, change the site and update the table.
+
+### Decision 9.6.C — SQL triggers are the enforcement mechanism for `hippo_append_only`, not adapter-level Python checks [NEW 2026-04-18]
+
+- **Finding:** The provenance-migration proposal said "adapter write-guard" for `hippo_append_only`. Reading the existing code, the legacy `provenance` table is already protected by five SQLite triggers (`sqlite_triggers.py`) that RAISE ABORT on UPDATE / DELETE. Adapter-level Python checks are strictly weaker — direct-SQL access (e.g., from `sqlite3` CLI or a raw-connection backdoor) bypasses them; DB triggers don't.
+- **Alternatives considered:** (A) Keep adapter-level Python checks only (weaker than status quo, but simpler). (B) Keep triggers, rename to target the new `ProvenanceRecord` table with new column names. (C) Extend the DDL generator to emit triggers from `hippo_append_only` — fully schema-driven. (D) Both — triggers for SQL-level enforcement plus adapter-level Python check for clearer error messages.
+- **Chosen:** (B) for provenance-migration commit 2; (C) is the long-term target for a future change. (B) preserves the current security posture without extending the DDL generator scope mid-migration.
+- **Why (B) over (A):** Not weakening existing protection is a strict correctness win. Rename is mechanical: change `provenance` → `ProvenanceRecord`, `entity_id` → `id`, drop `user_context` and `payload` triggers (absorbed by the generic "no UPDATE" behavior via BEFORE UPDATE without a target column).
+- **Why (B) over (C):** DDL-generator extension is a separate capability with its own acceptance criteria (applies to other `hippo_append_only` classes in user schemas, needs Postgres parity, etc.). Scope creep into commit 2 risks pulling the rewrite further behind.
+- **Why (B) over (D):** Duplicate enforcement creates drift risk. If the triggers fire, the Python check never runs; if the Python check runs, the triggers haven't fired either. Single source of truth (SQL triggers) is cleaner.
+- **Consequences for commit 2:**
+  - `sqlite_triggers.py`: retarget from `provenance` to `ProvenanceRecord`; drop the column-specific UPDATE triggers in favor of a single BEFORE UPDATE trigger (any column, any row).
+  - `SchemaRegistry.append_only_classes()` (landed in commit 1) is not consumed by adapters in commit 2 — it remains available for the future (C) work and for non-SQL adapters (Neo4j, etc.).
+  - Postgres: equivalent `CREATE TRIGGER` replaces the "Postgres equivalent" adapter check mentioned in the proposal.
+- **Revert:** Move to (A) by dropping the triggers module and adding Python-level checks. Backward-visible as a security downgrade.
+
+### Decision 9.6.D — `ProvenanceRecord` table is DDL-generated via LinkML, not hand-coded [NEW 2026-04-18]
+
+- **Finding (commit 1 verification):** `DDLGenerator().generate(registry)` against a registry importing `hippo_core` already emits a correct `ProvenanceRecord` table — all sec9 §9.6 columns present, NOT NULL on required slots, indexes on `hippo_index`-annotated slots, FK from `process_id` to `Process`. No generator changes required.
+- **Chosen:** `SQLiteAdapter._init_schema` (and Postgres equivalent) drops the hand-coded `CREATE TABLE IF NOT EXISTS provenance (...)` block and the supporting `CREATE INDEX` statements; the `ProvenanceRecord` table comes in through the existing LinkML-DDL pipeline (same path used for domain classes). The adapter's startup code ensures that pipeline runs against a registry that includes `hippo_core`.
+- **Why:** Matches sec9 §9.2 principle (every class goes through the same DDL path). Hand-coded DDL diverging from the LinkML declaration is exactly the drift risk the sec9 redesign is meant to eliminate.
+- **Consequences:** The `entities` / `relationships` / `entity_external_ids` / `schema_version` tables remain hand-coded for now (they're out of scope for this change; their LinkML-class migration is separate work in Wave 3). Only the `provenance` table and its indexes are removed from the hand-coded block.
+- **Revert:** Restore the hand-coded DDL block; remove `ProvenanceRecord` from the merged registry that the adapter uses for LinkML DDL generation.
+
+### Decision 9.6.E — Legacy `user_context` strings are not back-populated to `actor_id` UUIDs [NEW 2026-04-18]
+
+- **Finding (from the provenance-migration proposal's open question):** Legacy rows have `user_context` as a free-form string (often a username or `"sqlite_adapter"`). After rename to `actor_id`, these strings won't resolve through the UUID identity model (sec9 §9.5).
+- **Alternatives considered:** (A) Leave as-is — historical audit records retain their historical actor strings; new records use UUIDs. (B) Synthesize a `LegacyActor` placeholder entity per unique legacy string and back-populate references.
+- **Chosen:** (A). Simpler; matches append-only semantics (you don't rewrite history); legacy rows are a finite, read-only population that doesn't need forward compatibility with the identity model.
+- **Why:** Back-population (B) conflicts with the append-only invariant — rewriting `actor_id` across a million legacy rows is a mass mutation of an audit log, which is exactly what the immutability triggers reject. Even if triggers were temporarily disabled for the migration, the resulting synthetic `LegacyActor` entities are clutter with no consumer. Since there are no production deployments (per earlier user directive), the population of legacy rows is near-empty or easily droppable.
+- **Revert:** (B) remains available as a follow-up migration; low cost.
+
 ---
 
 ## 9.8 Typed Client
