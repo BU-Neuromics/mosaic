@@ -75,20 +75,49 @@ class QueryService:
                 entity_id=entity_id,
             )
 
+        # sec9 §9.7: temporal fields computed from ProvenanceRecord at
+        # read time. One SQL round-trip via get_temporal. Missing or
+        # inconsistent provenance is loud per sec9 §9.2 (Provenance
+        # integrity is transactional and loud).
         created_at = entity.created_at
         updated_at = entity.updated_at
-        try:
-            if hasattr(self._storage, "_transaction") and hasattr(
-                self._storage, "_get_provenance_store"
-            ):
-                with self._storage._transaction() as conn:
-                    prov_store = self._storage._get_provenance_store(conn)
-                    prov_ts = prov_store.get_provenance_timestamps(entity_id)
-                if prov_ts is not None:
-                    created_at = prov_ts["created_at"]
-                    updated_at = prov_ts["updated_at"] or entity.updated_at
-        except Exception:
-            pass
+        schema_version: Optional[str] = None
+        created_by: Optional[str] = None
+        updated_by: Optional[str] = None
+        if hasattr(self._storage, "get_temporal"):
+            temporal_map = self._storage.get_temporal([entity_id])
+            temporal = temporal_map.get(entity_id)
+            if temporal is None:
+                from hippo.core.exceptions import ProvenanceIntegrityError
+
+                raise ProvenanceIntegrityError(
+                    message=(
+                        f"Entity {entity_id!r} exists but has no "
+                        f"ProvenanceRecord. Every mutation must emit a "
+                        f"record transactionally (sec9 §9.6); missing "
+                        f"provenance indicates adapter or data corruption."
+                    ),
+                    entity_id=entity_id,
+                    inconsistency="missing_provenance",
+                )
+            if temporal.created_at is None:
+                from hippo.core.exceptions import ProvenanceIntegrityError
+
+                raise ProvenanceIntegrityError(
+                    message=(
+                        f"Entity {entity_id!r} has ProvenanceRecord entries "
+                        f"but none with operation='create'. The earliest "
+                        f"record for every entity MUST be a 'create' per "
+                        f"sec9 §9.7."
+                    ),
+                    entity_id=entity_id,
+                    inconsistency="missing_create_record",
+                )
+            created_at = temporal.created_at
+            updated_at = temporal.updated_at or updated_at
+            schema_version = temporal.schema_version
+            created_by = temporal.created_by
+            updated_by = temporal.updated_by
 
         result = {
             "id": entity.id,
@@ -97,6 +126,9 @@ class QueryService:
             "version": entity.version,
             "created_at": created_at,
             "updated_at": updated_at,
+            "schema_version": schema_version,
+            "created_by": created_by,
+            "updated_by": updated_by,
             "superseded_by": entity.superseded_by,
         }
 
@@ -149,21 +181,58 @@ class QueryService:
 
         all_results = list(self._storage.find(query))
 
-        prov_map = (
-            self._provenance_service.get_provenance_summary_map(entity_type)
-            if self._provenance_service
-            else {}
-        )
+        # sec9 §9.7: one batch aggregation round-trip for the result set,
+        # not N+1. The adapter's get_temporal returns TemporalRecord
+        # dicts keyed by entity_id. Loud failure on missing provenance
+        # mirrors client.get() — a corrupt entity in a page poisons the
+        # page rather than silently returning stale stored columns
+        # (Decision 9.7.A).
+        entity_ids = [entity.id for entity in all_results]
+        temporal_map: dict[str, Any] = {}
+        if entity_ids and hasattr(self._storage, "get_temporal"):
+            temporal_map = self._storage.get_temporal(entity_ids)
 
         filtered = []
         for entity in all_results:
-            prov = prov_map.get(entity.id)
-            if prov:
-                created_at = prov["created_at"]
-                updated_at = prov["updated_at"] or entity.updated_at
+            temporal = temporal_map.get(entity.id)
+            if temporal is None and entity_ids:
+                from hippo.core.exceptions import ProvenanceIntegrityError
+
+                raise ProvenanceIntegrityError(
+                    message=(
+                        f"Entity {entity.id!r} exists in query results but "
+                        f"has no ProvenanceRecord. sec9 §9.2 requires "
+                        f"transactional provenance on every mutation."
+                    ),
+                    entity_id=entity.id,
+                    inconsistency="missing_provenance",
+                )
+            if temporal is not None and temporal.created_at is None:
+                from hippo.core.exceptions import ProvenanceIntegrityError
+
+                raise ProvenanceIntegrityError(
+                    message=(
+                        f"Entity {entity.id!r} has ProvenanceRecord entries "
+                        f"but none with operation='create'."
+                    ),
+                    entity_id=entity.id,
+                    inconsistency="missing_create_record",
+                )
+            if temporal is not None:
+                created_at = temporal.created_at
+                updated_at = temporal.updated_at or entity.updated_at
+                schema_version = temporal.schema_version
+                created_by = temporal.created_by
+                updated_by = temporal.updated_by
             else:
+                # hasattr(storage, 'get_temporal') was False — adapter
+                # predates sec9 §9.7 and can't compute. Fall back to
+                # stored columns. Non-relational adapter stub.
                 created_at = entity.created_at
                 updated_at = entity.updated_at
+                schema_version = None
+                created_by = None
+                updated_by = None
 
             if date_from and created_at and created_at < date_from:
                 continue
@@ -178,6 +247,9 @@ class QueryService:
                     "version": entity.version,
                     "created_at": created_at,
                     "updated_at": updated_at,
+                    "schema_version": schema_version,
+                    "created_by": created_by,
+                    "updated_by": updated_by,
                     "superseded_by": entity.superseded_by,
                 }
             )

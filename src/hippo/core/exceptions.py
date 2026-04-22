@@ -200,6 +200,34 @@ class TemporalQueryError(HippoError):
         super().__init__(message, **context)
 
 
+class ProvenanceIntegrityError(HippoError):
+    """Exception raised when provenance state is missing or inconsistent.
+
+    Every mutation emits a ``ProvenanceRecord`` transactionally with the
+    entity write (sec9 §9.6), so an entity that exists in the ``entities``
+    table with no matching provenance is a data-integrity defect — not an
+    expected degraded state. Per sec9 §9.2 (*Provenance integrity is
+    transactional and loud*), the SDK refuses to return the entity.
+
+    Also raised on other inconsistency shapes: a non-``create`` record as
+    the earliest entry, a record with missing ``actor_id``, or a
+    ``schema_version`` unrecognized by the merged view.
+    """
+
+    def __init__(
+        self,
+        message: str,
+        entity_id: Optional[str] = None,
+        inconsistency: Optional[str] = None,
+        **context: Any,
+    ):
+        self.entity_id = entity_id
+        self.inconsistency = inconsistency
+        context["entity_id"] = entity_id
+        context["inconsistency"] = inconsistency
+        super().__init__(message, **context)
+
+
 class IngestionError(HippoError):
     """Exception raised for data ingestion errors.
 

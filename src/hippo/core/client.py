@@ -52,6 +52,28 @@ class HippoClient:
             bypass_validation=bypass_validation,
             storage=storage,
         )
+
+        # Plumb schema_version into the storage adapter so new
+        # ProvenanceRecord rows carry it (sec9 §9.6 / Decision 9.6.F).
+        # Derivation: prefer the merged schema's `version` field; fall
+        # back to "unversioned" when the user schema doesn't set one.
+        # Reaches into adapter-private attributes (`_schema_version`,
+        # `_provenance_store`) deliberately — a public setter is a
+        # future cleanup once the three adapter implementations agree
+        # on a shared interface.
+        if storage is not None and registry is not None:
+            sv = registry.schema_view.schema.version or "unversioned"
+            # Only overwrite an adapter's schema_version if the adapter
+            # wasn't given one explicitly at construction.
+            if not getattr(storage, "_schema_version", "") and hasattr(
+                storage, "_schema_version"
+            ):
+                storage._schema_version = sv
+                # Invalidate cached provenance_store so the next write
+                # picks up the new schema_version.
+                if hasattr(storage, "_provenance_store"):
+                    storage._provenance_store = None
+
         self._provenance_service = ProvenanceService(storage=storage)
         self._query_service = QueryService(
             storage=storage,

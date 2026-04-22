@@ -37,7 +37,7 @@ from hippo.core.storage.fts import (
     get_fts_tables_for_entity_type,
     normalize_bm25_score,
 )
-from hippo.core.types import ProvenanceRecord as ProvenanceRecordType
+from hippo.core.types import ProvenanceRecord as ProvenanceRecordType, TemporalRecord
 from hippo.core.exceptions import SearchCapabilityError
 
 
@@ -316,36 +316,100 @@ class ProvenanceStore:
     def get_provenance_timestamps(
         self, entity_id: str
     ) -> Optional[dict[str, Optional[str]]]:
-        """Derive created_at and updated_at for an entity from ProvenanceRecord.
-
-        Derives:
-        - created_at: timestamp of the earliest record (any operation)
-        - updated_at: timestamp of the most recent non-availability-deletion event
+        """Legacy single-entity timestamp derivation. Kept for backward compat;
+        new callers should use ``get_temporal([entity_id])`` instead.
         """
-        cursor = self._conn.cursor()
-        # Mirror the legacy SOFT_DELETE-exclusion logic: records that flip the
-        # entity to unavailable aren't "updates" for updated_at purposes.
-        cursor.execute(
-            """SELECT
-                   MIN(timestamp) AS created_at,
-                   MAX(CASE
-                       WHEN operation = 'availability_change'
-                            AND (json_extract(patch, '$.status') = 'deleted'
-                                 OR json_extract(patch, '$.is_available') = 0)
-                           THEN NULL
-                       ELSE timestamp
-                   END) AS updated_at
-               FROM "ProvenanceRecord"
-               WHERE entity_id = ?""",
-            (entity_id,),
-        )
-        row = cursor.fetchone()
-        if row is None or row["created_at"] is None:
+        out = self.get_temporal([entity_id])
+        if entity_id not in out:
             return None
+        rec = out[entity_id]
         return {
-            "created_at": row["created_at"],
-            "updated_at": row["updated_at"],
+            "created_at": rec.created_at,
+            "updated_at": rec.updated_at,
         }
+
+    def get_temporal(
+        self, entity_ids: list[str]
+    ) -> "dict[str, TemporalRecord]":
+        """Batch-derive sec9 §9.7 temporal fields for the given entities.
+
+        Returns a dict mapping ``entity_id`` → ``TemporalRecord``. An
+        ``entity_id`` that has no ``ProvenanceRecord`` rows is absent from
+        the returned dict (caller decides whether to raise
+        ``ProvenanceIntegrityError``). Uses a single SQL round-trip via
+        aggregation + a correlated subquery for the latest record's
+        ``schema_version`` and ``actor_id``.
+
+        SQL strategy:
+        - ``MIN(timestamp) WHERE operation='create'`` → created_at.
+        - ``MAX(timestamp)`` excluding availability-deletion events →
+          updated_at. Availability-deletion patches carry
+          ``status='deleted'`` or ``is_available=0``.
+        - ``actor_id`` of the earliest ``create`` → created_by.
+        - For ``updated_by`` and ``schema_version``, read the single
+          latest non-deletion record per entity via a GROUP BY subquery.
+        """
+        from hippo.core.types import TemporalRecord
+
+        if not entity_ids:
+            return {}
+
+        placeholders = ",".join("?" for _ in entity_ids)
+        cursor = self._conn.cursor()
+        cursor.execute(
+            f"""WITH target AS (
+                    SELECT entity_id, operation, timestamp, actor_id,
+                           schema_version, patch
+                    FROM "ProvenanceRecord"
+                    WHERE entity_id IN ({placeholders})
+                ),
+                agg AS (
+                    SELECT
+                        entity_id,
+                        MIN(CASE WHEN operation = 'create'
+                                 THEN timestamp END) AS created_at,
+                        MAX(CASE
+                            WHEN operation = 'availability_change'
+                                 AND (json_extract(patch, '$.status') = 'deleted'
+                                      OR json_extract(patch, '$.is_available') = 0)
+                                THEN NULL
+                            ELSE timestamp
+                        END) AS updated_at
+                    FROM target
+                    GROUP BY entity_id
+                )
+                SELECT
+                    agg.entity_id,
+                    agg.created_at,
+                    agg.updated_at,
+                    (SELECT actor_id FROM target t
+                     WHERE t.entity_id = agg.entity_id
+                       AND t.operation = 'create'
+                       AND t.timestamp = agg.created_at
+                     LIMIT 1) AS created_by,
+                    (SELECT actor_id FROM target t
+                     WHERE t.entity_id = agg.entity_id
+                       AND t.timestamp = agg.updated_at
+                     LIMIT 1) AS updated_by,
+                    (SELECT schema_version FROM target t
+                     WHERE t.entity_id = agg.entity_id
+                       AND t.timestamp = agg.updated_at
+                     LIMIT 1) AS schema_version
+                FROM agg""",
+            tuple(entity_ids),
+        )
+
+        result: dict[str, TemporalRecord] = {}
+        for row in cursor.fetchall():
+            eid = row["entity_id"]
+            result[eid] = TemporalRecord(
+                created_at=row["created_at"],
+                updated_at=row["updated_at"],
+                schema_version=row["schema_version"] or None,
+                created_by=row["created_by"] or None,
+                updated_by=row["updated_by"] or None,
+            )
+        return result
 
 
 class RelationshipRecord:
@@ -822,9 +886,27 @@ class FTSStore:
 class SQLiteAdapter(EntityStore[SQLiteEntity]):
     """SQLite storage adapter with WAL mode for improved concurrency."""
 
-    def __init__(self, database_path: str | Path, wal_mode: bool = True):
+    def __init__(
+        self,
+        database_path: str | Path,
+        wal_mode: bool = True,
+        schema_version: Optional[str] = None,
+    ):
+        """Initialize the SQLite adapter.
+
+        Args:
+            database_path: Path to the SQLite database file.
+            wal_mode: Whether to enable WAL journal mode.
+            schema_version: Schema version string captured on each
+                ``ProvenanceRecord`` write (sec9 §9.6 / §9.7). Typically
+                derived from ``SchemaRegistry.schema_view.schema.version``
+                by ``HippoClient``; callers constructing the adapter
+                directly may supply it explicitly. Defaults to the empty
+                string (legacy transition; see Decision 9.6.F).
+        """
         self.database_path = Path(database_path)
         self.wal_mode = wal_mode
+        self._schema_version = schema_version or ""
         self._local = threading.local()
         self._provenance_store: Optional[ProvenanceStore] = None
         self._relationship_store: Optional[RelationshipStore] = None
@@ -1066,7 +1148,9 @@ class SQLiteAdapter(EntityStore[SQLiteEntity]):
     def _get_provenance_store(self, conn: sqlite3.Connection) -> ProvenanceStore:
         """Get or create a ProvenanceStore for the given connection."""
         if self._provenance_store is None or self._provenance_store._conn is not conn:
-            self._provenance_store = ProvenanceStore(conn)
+            self._provenance_store = ProvenanceStore(
+                conn, schema_version=self._schema_version
+            )
         return self._provenance_store
 
     def _get_relationship_store(self, conn: sqlite3.Connection) -> RelationshipStore:
@@ -1520,6 +1604,12 @@ class SQLiteAdapter(EntityStore[SQLiteEntity]):
         with self._transaction() as conn:
             provenance = self._get_provenance_store(conn)
             return provenance.get_history(entity_id)
+
+    def get_temporal(self, entity_ids: list[str]) -> "dict[str, TemporalRecord]":
+        """Batch sec9 §9.7 temporal-field derivation. One SQL round-trip."""
+        with self._transaction() as conn:
+            provenance = self._get_provenance_store(conn)
+            return provenance.get_temporal(entity_ids)
 
     def state_at(self, entity_id: str, timestamp: str) -> Optional[dict[str, Any]]:
         """Get the entity state at a specific point in time.

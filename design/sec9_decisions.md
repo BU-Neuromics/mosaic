@@ -37,6 +37,33 @@ Review this file before sec9 is considered approved. If any decision is unwelcom
 - **Why (revised):** Provenance integrity is the audit guarantee the system exists to provide. Silent degradation on a provenance inconsistency would compromise every audit, compliance, and debugging use case. Transactional write atomicity prevents the inconsistent state from arising under normal operation; loud read-time failure surfaces any that do arise (from bugs or corrupted adapters) immediately instead of masking them. Sec9 adds `Provenance integrity is transactional and loud` as a first-class principle in 9.2.
 - **Revert:** Change to null-return in 9.7's "Degenerate cases" paragraph; drop the 9.2 principle; weaken 9.6's atomicity clause. High blast radius — this is a governing invariant.
 
+### Decision 9.7.E — `schema_version` derivation from `SchemaView.schema.version`, `"unversioned"` fallback [NEW 2026-04-21]
+
+- **Finding (computed-temporal-fields implementation):** Sec9 §9.6 says the SDK captures `schema_version` from the merged `SchemaView` at write time. In a three-layer stack (`hippo_ext`, `hippo_core`, user schema), "the merged schema's version" isn't a single unambiguous string — each YAML file has its own `version:` field.
+- **Chosen:** Read `registry.schema_view.schema.version` (the user schema's top-level `version:` field, after LinkML's merge resolves it). Fall back to the string literal `"unversioned"` when the user schema doesn't set one.
+- **Alternatives considered:** (A) Composite string like `hippo_core-0.3.0+hippo_ext-0.2.0+user-1.2.3` — human-unfriendly, changes when any layer bumps, hard to filter queries on. (B) Content hash of the merged schema YAML — precise but opaque; breaks after whitespace changes; not useful for "what version was this written under" questions. (C) Require callers to supply a version string at write time — violates sec9's "caller cannot supply it."
+- **Why (A)/(B)/(C) rejected:** All three trade simplicity for marginal precision. The user-schema-version interpretation matches how deployments already talk about versions ("we're on user-schema 1.2.3"); Hippo-internal version bumps are a separate, less-important dimension.
+- **Plumbing:** `HippoClient.__init__` reads `registry.schema_view.schema.version or "unversioned"` when both a registry and storage are supplied; sets the adapter's `_schema_version`. Adapters constructed without a `HippoClient` (direct `SQLiteAdapter(db_path)`) start with `""` — the legacy transition state from Decision 9.6.F.
+- **Revert:** Change the derivation in `HippoClient.__init__` (single line). No data migration needed — new rows would just carry a different string.
+
+### Decision 9.7.F — Loud failure in `query()` mirrors `get()`: a single orphan poisons the whole page [NEW 2026-04-21]
+
+- **Finding:** `HippoClient.get(entity_id)` raises `ProvenanceIntegrityError` on missing provenance per Decision 9.7.D. `HippoClient.query(entity_type)` returns a list; the natural implementation could either raise on the first inconsistency or skip the offending row and return the rest.
+- **Alternatives considered:** (A) Raise — whole page fails if any entity is orphaned. (B) Skip — silently exclude orphaned entities from the result set, log a warning. (C) Include with null fields — the original pre-9.7.D soft-degradation behavior applied per-row.
+- **Chosen:** (A). Mirrors `get()`. Per sec9 §9.2 *Provenance integrity is transactional and loud*, a corrupt audit log is a critical defect, not a row-level issue to absorb. A `query()` caller seeing 999 out of 1000 results silently is worse than seeing the exception and investigating.
+- **Why (B) rejected:** "Silently return fewer rows than the user asked for" is indistinguishable from a legitimate empty result — caller can't tell why the row is missing. A tool that pages through results and skips corrupt rows would silently lose data.
+- **Why (C) rejected:** Violates sec9 §9.2 explicitly. Already the pre-9.7.D behavior that was revised.
+- **Operational note:** In a deployment that encounters integrity errors at read time, the fix is always *repair the adapter*, not *make the reader more permissive*. This decision makes that routing unambiguous.
+- **Revert:** Switch to (B) by catching the exception inside the per-row loop. One-line change; backward-visible as a weakening of the invariant.
+
+### Decision 9.7.G — `get_temporal` is a duck-typed adapter extension, not an abstract method [NEW 2026-04-21]
+
+- **Finding:** `StorageAdapter.get_temporal(entity_ids)` is the batch primitive for sec9 §9.7 temporal aggregation. It's consumed by the SDK via `hasattr(self._storage, "get_temporal")` — SQLite and Postgres both implement it, but it's not declared on the `EntityStore` ABC.
+- **Chosen:** Keep it duck-typed for now; do not add it to the abstract base class.
+- **Why:** Matches existing precedent in the adapter layer (`get_fts_tables_for_entity_type`, `get_provenance_timestamps`, etc. are all duck-typed extensions). The `EntityStore` ABC already mandates the core read/write/find/history set; `get_temporal` sits alongside as a sec9-era extension. Non-relational adapters (Neo4j, when it lands) will need to decide whether they implement `get_temporal` natively or delegate — declaring it abstract up front would force a choice before the Neo4j constraints are understood.
+- **Consequence:** SDK-side `hasattr` checks declare `get_temporal` optional; in practice, every concrete adapter implements it. If Neo4j (or a future adapter) doesn't, the SDK falls back to the entity's stored columns — same behavior as today for `query()` with a non-provenance-aware adapter.
+- **Revert:** Promote to abstract on `EntityStore[T]` once all adapters are agreed. Low-cost later; additive-compatible for downstream subclassers since all existing concrete classes already implement it.
+
 ---
 
 ## 9.4 `hippo_ext` Extension Vocabulary

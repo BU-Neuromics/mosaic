@@ -132,6 +132,34 @@ class ValidationResult(BaseModel):
         return self.valid
 
 
+class TemporalRecord(BaseModel):
+    """Read-time computed temporal state for an entity (sec9 §9.7).
+
+    Populated by ``StorageAdapter.get_temporal`` aggregating over
+    ``ProvenanceRecord`` entries for a given entity. All five fields are
+    always present when the entity has any provenance; an entity with no
+    provenance raises ``ProvenanceIntegrityError`` rather than yielding a
+    ``TemporalRecord`` with null fields.
+    """
+
+    created_at: Optional[str] = Field(
+        default=None,
+        description="Timestamp of the earliest 'create' record",
+    )
+    updated_at: Optional[str] = Field(
+        default=None, description="Timestamp of the latest record (any operation)"
+    )
+    schema_version: Optional[str] = Field(
+        default=None, description="schema_version from the latest record"
+    )
+    created_by: Optional[str] = Field(
+        default=None, description="actor_id from the 'create' record"
+    )
+    updated_by: Optional[str] = Field(
+        default=None, description="actor_id from the latest record"
+    )
+
+
 class Operation(str, Enum):
     """Kind of operation recorded on a ProvenanceRecord.
 

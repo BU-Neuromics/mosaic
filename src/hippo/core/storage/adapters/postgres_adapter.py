@@ -24,7 +24,7 @@ from datetime import datetime, timezone
 from typing import Any, Dict, Generator, Iterator, List, Optional
 
 from hippo.core.storage import EntityStore, Query, ScoredMatch
-from hippo.core.types import ProvenanceRecord as ProvenanceRecordType
+from hippo.core.types import ProvenanceRecord as ProvenanceRecordType, TemporalRecord
 from hippo.core.exceptions import AdapterError, SearchCapabilityError
 
 try:
@@ -257,28 +257,77 @@ class PostgresProvenanceStore:
     def get_provenance_timestamps(
         self, entity_id: str
     ) -> Optional[dict[str, Optional[str]]]:
+        """Legacy single-entity timestamp derivation. Delegates to get_temporal."""
+        out = self.get_temporal([entity_id])
+        if entity_id not in out:
+            return None
+        rec = out[entity_id]
+        return {"created_at": rec.created_at, "updated_at": rec.updated_at}
+
+    def get_temporal(
+        self, entity_ids: list[str]
+    ) -> "dict[str, TemporalRecord]":
+        """Batch sec9 §9.7 temporal derivation (Postgres mirror of the SQLite path)."""
+        from hippo.core.types import TemporalRecord
+
+        if not entity_ids:
+            return {}
+
         cur = self._conn.cursor()
         cur.execute(
-            """SELECT
-                   MIN(timestamp) AS created_at,
-                   MAX(CASE
-                       WHEN operation = 'availability_change'
-                            AND (patch::jsonb->>'status' = 'deleted'
-                                 OR patch::jsonb->>'is_available' = 'false')
-                           THEN NULL
-                       ELSE timestamp
-                   END) AS updated_at
-               FROM "ProvenanceRecord"
-               WHERE entity_id = %s""",
-            (entity_id,),
+            """WITH target AS (
+                    SELECT entity_id, operation, timestamp, actor_id,
+                           schema_version, patch
+                    FROM "ProvenanceRecord"
+                    WHERE entity_id = ANY(%s)
+                ),
+                agg AS (
+                    SELECT
+                        entity_id,
+                        MIN(CASE WHEN operation = 'create'
+                                 THEN timestamp END) AS created_at,
+                        MAX(CASE
+                            WHEN operation = 'availability_change'
+                                 AND (patch::jsonb->>'status' = 'deleted'
+                                      OR patch::jsonb->>'is_available' = 'false')
+                                THEN NULL
+                            ELSE timestamp
+                        END) AS updated_at
+                    FROM target
+                    GROUP BY entity_id
+                )
+                SELECT
+                    agg.entity_id,
+                    agg.created_at,
+                    agg.updated_at,
+                    (SELECT actor_id FROM target t
+                     WHERE t.entity_id = agg.entity_id
+                       AND t.operation = 'create'
+                       AND t.timestamp = agg.created_at
+                     LIMIT 1) AS created_by,
+                    (SELECT actor_id FROM target t
+                     WHERE t.entity_id = agg.entity_id
+                       AND t.timestamp = agg.updated_at
+                     LIMIT 1) AS updated_by,
+                    (SELECT schema_version FROM target t
+                     WHERE t.entity_id = agg.entity_id
+                       AND t.timestamp = agg.updated_at
+                     LIMIT 1) AS schema_version
+                FROM agg""",
+            (list(entity_ids),),
         )
-        row = cur.fetchone()
-        if row is None or row["created_at"] is None:
-            return None
-        return {
-            "created_at": row["created_at"],
-            "updated_at": row["updated_at"],
-        }
+
+        result: dict[str, TemporalRecord] = {}
+        for row in cur.fetchall():
+            eid = row["entity_id"]
+            result[eid] = TemporalRecord(
+                created_at=row["created_at"],
+                updated_at=row["updated_at"],
+                schema_version=row["schema_version"] or None,
+                created_by=row["created_by"] or None,
+                updated_by=row["updated_by"] or None,
+            )
+        return result
 
 
 class PostgresRelationshipRecord:
@@ -834,10 +883,13 @@ class PostgresAdapter(EntityStore[PostgresEntity]):
         database_url: str,
         min_pool_size: int = 2,
         max_pool_size: int = 10,
+        schema_version: Optional[str] = None,
     ):
         self.database_url = database_url
         self.min_pool_size = min_pool_size
         self.max_pool_size = max_pool_size
+        self._schema_version = schema_version or ""
+        self._provenance_store: Optional[PostgresProvenanceStore] = None
 
         try:
             self._pool = ConnectionPool(
@@ -1102,7 +1154,7 @@ class PostgresAdapter(EntityStore[PostgresEntity]):
                 ),
             )
 
-            provenance = PostgresProvenanceStore(conn)
+            provenance = PostgresProvenanceStore(conn, self._schema_version)
             provenance.record(
                 entity_id=entity_id,
                 entity_type=entity_type,
@@ -1212,7 +1264,7 @@ class PostgresAdapter(EntityStore[PostgresEntity]):
                 (now, entity_id),
             )
 
-            provenance = PostgresProvenanceStore(conn)
+            provenance = PostgresProvenanceStore(conn, self._schema_version)
             provenance.record(
                 entity_id=entity_id,
                 entity_type=entity_type,
@@ -1451,12 +1503,20 @@ class PostgresAdapter(EntityStore[PostgresEntity]):
 
     def history(self, entity_id: str) -> list[dict[str, Any]]:
         with self._transaction() as conn:
-            provenance = PostgresProvenanceStore(conn)
+            provenance = PostgresProvenanceStore(conn, self._schema_version)
             return provenance.get_history(entity_id)
+
+    def get_temporal(
+        self, entity_ids: list[str]
+    ) -> "dict[str, TemporalRecord]":
+        """Batch sec9 §9.7 temporal-field derivation. One SQL round-trip."""
+        with self._transaction() as conn:
+            provenance = PostgresProvenanceStore(conn, self._schema_version)
+            return provenance.get_temporal(entity_ids)
 
     def state_at(self, entity_id: str, timestamp: str) -> Optional[dict[str, Any]]:
         with self._transaction() as conn:
-            provenance = PostgresProvenanceStore(conn)
+            provenance = PostgresProvenanceStore(conn, self._schema_version)
 
             creation_time = provenance.get_entity_creation_time(entity_id)
             if creation_time is None:
@@ -1500,7 +1560,7 @@ class PostgresAdapter(EntityStore[PostgresEntity]):
     def _get_provenance_store(
         self, conn: psycopg.Connection
     ) -> PostgresProvenanceStore:
-        return PostgresProvenanceStore(conn)
+        return PostgresProvenanceStore(conn, self._schema_version)
 
     def _get_relationship_store(
         self, conn: psycopg.Connection
