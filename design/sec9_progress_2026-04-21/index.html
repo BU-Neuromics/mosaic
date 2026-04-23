@@ -21,7 +21,7 @@
     
     
       
-        <title>Hippo — Metadata Tracking Service - BASS Documentation</title>
+        <title>sec9 Wave 1 Implementation — Progress Report - BASS Documentation</title>
       
     
     
@@ -74,7 +74,7 @@
     <div data-md-component="skip">
       
         
-        <a href="#hippo-metadata-tracking-service" class="md-skip">
+        <a href="#sec9-wave-1-implementation-progress-report" class="md-skip">
           Skip to content
         </a>
       
@@ -108,7 +108,7 @@
         <div class="md-header__topic" data-md-component="header-topic">
           <span class="md-ellipsis">
             
-              Hippo — Metadata Tracking Service
+              sec9 Wave 1 Implementation — Progress Report
             
           </span>
         </div>
@@ -3885,10 +3885,10 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#specification-index" class="md-nav__link">
+  <a href="#headline" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Specification Index
+        Headline
       
     </span>
   </a>
@@ -3896,10 +3896,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#document-map" class="md-nav__link">
+  <a href="#commits-this-session-in-order" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Document Map
+        Commits this session (in order)
       
     </span>
   </a>
@@ -3907,22 +3907,22 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#linkml-centric-redesign-approved-implementation-underway" class="md-nav__link">
+  <a href="#what-landed-in-detail" class="md-nav__link">
     <span class="md-ellipsis">
       
-        LinkML-Centric Redesign (Approved — Implementation Underway)
+        What landed, in detail
       
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="LinkML-Centric Redesign (Approved — Implementation Underway)">
+    <nav class="md-nav" aria-label="What landed, in detail">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
-  <a href="#motivation" class="md-nav__link">
+  <a href="#wave-1-1-hippo-ext-vocabulary" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Motivation
+        Wave 1 #1: hippo-ext-vocabulary
       
     </span>
   </a>
@@ -3930,10 +3930,10 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#new-artifacts" class="md-nav__link">
+  <a href="#wave-1-2-hippo-core-schema" class="md-nav__link">
     <span class="md-ellipsis">
       
-        New Artifacts
+        Wave 1 #2: hippo-core-schema
       
     </span>
   </a>
@@ -3941,10 +3941,10 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#per-section-revision-plan" class="md-nav__link">
+  <a href="#wave-1-3-id-registry-and-uuid-strategy-narrowed-scope" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Per-Section Revision Plan
+        Wave 1 #3: id-registry-and-uuid-strategy (narrowed scope)
       
     </span>
   </a>
@@ -3952,32 +3952,10 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#preservation-of-historical-design" class="md-nav__link">
+  <a href="#wave-1-4-process-class" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Preservation of Historical Design
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#decision-log-impact-preview" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Decision-Log Impact (Preview)
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#progress" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Progress
+        Wave 1 #4: process-class
       
     </span>
   </a>
@@ -3990,10 +3968,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#key-decisions-log" class="md-nav__link">
+  <a href="#decisions-made-during-implementation-all-in-sec9_decisionsmd-dated-2026-04-21" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Key Decisions Log
+        Decisions made during implementation (all in sec9_decisions.md, dated 2026-04-21)
       
     </span>
   </a>
@@ -4001,10 +3979,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#open-questions" class="md-nav__link">
+  <a href="#test-state" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Open Questions
+        Test state
       
     </span>
   </a>
@@ -4012,10 +3990,71 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#how-to-use-this-spec" class="md-nav__link">
+  <a href="#things-worth-reviewing-when-you-return" class="md-nav__link">
     <span class="md-ellipsis">
       
-        How to Use This Spec
+        Things worth reviewing when you return
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Things worth reviewing when you return">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#nothing-urgent" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Nothing urgent
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#things-id-particularly-call-out" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Things I'd particularly call out
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#pushing" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Pushing
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#recommended-next-steps" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Recommended next steps
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#parking-lot-surfaced-during-implementation-not-urgent" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Parking lot (surfaced during implementation, not urgent)
       
     </span>
   </a>
@@ -4039,666 +4078,218 @@
 
 
 
-<h1 id="hippo-metadata-tracking-service">Hippo — Metadata Tracking Service<a class="headerlink" href="#hippo-metadata-tracking-service" title="Permanent link">&para;</a></h1>
-<h2 id="specification-index">Specification Index<a class="headerlink" href="#specification-index" title="Permanent link">&para;</a></h2>
-<p><strong>Codename:</strong> Hippo<br />
-<strong>Component:</strong> Metadata Tracking Service (MTS)<br />
-<strong>Version:</strong> 0.1 — Implementation Ready<br />
-<strong>Status:</strong> Ready for implementation<br />
-<strong>LinkML-centric redesign:</strong> Approved 2026-04-18. See <code>sec9_linkml_redesign.md</code> (authoritative design) and <code>sec9_decisions.md</code> (drafting decision log). Pre-redesign state preserved at git tag <code>design-pre-linkml</code>. Section revisions land coordinated with each OpenSpec change per 9.12.</p>
+<h1 id="sec9-wave-1-implementation-progress-report">sec9 Wave 1 Implementation — Progress Report<a class="headerlink" href="#sec9-wave-1-implementation-progress-report" title="Permanent link">&para;</a></h1>
+<p><strong>Session:</strong> 2026-04-21 autonomous pass
+<strong>Worked by:</strong> Claude
+<strong>Scope authorized:</strong> Full Wave 1 implementation (four OpenSpec changes) plus Wave 2/3 scaffolding, per the user's "feel free to make opinionated decisions, note to review together later" directive before dinner.</p>
 <hr />
-<h2 id="document-map">Document Map<a class="headerlink" href="#document-map" title="Permanent link">&para;</a></h2>
+<h2 id="headline">Headline<a class="headerlink" href="#headline" title="Permanent link">&para;</a></h2>
+<p><strong>All four Wave 1 OpenSpec changes implemented and tested.</strong> 833 tests pass, 8 skipped, no regressions. Wave 2 and Wave 3 scaffolds are in place (proposal.md + tasks.md for each) ready for implementation. Nothing pushed; you push when you're ready.</p>
 <table>
 <thead>
 <tr>
-<th>File</th>
-<th>Section</th>
+<th>Wave 1 change</th>
 <th>Status</th>
-<th>Notes</th>
 </tr>
 </thead>
 <tbody>
 <tr>
-<td><code>sec1_overview.md</code></td>
-<td>1. Overview &amp; Scope</td>
-<td>✅ Draft v0.1</td>
-<td>Domain-neutral; no deployment-specific types</td>
+<td><code>hippo-ext-vocabulary</code></td>
+<td>✅ Landed (4 commits)</td>
 </tr>
 <tr>
-<td><code>sec2_architecture.md</code></td>
-<td>2. Architecture</td>
-<td>✅ Draft v0.1</td>
-<td>SDK-first layering, all plugin ABCs, validation infrastructure, search</td>
+<td><code>hippo-core-schema</code></td>
+<td>✅ Landed (2 commits)</td>
 </tr>
 <tr>
-<td><code>sec3_data_model.md</code></td>
-<td>3. Data Model</td>
-<td>✅ Draft v0.1</td>
-<td>Polymorphic inheritance, search field declarations, <code>requires:</code> block</td>
+<td><code>id-registry-and-uuid-strategy</code></td>
+<td>✅ Landed (narrowed scope — see Decision 9.5.D)</td>
 </tr>
 <tr>
-<td><code>sec3b_relational_storage.md</code></td>
-<td>3b. Relational Storage Mapping</td>
-<td>✅ Draft v0.1</td>
-<td>SQLite/PostgreSQL reference impl; §3b.8 polymorphic storage</td>
+<td><code>process-class</code></td>
+<td>✅ Landed</td>
+</tr>
+</tbody>
+</table>
+<table>
+<thead>
+<tr>
+<th>Wave 2 change</th>
+<th>Status</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>provenance-as-linkml-class</code></td>
+<td>📋 Scaffolded (proposal.md + tasks.md)</td>
 </tr>
 <tr>
-<td><code>sec4_api_layer.md</code></td>
-<td>4. API Layer</td>
-<td>✅ Draft v0.1</td>
-<td>HippoClient interface, REST endpoints, pagination, polling</td>
+<td><code>computed-temporal-fields</code></td>
+<td>📋 Scaffolded</td>
+</tr>
+</tbody>
+</table>
+<table>
+<thead>
+<tr>
+<th>Wave 3 change</th>
+<th>Status</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>validation-tiering-clarification</code></td>
+<td>📋 Scaffolded</td>
 </tr>
 <tr>
-<td><code>sec5_ingestion.md</code></td>
-<td>5. Ingestion &amp; Integration</td>
-<td>✅ Draft v0.1</td>
-<td>Flat-file, reference data, upsert-by-ExternalID, error handling</td>
+<td><code>typed-client</code></td>
+<td>📋 Scaffolded</td>
 </tr>
 <tr>
-<td><code>sec6_provenance.md</code></td>
-<td>6. Provenance &amp; Audit</td>
-<td>✅ Draft v0.1</td>
-<td>Event model, structured context, storage, history API, retention</td>
+<td><code>reference-loader-shape</code></td>
+<td>📋 Scaffolded</td>
 </tr>
 <tr>
-<td><code>sec7_nfr.md</code></td>
-<td>7. Non-Functional Requirements</td>
-<td>✅ Draft v0.1</td>
-<td>Performance targets, scalability tiers, reliability, schema sync roadmap</td>
-</tr>
-<tr>
-<td><code>sec8_auth_integration.md</code></td>
-<td>8. Authentication &amp; Authorization Integration</td>
-<td>✅ Draft v0.1</td>
-<td>Bridge-aware <code>AuthMiddleware</code> impl, actor propagation, audit trail split</td>
-</tr>
-<tr>
-<td><code>sec9_linkml_redesign.md</code></td>
-<td>9. LinkML-Centric Redesign</td>
-<td>✅ Approved 2026-04-18</td>
-<td>Three-layer schema stack, first-class <code>Process</code>, PROV-O-aligned <code>ProvenanceRecord</code>, UUID identity model, namespace-aware typed client</td>
-</tr>
-<tr>
-<td><code>sec9_decisions.md</code></td>
-<td>9. (Companion) Decisions Log</td>
-<td>✅ Approved 2026-04-18</td>
-<td>Drafting decisions with alternatives, rationale, revert paths</td>
-</tr>
-<tr>
-<td><code>appendix_a_example_schema_omics.md</code></td>
-<td>Appendix A. Example Schema (Omics)</td>
-<td>✅ Draft v0.1</td>
-<td>Complete LinkML schema with <code>search:</code>, polymorphic extension example</td>
-</tr>
-<tr>
-<td><code>appendix_b_implementation_guide.md</code></td>
-<td>Appendix B. Implementation Guide</td>
-<td>✅ Draft v0.1</td>
-<td>Build order, module map, error hierarchy, invariants, test strategy, OpenSpec mapping</td>
-</tr>
-<tr>
-<td><code>reference_hippo_core.md</code></td>
-<td>Reference: <code>hippo_core</code> Classes and Enums</td>
-<td>✅ Draft v0.1</td>
-<td>Entity + Status + Operation + placeholder Validator / ReferenceLoader; design invariants; what's deferred to later changes</td>
-</tr>
-<tr>
-<td><code>reference_hippo_ext.md</code></td>
-<td>Reference: <code>hippo_ext</code> Annotation Vocabulary</td>
-<td>✅ Draft v0.1</td>
-<td>Per-annotation reference (range, applies_to, default, semantics), modeling note, version discipline, extensibility process</td>
-</tr>
-<tr>
-<td><code>reference_hippo_yaml.md</code></td>
-<td>Reference: <code>hippo.yaml</code> Config Schema</td>
-<td>✅ Draft v0.1</td>
-<td>All valid keys, types, defaults, env var substitution, minimal configs</td>
-</tr>
-<tr>
-<td><code>reference_validators_yaml.md</code></td>
-<td>Reference: <code>validators.yaml</code> Format</td>
-<td>✅ Draft v0.1</td>
-<td>Complete field spec, expand syntax, all built-in presets, execution semantics</td>
-</tr>
-<tr>
-<td><code>reference_cel_context.md</code></td>
-<td>Reference: CEL Evaluation Context</td>
-<td>✅ Draft v0.1</td>
-<td>All context variables, CEL types, expanded field shapes, available functions, common patterns</td>
+<td><code>generated-rest-surface</code></td>
+<td>📋 Proposal-only (optional, deferred per sec9 §9.12)</td>
 </tr>
 </tbody>
 </table>
 <hr />
-<h2 id="linkml-centric-redesign-approved-implementation-underway">LinkML-Centric Redesign (Approved — Implementation Underway)<a class="headerlink" href="#linkml-centric-redesign-approved-implementation-underway" title="Permanent link">&para;</a></h2>
-<p><strong>Status:</strong> Approved 2026-04-18. <code>sec9_linkml_redesign.md</code> is the authoritative design; <code>sec9_decisions.md</code> captures drafting decisions. This block is the high-level treatment plan; specific design claims are owned by sec9. Section revisions land coordinated with each OpenSpec change (see sec9 §9.12).</p>
-<h3 id="motivation">Motivation<a class="headerlink" href="#motivation" title="Permanent link">&para;</a></h3>
-<p>Recent refactors (<code>delete SchemaParser/SchemaConfig/FieldDefinition</code>, <code>swap DDL/migration/diff to SchemaRegistry</code>, <code>feat: LinkML-backed SchemaRegistry seam</code>) have been unwinding a pre-LinkML schema-abstraction layer. This proposal completes the direction by making LinkML the spine of Hippo: a three-layer schema stack (extension vocabulary → Hippo core schema → user schema) with <code>Entity</code> and <code>ProvenanceRecord</code> modeled as first-class LinkML classes rather than hand-coded Python constructs.</p>
-<h3 id="new-artifacts">New Artifacts<a class="headerlink" href="#new-artifacts" title="Permanent link">&para;</a></h3>
-<table>
-<thead>
-<tr>
-<th>File</th>
-<th>Purpose</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><code>sec9_linkml_redesign.md</code></td>
-<td>Vision doc — three-layer stack, provenance-as-LinkML-class, migration narrative, tradeoffs</td>
-</tr>
-<tr>
-<td><code>reference_hippo_core.md</code></td>
-<td>Reference for <code>hippo_core.yaml</code> (Entity, ProvenanceRecord, Status/Operation enums, Validator)</td>
-</tr>
-<tr>
-<td><code>reference_hippo_ext.md</code></td>
-<td>Reference for <code>hippo_ext.yaml</code> — the <code>hippo_*</code> annotation vocabulary (<code>hippo_unique</code>, <code>hippo_index</code>, <code>hippo_index_partial</code>, <code>hippo_search</code>, <code>hippo_append_only</code>, <code>hippo_accessor</code>)</td>
-</tr>
-</tbody>
-</table>
-<h3 id="per-section-revision-plan">Per-Section Revision Plan<a class="headerlink" href="#per-section-revision-plan" title="Permanent link">&para;</a></h3>
-<p>Legend: 🟢 Light touch • 🟡 Moderate • 🔴 Major rewrite</p>
-<table>
-<thead>
-<tr>
-<th>Section</th>
-<th>Treatment</th>
-<th>Reason</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>sec1 Overview</td>
-<td>🟢</td>
-<td>Purpose/scope domain-neutral; touch only paragraphs citing removed <code>SchemaConfig</code>/<code>SchemaLoader</code></td>
-</tr>
-<tr>
-<td>sec2 Architecture</td>
-<td>🟢</td>
-<td>Three-layer SDK-first reinforced, not changed; update <code>SchemaRegistry</code> seam and entry-point list</td>
-</tr>
-<tr>
-<td>sec3 Data Model</td>
-<td>🔴</td>
-<td>Conceptual model recast on LinkML primitives; <code>base:</code> polymorphic inheritance mapped onto <code>is_a</code>; namespace semantics reconciled with LinkML schema-level namespacing</td>
-</tr>
-<tr>
-<td>sec3b Relational Storage</td>
-<td>🔴</td>
-<td>DDL generation path fully LinkML-driven; polymorphic storage semantics revisited; partial-index annotations formalized</td>
-</tr>
-<tr>
-<td>sec4 API Layer</td>
-<td>🟡</td>
-<td>Typed (Pydantic-generated) client added alongside generic <code>HippoClient</code>; generated REST surface noted as roadmap; core interfaces stable</td>
-</tr>
-<tr>
-<td>sec5 Ingestion</td>
-<td>🟡</td>
-<td>Validation pipeline largely unchanged; reference-loader ABC reshaped around a LinkML-declared <code>ReferenceLoader</code> class</td>
-</tr>
-<tr>
-<td>sec6 Provenance &amp; Audit</td>
-<td>🔴</td>
-<td><code>ProvenanceRecord</code> becomes a LinkML class with a DDL-generated table; temporal fields formalized as computed reads/views</td>
-</tr>
-<tr>
-<td>sec7 NFR</td>
-<td>🟢</td>
-<td>Targets unchanged; schema-sync roadmap revisited if REST surface becomes generated</td>
-</tr>
-<tr>
-<td>sec8 Auth Integration</td>
-<td>🟢</td>
-<td>Orthogonal to schema design; no change expected</td>
-</tr>
-<tr>
-<td>Appendix A Example Schema (Omics)</td>
-<td>🟡</td>
-<td>Rework to <code>import: hippo_core</code>; demonstrate <code>is_a: Entity</code> on domain classes</td>
-</tr>
-<tr>
-<td>Appendix B Implementation Guide</td>
-<td>🔴</td>
-<td>Build order, module map, invariants, test strategy all shift</td>
-</tr>
-<tr>
-<td><code>reference_hippo_yaml.md</code></td>
-<td>🟢</td>
-<td>May gain <code>hippo_core_path</code> / extension-import config</td>
-</tr>
-<tr>
-<td><code>reference_validators_yaml.md</code></td>
-<td>🟡</td>
-<td>Clarify division between LinkML-native validation (types/patterns/enums/ranges) and CEL (cross-entity/dynamic rules)</td>
-</tr>
-<tr>
-<td><code>reference_cel_context.md</code></td>
-<td>🟢</td>
-<td>Context shape unchanged</td>
-</tr>
-</tbody>
-</table>
-<h3 id="preservation-of-historical-design">Preservation of Historical Design<a class="headerlink" href="#preservation-of-historical-design" title="Permanent link">&para;</a></h3>
-<ul>
-<li><strong>Git tag</strong> <code>design-pre-linkml</code> applied to current HEAD before any section rewrite begins. <code>git checkout design-pre-linkml -- design/</code> always recovers the prior spec.</li>
-<li>Major-rewrite sections preserved as <code>secN_pre_linkml.md</code> alongside new versions during the transition, removed once sec9 is merged and the OpenSpec changes have landed.</li>
-<li>Superseded entries in the Key Decisions Log are not deleted — they gain a <code>Superseded by</code> pointer into sec9.</li>
-</ul>
-<h3 id="decision-log-impact-preview">Decision-Log Impact (Preview)<a class="headerlink" href="#decision-log-impact-preview" title="Permanent link">&para;</a></h3>
-<p>Existing decisions expected to be reaffirmed / reformulated (non-exhaustive, to be finalized in sec9):</p>
-<ul>
-<li><em>Data model approach</em> — reaffirmed; expressed via LinkML classes + <code>hippo_ext</code> annotations instead of config keys</li>
-<li><em>Temporal metadata: provenance-log only, computed at read time</em> — reaffirmed and formalized as views over a DDL-generated provenance table</li>
-<li><em>Schema authoring: direct LinkML</em> — reaffirmed and extended to Hippo's own core schema</li>
-<li><em>Namespace</em> decisions (inference, root canonicalization, backwards compatibility) — reconciled with LinkML schema-level namespacing; treatment deferred to sec9</li>
-</ul>
-<p>New decisions to be introduced in sec9 (preview):</p>
-<ul>
-<li>Three-layer schema stack: <code>hippo_ext</code> → <code>hippo_core</code> → user schema</li>
-<li><code>ProvenanceRecord</code> is a first-class LinkML class; its table is DDL-generated via the same path as entity tables</li>
-<li><code>hippo_*</code> annotations formalized as a versioned LinkML extension vocabulary</li>
-<li>Typed Pydantic-generated client available alongside generic <code>HippoClient</code></li>
-</ul>
-<h3 id="progress">Progress<a class="headerlink" href="#progress" title="Permanent link">&para;</a></h3>
-<ol>
-<li>~~Review and approve this block~~ — <strong>Approved 2026-04-18</strong>.</li>
-<li>~~Tag <code>design-pre-linkml</code> on current HEAD~~ — <strong>Applied 2026-04-18</strong>.</li>
-<li>~~Draft <code>sec9_linkml_redesign.md</code> via the <code>doc-coauthoring</code> workflow~~ — <strong>Complete</strong>; see <code>sec9_linkml_redesign.md</code> and <code>sec9_decisions.md</code>.</li>
-<li><strong>In progress.</strong> Decompose into OpenSpec changes per sec9 §9.12. Ten changes grouped into three waves (foundation / data-model / consumer-facing). Scaffolding Wave 1 first: <code>hippo-ext-vocabulary</code> → <code>hippo-core-schema</code> → <code>id-registry-and-uuid-strategy</code> → <code>process-class</code>.</li>
-<li><strong>Pending.</strong> Revise each section per the Revision Plan, coordinated with the OpenSpec change that triggers it.</li>
-</ol>
+<h2 id="commits-this-session-in-order">Commits this session (in order)<a class="headerlink" href="#commits-this-session-in-order" title="Permanent link">&para;</a></h2>
+<p>Previous commits this session were the three-findings review work plus the <code>chore(hippo): regenerate uv.lock</code> you asked for. Wave 1 implementation starts at <code>1be200b</code>.</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>bba28bb docs(hippo): scaffold Wave 2 and Wave 3 OpenSpec changes
+<a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>a3e9b4d feat(hippo): add Process class to hippo_core (Wave 1 #4)
+<a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>0462d44 feat(hippo): id-registry — resolve_type helpers on adapters + HippoClient
+<a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>2093622 feat(hippo): finalize hippo-core-schema — reference doc, tests, decisions
+<a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a>826c5fe feat(hippo): ship hippo_core.yaml + three-layer SchemaRegistry merge
+<a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a>d2cd016 test(hippo): add dedicated tests for hippo_ext annotation validation
+<a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a>ad25ca0 feat(hippo): SchemaRegistry validates hippo_* annotations against hippo_ext
+<a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a>cffbef6 feat(hippo): install hippo_ext.yaml at src/hippo/schemas/
+<a id="__codelineno-0-9" name="__codelineno-0-9" href="#__codelineno-0-9"></a>1be200b refactor(hippo): retire hippo_default in favor of LinkML-native ifabsent
+<a id="__codelineno-0-10" name="__codelineno-0-10" href="#__codelineno-0-10"></a>e748265 chore(hippo): regenerate uv.lock
+<a id="__codelineno-0-11" name="__codelineno-0-11" href="#__codelineno-0-11"></a>7d601fd docs(hippo): narrow Wave 1 vocabulary; defer hippo_append_only &amp; hippo_accessor
+<a id="__codelineno-0-12" name="__codelineno-0-12" href="#__codelineno-0-12"></a>0a0c642 feat(hippo): scrub hippo_summary_view + auto-emitted summary views
+</code></pre></div>
+<p>10 implementation commits + 2 doc/scaffold commits. Branch is now 24 commits ahead of <code>origin/main</code>. All local; push when ready.</p>
 <hr />
-<h2 id="key-decisions-log">Key Decisions Log<a class="headerlink" href="#key-decisions-log" title="Permanent link">&para;</a></h2>
+<h2 id="what-landed-in-detail">What landed, in detail<a class="headerlink" href="#what-landed-in-detail" title="Permanent link">&para;</a></h2>
+<h3 id="wave-1-1-hippo-ext-vocabulary">Wave 1 #1: <code>hippo-ext-vocabulary</code><a class="headerlink" href="#wave-1-1-hippo-ext-vocabulary" title="Permanent link">&para;</a></h3>
+<ul>
+<li><code>HIPPO_DEFAULT</code> constant deleted; all DDL/migration/schema-diff code paths now read <code>slot.ifabsent</code> via a new <code>slot_default()</code> helper in <code>hippo.linkml_bridge</code>. Existing tests updated; no user-schema migration needed (nothing in the repo used <code>hippo_default:</code>).</li>
+<li><code>src/hippo/schemas/hippo_ext.yaml</code> installed, declaring four initial annotations (<code>hippo_unique</code>, <code>hippo_index</code>, <code>hippo_index_partial</code>, <code>hippo_search</code>) via LinkML slots (modeling note in the schema header — LinkML has no native "annotation vocabulary" metamodel, so slots repurposed).</li>
+<li><code>SchemaRegistry</code> validates every <code>hippo_*</code> annotation at construction — undeclared, type-mismatched, and wrong-target annotations raise <code>SchemaError(HIPPO_EXT_VALIDATION)</code> with aggregated, actionable messages.</li>
+<li><code>design/reference_hippo_ext.md</code> written — per-annotation reference with examples, interactions, version discipline, extensibility process.</li>
+<li>New <code>TestHippoExtValidation</code> test class in <code>tests/core/test_linkml_bridge.py</code> (8 tests) covering the four failure modes plus the non-hippo-annotations-pass-through case.</li>
+</ul>
+<h3 id="wave-1-2-hippo-core-schema">Wave 1 #2: <code>hippo-core-schema</code><a class="headerlink" href="#wave-1-2-hippo-core-schema" title="Permanent link">&para;</a></h3>
+<ul>
+<li><code>src/hippo/schemas/hippo_core.yaml</code> ships with <code>Entity</code> (abstract, <code>class_uri: prov:Entity</code>, <code>id</code> + <code>is_available</code> slots), <code>Status</code> enum, <code>Operation</code> enum, placeholder <code>Validator</code> + <code>ReferenceLoader</code> classes pointing at later changes.</li>
+<li><code>SchemaRegistry</code> three-layer merge via <code>SchemaView</code> importmap: callers say <code>imports: [hippo_core]</code> in their YAML and LinkML resolves to the bundled path.</li>
+<li><code>_flatten_for_validator</code> helper added in <code>linkml_bridge</code> — materializes all classes/slots/enums/types inline before handing the schema to <code>linkml.validator.Validator</code>, which otherwise re-resolves imports independently of <code>SchemaView</code>'s importmap. Detailed in Decision 9.5.C.</li>
+<li><code>sample_schema.yaml</code> migrated to import hippo_core; local <code>Entity</code> declaration removed; Project/Sample continue to use <code>is_a: Entity</code>.</li>
+<li>DDL generators updated: <code>is_available</code> is emitted from the schema (via induced_slots) when the class inherits from Entity; hardcoded fallback retained for ad-hoc test fixtures that don't <code>is_a: Entity</code> (Decision 9.5.A). <code>superseded_by</code> stays hardcoded pending Wave 2's provenance redesign.</li>
+<li><code>design/reference_hippo_core.md</code> written.</li>
+<li>New <code>TestHippoCoreImport</code> test class (4 tests) plus <code>TestHippoCoreProcess</code> (6 tests, added in Wave 1 #4).</li>
+</ul>
+<h3 id="wave-1-3-id-registry-and-uuid-strategy-narrowed-scope">Wave 1 #3: <code>id-registry-and-uuid-strategy</code> (narrowed scope)<a class="headerlink" href="#wave-1-3-id-registry-and-uuid-strategy-narrowed-scope" title="Permanent link">&para;</a></h3>
+<p>Significant finding during implementation: the existing SQLite and PostgreSQL adapters already store all entities in a single <code>entities</code> table with an <code>entity_type</code> discriminator — effectively <em>already</em> the id-registry sec9 §9.5 proposed. A separate <code>_entity_registry</code> table would duplicate data without adding capability. Decision 9.5.D captures the rationale and commits the narrowed scope:</p>
+<ul>
+<li><code>SQLiteAdapter.resolve_type(uuid)</code>, <code>resolve_types(uuids)</code> (batch) added, wrapping the existing <code>entities</code> table lookup.</li>
+<li>Postgres equivalents with <code>ANY(%s)</code> for the batch form.</li>
+<li><code>HippoClient.resolve_type(uuid)</code>, <code>HippoClient.resolve_types(uuids)</code> wrap the adapter.</li>
+<li>Type resolution works regardless of availability (archived/deleted entities retain a knowable type).</li>
+<li>New <code>TestTypeResolution</code> test class (5 tests) covers known / unknown / batch / empty / post-delete cases.</li>
+</ul>
+<p><strong>Deferred from the original proposal</strong> (flagged in sec9_decisions.md Decision 9.5.D):
+- UUID <code>pattern</code> constraint on <code>Entity.id</code> — would break existing test fixtures using ids like <code>"s1"</code>; postpone until a test-fixture cleanup pass.
+- <code>client.get(uuid)</code> overload without <code>entity_type</code> — requires deeper <code>QueryService</code> restructuring.
+- One-time backfill migration — unnecessary, no registry table to backfill.
+- Performance benchmarks — the lookup path didn't change; nothing to re-benchmark.</p>
+<h3 id="wave-1-4-process-class">Wave 1 #4: <code>process-class</code><a class="headerlink" href="#wave-1-4-process-class" title="Permanent link">&para;</a></h3>
+<ul>
+<li><code>Process</code> class added to <code>hippo_core.yaml</code> with <code>is_a: Entity</code>, <code>class_uri: prov:Activity</code>. Slots: <code>parent_process_id</code> (self-reference), <code>operation_kind</code> (hippo_index), <code>started_at</code> (hippo_index), <code>ended_at</code> (optional), <code>actor_id</code>.</li>
+<li><code>hippo_core</code> minor-bumped to <code>0.2.0</code>.</li>
+<li><code>reference_hippo_core.md</code> updated with a full <code>Process</code> section including a PipelineRun subclass example.</li>
+<li>New <code>TestHippoCoreProcess</code> test class (6 tests) covering Process presence, Entity slot inheritance, subclass inheritance, <code>class_uri</code>, self-reference, and index annotations reaching induced slots.</li>
+</ul>
+<hr />
+<h2 id="decisions-made-during-implementation-all-in-sec9_decisionsmd-dated-2026-04-21">Decisions made during implementation (all in sec9_decisions.md, dated 2026-04-21)<a class="headerlink" href="#decisions-made-during-implementation-all-in-sec9_decisionsmd-dated-2026-04-21" title="Permanent link">&para;</a></h2>
 <table>
 <thead>
 <tr>
 <th>Decision</th>
-<th>Choice</th>
-<th>Section</th>
+<th>Summary</th>
 </tr>
 </thead>
 <tbody>
 <tr>
-<td>Deployment model</td>
-<td>SDK-first; REST and GraphQL are independent transport adapters</td>
-<td>sec2</td>
+<td><strong>9.4.C</strong></td>
+<td><code>hippo_search</code> range changed from enum to <code>string</code>. Schemas declare intent; adapters enforce mode capability. Existing tests using non-fts5 modes continue to pass.</td>
 </tr>
 <tr>
-<td>Async strategy</td>
-<td>Sync SDK for v0.1; revisit at PostgreSQL adapter</td>
-<td>sec2</td>
+<td><strong>9.5.A</strong></td>
+<td><code>is_available</code> kept hardcoded as a fallback in DDL generators when the class doesn't inherit it via <code>is_a: Entity</code>. Preserves ad-hoc test fixtures; principled path (require <code>is_a: Entity</code> everywhere) deferred.</td>
 </tr>
 <tr>
-<td>REST deployment</td>
-<td>Standalone (<code>hippo serve</code>) wrapping embedded <code>app</code> object</td>
-<td>sec2</td>
+<td><strong>9.5.B</strong></td>
+<td>New <code>slot_default()</code> helper in <code>linkml_bridge</code> coerces boolean <code>ifabsent</code> strings (<code>"true"</code>/<code>"false"</code>) to Python booleans so DDL emits native SQL defaults. Minimal form; richer ifabsent parsing (<code>uuid()</code>, <code>datetime(now)</code>) deferred.</td>
 </tr>
 <tr>
-<td>Plugin system</td>
-<td>Entry points (<code>hippo.storage_adapters</code>, <code>hippo.external_adapters</code>, <code>hippo.write_validators</code>, <code>hippo.reference_loaders</code>)</td>
-<td>sec2</td>
+<td><strong>9.5.C</strong></td>
+<td><code>_flatten_for_validator</code> materializes imports inline before <code>linkml.validator.Validator</code> sees the schema. Workaround for LinkML's lack of importmap in the Validator API.</td>
 </tr>
 <tr>
-<td>Storage backend v0.1</td>
-<td>SQLite via stdlib <code>sqlite3</code></td>
-<td>sec2</td>
-</tr>
-<tr>
-<td>Data model approach</td>
-<td>Config-driven relational + graph-shaped API; graph DB as future adapter</td>
-<td>sec3</td>
-</tr>
-<tr>
-<td>Temporal metadata</td>
-<td>Provenance log only — not stored on entities; computed at read time</td>
-<td>sec3, sec6</td>
-</tr>
-<tr>
-<td>Entity lifecycle</td>
-<td><code>is_available</code> boolean; storage adapters optimize for this filter</td>
-<td>sec3, sec3b</td>
-</tr>
-<tr>
-<td>Lifecycle semantics</td>
-<td>Reason for unavailability stored in provenance events, not on entities</td>
-<td>sec3, sec6</td>
-</tr>
-<tr>
-<td>Supersession</td>
-<td>System-level <code>superseded_by</code> relationship; atomic SDK operation</td>
-<td>sec3</td>
-</tr>
-<tr>
-<td>Schema authoring</td>
-<td>Direct LinkML (YAML/JSON) — no intermediate DSL or compilation step</td>
-<td>sec3</td>
-</tr>
-<tr>
-<td>Graph DB</td>
-<td>Future adapter option; not v0.1 scope</td>
-<td>sec3</td>
-</tr>
-<tr>
-<td>Multi-tenancy</td>
-<td>Out of scope for v0.1</td>
-<td>sec3</td>
-</tr>
-<tr>
-<td>Conceptual/storage separation</td>
-<td>Sec3 defines conceptual data model only; relational storage mapping in sec3b</td>
-<td>sec3, sec3b</td>
-</tr>
-<tr>
-<td>Domain-neutral spec</td>
-<td>System spec contains no domain-specific schema; omics types in Appendix A only</td>
-<td>sec1, sec2, sec3</td>
-</tr>
-<tr>
-<td>Schema inheritance semantics</td>
-<td><code>base:</code> creates polymorphic (is-a) inheritance — subtypes are queryable as their parent type</td>
-<td>sec3, sec3b</td>
-</tr>
-<tr>
-<td>Validator <code>entity_types</code> matching</td>
-<td>Subtype-aware — declaring a parent type covers all subtypes; redundant entries emit startup warning</td>
-<td>sec2</td>
-</tr>
-<tr>
-<td>Config-driven validation</td>
-<td><code>validators.yaml</code> with CEL conditions, <code>expand</code> path pre-fetching, <code>when</code> pre-conditions, <code>requires</code> shorthand, <code>existing</code> context</td>
-<td>sec2</td>
-</tr>
-<tr>
-<td>CEL expression language</td>
-<td>Used for config-driven validator conditions; sandboxed, no I/O, <code>cel-python</code> binding</td>
-<td>sec2</td>
-</tr>
-<tr>
-<td>Expand path syntax</td>
-<td><code>field</code>, <code>field.child</code>, <code>field[]</code>, <code>field[].child</code>; batch-fetched; cycle detection; <code>max_expand_list_size</code> cap</td>
-<td>sec2</td>
-</tr>
-<tr>
-<td>Lazy evaluation rejected</td>
-<td>Explicit <code>expand</code> paths preferred — CEL short-circuit makes implicit I/O non-deterministic</td>
-<td>sec2</td>
-</tr>
-<tr>
-<td>Built-in validator presets</td>
-<td><code>ref_check</code>, <code>count_constraint</code>, <code>immutable_field</code>, <code>field_required_if</code>, <code>no_self_ref</code> as ergonomic shortcuts</td>
-<td>sec2</td>
-</tr>
-<tr>
-<td>External adapter boundary</td>
-<td>STARLIMS, HALO, REDCap concrete implementations in Cappella; <code>ExternalSourceAdapter</code> ABC stays in Hippo</td>
-<td>sec2</td>
-</tr>
-<tr>
-<td>Reference loader plugin system</td>
-<td><code>hippo.reference_loaders</code> entry point; <code>ReferenceLoader</code> ABC ships <code>schema_fragment()</code>; install auto-migrates</td>
-<td>sec2, sec5</td>
-</tr>
-<tr>
-<td>Fuzzy search</td>
-<td><code>EntityStore.search()</code> ABC method; per-field <code>search:</code> mode; <code>ScoredMatch</code> core SDK type; adapter capability declaration at startup</td>
-<td>sec2, sec3, sec4</td>
-</tr>
-<tr>
-<td>Provenance event model</td>
-<td>Typed events (EntityCreated/Updated/AvailabilityChanged/Superseded/Relationship<em>/ExternalId</em>/Migration<em>/ReferenceData</em>)</td>
-<td>sec6</td>
-</tr>
-<tr>
-<td>Provenance context</td>
-<td>Unstructured JSON <code>context</code> field on all events; Cappella conventions documented</td>
-<td>sec6</td>
-</tr>
-<tr>
-<td>Batch ingestion semantics</td>
-<td>Per-record transactions by default; <code>--fail-fast</code> flag; <code>--atomic</code> deferred</td>
-<td>sec5</td>
-</tr>
-<tr>
-<td>Upsert identity resolution</td>
-<td>Priority: explicit UUID → ExternalID lookup → new entity</td>
-<td>sec5</td>
-</tr>
-<tr>
-<td>Pagination</td>
-<td>Offset-based (limit/offset); cursor-based deferred</td>
-<td>sec4</td>
-</tr>
-<tr>
-<td>Multi-instance REST</td>
-<td>Fully stateless; all distributed concerns delegated to storage adapter</td>
-<td>sec7</td>
-</tr>
-<tr>
-<td>Schema sync v0.1</td>
-<td>Restart-on-migrate; three-phase post-v0.1 roadmap documented</td>
-<td>sec7</td>
-</tr>
-<tr>
-<td>Multi-instance adapter contract</td>
-<td>Must implement atomic server-side upsert (not read-then-write) for entity and ExternalID creation</td>
-<td>sec2, sec7</td>
-</tr>
-<tr>
-<td>Entity namespaces</td>
-<td>Optional <code>namespace:</code> key in schema files scopes entities to named namespaces; FQN = <code>namespace.EntityType</code>; root namespace is the only implicit namespace</td>
-<td>sec3</td>
-</tr>
-<tr>
-<td>NamespaceRegistry</td>
-<td>Built by <code>SchemaLoader</code> at load time; maps <code>(namespace, entity_name)</code> → <code>EntityConfig</code>; fully populated before cross-namespace reference validation</td>
-<td>sec3</td>
-</tr>
-<tr>
-<td>Namespace dependency inference</td>
-<td>Dependencies inferred from <code>references.entity_type</code> FQNs — no explicit <code>depends_on:</code> required; topological sort detects cycles</td>
-<td>sec3</td>
-</tr>
-<tr>
-<td>Root namespace canonicalization</td>
-<td><code>root.Donor</code> normalized to <code>"Donor"</code> at registry ingestion; only unqualified form in <code>SchemaConfig</code> and storage. <strong>Superseded at the client level by sec9.8</strong> — typed client provides dual access (flat <code>client.samples</code> and explicit <code>client.root.samples</code>); storage-level canonicalization unchanged</td>
-<td>sec3, sec9</td>
-</tr>
-<tr>
-<td>Namespace backwards compatibility</td>
-<td>Schemas without <code>namespace:</code> key load unchanged; no data migration required for existing deployments</td>
-<td>sec3</td>
-</tr>
-<tr>
-<td>Provenance event model</td>
-<td>Typed events (EntityCreated/Updated/AvailabilityChanged/Superseded/Relationship<em>/ExternalId</em>/Migration<em>/ReferenceData</em>). <strong>Reshaped by sec9.6</strong> — <code>ProvenanceRecord</code> is now a first-class LinkML class with PROV-O alignment (<code>class_uri: prov:Activity</code>); event categories expressed as the <code>Operation</code> enum in <code>hippo_core</code> (<code>create</code>, <code>update</code>, <code>availability_change</code>, <code>supersede</code>, <code>relationship_add</code>/<code>remove</code>, <code>external_id_add</code>/<code>remove</code>, <code>migration_applied</code>, <code>reference_data_installed</code>)</td>
-<td>sec6, sec9</td>
-</tr>
-<tr>
-<td>Provenance-log-only temporal data</td>
-<td><code>created_at</code>, <code>updated_at</code>, <code>schema_version</code> never stored on entity tables; always computed from <code>ProvenanceRecord</code> at read time. <strong>Formalized by sec9.7</strong> — adds <code>created_by</code> and <code>updated_by</code> as computed fields; defines required indexes and batch aggregation primitives</td>
-<td>sec3, sec6, sec9</td>
-</tr>
-<tr>
-<td>Three-layer schema stack</td>
-<td><code>hippo_ext</code> (annotation vocabulary) → <code>hippo_core</code> (Entity, ProvenanceRecord, Process, Validator, ReferenceLoader, Status/Operation enums) → user schema. Imports flow downward only. <code>SchemaRegistry</code> produces one merged <code>SchemaView</code> consumed by every subsystem</td>
-<td>sec9.3</td>
-</tr>
-<tr>
-<td><code>hippo_*</code> extension vocabulary</td>
-<td><code>hippo_ext</code> is a shipped-with-Hippo LinkML schema that declares every <code>hippo_*</code> annotation with <code>applies_to</code>, <code>value_type</code>, and <code>cardinality</code> constraints. Every used annotation MUST be declared; undeclared annotations fail at load time</td>
-<td>sec9.4</td>
-</tr>
-<tr>
-<td><code>Process</code> as first-class class</td>
-<td>Composite activity grouping atomic <code>ProvenanceRecord</code> entries under one logical execution (reference loads, pipeline runs, schema migrations). <code>is_a: Entity</code>, <code>class_uri: prov:Activity</code>. Minimum slots: <code>parent_process_id</code>, <code>operation_kind</code>, <code>started_at</code>, <code>ended_at</code>, <code>actor_id</code></td>
-<td>sec9.5</td>
-</tr>
-<tr>
-<td>UUID identity model</td>
-<td>Every <code>id</code> is a UUID, globally unique by collision probability. Polymorphic references carry a UUID alone. Type resolution: relational adapters maintain an <code>_entity_registry</code> table; Neo4j uses native labels</td>
-<td>sec9.2, sec9.5</td>
-</tr>
-<tr>
-<td>FQN parsing rule</td>
-<td>Fully qualified class name = <code>&lt;namespace&gt;.&lt;ClassName&gt;</code>. The last dot-separated segment is always the class name; everything before is the namespace string. Dots in class names are forbidden</td>
-<td>sec9.5</td>
-</tr>
-<tr>
-<td>Provenance integrity transactional and loud</td>
-<td>Entity mutation + <code>ProvenanceRecord</code> write are one atomic unit; either both land or neither does. Missing or inconsistent provenance at read time raises <code>ProvenanceIntegrityError</code> — no silent degradation</td>
-<td>sec9.2, sec9.6</td>
-</tr>
-<tr>
-<td>Namespace-aware typed client</td>
-<td>Root classes accessible via flat <code>client.&lt;accessor&gt;</code> or explicit <code>client.root.&lt;accessor&gt;</code>. Non-root via <code>client.&lt;namespace&gt;.&lt;accessor&gt;</code>. Nested namespaces via dot notation (e.g. <code>assay.quant</code>) produce nested attributes. Accessor default: <code>snake_case(ClassName) + "s"</code>; <code>hippo_accessor</code> overrides per class</td>
-<td>sec9.8</td>
-</tr>
-<tr>
-<td>Validation tiering</td>
-<td>Three tiers in fixed order: LinkML-native (static shape) → CEL (dynamic / cross-entity) → Python plugin (escape hatch). Fail-fast by default; opt-in collect-all for batch ingest. Unified <code>ValidationResult</code> envelope with tier annotation</td>
-<td>sec9.9</td>
-</tr>
-<tr>
-<td>LinkML ecosystem adopted as-is</td>
-<td>Hippo uses <code>SchemaView</code>, <code>gen-sqlddl</code>, <code>gen-pydantic</code>, <code>linkml-validate</code>, <code>linkml-diff</code> directly. Shims strictly bounded to applying <code>hippo_*</code> annotation effects. LinkML bugs fixed upstream or by version upgrade — never reimplemented in Hippo. Exact version pinning; LinkML patch bump triggers Hippo version bump</td>
-<td>sec9.10</td>
+<td><strong>9.5.D</strong></td>
+<td><code>id-registry-and-uuid-strategy</code> scope narrowed — the existing <code>entities</code> table already serves the registry role; no new table needed. SDK exposes stable <code>resolve_type</code> helpers that can be re-plumbed later if the storage model migrates to per-type tables.</td>
 </tr>
 </tbody>
 </table>
+<p>All five decisions have <code>[NEW 2026-04-21]</code> tags, alternatives considered, rationale, and revert paths.</p>
 <hr />
-<h2 id="open-questions">Open Questions<a class="headerlink" href="#open-questions" title="Permanent link">&para;</a></h2>
-<p>Items requiring a future design decision before implementation. Deferred items are explicitly
-out of scope for v0.1 and documented here for tracking.</p>
-<table>
-<thead>
-<tr>
-<th>Question</th>
-<th>Section</th>
-<th>Priority</th>
-<th>Status</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>Where does the example omics schema ultimately live?</td>
-<td>—</td>
-<td>Low</td>
-<td>Open — config repo, <code>schemas/omics/</code>, or community <code>hippo-reference-omics</code> package</td>
-</tr>
-<tr>
-<td>Entity type remapping / namespace migration path (OQ1)</td>
-<td>sec3 §3.12</td>
-<td>High</td>
-<td>Open — no migration path exists for moving <code>Sample</code> (root) to <code>tissue.Sample</code>; must be resolved before any production namespace adoption of existing entities. Options: <code>hippo migrate --remap</code>, namespace aliasing, or out-of-band migration script</td>
-</tr>
-<tr>
-<td>Canonical form for root-namespace entities in storage (OQ2)</td>
-<td>sec3 §3.11</td>
-<td>Low</td>
-<td>Decided — store as <code>"Donor"</code> (unqualified); registry normalizes <code>root.*</code> to unqualified at load time. Client-side access revisited by sec9.8 (dual <code>client.samples</code> + <code>client.root.samples</code> paths); storage behavior unchanged</td>
-</tr>
-<tr>
-<td>Ingestion idempotency for live webhook integrations</td>
-<td>sec5</td>
-<td>High</td>
-<td>Deferred — ExternalID upsert is the stable foundation; webhook retry deduplication needs a dedicated design session when live integrations are scoped</td>
-</tr>
-<tr>
-<td>Explicit update endpoint (PUT, 404-on-missing)</td>
-<td>sec4</td>
-<td>Medium</td>
-<td><strong>Planned v0.5 (Phase 1)</strong> — <code>PUT /entities/{type}/{id}</code>; partial update semantics, 404 if entity absent; specced in sec4 §4.3</td>
-</tr>
-<tr>
-<td>Bulk availability change endpoint</td>
-<td>sec4</td>
-<td>Medium</td>
-<td><strong>Planned v0.5 (Phase 1)</strong> — <code>POST /entities/{type}/bulk-availability</code>; specced in sec4 §4.3</td>
-</tr>
-<tr>
-<td>OR filter composition in query API</td>
-<td>sec4</td>
-<td>Low</td>
-<td><strong>Planned v0.5 (Phase 1)</strong> — multi-value params (same-field OR) + <code>?filter=</code> CEL (cross-field); specced in sec4 §4.3</td>
-</tr>
-<tr>
-<td>Per-validator timeout</td>
-<td>sec2</td>
-<td>Low</td>
-<td>Deferred — plugin validators should complete in &lt;100ms; configurable timeout post-v0.1</td>
-</tr>
-<tr>
-<td><code>hippo_poll</code> efficiency at scale</td>
-<td>sec3b/sec6</td>
-<td>Medium</td>
-<td>Deferred — provenance timestamp index handles current workload; denormalised <code>updated_at</code> column if needed at scale</td>
-</tr>
-<tr>
-<td>Schema version check on writes (503 on mismatch)</td>
-<td>sec7</td>
-<td>Medium</td>
-<td>Planned for v0.2 — roadmap documented in sec7 §7.3</td>
-</tr>
-<tr>
-<td>Dynamic schema reload via polling</td>
-<td>sec7</td>
-<td>Medium</td>
-<td>Planned for v0.3 — roadmap documented in sec7 §7.3</td>
-</tr>
-<tr>
-<td>Expand-contract convention enforcement in <code>hippo migrate</code></td>
-<td>sec2/sec3</td>
-<td>Medium</td>
-<td>Planned for v0.3+ — roadmap documented in sec7 §7.3</td>
-</tr>
-<tr>
-<td>Cursor-based pagination</td>
-<td>sec4</td>
-<td>Low</td>
-<td><strong>Planned v0.5 (Phase 1)</strong> — cursor-based mode specced in sec4 §4.4; offset mode remains the default</td>
-</tr>
-<tr>
-<td>GraphQL transport</td>
-<td>sec2</td>
-<td>Low</td>
-<td>Reserved in <code>hippo/graphql/</code>; deferred post-v0.1</td>
-</tr>
-<tr>
-<td>Provenance system vs. entity events table split</td>
-<td>sec6</td>
-<td>Low</td>
-<td><strong>Resolved by sec9.6</strong> — single <code>ProvenanceRecord</code> table for both entity and system events; system operations (<code>migration_applied</code>, <code>reference_data_installed</code>) carry <code>entity_id = null</code>. One table, one code path</td>
-</tr>
-<tr>
-<td>Auth / RBAC</td>
-<td>sec8</td>
-<td><strong>✅ Resolved (Phase 3)</strong></td>
-<td><code>BridgeAuthMiddleware</code> spec in sec8; Bridge owns auth, Hippo trusts injected headers; actor flows into provenance</td>
-</tr>
-<tr>
-<td>GA4GH DRS server (read-only)</td>
-<td>sec4</td>
-<td>High</td>
-<td>v0.4.0 target — <code>GET /ga4gh/drs/v1/objects/{entity_id}</code> resolves entity UUID → access_methods (s3/https/file). Thin read-only router over existing entity storage. No new data model; entity URI is the download target. Checksums from provenance if available. Enables external tools (Terra, Galaxy, other Canon instances) to resolve <code>drs://</code> URIs. Canon DRS client for consuming external DRS URIs deferred to Canon v0.3.</td>
-</tr>
-<tr>
-<td><code>HippoClient.schema_references(entity_type)</code></td>
-<td>—</td>
-<td><strong>✅ Implemented (Hippo v0.4)</strong></td>
-<td>Reads <code>FieldDefinition.references</code> from already-loaded schema. Returns <code>[{field, target_entity_type}]</code> for each field with <code>references: {entity_type: &lt;name&gt;}</code> declared in schema YAML. REST endpoint: <code>GET /schemas/{entity_type}/references</code>. Works today — caller schemas must declare <code>references:</code> on foreign-key fields.</td>
-</tr>
-</tbody>
-</table>
+<h2 id="test-state">Test state<a class="headerlink" href="#test-state" title="Permanent link">&para;</a></h2>
+<ul>
+<li>Full suite: <strong>833 passed, 8 skipped, 1 warning</strong> (the warning is a pre-existing <code>TestEntity</code> collection warning in <code>tests/core/test_provenance.py</code>, unrelated to this work).</li>
+<li>Wave 1 added <strong>29 new tests</strong> across <code>test_linkml_bridge.py</code> (TestHippoExtValidation 8, TestHippoCoreImport 4, TestHippoCoreProcess 6) and <code>test_client.py</code> (TestTypeResolution 5), plus 6 more (the earlier finding #2 scrub removed 1 and added none).</li>
+<li>No tests broken unmodified; 7 existing tests adjusted to match new expected behavior (TestValidation required <code>is_available</code> in test data; TestDefaultValue renamed for ifabsent; TestFullSchema dropped a trivial <code>hippo_default</code> annotation).</li>
+</ul>
 <hr />
-<h2 id="how-to-use-this-spec">How to Use This Spec<a class="headerlink" href="#how-to-use-this-spec" title="Permanent link">&para;</a></h2>
-<p>Each section document is self-contained and includes <code>Depends on</code> and <code>Feeds into</code> headers
-to make inter-document dependencies explicit. When starting a new section, read the documents
-it depends on first.</p>
-<p>This spec is designed to feed into the openplan pipeline:
-<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>Spec sections → openplan vision.yaml → roadmap → epics → features → OpenSpec
-</code></pre></div></p>
-<p>Each completed section maps to one or more epics in the openplan roadmap.</p>
+<h2 id="things-worth-reviewing-when-you-return">Things worth reviewing when you return<a class="headerlink" href="#things-worth-reviewing-when-you-return" title="Permanent link">&para;</a></h2>
+<h3 id="nothing-urgent">Nothing urgent<a class="headerlink" href="#nothing-urgent" title="Permanent link">&para;</a></h3>
+<p>The implementation matches sec9's design as scoped. The five implementation decisions are reviewable at your pace; none would require a hot rollback if you disagreed.</p>
+<h3 id="things-id-particularly-call-out">Things I'd particularly call out<a class="headerlink" href="#things-id-particularly-call-out" title="Permanent link">&para;</a></h3>
+<ol>
+<li>
+<p><strong>Decision 9.5.D (narrowed id-registry scope)</strong> is the most substantive judgment call. If you want the full <code>_entity_registry</code> table (per the original proposal's explicit design) I should add it despite the redundancy — that's a call that affects how Neo4j and future adapters align with the relational storage model.</p>
+</li>
+<li>
+<p><strong>The <code>Entity</code>-is-a hardcoded-fallback in DDL (9.5.A)</strong> is a pragmatic compromise. The principled path (all classes <code>is_a: Entity</code>) touches many test fixtures; worth a dedicated change later that does the sweep.</p>
+</li>
+<li>
+<p><strong><code>_flatten_for_validator</code> (9.5.C)</strong> is a LinkML-API-shape workaround. If LinkML's <code>Validator</code> API later gains an <code>importmap</code> parameter, we remove the helper. Until then, it's the price of using bundled schemas.</p>
+</li>
+<li>
+<p><strong><code>hippo_core</code> version is <code>0.2.0</code></strong> now (Entity + Process added in two minor bumps from 0.1.0). <code>hippo_ext</code> is still <code>0.1.0</code> (four initial annotations). Wave 2 will bump hippo_ext to 0.2.0 when it adds <code>hippo_append_only</code>.</p>
+</li>
+</ol>
+<h3 id="pushing">Pushing<a class="headerlink" href="#pushing" title="Permanent link">&para;</a></h3>
+<p>16 commits are queued locally. I didn't push. <code>git push origin main</code> from your terminal.</p>
+<hr />
+<h2 id="recommended-next-steps">Recommended next steps<a class="headerlink" href="#recommended-next-steps" title="Permanent link">&para;</a></h2>
+<ol>
+<li><strong>Review <code>sec9_decisions.md</code></strong> additions (9.4.C, 9.5.A–D). Everything behind them is documented; push back if any decision needs revisiting.</li>
+<li><strong>Spot-check the four Wave 1 changes</strong> if you want — each has a proposal.md and tasks.md under <code>openspec/changes/&lt;name&gt;/</code>. Implementation matches the proposals modulo the documented decisions.</li>
+<li><strong>Push when ready.</strong></li>
+<li><strong>When you pick up Wave 2</strong>, <code>provenance-as-linkml-class</code> is the next change. Its proposal + tasks are scaffolded; the biggest subtasks are (a) migrating the existing <code>ProvenanceStore</code> table to the LinkML-declared shape and (b) wiring <code>hippo_append_only</code> enforcement into the adapters.</li>
+</ol>
+<hr />
+<h2 id="parking-lot-surfaced-during-implementation-not-urgent">Parking lot (surfaced during implementation, not urgent)<a class="headerlink" href="#parking-lot-surfaced-during-implementation-not-urgent" title="Permanent link">&para;</a></h2>
+<ul>
+<li><strong>Test-fixture cleanup pass:</strong> many tests use <code>build_registry</code> with ad-hoc classes that don't <code>is_a: Entity</code>. A future change could sweep these and retire the hardcoded-<code>is_available</code> fallback. Not blocking.</li>
+<li><strong>Summary views (finding #2 from 2026-04-18) stay scrubbed.</strong> No consumer emerged during Wave 1 implementation.</li>
+<li><strong>LinkML tool pinning:</strong> still using <code>linkml</code> resolved via <code>uv</code>; explicit pin in <code>pyproject.toml</code> per Decision 9.10.B could be tightened whenever you do a dependency pass.</li>
+<li><strong><code>sec9_progress.md</code></strong> (from the 2026-04-18 autonomous session) can be moved to <code>design/archive/</code> or deleted — all three findings it flagged are resolved.</li>
+</ul>
 
 
 
