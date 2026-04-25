@@ -2,8 +2,8 @@
 
 ## 1. Resolve design questions
 
-- [ ] 1.1 Multi-class loaders: finalize `entity_type` as multivalued; decide cardinality semantics (set vs. ordered); decide whether per-class metadata is carried alongside or in separate records. Document decision in `sec9_decisions.md`.
-- [ ] 1.2 `schema_fragment` load-order: document the exact contract — when the fragment is merged into the SchemaView, when the ReferenceLoader instance is validated, the error surface. Document in `sec9_decisions.md`.
+- [x] 1.1 Multi-class loaders: `entity_type` is `multivalued: true` over `range: string`, declarative-only (provenance + discoverability); loader code owns runtime ingestion order; per-class metadata not modeled. Logged as Decision 9.5.F in `design/sec9_decisions.md` (PTS-67).
+- [x] 1.2 `schema_fragment` load-order: fragment merges at plugin registration; ReferenceLoader instance validates against the merged SchemaView immediately after; either failure aborts plugin registration with a single error path. Logged as Decision 9.5.E in `design/sec9_decisions.md` (PTS-67).
 
 ## 2. Finalize `hippo_core` declaration
 
@@ -25,7 +25,8 @@
 ## 5. Documentation
 
 - [ ] 5.1 Update `design/reference_hippo_core.md` `ReferenceLoader` section from placeholder to the finalized inventory.
-- [ ] 5.2 Log the two design resolutions in `sec9_decisions.md` as Decision 9.5.E and 9.5.F.
+- [x] 5.2 Logged the two design resolutions in `sec9_decisions.md` as Decision 9.5.E (fragment merge timing) and Decision 9.5.F (entity_type semantics).
+- [ ] 5.3 ReferenceLoader developer documentation must explicitly call out the developer's responsibility for correct data-loading semantics — schema-side validation does not enforce ingestion order or FK satisfaction; the loader's own code owns it. (Per Decision 9.5.F.)
 
 ## 6. Acceptance
 
