@@ -130,6 +130,14 @@ Review this file before sec9 is considered approved. If any decision is unwelcom
 - **Deferred parts of the proposal:** UUID pattern on `Entity.id` (would break existing test fixtures using ids like "s1"; postpone until a test-fixture cleanup pass); `client.get(uuid)` overload without `entity_type` (requires deeper restructuring of `QueryService` which routes by entity_type today); one-time backfill migration (unnecessary — the `entities` table always had the type column).
 - **Revert:** Remove the four methods (two adapters × {single, batch}) and two client methods. Low blast radius.
 
+### Decision 9.5.E — `ReferenceLoader.schema_fragment` merges at plugin registration; instance validation runs after merge [NEW 2026-04-25]
+
+- **Finding (PTS-67 design discussion):** A `ReferenceLoader` instance may reference classes declared in its own `schema_fragment` slot. Those classes don't exist in the merged `SchemaView` until the plugin's fragment is installed, so the lifecycle has to fix three things: (i) when the fragment is merged into the SchemaView, (ii) when the `ReferenceLoader` instance itself is validated against that view, and (iii) what the error surface looks like if either step fails.
+- **Alternatives considered:** (A) merge fragment at plugin registration; validate the loader instance against the merged view immediately; failures abort registration. (B) lazy merge on first loader invocation; instance validation deferred until first use. (C) eager merge at registration but defer instance validation to first invocation.
+- **Chosen:** (A). Per Director-of-Bioinformatics direction (PTS-67): the `schema_fragment` is loaded at plugin registration time, and end-user installation of a reference loader should not surface schema or data validation issues — the validation surface is plugin-developer-facing, not end-user-facing.
+- **Consequences:** Plugin registration becomes a two-step lockstep: Hippo (1) merges `schema_fragment` into the live `SchemaView`, then (2) validates the `ReferenceLoader` instance against the merged view so its `entity_type` references resolve. Failure at either step aborts plugin registration with a single error path (`plugin X failed to register: <reason>`); partial state — fragment merged but instance rejected, or instance accepted before its fragment loads — is impossible. End users never see fragment-or-instance validation errors at runtime; those are caught by the plugin developer at registration. This locks the contract for sec9 §9.5 and for the `reference-loader-shape` OpenSpec change.
+- **Revert:** Switch to (B) lazy-merge; would let invalid plugins register and fail mid-flight on first loader invocation. Higher operational cost (errors surface in user code paths instead of at registration); not recommended.
+
 ---
 
 ## 9.6 Provenance as a LinkML Class
