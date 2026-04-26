@@ -211,6 +211,24 @@ Review this file before sec9 is considered approved. If any decision is unwelcom
 - **Why (tracking, not fixing now):** Both fallbacks are additive-compatible — removing them later won't require a data migration (new rows would just get richer values). Fixing them in this commit would expand the blast radius beyond "rewrite the provenance layer" into "propagate a schema registry through construction" and "plumb per-request actor context" — both multi-day undertakings on their own.
 - **Revert / fix-forward:** Not applicable (these are known gaps to close, not decisions to revert).
 
+### Decision 9.6.G — Actor context propagated via ContextVar, not method signatures [NEW 2026-04-26]
+
+- **Finding (Decision 9.6.F follow-up):** Several `ProvenanceStore.record()` call sites in `ingestion_service.py` and the storage adapters pass `actor_id=None`, producing `actor_id = "unknown"` rows. Fixing these by threading an `actor_id` parameter through every write-method signature (`put`, `create`, `update`, `replace`, `delete`) would add 5+ parameter pairs and expand the blast radius significantly. A request-scoped ContextVar is the standard Python pattern for this problem.
+- **Alternatives considered:**
+  - (A) Explicit `actor_id` on every public SDK method — predictable but loud; adds 10+ signature changes across `HippoClient`, `IngestionService`, and adapter `create`/`delete`.
+  - (B) Client-level default actor set at `HippoClient.__init__` — works for single-actor SDK use but fails for per-request multi-actor scenarios (FastAPI with multiple concurrent users).
+  - (C) `ContextVar` in `hippo.core.context` — per-request isolation is automatic; no signature pollution; plays well with async.
+- **Chosen:** (C). `hippo.core.context.current_actor` is a `ContextVar[Optional[str]]` with a `with_actor(actor_id)` context manager for direct SDK use.
+- **Resolution order in `ProvenanceStore.record()`:**
+  1. Explicit `actor_id=` kwarg (highest priority — existing call sites with real actors)
+  2. Legacy `user_context=` shim (Decision 9.6.B)
+  3. `current_actor.get()` from the ContextVar (set by middleware or `with_actor()`)
+  4. `"unknown"` sentinel (last resort — satisfies NOT NULL; flags unmigrated paths)
+- **FastAPI integration:** `PassThroughAuthMiddleware.__call__` calls `current_actor.set(actor_id)` at request entry and resets via token in a `try/finally` block, so each async request carries its own isolated actor value.
+- **Scope note:** `track_creation`, `track_update`, `track_deletion` in `sqlite_adapter.py` produce in-memory records only (no DB writes) with `actor_id=""`. These are not part of the 9.6.F sentinel problem and are unchanged.
+- **Why:** ContextVar is the idiomatic Python pattern for request-scoped state in both sync and async contexts. It avoids signature pollution, works naturally with FastAPI's async request lifecycle, and is compatible with threadpool (`concurrent.futures`) use via `copy_context()`. The sentinel remains as a safety net — its presence in the audit log signals that a call site still needs migration, without breaking the NOT NULL constraint.
+- **Revert:** Remove `hippo.core.context`; revert the three-line change in each adapter's `record()` and the middleware change. Low blast radius — all changes are additive.
+
 ### Decision 9.6.E — Legacy `user_context` strings are not back-populated to `actor_id` UUIDs [NEW 2026-04-18]
 
 - **Finding (from the provenance-migration proposal's open question):** Legacy rows have `user_context` as a free-form string (often a username or `"sqlite_adapter"`). After rename to `actor_id`, these strings won't resolve through the UUID identity model (sec9 §9.5).

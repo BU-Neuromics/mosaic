@@ -104,7 +104,12 @@ class PostgresProvenanceStore:
             raise ValueError("operation (or legacy operation_type) is required")
         op_value = _pg_normalize_operation(op_source)
 
+        # actor_id resolution order (Decision 9.6.G): explicit kwarg → legacy
+        # user_context shim → ContextVar (middleware / with_actor()) → sentinel.
         effective_actor = actor_id if actor_id is not None else user_context
+        if effective_actor is None:
+            from hippo.core.context import get_current_actor
+            effective_actor = get_current_actor()
         if effective_actor is None:
             effective_actor = "unknown"
         effective_patch = patch if patch is not None else payload

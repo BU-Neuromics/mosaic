@@ -147,11 +147,15 @@ class ProvenanceStore:
             raise ValueError("operation (or legacy operation_type) is required")
         op_value = _normalize_operation(op_source)
 
-        # actor_id is required in sec9 §9.5's identity model. During the
-        # transition, callers that haven't been migrated pass None via the
-        # legacy user_context kwarg; default to a sentinel so the NOT NULL
-        # DDL constraint holds. Real deployments pass an agent UUID.
+        # actor_id resolution order (Decision 9.6.G):
+        # 1. explicit kwarg passed by the caller
+        # 2. legacy user_context shim (Decision 9.6.B)
+        # 3. ContextVar set by middleware / with_actor() (sec9 §9.6.G)
+        # 4. "unknown" sentinel — satisfies NOT NULL; signals unmigrated path
         effective_actor = actor_id if actor_id is not None else user_context
+        if effective_actor is None:
+            from hippo.core.context import get_current_actor
+            effective_actor = get_current_actor()
         if effective_actor is None:
             effective_actor = "unknown"
         effective_patch = patch if patch is not None else payload

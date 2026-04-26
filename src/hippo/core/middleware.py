@@ -7,6 +7,8 @@ from typing import Callable, Optional
 from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 
+from hippo.core.context import current_actor
+
 
 ACTOR_HEADER = "x-hippo-actor"
 ACTOR_PREFIX = "actor:"
@@ -87,7 +89,14 @@ class PassThroughAuthMiddleware:
 
         request.state.hippo_context = context
 
-        await self.app(scope, receive, send)
+        # Propagate actor into the ContextVar so provenance writes in
+        # downstream SDK calls pick it up without explicit threading.
+        # Use context.actor_id so we're always referencing the resolved value.
+        token = current_actor.set(context.actor_id if context.actor_id else None)
+        try:
+            await self.app(scope, receive, send)
+        finally:
+            current_actor.reset(token)
 
 
 def create_auth_middleware() -> type[PassThroughAuthMiddleware]:
