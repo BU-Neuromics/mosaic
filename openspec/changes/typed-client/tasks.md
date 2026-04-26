@@ -58,7 +58,7 @@ All four cases raise ``TypedClientError`` at ``HippoClient.__init__`` with a
 
 ## 9. Documentation
 
-- [ ] 9.1 Reference doc for typed-client access patterns — **deferred**. sec9 §9.8 + test file documents the contract; dedicated `reference_typed_client.md` lands when deployments start consuming.
+- [x] 9.1 Reference doc for typed-client access patterns. `docs/reference_typed_client.md` covers accessor API, Pydantic model access, namespace-aware patterns, and error handling.
 - [x] 9.2 Decision 9.8.H logged.
 
 ## 10. Acceptance
