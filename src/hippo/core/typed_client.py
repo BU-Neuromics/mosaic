@@ -18,6 +18,9 @@ import re
 import textwrap
 from typing import Any, Iterable, Optional
 
+from hippo.core.exceptions import ValidationFailed
+from hippo.core.validation.validators import WriteOperation
+
 logger = logging.getLogger(__name__)
 
 from hippo.linkml_bridge import (
@@ -159,11 +162,54 @@ class EntityAccessor:
             f"Expected dict or Pydantic model, got {type(value).__name__}"
         )
 
+    def _validate_or_raise(
+        self,
+        data: dict[str, Any],
+        operation: str,
+        entity_id: Optional[str] = None,
+    ) -> None:
+        """Run client validation; raise ValidationFailed on any failure.
+
+        Empty data is rejected uniformly so the typed surface never forwards
+        null/empty payloads to storage. The underlying client's own
+        validation is then skipped (bypass_validation=True) to avoid
+        double-running the same validators.
+        """
+        if not data:
+            raise ValidationFailed(
+                message="Entity data cannot be null or empty",
+                entity_type=self._class_name,
+                entity_id=entity_id,
+            )
+
+        validate = getattr(self._client, "validate", None)
+        if not callable(validate):
+            return
+
+        op = WriteOperation(
+            operation=operation,
+            entity_type=self._class_name,
+            data=data,
+        )
+        result = validate(op)
+        if not result.is_valid:
+            raise ValidationFailed(
+                message="; ".join(result.errors),
+                result=result,
+                entity_type=self._class_name,
+                entity_id=entity_id,
+            )
+
     def create(self, data: Any) -> dict[str, Any]:
-        return self._client.put(self._class_name, self._to_dict(data))
+        d = self._to_dict(data)
+        self._validate_or_raise(d, "insert")
+        return self._client.put(self._class_name, d, bypass_validation=True)
 
     def put(self, data: Any, entity_id: Optional[str] = None) -> dict[str, Any]:
-        return self._client.put(self._class_name, self._to_dict(data), entity_id)
+        d = self._to_dict(data)
+        op = "update" if entity_id is not None else "insert"
+        self._validate_or_raise(d, op, entity_id=entity_id)
+        return self._client.put(self._class_name, d, entity_id, bypass_validation=True)
 
     def get(self, entity_id: str, expand: Optional[str] = None) -> dict[str, Any]:
         return self._client.get(self._class_name, entity_id, expand=expand)
@@ -172,8 +218,10 @@ class EntityAccessor:
         return self._client.query(self._class_name, **kwargs)
 
     def replace(self, entity_id: str, data: Any) -> dict[str, Any]:
+        d = self._to_dict(data)
+        self._validate_or_raise(d, "update", entity_id=entity_id)
         return self._client.replace(
-            self._class_name, entity_id, self._to_dict(data)
+            self._class_name, entity_id, d, bypass_validation=True
         )
 
     def delete(self, entity_id: str) -> bool:

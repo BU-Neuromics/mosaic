@@ -8,6 +8,7 @@ import tempfile
 import pytest
 
 from hippo.core.client import HippoClient
+from hippo.core.exceptions import ValidationFailed
 from hippo.core.storage.adapters.sqlite_adapter import SQLiteAdapter
 from hippo.core.typed_client import (
     EntityAccessor,
@@ -17,6 +18,7 @@ from hippo.core.typed_client import (
     build_typed_surface,
     default_accessor,
 )
+from hippo.core.validation.validators import ValidationResult, WriteOperation, WriteValidator
 from hippo.linkml_bridge import SchemaRegistry
 
 
@@ -469,3 +471,122 @@ class TestReservedNamesGuard:
             f"these. Add them to SDK_RESERVED_NAMES in "
             f"src/hippo/core/typed_client.py."
         )
+
+
+# ---------------------------------------------------------------------------
+# ValidationFailed raise-on-write (sec9 §9.9 / Decision 9.9.E, task 6.1)
+# ---------------------------------------------------------------------------
+
+
+class _AlwaysFailValidator(WriteValidator):
+    """Deterministic failing validator for typed-client tests."""
+
+    def validate(self, operation: WriteOperation) -> ValidationResult:
+        return ValidationResult(is_valid=False, errors=["always fails"])
+
+
+@pytest.fixture
+def validating_client_factory():
+    """HippoClient with validation enabled (bypass_validation=False)."""
+    created: list[SQLiteAdapter] = []
+
+    def _make(registry: SchemaRegistry) -> HippoClient:
+        tmpdir = tempfile.mkdtemp()
+        storage = SQLiteAdapter(os.path.join(tmpdir, "typed_val.db"))
+        created.append(storage)
+        return HippoClient(storage=storage, registry=registry)
+
+    yield _make
+
+    for s in created:
+        try:
+            s.close()
+        except Exception:
+            pass
+
+
+def _sample_reg() -> SchemaRegistry:
+    return _reg(
+        "  Sample:\n"
+        "    is_a: Entity\n"
+        "    attributes:\n"
+        "      name:\n"
+        "        range: string\n"
+    )
+
+
+class TestValidationFailedOnWrite:
+    """sec9 §9.9 task 6.1 — EntityAccessor write methods raise ValidationFailed."""
+
+    def test_create_raises_validation_failed(self, validating_client_factory):
+        client = validating_client_factory(_sample_reg())
+        client.add_validator(_AlwaysFailValidator())
+
+        with pytest.raises(ValidationFailed) as exc_info:
+            client.samples.create({"name": "x"})
+
+        exc = exc_info.value
+        assert exc.entity_type == "Sample"
+        assert exc.entity_id is None
+
+    def test_put_no_id_raises_validation_failed(self, validating_client_factory):
+        client = validating_client_factory(_sample_reg())
+        client.add_validator(_AlwaysFailValidator())
+
+        with pytest.raises(ValidationFailed) as exc_info:
+            client.samples.put({"name": "x"})
+
+        exc = exc_info.value
+        assert exc.entity_type == "Sample"
+        assert exc.entity_id is None
+
+    def test_put_with_id_raises_validation_failed(self, validating_client_factory):
+        client = validating_client_factory(_sample_reg())
+        client.add_validator(_AlwaysFailValidator())
+
+        with pytest.raises(ValidationFailed) as exc_info:
+            client.samples.put({"name": "x"}, entity_id="eid-1")
+
+        exc = exc_info.value
+        assert exc.entity_id == "eid-1"
+
+    def test_replace_raises_validation_failed(self, validating_client_factory):
+        client = validating_client_factory(_sample_reg())
+        client.add_validator(_AlwaysFailValidator())
+
+        with pytest.raises(ValidationFailed) as exc_info:
+            client.samples.replace("eid-1", {"name": "x"})
+
+        exc = exc_info.value
+        assert exc.entity_type == "Sample"
+        assert exc.entity_id == "eid-1"
+
+    def test_validation_failed_carries_result_envelope(self, validating_client_factory):
+        client = validating_client_factory(_sample_reg())
+        client.add_validator(_AlwaysFailValidator())
+
+        with pytest.raises(ValidationFailed) as exc_info:
+            client.samples.create({"name": "x"})
+
+        result = exc_info.value.result
+        assert result is not None
+        assert not result.is_valid
+        envelope = result.to_envelope()
+        assert not envelope["passed"]
+        assert len(envelope["failures"]) > 0
+        assert any("always fails" in f["message"] for f in envelope["failures"])
+
+    def test_empty_data_raises_validation_failed(self, validating_client_factory):
+        client = validating_client_factory(_sample_reg())
+
+        with pytest.raises(ValidationFailed) as exc_info:
+            client.samples.create({})
+
+        assert exc_info.value.entity_type == "Sample"
+
+    def test_valid_data_passes_through_when_no_validators(
+        self, validating_client_factory
+    ):
+        client = validating_client_factory(_sample_reg())
+        result = client.samples.create({"name": "good"})
+        assert result["id"] is not None
