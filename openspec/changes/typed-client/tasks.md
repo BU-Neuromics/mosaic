@@ -38,7 +38,7 @@ All four cases raise ``TypedClientError`` at ``HippoClient.__init__`` with a
 
 ## 6. ValidationFailed integration
 
-- [ ] 6.1 Typed-client write methods raise `ValidationFailed` carrying the envelope — **deferred**. Exception class is available; wiring it into `EntityAccessor.create`/`.put`/`.replace` requires the write-path integration currently handled by Ingestion/Query services. Follow-up.
+- [x] 6.1 Typed-client write methods raise `ValidationFailed` carrying the envelope. `EntityAccessor._validate_or_raise()` runs `client.validate()` before storage; empty data is also rejected uniformly. `bypass_validation=True` prevents double-validation in the underlying client. `ValidationFailure` (legacy) remains for direct `HippoClient` callers per Decision 9.9.E.
 
 ## 7. Infrastructure classes excluded
 
