@@ -79,8 +79,8 @@ class QueryService:
         # read time. One SQL round-trip via get_temporal. Missing or
         # inconsistent provenance is loud per sec9 §9.2 (Provenance
         # integrity is transactional and loud).
-        created_at = entity.created_at
-        updated_at = entity.updated_at
+        created_at: Optional[str] = None
+        updated_at: Optional[str] = None
         schema_version: Optional[str] = None
         created_by: Optional[str] = None
         updated_by: Optional[str] = None
@@ -114,7 +114,7 @@ class QueryService:
                     inconsistency="missing_create_record",
                 )
             created_at = temporal.created_at
-            updated_at = temporal.updated_at or updated_at
+            updated_at = temporal.updated_at
             schema_version = temporal.schema_version
             created_by = temporal.created_by
             updated_by = temporal.updated_by
@@ -220,16 +220,13 @@ class QueryService:
                 )
             if temporal is not None:
                 created_at = temporal.created_at
-                updated_at = temporal.updated_at or entity.updated_at
+                updated_at = temporal.updated_at
                 schema_version = temporal.schema_version
                 created_by = temporal.created_by
                 updated_by = temporal.updated_by
             else:
-                # hasattr(storage, 'get_temporal') was False — adapter
-                # predates sec9 §9.7 and can't compute. Fall back to
-                # stored columns. Non-relational adapter stub.
-                created_at = entity.created_at
-                updated_at = entity.updated_at
+                created_at = None
+                updated_at = None
                 schema_version = None
                 created_by = None
                 updated_by = None

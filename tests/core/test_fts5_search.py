@@ -54,8 +54,6 @@ class TestFTS5SearchIntegration:
             is_available=True,
             version=1,
             data={"title": "prefrontal cortex analysis"},
-            created_at="2024-01-01T00:00:00",
-            updated_at="2024-01-01T00:00:00",
         )
         adapter.create(entity)
 
@@ -85,8 +83,6 @@ class TestFTS5SearchIntegration:
             is_available=True,
             version=1,
             data={"content": "hello world test document"},
-            created_at="2024-01-01T00:00:00",
-            updated_at="2024-01-01T00:00:00",
         )
         adapter.create(entity)
 
@@ -118,8 +114,6 @@ class TestFTS5SearchIntegration:
             is_available=True,
             version=1,
             data={"notes": "Analysis Results"},
-            created_at="2024-01-01T00:00:00",
-            updated_at="2024-01-01T00:00:00",
         )
         adapter.create(entity)
 
@@ -144,8 +138,6 @@ class TestFTS5SearchIntegration:
             is_available=True,
             version=1,
             data={"content": "test test test test test"},
-            created_at="2024-01-01T00:00:00",
-            updated_at="2024-01-01T00:00:00",
         )
         entity2 = SQLiteEntity(
             id="test-b",
@@ -153,8 +145,6 @@ class TestFTS5SearchIntegration:
             is_available=True,
             version=1,
             data={"content": "test test"},
-            created_at="2024-01-01T00:00:00",
-            updated_at="2024-01-01T00:00:00",
         )
         adapter.create(entity1)
         adapter.create(entity2)
@@ -189,8 +179,6 @@ class TestFTS5SearchIntegration:
             is_available=True,
             version=1,
             data={"title": "test document"},
-            created_at="2024-01-01T00:00:00",
-            updated_at="2024-01-01T00:00:00",
         )
         adapter.create(entity)
 
@@ -217,8 +205,6 @@ class TestFTS5SearchIntegration:
             is_available=True,
             version=1,
             data={"title": "hello world"},
-            created_at="2024-01-01T00:00:00",
-            updated_at="2024-01-01T00:00:00",
         )
         adapter.create(entity)
 
@@ -247,8 +233,6 @@ class TestFTS5SearchCapabilityError:
             is_available=True,
             version=1,
             data={"description": "some text"},
-            created_at="2024-01-01T00:00:00",
-            updated_at="2024-01-01T00:00:00",
         )
         adapter.create(entity)
 
@@ -273,8 +257,6 @@ class TestFTS5SearchCapabilityError:
             is_available=True,
             version=1,
             data={"notes": "test"},
-            created_at="2024-01-01T00:00:00",
-            updated_at="2024-01-01T00:00:00",
         )
         adapter.create(entity)
 
@@ -302,8 +284,6 @@ class TestFTS5SearchMinScore:
             is_available=True,
             version=1,
             data={"content": "test test test test test"},
-            created_at="2024-01-01T00:00:00",
-            updated_at="2024-01-01T00:00:00",
         )
         entity2 = SQLiteEntity(
             id="test-low",
@@ -311,8 +291,6 @@ class TestFTS5SearchMinScore:
             is_available=True,
             version=1,
             data={"content": "test"},
-            created_at="2024-01-01T00:00:00",
-            updated_at="2024-01-01T00:00:00",
         )
         adapter.create(entity1)
         adapter.create(entity2)
@@ -347,8 +325,6 @@ class TestFTS5SearchMinScore:
             is_available=True,
             version=1,
             data={"title": "test document"},
-            created_at="2024-01-01T00:00:00",
-            updated_at="2024-01-01T00:00:00",
         )
         adapter.create(entity)
 
@@ -381,8 +357,6 @@ class TestFTS5SearchLimit:
                 is_available=True,
                 version=1,
                 data={"content": "test content"},
-                created_at="2024-01-01T00:00:00",
-                updated_at="2024-01-01T00:00:00",
             )
             adapter.create(entity)
             _sync_to_fts(
@@ -408,8 +382,6 @@ class TestFTS5SearchLimit:
             is_available=True,
             version=1,
             data={"title": "test"},
-            created_at="2024-01-01T00:00:00",
-            updated_at="2024-01-01T00:00:00",
         )
         adapter.create(entity)
 
@@ -437,8 +409,6 @@ class TestFTS5SearchLimit:
                 is_available=True,
                 version=1,
                 data={"content": "test"},
-                created_at="2024-01-01T00:00:00",
-                updated_at="2024-01-01T00:00:00",
             )
             adapter.create(entity)
             _sync_to_fts(adapter, "fts_document_content", f"doc-{i}", "test", "content")

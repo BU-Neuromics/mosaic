@@ -155,8 +155,6 @@ class BatchFetcher:
             "entity_type": entity.entity_type,
             "data": entity.data,
             "version": entity.version,
-            "created_at": entity.created_at,
-            "updated_at": entity.updated_at,
         }
 
     def _group_queries_by_entity(
@@ -247,8 +245,6 @@ class BatchFetcher:
                         "entity_type": entity.entity_type,
                         "data": entity.data,
                         "version": entity.version,
-                        "created_at": entity.created_at,
-                        "updated_at": entity.updated_at,
                     }
                 )
 
@@ -283,8 +279,6 @@ class BatchFetcher:
             "entity_type": entity.entity_type,
             "data": entity.data,
             "version": entity.version,
-            "created_at": entity.created_at,
-            "updated_at": entity.updated_at,
         }
 
 

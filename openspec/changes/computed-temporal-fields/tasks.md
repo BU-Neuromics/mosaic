@@ -28,7 +28,7 @@
 
 ## 5. Drop stored temporal columns
 
-- [ ] 5.1 The existing `entities` table still has `created_at` / `updated_at` columns; they're populated on write and used as fallback when `get_temporal` isn't available. **Deferred to a follow-up change** — dropping them will require migrating all callers (adapters, services, tests) to consume the computed fields exclusively.
+- [x] 5.1 The `entities` table `created_at` / `updated_at` columns are dropped. A forward migration (`ALTER TABLE entities DROP COLUMN`) runs in `_run_migrations` (SQLite, idempotent via PRAGMA table_info guard) and in `_init_database` (Postgres, `DROP COLUMN IF EXISTS`). All callers — adapters, ingestion service, provenance service, query service, batch fetcher, tests — migrated to the provenance-only path. PTS-69.
 - [ ] 5.2 Same for `created_by` / `updated_by` — not currently stored as columns; read path populates them from provenance directly.
 
 ## 6. Tests
@@ -52,5 +52,5 @@
 - [x] 8.1 Every entity read returns the five temporal fields.
 - [x] 8.2 Batch reads use one aggregation round-trip (verified by spy test).
 - [x] 8.3 Loud failure on inconsistency works (both `get` and `query` paths).
-- [ ] 8.4 Stored temporal columns gone — deferred to a follow-up. The columns remain in the schema; the SDK computes via `get_temporal` and treats the stored values as legacy fallback only.
+- [x] 8.4 Stored temporal columns gone — `created_at` and `updated_at` dropped from the `entities` table in both SQLite and Postgres adapters. The SDK computes exclusively via `get_temporal`. All 932 tests pass. PTS-69.
 - [x] 8.5 Full suite green (864 passed, 7 skipped).

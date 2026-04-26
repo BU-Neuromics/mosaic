@@ -144,27 +144,17 @@ class IngestionService:
     ) -> dict[str, Any]:
         """Internal put implementation for SQLite storage."""
         final_id = entity_id or str(uuid.uuid4())
-        now = datetime.now(timezone.utc).isoformat()
 
         existing = self._storage.read(final_id)
 
         if existing is not None:
             new_version = existing.version + 1
-            entity = SQLiteEntity(
-                id=final_id,
-                entity_type=entity_type,
-                is_available=True,
-                version=new_version,
-                data=data,
-                created_at=existing.created_at,
-                updated_at=now,
-            )
             with self._storage._transaction() as conn:
                 cursor = conn.cursor()
                 cursor.execute(
-                    """UPDATE entities SET data = ?, version = ?, updated_at = ?
+                    """UPDATE entities SET data = ?, version = ?
                        WHERE id = ? AND is_available = 1""",
-                    (json.dumps(data), new_version, now, final_id),
+                    (json.dumps(data), new_version, final_id),
                 )
 
                 provenance = self._storage._get_provenance_store(conn)
@@ -178,13 +168,15 @@ class IngestionService:
 
                 self._sync_entity_to_fts(final_id, entity_type, data, is_available=True)
 
+            temporal_map = self._storage.get_temporal([final_id])
+            temporal = temporal_map.get(final_id)
             return {
                 "id": final_id,
                 "entity_type": entity_type,
                 "data": data,
                 "version": new_version,
-                "created_at": existing.created_at,
-                "updated_at": now,
+                "created_at": temporal.created_at if temporal else None,
+                "updated_at": temporal.updated_at if temporal else None,
             }
         else:
             entity = SQLiteEntity(
@@ -193,20 +185,20 @@ class IngestionService:
                 is_available=True,
                 version=1,
                 data=data,
-                created_at=now,
-                updated_at=now,
             )
             self._storage.create(entity)
 
             self._sync_entity_to_fts(final_id, entity_type, data, is_available=True)
 
+            temporal_map = self._storage.get_temporal([final_id])
+            temporal = temporal_map.get(final_id)
             return {
                 "id": final_id,
                 "entity_type": entity_type,
                 "data": data,
                 "version": 1,
-                "created_at": now,
-                "updated_at": now,
+                "created_at": temporal.created_at if temporal else None,
+                "updated_at": temporal.updated_at if temporal else None,
             }
 
     def replace(
@@ -281,15 +273,14 @@ class IngestionService:
                 entity_id=entity_id,
             )
 
-        now = datetime.now(timezone.utc).isoformat()
         new_version = existing.version + 1
 
         with self._storage._transaction() as conn:
             cursor = conn.cursor()
             cursor.execute(
-                """UPDATE entities SET data = ?, version = ?, updated_at = ?
+                """UPDATE entities SET data = ?, version = ?
                    WHERE id = ? AND is_available = 1""",
-                (json.dumps(data), new_version, now, entity_id),
+                (json.dumps(data), new_version, entity_id),
             )
 
             provenance = self._storage._get_provenance_store(conn)
@@ -303,13 +294,15 @@ class IngestionService:
 
             self._sync_entity_to_fts(entity_id, entity_type, data, is_available=True)
 
+        temporal_map = self._storage.get_temporal([entity_id])
+        temporal = temporal_map.get(entity_id)
         return {
             "id": entity_id,
             "entity_type": entity_type,
             "data": data,
             "version": new_version,
-            "created_at": existing.created_at,
-            "updated_at": now,
+            "created_at": temporal.created_at if temporal else None,
+            "updated_at": temporal.updated_at if temporal else None,
         }
 
     def create(
@@ -400,14 +393,12 @@ class IngestionService:
                     failures.append({"id": eid, "error": f"Entity not found: {eid}"})
                     continue
 
-                now = datetime.now(timezone.utc).isoformat()
-
                 with self._storage._transaction() as conn:
                     cursor = conn.cursor()
                     cursor.execute(
-                        """UPDATE entities SET is_available = ?, updated_at = ?
+                        """UPDATE entities SET is_available = ?
                            WHERE id = ?""",
-                        (1 if is_available else 0, now, eid),
+                        (1 if is_available else 0, eid),
                     )
 
                     provenance = self._storage._get_provenance_store(conn)

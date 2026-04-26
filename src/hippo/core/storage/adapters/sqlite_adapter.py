@@ -51,8 +51,6 @@ class SQLiteEntity:
         is_available: bool,
         version: int,
         data: dict[str, Any],
-        created_at: str,
-        updated_at: Optional[str],
         superseded_by: Optional[str] = None,
     ):
         self.id = id
@@ -60,8 +58,6 @@ class SQLiteEntity:
         self.is_available = is_available
         self.version = version
         self.data = data
-        self.created_at = created_at
-        self.updated_at = updated_at
         self.superseded_by = superseded_by
 
 
@@ -976,9 +972,7 @@ class SQLiteAdapter(EntityStore[SQLiteEntity]):
                     entity_type TEXT NOT NULL,
                     is_available INTEGER NOT NULL DEFAULT 1,
                     version INTEGER NOT NULL DEFAULT 1,
-                    data TEXT NOT NULL,
-                    created_at TEXT,
-                    updated_at TEXT
+                    data TEXT NOT NULL
                 )
             """)
 
@@ -1149,6 +1143,15 @@ class SQLiteAdapter(EntityStore[SQLiteEntity]):
         if "superseded_by" not in entity_columns:
             cursor.execute("ALTER TABLE entities ADD COLUMN superseded_by TEXT")
 
+        # Phase E: drop legacy stored temporal columns (PTS-69).
+        # Temporal fields are now computed exclusively from ProvenanceRecord
+        # via entity_provenance_summary / get_temporal(). SQLite 3.35+ supports
+        # ALTER TABLE … DROP COLUMN. Guarded by PRAGMA table_info so the
+        # migration is idempotent.
+        for col in ("created_at", "updated_at"):
+            if col in entity_columns:
+                cursor.execute(f"ALTER TABLE entities DROP COLUMN {col}")
+
     def _get_provenance_store(self, conn: sqlite3.Connection) -> ProvenanceStore:
         """Get or create a ProvenanceStore for the given connection."""
         if self._provenance_store is None or self._provenance_store._conn is not conn:
@@ -1312,21 +1315,16 @@ class SQLiteAdapter(EntityStore[SQLiteEntity]):
 
         with self._transaction() as conn:
             cursor = conn.cursor()
-            now = datetime.now(timezone.utc).isoformat()
-            created_at = getattr(entity, "created_at", None) or now
-            updated_at = getattr(entity, "updated_at", None) or now
 
             cursor.execute(
-                """INSERT INTO entities (id, entity_type, is_available, version, data, created_at, updated_at)
-                   VALUES (?, ?, ?, ?, ?, ?, ?)""",
+                """INSERT INTO entities (id, entity_type, is_available, version, data)
+                   VALUES (?, ?, ?, ?, ?)""",
                 (
                     entity_id,
                     entity_type,
                     1,
                     entity.version if hasattr(entity, "version") else 1,
                     json.dumps(entity_data),
-                    created_at,
-                    updated_at,
                 ),
             )
 
@@ -1346,7 +1344,7 @@ class SQLiteAdapter(EntityStore[SQLiteEntity]):
         with self._transaction() as conn:
             cursor = conn.cursor()
             cursor.execute(
-                """SELECT id, entity_type, is_available, version, data, created_at, updated_at, superseded_by
+                """SELECT id, entity_type, is_available, version, data, superseded_by
                    FROM entities WHERE id = ? AND is_available = 1""",
                 (entity_id,),
             )
@@ -1398,7 +1396,7 @@ class SQLiteAdapter(EntityStore[SQLiteEntity]):
         with self._transaction() as conn:
             cursor = conn.cursor()
             cursor.execute(
-                """SELECT id, entity_type, is_available, version, data, created_at, updated_at, superseded_by
+                """SELECT id, entity_type, is_available, version, data, superseded_by
                    FROM entities WHERE id = ?""",
                 (entity_id,),
             )
@@ -1409,24 +1407,13 @@ class SQLiteAdapter(EntityStore[SQLiteEntity]):
             return self._row_to_entity(row)
 
     def update(self, entity: SQLiteEntity) -> SQLiteEntity:
-        """Update an existing entity."""
-        from datetime import datetime, timezone
-
-        with self._transaction() as conn:
-            cursor = conn.cursor()
-            now = datetime.now(timezone.utc).isoformat()
-            cursor.execute(
-                """UPDATE entities SET updated_at = ? WHERE id = ? AND is_available = 1""",
-                (now, entity.id),
-            )
-
+        """Update an existing entity (no-op on entities table; temporal tracking is via ProvenanceRecord)."""
         return entity
 
     def delete(self, entity_id: str, user_context: Optional[str] = None) -> bool:
         """Delete an entity by its ID (soft delete)."""
         with self._transaction() as conn:
             cursor = conn.cursor()
-            now = datetime.now(timezone.utc).isoformat()
 
             cursor.execute(
                 "SELECT id, entity_type, data FROM entities WHERE id = ? AND is_available = 1",
@@ -1440,9 +1427,9 @@ class SQLiteAdapter(EntityStore[SQLiteEntity]):
             original_data = json.loads(row["data"]) if row["data"] else {}
 
             cursor.execute(
-                """UPDATE entities SET is_available = 0, updated_at = ?
+                """UPDATE entities SET is_available = 0
                    WHERE id = ? AND is_available = 1""",
-                (now, entity_id),
+                (entity_id,),
             )
 
             provenance = self._get_provenance_store(conn)
@@ -1461,7 +1448,7 @@ class SQLiteAdapter(EntityStore[SQLiteEntity]):
         with self._transaction() as conn:
             cursor = conn.cursor()
 
-            sql = "SELECT id, entity_type, is_available, version, data, created_at, updated_at, superseded_by FROM entities WHERE is_available = 1"
+            sql = "SELECT id, entity_type, is_available, version, data, superseded_by FROM entities WHERE is_available = 1"
             params = []
 
             if query.entity_type:
@@ -1522,8 +1509,6 @@ class SQLiteAdapter(EntityStore[SQLiteEntity]):
             is_available=bool(row["is_available"]),
             version=row["version"],
             data=json.loads(row["data"]) if row["data"] else {},
-            created_at=row["created_at"],
-            updated_at=row["updated_at"],
             superseded_by=superseded_by,
         )
 

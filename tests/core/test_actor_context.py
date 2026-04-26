@@ -65,8 +65,6 @@ class TestProvenanceStorePicksUpContextVar:
             is_available=True,
             version=1,
             data={"name": "ctx-sample"},
-            created_at=now,
-            updated_at=now,
         )
 
         with with_actor("real-agent-uuid-abc123"):
@@ -88,8 +86,6 @@ class TestProvenanceStorePicksUpContextVar:
             is_available=True,
             version=1,
             data={"name": "no-ctx-sample"},
-            created_at=now,
-            updated_at=now,
         )
         adapter.create(entity)
 
@@ -107,9 +103,9 @@ class TestProvenanceStorePicksUpContextVar:
 
             cursor = conn.cursor()
             cursor.execute(
-                """INSERT INTO entities (id, entity_type, is_available, version, data, created_at, updated_at)
-                   VALUES (?, ?, ?, ?, ?, ?, ?)""",
-                ("ctx-entity-3", "Sample", 1, 1, '{"name": "explicit"}', "2026-01-01T00:00:00", "2026-01-01T00:00:00"),
+                """INSERT INTO entities (id, entity_type, is_available, version, data)
+                   VALUES (?, ?, ?, ?, ?)""",
+                ("ctx-entity-3", "Sample", 1, 1, '{"name": "explicit"}'),
             )
             provenance = adapter._get_provenance_store(conn)
             with with_actor("context-actor"):

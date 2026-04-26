@@ -158,9 +158,9 @@ class ProvenanceService:
             cursor = conn.cursor()
 
             cursor.execute(
-                """UPDATE entities SET is_available = 0, superseded_by = ?, updated_at = ?
+                """UPDATE entities SET is_available = 0, superseded_by = ?
                    WHERE id = ?""",
-                (replacement_id, now, entity_id),
+                (replacement_id, entity_id),
             )
 
             prov_store = self._storage._get_provenance_store(conn)
@@ -230,7 +230,7 @@ class ProvenanceService:
         if include_archived:
             cursor = self._storage._get_connection().cursor()
             cursor.execute(
-                "SELECT id, entity_type, is_available, version, data, created_at, updated_at, superseded_by FROM entities WHERE id = ?",
+                "SELECT id, entity_type, is_available, version, data, superseded_by FROM entities WHERE id = ?",
                 (record.entity_id,),
             )
             row = cursor.fetchone()
@@ -255,8 +255,6 @@ class ProvenanceService:
                     "is_available": bool(row["is_available"]),
                     "version": row["version"],
                     "data": entity_data,
-                    "created_at": row["created_at"],
-                    "updated_at": row["updated_at"],
                     "superseded_by": superseded_by_val,
                 },
             )()
@@ -269,13 +267,15 @@ class ProvenanceService:
                     entity_id=record.entity_id,
                 )
 
+        temporal_map = self._storage.get_temporal([entity.id])
+        temporal = temporal_map.get(entity.id)
         return {
             "id": entity.id,
             "entity_type": entity.entity_type,
             "data": entity.data,
             "version": entity.version,
-            "created_at": entity.created_at,
-            "updated_at": entity.updated_at,
+            "created_at": temporal.created_at if temporal else None,
+            "updated_at": temporal.updated_at if temporal else None,
             "external_id": record.external_id,
             "external_id_created_at": record.created_at,
         }

@@ -143,8 +143,6 @@ class TestComputedTemporalFields:
             is_available=True,
             version=1,
             data={"name": "actor-test"},
-            created_at="",
-            updated_at="",
         )
         storage.create(entity, user_context="alice@example.com")
 
@@ -171,9 +169,7 @@ class TestProvenanceIntegrity:
         storage = client._storage
         with storage._transaction() as conn:
             conn.execute(
-                "INSERT INTO entities (id, entity_type, is_available, version, "
-                "data, created_at, updated_at) VALUES "
-                "(?, 'Sample', 1, 1, '{}', '2026-04-21', '2026-04-21')",
+                "INSERT INTO entities (id, entity_type, is_available, version, data) VALUES (?, 'Sample', 1, 1, '{}')",
                 ("orphan-entity-1",),
             )
 
@@ -195,9 +191,7 @@ class TestProvenanceIntegrity:
         storage = client._storage
         with storage._transaction() as conn:
             conn.execute(
-                "INSERT INTO entities (id, entity_type, is_available, version, "
-                "data, created_at, updated_at) VALUES "
-                "(?, 'Sample', 1, 1, '{}', '2026-04-21', '2026-04-21')",
+                "INSERT INTO entities (id, entity_type, is_available, version, data) VALUES (?, 'Sample', 1, 1, '{}')",
                 ("orphan-in-query",),
             )
 
@@ -219,9 +213,7 @@ class TestProvenanceIntegrity:
         storage = client._storage
         with storage._transaction() as conn:
             conn.execute(
-                "INSERT INTO entities (id, entity_type, is_available, version, "
-                "data, created_at, updated_at) VALUES "
-                "(?, 'Sample', 1, 1, '{}', '2026-04-21', '2026-04-21')",
+                "INSERT INTO entities (id, entity_type, is_available, version, data) VALUES (?, 'Sample', 1, 1, '{}')",
                 ("no-create-1",),
             )
             conn.execute(

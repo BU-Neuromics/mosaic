@@ -48,8 +48,6 @@ class PostgresEntity:
         is_available: bool,
         version: int,
         data: dict[str, Any],
-        created_at: str,
-        updated_at: Optional[str],
         superseded_by: Optional[str] = None,
     ):
         self.id = id
@@ -57,8 +55,6 @@ class PostgresEntity:
         self.is_available = is_available
         self.version = version
         self.data = data
-        self.created_at = created_at
-        self.updated_at = updated_at
         self.superseded_by = superseded_by
 
 
@@ -959,8 +955,6 @@ class PostgresAdapter(EntityStore[PostgresEntity]):
                     is_available BOOLEAN NOT NULL DEFAULT TRUE,
                     version INTEGER NOT NULL DEFAULT 1,
                     data JSONB NOT NULL,
-                    created_at TEXT,
-                    updated_at TEXT,
                     superseded_by TEXT
                 )
             """)
@@ -1107,6 +1101,14 @@ class PostgresAdapter(EntityStore[PostgresEntity]):
                 GROUP BY p1.entity_id, p1.entity_type
             """)
 
+            # Phase E: drop legacy stored temporal columns (PTS-69).
+            # Temporal fields are computed exclusively from ProvenanceRecord.
+            # Postgres supports DROP COLUMN IF EXISTS directly.
+            for col in ("created_at", "updated_at"):
+                cur.execute(
+                    f"ALTER TABLE entities DROP COLUMN IF EXISTS {col}"
+                )
+
     # ------------------------------------------------------------------
     # EntityStore protocol implementation
     # ------------------------------------------------------------------
@@ -1136,26 +1138,20 @@ class PostgresAdapter(EntityStore[PostgresEntity]):
 
         with self._transaction() as conn:
             cur = conn.cursor()
-            now = datetime.now(timezone.utc).isoformat()
-            created_at = getattr(entity, "created_at", None) or now
-            updated_at = getattr(entity, "updated_at", None) or now
 
             # Atomic upsert per design spec §2.3
             cur.execute(
                 """INSERT INTO entities
-                   (id, entity_type, is_available, version, data, created_at, updated_at)
-                   VALUES (%s, %s, TRUE, %s, %s, %s, %s)
+                   (id, entity_type, is_available, version, data)
+                   VALUES (%s, %s, TRUE, %s, %s)
                    ON CONFLICT (id) DO UPDATE SET
                        data = EXCLUDED.data,
-                       updated_at = EXCLUDED.updated_at,
                        version = entities.version + 1""",
                 (
                     entity_id,
                     entity_type,
                     entity.version if hasattr(entity, "version") else 1,
                     json.dumps(entity_data),
-                    created_at,
-                    updated_at,
                 ),
             )
 
@@ -1176,7 +1172,7 @@ class PostgresAdapter(EntityStore[PostgresEntity]):
             cur = conn.cursor()
             cur.execute(
                 """SELECT id, entity_type, is_available, version, data,
-                          created_at, updated_at, superseded_by
+                          superseded_by
                    FROM entities WHERE id = %s AND is_available = TRUE""",
                 (entity_id,),
             )
@@ -1192,7 +1188,7 @@ class PostgresAdapter(EntityStore[PostgresEntity]):
             cur = conn.cursor()
             cur.execute(
                 """SELECT id, entity_type, is_available, version, data,
-                          created_at, updated_at, superseded_by
+                          superseded_by
                    FROM entities WHERE id = %s""",
                 (entity_id,),
             )
@@ -1234,23 +1230,13 @@ class PostgresAdapter(EntityStore[PostgresEntity]):
             return {row["id"]: row["entity_type"] for row in cur.fetchall()}
 
     def update(self, entity: PostgresEntity) -> PostgresEntity:
-        """Update an existing entity."""
-        with self._transaction() as conn:
-            cur = conn.cursor()
-            now = datetime.now(timezone.utc).isoformat()
-            cur.execute(
-                """UPDATE entities SET updated_at = %s
-                   WHERE id = %s AND is_available = TRUE""",
-                (now, entity.id),
-            )
-
+        """Update an existing entity (no-op on entities table; temporal tracking is via ProvenanceRecord)."""
         return entity
 
     def delete(self, entity_id: str, user_context: Optional[str] = None) -> bool:
         """Delete an entity by its ID (soft delete)."""
         with self._transaction() as conn:
             cur = conn.cursor()
-            now = datetime.now(timezone.utc).isoformat()
 
             cur.execute(
                 "SELECT id, entity_type, data FROM entities WHERE id = %s AND is_available = TRUE",
@@ -1264,9 +1250,9 @@ class PostgresAdapter(EntityStore[PostgresEntity]):
             original_data = row["data"] if isinstance(row["data"], dict) else json.loads(row["data"])
 
             cur.execute(
-                """UPDATE entities SET is_available = FALSE, updated_at = %s
+                """UPDATE entities SET is_available = FALSE
                    WHERE id = %s AND is_available = TRUE""",
-                (now, entity_id),
+                (entity_id,),
             )
 
             provenance = PostgresProvenanceStore(conn, self._schema_version)
@@ -1286,7 +1272,7 @@ class PostgresAdapter(EntityStore[PostgresEntity]):
             cur = conn.cursor()
 
             sql = """SELECT id, entity_type, is_available, version, data,
-                            created_at, updated_at, superseded_by
+                            superseded_by
                      FROM entities WHERE is_available = TRUE"""
             params: list[Any] = []
 
@@ -1557,8 +1543,6 @@ class PostgresAdapter(EntityStore[PostgresEntity]):
             is_available=bool(row["is_available"]),
             version=row["version"],
             data=data if data else {},
-            created_at=row["created_at"],
-            updated_at=row["updated_at"],
             superseded_by=row.get("superseded_by"),
         )
 

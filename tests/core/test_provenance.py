@@ -286,8 +286,6 @@ class TestHistoryMethods:
             is_available=True,
             version=1,
             data={"name": "Version 1"},
-            created_at=now,
-            updated_at=now,
         )
         adapter.create(entity)
 
@@ -297,15 +295,13 @@ class TestHistoryMethods:
             is_available=True,
             version=2,
             data={"name": "Version 2"},
-            created_at=now,
-            updated_at=now,
         )
         with adapter._transaction() as conn:
             cursor = conn.cursor()
             cursor.execute(
-                """UPDATE entities SET data = ?, version = ?, updated_at = ?
+                """UPDATE entities SET data = ?, version = ?
                    WHERE id = ? AND is_available = 1""",
-                ('{"name": "Version 2"}', 2, now, "history-test-1"),
+                ('{"name": "Version 2"}', 2, "history-test-1"),
             )
             provenance = adapter._get_provenance_store(conn)
             provenance.record(
@@ -347,8 +343,6 @@ class TestHistoryMethods:
             is_available=True,
             version=1,
             data={"name": "Initial"},
-            created_at=time1,
-            updated_at=time1,
         )
         adapter.create(entity)
 
@@ -360,9 +354,9 @@ class TestHistoryMethods:
         with adapter._transaction() as conn:
             cursor = conn.cursor()
             cursor.execute(
-                """UPDATE entities SET data = ?, version = ?, updated_at = ?
+                """UPDATE entities SET data = ?, version = ?
                    WHERE id = ? AND is_available = 1""",
-                ('{"name": "Updated"}', 2, time2, "state-test-1"),
+                ('{"name": "Updated"}', 2, "state-test-1"),
             )
             provenance = adapter._get_provenance_store(conn)
             provenance.record(
@@ -403,8 +397,6 @@ class TestHistoryMethods:
             is_available=True,
             version=1,
             data={"name": "Test"},
-            created_at=time1,
-            updated_at=time1,
         )
         adapter.create(entity)
 
@@ -433,8 +425,6 @@ class TestHistoryMethods:
             is_available=True,
             version=1,
             data={"name": "To Delete"},
-            created_at=time1,
-            updated_at=time1,
         )
         adapter.create(entity)
 

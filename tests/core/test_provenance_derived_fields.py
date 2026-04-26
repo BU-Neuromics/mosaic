@@ -83,47 +83,38 @@ class TestProvenanceDerivedFields:
             assert prov_ts is not None
             assert item["created_at"] == prov_ts["created_at"]
 
-    def test_entity_table_cache_updated_on_create(self, client: HippoClient) -> None:
-        """Entity table created_at and updated_at are set on creation (cache in sync)."""
+    def test_entity_table_has_no_stored_temporal_columns(self, client: HippoClient) -> None:
+        """Phase E: entities table must not have created_at/updated_at columns (PTS-69)."""
         client.put("Sample", {"id": "cache-test", "name": "test"})
 
-        # Check the entity table columns directly.
         storage = client._storage
         with storage._transaction() as conn:
             cursor = conn.cursor()
-            cursor.execute(
-                "SELECT created_at, updated_at FROM entities WHERE id = ?",
-                ("cache-test",),
-            )
-            row = cursor.fetchone()
+            cursor.execute("PRAGMA table_info(entities)")
+            col_names = {row[1] for row in cursor.fetchall()}
 
-        assert row is not None
-        assert row["created_at"] is not None
-        assert row["updated_at"] is not None
+        assert "created_at" not in col_names
+        assert "updated_at" not in col_names
 
-    def test_entity_table_cache_updated_on_update(self, client: HippoClient) -> None:
-        """Entity table updated_at is updated on each write operation."""
+    def test_temporal_fields_advance_via_provenance_on_update(self, client: HippoClient) -> None:
+        """After an update, updated_at advances in the provenance view (not stored column)."""
         client.put("Sample", {"id": "cache-update", "name": "v1"})
         storage = client._storage
 
         with storage._transaction() as conn:
-            cursor = conn.cursor()
-            cursor.execute(
-                "SELECT updated_at FROM entities WHERE id = ?", ("cache-update",)
-            )
-            first_updated_at = cursor.fetchone()["updated_at"]
+            prov_store = storage._get_provenance_store(conn)
+            first_ts = prov_store.get_provenance_timestamps("cache-update")
 
         time.sleep(0.01)
         client.put("Sample", {"name": "v2"}, "cache-update")
 
         with storage._transaction() as conn:
-            cursor = conn.cursor()
-            cursor.execute(
-                "SELECT updated_at FROM entities WHERE id = ?", ("cache-update",)
-            )
-            second_updated_at = cursor.fetchone()["updated_at"]
+            prov_store = storage._get_provenance_store(conn)
+            second_ts = prov_store.get_provenance_timestamps("cache-update")
 
-        assert second_updated_at >= first_updated_at
+        assert first_ts is not None
+        assert second_ts is not None
+        assert second_ts["updated_at"] >= first_ts["updated_at"]
 
 
 class TestPaginatedResult:
