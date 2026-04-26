@@ -1,8 +1,13 @@
 ## 6. Provenance & Audit
 
-**Document status:** Draft v0.1
+**Document status:** Draft v0.1 (light-touch revision post-provenance-migration, 2026-04-26)
 **Depends on:** sec3_data_model.md
 **Feeds into:** sec4_api_layer.md, sec5_ingestion.md
+
+> **⚠ Authoritative reference:** sec9 §9.6 is authoritative for the post-migration provenance schema,
+> `Operation` enum values, actor-resolution order, and enforcement mechanism. Where this section
+> conflicts with sec9 §9.6 or the decisions in `sec9_decisions.md` (9.6.B–9.6.G), sec9 takes
+> precedence. A broader revision of sec6 is deferred (task 7.3 of `provenance-migration`).
 
 ---
 
@@ -29,28 +34,39 @@ Every provenance event shares a common structure:
 | Field | Type | Description |
 |---|---|---|
 | `id` | UUID | Unique event identifier |
-| `event_type` | string | One of the event types in §6.3 |
+| `operation` | `Operation` enum | The operation that produced this record (see §6.3) |
 | `entity_id` | UUID | The entity this event pertains to |
 | `entity_type` | string | The entity type name |
-| `actor` | string | Identity of the caller who triggered the change |
+| `actor_id` | string | Identity of the actor who triggered the change (see Actor below) |
 | `timestamp` | datetime (UTC) | When the event was recorded |
 | `schema_version` | string | The schema config version at the time of the event |
 | `context` | JSON | Structured context from the caller (see §6.5) |
-| `payload` | JSON | Event-type-specific data (see §6.3) |
+| `patch` | JSON | Operation-specific delta data (replaces pre-migration `payload`) |
+| `derived_from_id` | UUID | Links to the source record (e.g. superseded entity's provenance) |
+| `process_id` | UUID | FK to `Process` — associates the record with a workflow run |
 
-**Immutability:** Provenance records are written once and never modified. The storage adapter
-must enforce this at the database level (e.g., no `UPDATE` or `DELETE` on the provenance
-table).
+**Immutability:** Provenance records are written once and never modified. The `ProvenanceRecord`
+class carries the `hippo_append_only` LinkML annotation; the storage adapter enforces this via
+SQL triggers (see §6.6 and sec9 Decision 9.6.C).
 
-**Actor:** A free-form string identity supplied by the caller. The SDK never validates or
-interprets the `actor` value — it is passed through and stored verbatim. In v0.1, auth is
-out of scope; the REST transport sets `actor = "anonymous"` by default. In future auth-enabled
-deployments, the transport layer will resolve the authenticated user and pass their identity
-as `actor`.
+**Actor:** `actor_id` is resolved in priority order: (1) explicit `actor_id` kwarg to
+`ProvenanceStore.record()`; (2) legacy `user_context` shim (Decision 9.6.B); (3) the
+`current_actor` ContextVar set by middleware or `with_actor()` (Decision 9.6.G); (4) the
+sentinel string `"unknown"` when no actor context is available. The sentinel satisfies NOT NULL
+and flags unmigrated call sites in the audit log. Future work will migrate those sites to
+require a real actor identity (sec9 §9.5 identity model).
 
 ---
 
 ### 6.3 Event Types
+
+> **Post-migration note:** The `event_type` string taxonomy below predates the
+> `provenance-migration` change. The production `Operation` enum in `hippo_core` uses
+> lowercase values: `create`, `update`, `supersede`, `availability_change`,
+> `relationship_add`, `relationship_remove`, `external_id_add`, `external_id_remove`.
+> See sec9 §9.6 and Decision 9.6.B for the per-site mapping from legacy strings to
+> `Operation` values, and for how `patch` replaces the `previous_state`/`new_state`
+> payload structure. The subsections below are retained as design rationale only.
 
 #### EntityCreated
 
@@ -246,8 +262,8 @@ provenance log at read time. The derivation is:
 
 | Field | Derivation |
 |---|---|
-| `created_at` | Timestamp of the `EntityCreated` event for the entity |
-| `updated_at` | Timestamp of the most recent provenance event for the entity (any type) |
+| `created_at` | Timestamp of the first provenance record for the entity (`operation = 'create'`) |
+| `updated_at` | Timestamp of the most recent provenance event for the entity (any operation) |
 | `schema_version` | `schema_version` from the most recent provenance event for the entity |
 
 **Performance:** Deriving these fields for individual entity reads (single `MAX(timestamp)`
@@ -304,77 +320,61 @@ documented as conventions, not enforced constraints.
 
 ### 6.6 Relational Storage for Provenance
 
-Provenance records are stored in a single `provenance_events` table:
+Provenance records are stored in the `ProvenanceRecord` table. The DDL is **LinkML-generated**
+via the `hippo_core` schema (Decision 9.6.D) — there is no hand-coded `CREATE TABLE` block
+for this table in the adapter. The representative shape is:
 
 ```sql
-CREATE TABLE provenance_events (
+-- Representative shape only; authoritative DDL is LinkML-generated from hippo_core.ProvenanceRecord
+CREATE TABLE "ProvenanceRecord" (
     id              TEXT PRIMARY KEY,
-    event_type      TEXT NOT NULL,
+    operation       TEXT NOT NULL,       -- Operation enum value (e.g. 'create', 'update')
     entity_id       TEXT,                -- null for instance-level events
     entity_type     TEXT,                -- null for instance-level events
-    actor           TEXT NOT NULL,
+    actor_id        TEXT NOT NULL,       -- resolved actor (UUID, sentinel, or legacy string)
     timestamp       TEXT NOT NULL,       -- ISO 8601 UTC
     schema_version  TEXT NOT NULL,
     context         TEXT,                -- JSON string, nullable
-    payload         TEXT NOT NULL        -- JSON string
+    patch           TEXT,                -- JSON delta (operation-specific)
+    derived_from_id TEXT,                -- FK: source provenance record (e.g. for supersede)
+    process_id      TEXT                 -- FK to Process (workflow association)
 );
 
 -- Core lookup index: all events for a given entity, chronological
 CREATE INDEX idx_provenance_entity
-ON provenance_events (entity_id, entity_type, timestamp);
+ON "ProvenanceRecord" (entity_id, entity_type, timestamp);
 
 -- Actor + time range queries (audit use case)
 CREATE INDEX idx_provenance_actor_time
-ON provenance_events (actor, timestamp);
+ON "ProvenanceRecord" (actor_id, timestamp);
 
--- Event type filter (e.g. "show all MigrationApplied events")
-CREATE INDEX idx_provenance_event_type
-ON provenance_events (event_type, timestamp);
+-- Operation filter (e.g. "show all create events")
+CREATE INDEX idx_provenance_operation
+ON "ProvenanceRecord" (operation, timestamp);
 ```
 
-**No `UPDATE` or `DELETE` permitted** on `provenance_events`. The SQLite adapter enforces
-this via triggers:
+**No `UPDATE` or `DELETE` permitted** on `ProvenanceRecord`. The `hippo_append_only`
+annotation drives SQL trigger generation (Decision 9.6.C). The triggers are generic —
+any update to any column is rejected:
 
 ```sql
--- Block primary key updates
-CREATE TRIGGER IF NOT EXISTS prevent_provenance_pk_update
-BEFORE UPDATE OF entity_id ON provenance
+-- Block any UPDATE on any column
+CREATE TRIGGER IF NOT EXISTS prevent_ProvenanceRecord_update
+BEFORE UPDATE ON "ProvenanceRecord"
 BEGIN
-    SELECT RAISE(ABORT, 'Cannot update primary key of provenance record');
-END;
-
--- Block timestamp field updates
-CREATE TRIGGER IF NOT EXISTS prevent_provenance_timestamp_update
-BEFORE UPDATE OF timestamp ON provenance
-BEGIN
-    SELECT RAISE(ABORT, 'Cannot update timestamp of provenance record');
-END;
-
--- Block user_context (metadata) field updates
-CREATE TRIGGER IF NOT EXISTS prevent_provenance_metadata_update
-BEFORE UPDATE OF user_context ON provenance
-BEGIN
-    SELECT RAISE(ABORT, 'Cannot update user_context field of provenance record');
-END;
-
--- Block payload (content) field updates
-CREATE TRIGGER IF NOT EXISTS prevent_provenance_content_update
-BEFORE UPDATE OF payload ON provenance
-BEGIN
-    SELECT RAISE(ABORT, 'Cannot update payload field of provenance record');
+    SELECT RAISE(ABORT, 'Cannot update ProvenanceRecord: hippo_append_only class');
 END;
 
 -- Block DELETE operations
-CREATE TRIGGER IF NOT EXISTS prevent_provenance_delete
-BEFORE DELETE ON provenance
+CREATE TRIGGER IF NOT EXISTS prevent_ProvenanceRecord_delete
+BEFORE DELETE ON "ProvenanceRecord"
 BEGIN
-    SELECT RAISE(ABORT, 'Cannot delete provenance record');
+    SELECT RAISE(ABORT, 'Cannot delete ProvenanceRecord: hippo_append_only class');
 END;
 ```
 
-The triggers use `CREATE TRIGGER IF NOT EXISTS` for idempotent initialization.
-Triggers fire at statement level (BEFORE), providing database-level enforcement
-complementary to any application-level checks.
+Triggers fire at statement level (BEFORE), providing database-level enforcement that applies
+even to direct SQL access outside the SDK.
 
 **Provenance summary view** (REQUIRED — not optional):
 
@@ -388,9 +388,9 @@ Expected columns and derivation logic:
 |---|---|
 | `entity_id` | The entity UUID |
 | `entity_type` | The entity type name |
-| `created_at` | `MIN(timestamp)` — timestamp of first provenance event (any `operation_type`) |
-| `updated_at` | `MAX(timestamp)` for non-`SOFT_DELETE` events — timestamp of most recent write |
-| `schema_version` | `NULL` in v0.1 (not stored on provenance records) |
+| `created_at` | `MIN(timestamp)` — timestamp of first provenance event (any `operation`) |
+| `updated_at` | `MAX(timestamp)` for non-deletion events — timestamp of most recent write |
+| `schema_version` | Derived from the most recent record's `schema_version` field |
 
 ```sql
 CREATE VIEW IF NOT EXISTS entity_provenance_summary AS
@@ -398,16 +398,23 @@ SELECT
     entity_id,
     entity_type,
     MIN(timestamp) AS created_at,
-    MAX(CASE WHEN operation_type != 'SOFT_DELETE' THEN timestamp ELSE NULL END) AS updated_at,
-    NULL AS schema_version
-FROM provenance
+    MAX(timestamp) AS updated_at,
+    (SELECT schema_version FROM "ProvenanceRecord" p2
+     WHERE p2.entity_id = p.entity_id
+     ORDER BY p2.timestamp DESC LIMIT 1) AS schema_version
+FROM "ProvenanceRecord" p
 WHERE entity_id IS NOT NULL
 GROUP BY entity_id, entity_type;
 ```
 
-Note: the actual provenance table is named `provenance` (not `provenance_events`) in the v0.1
-SQLite implementation. The SDK's `query()` implementation JOINs against this view to resolve
-`created_at` and `updated_at` in a single query rather than N+1 provenance lookups. The
+> **Note:** The pre-migration view excluded `SOFT_DELETE` operations from `updated_at`.
+> After the migration, `SOFT_DELETE` maps to `operation = 'availability_change'` (Decision
+> 9.6.B), but not all `availability_change` records represent hard deletions — the distinction
+> lives in the `patch` column. The view above includes all operations in `updated_at`; refining
+> the exclusion logic is deferred to a future sec6 revision.
+
+The SDK's `query()` implementation JOINs against this view to resolve `created_at`,
+`updated_at`, and `schema_version` in a single query rather than N+1 provenance lookups. The
 `get()` implementation uses a direct provenance subquery for individual entity reads.
 
 ---
