@@ -4402,9 +4402,15 @@
   <h1>Provenance & Audit</h1>
 
 <h2 id="6-provenance-audit">6. Provenance &amp; Audit<a class="headerlink" href="#6-provenance-audit" title="Permanent link">&para;</a></h2>
-<p><strong>Document status:</strong> Draft v0.1
+<p><strong>Document status:</strong> Draft v0.1 (light-touch revision post-provenance-migration, 2026-04-26)
 <strong>Depends on:</strong> sec3_data_model.md
 <strong>Feeds into:</strong> sec4_api_layer.md, sec5_ingestion.md</p>
+<blockquote>
+<p><strong>⚠ Authoritative reference:</strong> sec9 §9.6 is authoritative for the post-migration provenance schema,
+<code>Operation</code> enum values, actor-resolution order, and enforcement mechanism. Where this section
+conflicts with sec9 §9.6 or the decisions in <code>sec9_decisions.md</code> (9.6.B–9.6.G), sec9 takes
+precedence. A broader revision of sec6 is deferred (task 7.3 of <code>provenance-migration</code>).</p>
+</blockquote>
 <hr />
 <h3 id="61-design-philosophy">6.1 Design Philosophy<a class="headerlink" href="#61-design-philosophy" title="Permanent link">&para;</a></h3>
 <p>Provenance is a first-class feature of Hippo, not an afterthought. Every mutation to the
@@ -4437,9 +4443,9 @@ log is:</p>
 <td>Unique event identifier</td>
 </tr>
 <tr>
-<td><code>event_type</code></td>
-<td>string</td>
-<td>One of the event types in §6.3</td>
+<td><code>operation</code></td>
+<td><code>Operation</code> enum</td>
+<td>The operation that produced this record (see §6.3)</td>
 </tr>
 <tr>
 <td><code>entity_id</code></td>
@@ -4452,9 +4458,9 @@ log is:</p>
 <td>The entity type name</td>
 </tr>
 <tr>
-<td><code>actor</code></td>
+<td><code>actor_id</code></td>
 <td>string</td>
-<td>Identity of the caller who triggered the change</td>
+<td>Identity of the actor who triggered the change (see Actor below)</td>
 </tr>
 <tr>
 <td><code>timestamp</code></td>
@@ -4472,22 +4478,42 @@ log is:</p>
 <td>Structured context from the caller (see §6.5)</td>
 </tr>
 <tr>
-<td><code>payload</code></td>
+<td><code>patch</code></td>
 <td>JSON</td>
-<td>Event-type-specific data (see §6.3)</td>
+<td>Operation-specific delta data (replaces pre-migration <code>payload</code>)</td>
+</tr>
+<tr>
+<td><code>derived_from_id</code></td>
+<td>UUID</td>
+<td>Links to the source record (e.g. superseded entity's provenance)</td>
+</tr>
+<tr>
+<td><code>process_id</code></td>
+<td>UUID</td>
+<td>FK to <code>Process</code> — associates the record with a workflow run</td>
 </tr>
 </tbody>
 </table>
-<p><strong>Immutability:</strong> Provenance records are written once and never modified. The storage adapter
-must enforce this at the database level (e.g., no <code>UPDATE</code> or <code>DELETE</code> on the provenance
-table).</p>
-<p><strong>Actor:</strong> A free-form string identity supplied by the caller. The SDK never validates or
-interprets the <code>actor</code> value — it is passed through and stored verbatim. In v0.1, auth is
-out of scope; the REST transport sets <code>actor = "anonymous"</code> by default. In future auth-enabled
-deployments, the transport layer will resolve the authenticated user and pass their identity
-as <code>actor</code>.</p>
+<p><strong>Immutability:</strong> Provenance records are written once and never modified. The <code>ProvenanceRecord</code>
+class carries the <code>hippo_append_only</code> LinkML annotation; the storage adapter enforces this via
+SQL triggers (see §6.6 and sec9 Decision 9.6.C).</p>
+<p><strong>Actor:</strong> <code>actor_id</code> is resolved in priority order: (1) explicit <code>actor_id</code> kwarg to
+<code>ProvenanceStore.record()</code>; (2) legacy <code>user_context</code> shim (Decision 9.6.B); (3) the
+<code>current_actor</code> ContextVar set by middleware or <code>with_actor()</code> (Decision 9.6.G); (4) the
+sentinel string <code>"unknown"</code> when no actor context is available. The sentinel satisfies NOT NULL
+and flags unmigrated call sites in the audit log. Future work will migrate those sites to
+require a real actor identity (sec9 §9.5 identity model).</p>
 <hr />
 <h3 id="63-event-types">6.3 Event Types<a class="headerlink" href="#63-event-types" title="Permanent link">&para;</a></h3>
+<blockquote>
+<p><strong>Post-migration note:</strong> The <code>event_type</code> string taxonomy below predates the
+<code>provenance-migration</code> change. The production <code>Operation</code> enum in <code>hippo_core</code> uses
+lowercase values: <code>create</code>, <code>update</code>, <code>supersede</code>, <code>availability_change</code>,
+<code>relationship_add</code>, <code>relationship_remove</code>, <code>external_id_add</code>, <code>external_id_remove</code>.
+See sec9 §9.6 and Decision 9.6.B for the per-site mapping from legacy strings to
+<code>Operation</code> values, and for how <code>patch</code> replaces the <code>previous_state</code>/<code>new_state</code>
+payload structure. The subsections below are retained as design rationale only.</p>
+</blockquote>
 <h4 id="entitycreated">EntityCreated<a class="headerlink" href="#entitycreated" title="Permanent link">&para;</a></h4>
 <p>Fired when a new entity is written for the first time.</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="p">{</span>
@@ -4640,11 +4666,11 @@ provenance log at read time. The derivation is:</p>
 <tbody>
 <tr>
 <td><code>created_at</code></td>
-<td>Timestamp of the <code>EntityCreated</code> event for the entity</td>
+<td>Timestamp of the first provenance record for the entity (<code>operation = 'create'</code>)</td>
 </tr>
 <tr>
 <td><code>updated_at</code></td>
-<td>Timestamp of the most recent provenance event for the entity (any type)</td>
+<td>Timestamp of the most recent provenance event for the entity (any operation)</td>
 </tr>
 <tr>
 <td><code>schema_version</code></td>
@@ -4692,71 +4718,55 @@ tight coupling between Hippo and the systems that write to it. Structured contex
 documented as conventions, not enforced constraints.</p>
 <hr />
 <h3 id="66-relational-storage-for-provenance">6.6 Relational Storage for Provenance<a class="headerlink" href="#66-relational-storage-for-provenance" title="Permanent link">&para;</a></h3>
-<p>Provenance records are stored in a single <code>provenance_events</code> table:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-13-1" name="__codelineno-13-1" href="#__codelineno-13-1"></a><span class="k">CREATE</span><span class="w"> </span><span class="k">TABLE</span><span class="w"> </span><span class="n">provenance_events</span><span class="w"> </span><span class="p">(</span>
-<a id="__codelineno-13-2" name="__codelineno-13-2" href="#__codelineno-13-2"></a><span class="w">    </span><span class="n">id</span><span class="w">              </span><span class="nb">TEXT</span><span class="w"> </span><span class="k">PRIMARY</span><span class="w"> </span><span class="k">KEY</span><span class="p">,</span>
-<a id="__codelineno-13-3" name="__codelineno-13-3" href="#__codelineno-13-3"></a><span class="w">    </span><span class="n">event_type</span><span class="w">      </span><span class="nb">TEXT</span><span class="w"> </span><span class="k">NOT</span><span class="w"> </span><span class="k">NULL</span><span class="p">,</span>
-<a id="__codelineno-13-4" name="__codelineno-13-4" href="#__codelineno-13-4"></a><span class="w">    </span><span class="n">entity_id</span><span class="w">       </span><span class="nb">TEXT</span><span class="p">,</span><span class="w">                </span><span class="c1">-- null for instance-level events</span>
-<a id="__codelineno-13-5" name="__codelineno-13-5" href="#__codelineno-13-5"></a><span class="w">    </span><span class="n">entity_type</span><span class="w">     </span><span class="nb">TEXT</span><span class="p">,</span><span class="w">                </span><span class="c1">-- null for instance-level events</span>
-<a id="__codelineno-13-6" name="__codelineno-13-6" href="#__codelineno-13-6"></a><span class="w">    </span><span class="n">actor</span><span class="w">           </span><span class="nb">TEXT</span><span class="w"> </span><span class="k">NOT</span><span class="w"> </span><span class="k">NULL</span><span class="p">,</span>
-<a id="__codelineno-13-7" name="__codelineno-13-7" href="#__codelineno-13-7"></a><span class="w">    </span><span class="k">timestamp</span><span class="w">       </span><span class="nb">TEXT</span><span class="w"> </span><span class="k">NOT</span><span class="w"> </span><span class="k">NULL</span><span class="p">,</span><span class="w">       </span><span class="c1">-- ISO 8601 UTC</span>
-<a id="__codelineno-13-8" name="__codelineno-13-8" href="#__codelineno-13-8"></a><span class="w">    </span><span class="n">schema_version</span><span class="w">  </span><span class="nb">TEXT</span><span class="w"> </span><span class="k">NOT</span><span class="w"> </span><span class="k">NULL</span><span class="p">,</span>
-<a id="__codelineno-13-9" name="__codelineno-13-9" href="#__codelineno-13-9"></a><span class="w">    </span><span class="n">context</span><span class="w">         </span><span class="nb">TEXT</span><span class="p">,</span><span class="w">                </span><span class="c1">-- JSON string, nullable</span>
-<a id="__codelineno-13-10" name="__codelineno-13-10" href="#__codelineno-13-10"></a><span class="w">    </span><span class="n">payload</span><span class="w">         </span><span class="nb">TEXT</span><span class="w"> </span><span class="k">NOT</span><span class="w"> </span><span class="k">NULL</span><span class="w">        </span><span class="c1">-- JSON string</span>
-<a id="__codelineno-13-11" name="__codelineno-13-11" href="#__codelineno-13-11"></a><span class="p">);</span>
-<a id="__codelineno-13-12" name="__codelineno-13-12" href="#__codelineno-13-12"></a>
-<a id="__codelineno-13-13" name="__codelineno-13-13" href="#__codelineno-13-13"></a><span class="c1">-- Core lookup index: all events for a given entity, chronological</span>
-<a id="__codelineno-13-14" name="__codelineno-13-14" href="#__codelineno-13-14"></a><span class="k">CREATE</span><span class="w"> </span><span class="k">INDEX</span><span class="w"> </span><span class="n">idx_provenance_entity</span>
-<a id="__codelineno-13-15" name="__codelineno-13-15" href="#__codelineno-13-15"></a><span class="k">ON</span><span class="w"> </span><span class="n">provenance_events</span><span class="w"> </span><span class="p">(</span><span class="n">entity_id</span><span class="p">,</span><span class="w"> </span><span class="n">entity_type</span><span class="p">,</span><span class="w"> </span><span class="k">timestamp</span><span class="p">);</span>
-<a id="__codelineno-13-16" name="__codelineno-13-16" href="#__codelineno-13-16"></a>
-<a id="__codelineno-13-17" name="__codelineno-13-17" href="#__codelineno-13-17"></a><span class="c1">-- Actor + time range queries (audit use case)</span>
-<a id="__codelineno-13-18" name="__codelineno-13-18" href="#__codelineno-13-18"></a><span class="k">CREATE</span><span class="w"> </span><span class="k">INDEX</span><span class="w"> </span><span class="n">idx_provenance_actor_time</span>
-<a id="__codelineno-13-19" name="__codelineno-13-19" href="#__codelineno-13-19"></a><span class="k">ON</span><span class="w"> </span><span class="n">provenance_events</span><span class="w"> </span><span class="p">(</span><span class="n">actor</span><span class="p">,</span><span class="w"> </span><span class="k">timestamp</span><span class="p">);</span>
-<a id="__codelineno-13-20" name="__codelineno-13-20" href="#__codelineno-13-20"></a>
-<a id="__codelineno-13-21" name="__codelineno-13-21" href="#__codelineno-13-21"></a><span class="c1">-- Event type filter (e.g. &quot;show all MigrationApplied events&quot;)</span>
-<a id="__codelineno-13-22" name="__codelineno-13-22" href="#__codelineno-13-22"></a><span class="k">CREATE</span><span class="w"> </span><span class="k">INDEX</span><span class="w"> </span><span class="n">idx_provenance_event_type</span>
-<a id="__codelineno-13-23" name="__codelineno-13-23" href="#__codelineno-13-23"></a><span class="k">ON</span><span class="w"> </span><span class="n">provenance_events</span><span class="w"> </span><span class="p">(</span><span class="n">event_type</span><span class="p">,</span><span class="w"> </span><span class="k">timestamp</span><span class="p">);</span>
+<p>Provenance records are stored in the <code>ProvenanceRecord</code> table. The DDL is <strong>LinkML-generated</strong>
+via the <code>hippo_core</code> schema (Decision 9.6.D) — there is no hand-coded <code>CREATE TABLE</code> block
+for this table in the adapter. The representative shape is:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-13-1" name="__codelineno-13-1" href="#__codelineno-13-1"></a><span class="c1">-- Representative shape only; authoritative DDL is LinkML-generated from hippo_core.ProvenanceRecord</span>
+<a id="__codelineno-13-2" name="__codelineno-13-2" href="#__codelineno-13-2"></a><span class="k">CREATE</span><span class="w"> </span><span class="k">TABLE</span><span class="w"> </span><span class="ss">&quot;ProvenanceRecord&quot;</span><span class="w"> </span><span class="p">(</span>
+<a id="__codelineno-13-3" name="__codelineno-13-3" href="#__codelineno-13-3"></a><span class="w">    </span><span class="n">id</span><span class="w">              </span><span class="nb">TEXT</span><span class="w"> </span><span class="k">PRIMARY</span><span class="w"> </span><span class="k">KEY</span><span class="p">,</span>
+<a id="__codelineno-13-4" name="__codelineno-13-4" href="#__codelineno-13-4"></a><span class="w">    </span><span class="k">operation</span><span class="w">       </span><span class="nb">TEXT</span><span class="w"> </span><span class="k">NOT</span><span class="w"> </span><span class="k">NULL</span><span class="p">,</span><span class="w">       </span><span class="c1">-- Operation enum value (e.g. &#39;create&#39;, &#39;update&#39;)</span>
+<a id="__codelineno-13-5" name="__codelineno-13-5" href="#__codelineno-13-5"></a><span class="w">    </span><span class="n">entity_id</span><span class="w">       </span><span class="nb">TEXT</span><span class="p">,</span><span class="w">                </span><span class="c1">-- null for instance-level events</span>
+<a id="__codelineno-13-6" name="__codelineno-13-6" href="#__codelineno-13-6"></a><span class="w">    </span><span class="n">entity_type</span><span class="w">     </span><span class="nb">TEXT</span><span class="p">,</span><span class="w">                </span><span class="c1">-- null for instance-level events</span>
+<a id="__codelineno-13-7" name="__codelineno-13-7" href="#__codelineno-13-7"></a><span class="w">    </span><span class="n">actor_id</span><span class="w">        </span><span class="nb">TEXT</span><span class="w"> </span><span class="k">NOT</span><span class="w"> </span><span class="k">NULL</span><span class="p">,</span><span class="w">       </span><span class="c1">-- resolved actor (UUID, sentinel, or legacy string)</span>
+<a id="__codelineno-13-8" name="__codelineno-13-8" href="#__codelineno-13-8"></a><span class="w">    </span><span class="k">timestamp</span><span class="w">       </span><span class="nb">TEXT</span><span class="w"> </span><span class="k">NOT</span><span class="w"> </span><span class="k">NULL</span><span class="p">,</span><span class="w">       </span><span class="c1">-- ISO 8601 UTC</span>
+<a id="__codelineno-13-9" name="__codelineno-13-9" href="#__codelineno-13-9"></a><span class="w">    </span><span class="n">schema_version</span><span class="w">  </span><span class="nb">TEXT</span><span class="w"> </span><span class="k">NOT</span><span class="w"> </span><span class="k">NULL</span><span class="p">,</span>
+<a id="__codelineno-13-10" name="__codelineno-13-10" href="#__codelineno-13-10"></a><span class="w">    </span><span class="n">context</span><span class="w">         </span><span class="nb">TEXT</span><span class="p">,</span><span class="w">                </span><span class="c1">-- JSON string, nullable</span>
+<a id="__codelineno-13-11" name="__codelineno-13-11" href="#__codelineno-13-11"></a><span class="w">    </span><span class="n">patch</span><span class="w">           </span><span class="nb">TEXT</span><span class="p">,</span><span class="w">                </span><span class="c1">-- JSON delta (operation-specific)</span>
+<a id="__codelineno-13-12" name="__codelineno-13-12" href="#__codelineno-13-12"></a><span class="w">    </span><span class="n">derived_from_id</span><span class="w"> </span><span class="nb">TEXT</span><span class="p">,</span><span class="w">                </span><span class="c1">-- FK: source provenance record (e.g. for supersede)</span>
+<a id="__codelineno-13-13" name="__codelineno-13-13" href="#__codelineno-13-13"></a><span class="w">    </span><span class="n">process_id</span><span class="w">      </span><span class="nb">TEXT</span><span class="w">                 </span><span class="c1">-- FK to Process (workflow association)</span>
+<a id="__codelineno-13-14" name="__codelineno-13-14" href="#__codelineno-13-14"></a><span class="p">);</span>
+<a id="__codelineno-13-15" name="__codelineno-13-15" href="#__codelineno-13-15"></a>
+<a id="__codelineno-13-16" name="__codelineno-13-16" href="#__codelineno-13-16"></a><span class="c1">-- Core lookup index: all events for a given entity, chronological</span>
+<a id="__codelineno-13-17" name="__codelineno-13-17" href="#__codelineno-13-17"></a><span class="k">CREATE</span><span class="w"> </span><span class="k">INDEX</span><span class="w"> </span><span class="n">idx_provenance_entity</span>
+<a id="__codelineno-13-18" name="__codelineno-13-18" href="#__codelineno-13-18"></a><span class="k">ON</span><span class="w"> </span><span class="ss">&quot;ProvenanceRecord&quot;</span><span class="w"> </span><span class="p">(</span><span class="n">entity_id</span><span class="p">,</span><span class="w"> </span><span class="n">entity_type</span><span class="p">,</span><span class="w"> </span><span class="k">timestamp</span><span class="p">);</span>
+<a id="__codelineno-13-19" name="__codelineno-13-19" href="#__codelineno-13-19"></a>
+<a id="__codelineno-13-20" name="__codelineno-13-20" href="#__codelineno-13-20"></a><span class="c1">-- Actor + time range queries (audit use case)</span>
+<a id="__codelineno-13-21" name="__codelineno-13-21" href="#__codelineno-13-21"></a><span class="k">CREATE</span><span class="w"> </span><span class="k">INDEX</span><span class="w"> </span><span class="n">idx_provenance_actor_time</span>
+<a id="__codelineno-13-22" name="__codelineno-13-22" href="#__codelineno-13-22"></a><span class="k">ON</span><span class="w"> </span><span class="ss">&quot;ProvenanceRecord&quot;</span><span class="w"> </span><span class="p">(</span><span class="n">actor_id</span><span class="p">,</span><span class="w"> </span><span class="k">timestamp</span><span class="p">);</span>
+<a id="__codelineno-13-23" name="__codelineno-13-23" href="#__codelineno-13-23"></a>
+<a id="__codelineno-13-24" name="__codelineno-13-24" href="#__codelineno-13-24"></a><span class="c1">-- Operation filter (e.g. &quot;show all create events&quot;)</span>
+<a id="__codelineno-13-25" name="__codelineno-13-25" href="#__codelineno-13-25"></a><span class="k">CREATE</span><span class="w"> </span><span class="k">INDEX</span><span class="w"> </span><span class="n">idx_provenance_operation</span>
+<a id="__codelineno-13-26" name="__codelineno-13-26" href="#__codelineno-13-26"></a><span class="k">ON</span><span class="w"> </span><span class="ss">&quot;ProvenanceRecord&quot;</span><span class="w"> </span><span class="p">(</span><span class="k">operation</span><span class="p">,</span><span class="w"> </span><span class="k">timestamp</span><span class="p">);</span>
 </code></pre></div>
-<p><strong>No <code>UPDATE</code> or <code>DELETE</code> permitted</strong> on <code>provenance_events</code>. The SQLite adapter enforces
-this via triggers:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-14-1" name="__codelineno-14-1" href="#__codelineno-14-1"></a><span class="c1">-- Block primary key updates</span>
-<a id="__codelineno-14-2" name="__codelineno-14-2" href="#__codelineno-14-2"></a><span class="k">CREATE</span><span class="w"> </span><span class="k">TRIGGER</span><span class="w"> </span><span class="k">IF</span><span class="w"> </span><span class="k">NOT</span><span class="w"> </span><span class="k">EXISTS</span><span class="w"> </span><span class="n">prevent_provenance_pk_update</span>
-<a id="__codelineno-14-3" name="__codelineno-14-3" href="#__codelineno-14-3"></a><span class="k">BEFORE</span><span class="w"> </span><span class="k">UPDATE</span><span class="w"> </span><span class="k">OF</span><span class="w"> </span><span class="n">entity_id</span><span class="w"> </span><span class="k">ON</span><span class="w"> </span><span class="n">provenance</span>
+<p><strong>No <code>UPDATE</code> or <code>DELETE</code> permitted</strong> on <code>ProvenanceRecord</code>. The <code>hippo_append_only</code>
+annotation drives SQL trigger generation (Decision 9.6.C). The triggers are generic —
+any update to any column is rejected:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-14-1" name="__codelineno-14-1" href="#__codelineno-14-1"></a><span class="c1">-- Block any UPDATE on any column</span>
+<a id="__codelineno-14-2" name="__codelineno-14-2" href="#__codelineno-14-2"></a><span class="k">CREATE</span><span class="w"> </span><span class="k">TRIGGER</span><span class="w"> </span><span class="k">IF</span><span class="w"> </span><span class="k">NOT</span><span class="w"> </span><span class="k">EXISTS</span><span class="w"> </span><span class="n">prevent_ProvenanceRecord_update</span>
+<a id="__codelineno-14-3" name="__codelineno-14-3" href="#__codelineno-14-3"></a><span class="k">BEFORE</span><span class="w"> </span><span class="k">UPDATE</span><span class="w"> </span><span class="k">ON</span><span class="w"> </span><span class="ss">&quot;ProvenanceRecord&quot;</span>
 <a id="__codelineno-14-4" name="__codelineno-14-4" href="#__codelineno-14-4"></a><span class="k">BEGIN</span>
-<a id="__codelineno-14-5" name="__codelineno-14-5" href="#__codelineno-14-5"></a><span class="w">    </span><span class="k">SELECT</span><span class="w"> </span><span class="n">RAISE</span><span class="p">(</span><span class="k">ABORT</span><span class="p">,</span><span class="w"> </span><span class="s1">&#39;Cannot update primary key of provenance record&#39;</span><span class="p">);</span>
+<a id="__codelineno-14-5" name="__codelineno-14-5" href="#__codelineno-14-5"></a><span class="w">    </span><span class="k">SELECT</span><span class="w"> </span><span class="n">RAISE</span><span class="p">(</span><span class="k">ABORT</span><span class="p">,</span><span class="w"> </span><span class="s1">&#39;Cannot update ProvenanceRecord: hippo_append_only class&#39;</span><span class="p">);</span>
 <a id="__codelineno-14-6" name="__codelineno-14-6" href="#__codelineno-14-6"></a><span class="k">END</span><span class="p">;</span>
 <a id="__codelineno-14-7" name="__codelineno-14-7" href="#__codelineno-14-7"></a>
-<a id="__codelineno-14-8" name="__codelineno-14-8" href="#__codelineno-14-8"></a><span class="c1">-- Block timestamp field updates</span>
-<a id="__codelineno-14-9" name="__codelineno-14-9" href="#__codelineno-14-9"></a><span class="k">CREATE</span><span class="w"> </span><span class="k">TRIGGER</span><span class="w"> </span><span class="k">IF</span><span class="w"> </span><span class="k">NOT</span><span class="w"> </span><span class="k">EXISTS</span><span class="w"> </span><span class="n">prevent_provenance_timestamp_update</span>
-<a id="__codelineno-14-10" name="__codelineno-14-10" href="#__codelineno-14-10"></a><span class="k">BEFORE</span><span class="w"> </span><span class="k">UPDATE</span><span class="w"> </span><span class="k">OF</span><span class="w"> </span><span class="k">timestamp</span><span class="w"> </span><span class="k">ON</span><span class="w"> </span><span class="n">provenance</span>
+<a id="__codelineno-14-8" name="__codelineno-14-8" href="#__codelineno-14-8"></a><span class="c1">-- Block DELETE operations</span>
+<a id="__codelineno-14-9" name="__codelineno-14-9" href="#__codelineno-14-9"></a><span class="k">CREATE</span><span class="w"> </span><span class="k">TRIGGER</span><span class="w"> </span><span class="k">IF</span><span class="w"> </span><span class="k">NOT</span><span class="w"> </span><span class="k">EXISTS</span><span class="w"> </span><span class="n">prevent_ProvenanceRecord_delete</span>
+<a id="__codelineno-14-10" name="__codelineno-14-10" href="#__codelineno-14-10"></a><span class="k">BEFORE</span><span class="w"> </span><span class="k">DELETE</span><span class="w"> </span><span class="k">ON</span><span class="w"> </span><span class="ss">&quot;ProvenanceRecord&quot;</span>
 <a id="__codelineno-14-11" name="__codelineno-14-11" href="#__codelineno-14-11"></a><span class="k">BEGIN</span>
-<a id="__codelineno-14-12" name="__codelineno-14-12" href="#__codelineno-14-12"></a><span class="w">    </span><span class="k">SELECT</span><span class="w"> </span><span class="n">RAISE</span><span class="p">(</span><span class="k">ABORT</span><span class="p">,</span><span class="w"> </span><span class="s1">&#39;Cannot update timestamp of provenance record&#39;</span><span class="p">);</span>
+<a id="__codelineno-14-12" name="__codelineno-14-12" href="#__codelineno-14-12"></a><span class="w">    </span><span class="k">SELECT</span><span class="w"> </span><span class="n">RAISE</span><span class="p">(</span><span class="k">ABORT</span><span class="p">,</span><span class="w"> </span><span class="s1">&#39;Cannot delete ProvenanceRecord: hippo_append_only class&#39;</span><span class="p">);</span>
 <a id="__codelineno-14-13" name="__codelineno-14-13" href="#__codelineno-14-13"></a><span class="k">END</span><span class="p">;</span>
-<a id="__codelineno-14-14" name="__codelineno-14-14" href="#__codelineno-14-14"></a>
-<a id="__codelineno-14-15" name="__codelineno-14-15" href="#__codelineno-14-15"></a><span class="c1">-- Block user_context (metadata) field updates</span>
-<a id="__codelineno-14-16" name="__codelineno-14-16" href="#__codelineno-14-16"></a><span class="k">CREATE</span><span class="w"> </span><span class="k">TRIGGER</span><span class="w"> </span><span class="k">IF</span><span class="w"> </span><span class="k">NOT</span><span class="w"> </span><span class="k">EXISTS</span><span class="w"> </span><span class="n">prevent_provenance_metadata_update</span>
-<a id="__codelineno-14-17" name="__codelineno-14-17" href="#__codelineno-14-17"></a><span class="k">BEFORE</span><span class="w"> </span><span class="k">UPDATE</span><span class="w"> </span><span class="k">OF</span><span class="w"> </span><span class="n">user_context</span><span class="w"> </span><span class="k">ON</span><span class="w"> </span><span class="n">provenance</span>
-<a id="__codelineno-14-18" name="__codelineno-14-18" href="#__codelineno-14-18"></a><span class="k">BEGIN</span>
-<a id="__codelineno-14-19" name="__codelineno-14-19" href="#__codelineno-14-19"></a><span class="w">    </span><span class="k">SELECT</span><span class="w"> </span><span class="n">RAISE</span><span class="p">(</span><span class="k">ABORT</span><span class="p">,</span><span class="w"> </span><span class="s1">&#39;Cannot update user_context field of provenance record&#39;</span><span class="p">);</span>
-<a id="__codelineno-14-20" name="__codelineno-14-20" href="#__codelineno-14-20"></a><span class="k">END</span><span class="p">;</span>
-<a id="__codelineno-14-21" name="__codelineno-14-21" href="#__codelineno-14-21"></a>
-<a id="__codelineno-14-22" name="__codelineno-14-22" href="#__codelineno-14-22"></a><span class="c1">-- Block payload (content) field updates</span>
-<a id="__codelineno-14-23" name="__codelineno-14-23" href="#__codelineno-14-23"></a><span class="k">CREATE</span><span class="w"> </span><span class="k">TRIGGER</span><span class="w"> </span><span class="k">IF</span><span class="w"> </span><span class="k">NOT</span><span class="w"> </span><span class="k">EXISTS</span><span class="w"> </span><span class="n">prevent_provenance_content_update</span>
-<a id="__codelineno-14-24" name="__codelineno-14-24" href="#__codelineno-14-24"></a><span class="k">BEFORE</span><span class="w"> </span><span class="k">UPDATE</span><span class="w"> </span><span class="k">OF</span><span class="w"> </span><span class="n">payload</span><span class="w"> </span><span class="k">ON</span><span class="w"> </span><span class="n">provenance</span>
-<a id="__codelineno-14-25" name="__codelineno-14-25" href="#__codelineno-14-25"></a><span class="k">BEGIN</span>
-<a id="__codelineno-14-26" name="__codelineno-14-26" href="#__codelineno-14-26"></a><span class="w">    </span><span class="k">SELECT</span><span class="w"> </span><span class="n">RAISE</span><span class="p">(</span><span class="k">ABORT</span><span class="p">,</span><span class="w"> </span><span class="s1">&#39;Cannot update payload field of provenance record&#39;</span><span class="p">);</span>
-<a id="__codelineno-14-27" name="__codelineno-14-27" href="#__codelineno-14-27"></a><span class="k">END</span><span class="p">;</span>
-<a id="__codelineno-14-28" name="__codelineno-14-28" href="#__codelineno-14-28"></a>
-<a id="__codelineno-14-29" name="__codelineno-14-29" href="#__codelineno-14-29"></a><span class="c1">-- Block DELETE operations</span>
-<a id="__codelineno-14-30" name="__codelineno-14-30" href="#__codelineno-14-30"></a><span class="k">CREATE</span><span class="w"> </span><span class="k">TRIGGER</span><span class="w"> </span><span class="k">IF</span><span class="w"> </span><span class="k">NOT</span><span class="w"> </span><span class="k">EXISTS</span><span class="w"> </span><span class="n">prevent_provenance_delete</span>
-<a id="__codelineno-14-31" name="__codelineno-14-31" href="#__codelineno-14-31"></a><span class="k">BEFORE</span><span class="w"> </span><span class="k">DELETE</span><span class="w"> </span><span class="k">ON</span><span class="w"> </span><span class="n">provenance</span>
-<a id="__codelineno-14-32" name="__codelineno-14-32" href="#__codelineno-14-32"></a><span class="k">BEGIN</span>
-<a id="__codelineno-14-33" name="__codelineno-14-33" href="#__codelineno-14-33"></a><span class="w">    </span><span class="k">SELECT</span><span class="w"> </span><span class="n">RAISE</span><span class="p">(</span><span class="k">ABORT</span><span class="p">,</span><span class="w"> </span><span class="s1">&#39;Cannot delete provenance record&#39;</span><span class="p">);</span>
-<a id="__codelineno-14-34" name="__codelineno-14-34" href="#__codelineno-14-34"></a><span class="k">END</span><span class="p">;</span>
 </code></pre></div>
-<p>The triggers use <code>CREATE TRIGGER IF NOT EXISTS</code> for idempotent initialization.
-Triggers fire at statement level (BEFORE), providing database-level enforcement
-complementary to any application-level checks.</p>
+<p>Triggers fire at statement level (BEFORE), providing database-level enforcement that applies
+even to direct SQL access outside the SDK.</p>
 <p><strong>Provenance summary view</strong> (REQUIRED — not optional):</p>
 <p>The <code>entity_provenance_summary</code> view is <strong>required</strong> for correct operation of <code>client.query()</code>
 with provenance-derived <code>created_at</code> and <code>updated_at</code> fields. <code>hippo migrate</code> creates this
@@ -4780,15 +4790,15 @@ view before any entity table migrations so it is always available.</p>
 </tr>
 <tr>
 <td><code>created_at</code></td>
-<td><code>MIN(timestamp)</code> — timestamp of first provenance event (any <code>operation_type</code>)</td>
+<td><code>MIN(timestamp)</code> — timestamp of first provenance event (any <code>operation</code>)</td>
 </tr>
 <tr>
 <td><code>updated_at</code></td>
-<td><code>MAX(timestamp)</code> for non-<code>SOFT_DELETE</code> events — timestamp of most recent write</td>
+<td><code>MAX(timestamp)</code> for non-deletion events — timestamp of most recent write</td>
 </tr>
 <tr>
 <td><code>schema_version</code></td>
-<td><code>NULL</code> in v0.1 (not stored on provenance records)</td>
+<td>Derived from the most recent record's <code>schema_version</code> field</td>
 </tr>
 </tbody>
 </table>
@@ -4797,15 +4807,23 @@ view before any entity table migrations so it is always available.</p>
 <a id="__codelineno-15-3" name="__codelineno-15-3" href="#__codelineno-15-3"></a><span class="w">    </span><span class="n">entity_id</span><span class="p">,</span>
 <a id="__codelineno-15-4" name="__codelineno-15-4" href="#__codelineno-15-4"></a><span class="w">    </span><span class="n">entity_type</span><span class="p">,</span>
 <a id="__codelineno-15-5" name="__codelineno-15-5" href="#__codelineno-15-5"></a><span class="w">    </span><span class="k">MIN</span><span class="p">(</span><span class="k">timestamp</span><span class="p">)</span><span class="w"> </span><span class="k">AS</span><span class="w"> </span><span class="n">created_at</span><span class="p">,</span>
-<a id="__codelineno-15-6" name="__codelineno-15-6" href="#__codelineno-15-6"></a><span class="w">    </span><span class="k">MAX</span><span class="p">(</span><span class="k">CASE</span><span class="w"> </span><span class="k">WHEN</span><span class="w"> </span><span class="n">operation_type</span><span class="w"> </span><span class="o">!=</span><span class="w"> </span><span class="s1">&#39;SOFT_DELETE&#39;</span><span class="w"> </span><span class="k">THEN</span><span class="w"> </span><span class="k">timestamp</span><span class="w"> </span><span class="k">ELSE</span><span class="w"> </span><span class="k">NULL</span><span class="w"> </span><span class="k">END</span><span class="p">)</span><span class="w"> </span><span class="k">AS</span><span class="w"> </span><span class="n">updated_at</span><span class="p">,</span>
-<a id="__codelineno-15-7" name="__codelineno-15-7" href="#__codelineno-15-7"></a><span class="w">    </span><span class="k">NULL</span><span class="w"> </span><span class="k">AS</span><span class="w"> </span><span class="n">schema_version</span>
-<a id="__codelineno-15-8" name="__codelineno-15-8" href="#__codelineno-15-8"></a><span class="k">FROM</span><span class="w"> </span><span class="n">provenance</span>
-<a id="__codelineno-15-9" name="__codelineno-15-9" href="#__codelineno-15-9"></a><span class="k">WHERE</span><span class="w"> </span><span class="n">entity_id</span><span class="w"> </span><span class="k">IS</span><span class="w"> </span><span class="k">NOT</span><span class="w"> </span><span class="k">NULL</span>
-<a id="__codelineno-15-10" name="__codelineno-15-10" href="#__codelineno-15-10"></a><span class="k">GROUP</span><span class="w"> </span><span class="k">BY</span><span class="w"> </span><span class="n">entity_id</span><span class="p">,</span><span class="w"> </span><span class="n">entity_type</span><span class="p">;</span>
+<a id="__codelineno-15-6" name="__codelineno-15-6" href="#__codelineno-15-6"></a><span class="w">    </span><span class="k">MAX</span><span class="p">(</span><span class="k">timestamp</span><span class="p">)</span><span class="w"> </span><span class="k">AS</span><span class="w"> </span><span class="n">updated_at</span><span class="p">,</span>
+<a id="__codelineno-15-7" name="__codelineno-15-7" href="#__codelineno-15-7"></a><span class="w">    </span><span class="p">(</span><span class="k">SELECT</span><span class="w"> </span><span class="n">schema_version</span><span class="w"> </span><span class="k">FROM</span><span class="w"> </span><span class="ss">&quot;ProvenanceRecord&quot;</span><span class="w"> </span><span class="n">p2</span>
+<a id="__codelineno-15-8" name="__codelineno-15-8" href="#__codelineno-15-8"></a><span class="w">     </span><span class="k">WHERE</span><span class="w"> </span><span class="n">p2</span><span class="p">.</span><span class="n">entity_id</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">p</span><span class="p">.</span><span class="n">entity_id</span>
+<a id="__codelineno-15-9" name="__codelineno-15-9" href="#__codelineno-15-9"></a><span class="w">     </span><span class="k">ORDER</span><span class="w"> </span><span class="k">BY</span><span class="w"> </span><span class="n">p2</span><span class="p">.</span><span class="k">timestamp</span><span class="w"> </span><span class="k">DESC</span><span class="w"> </span><span class="k">LIMIT</span><span class="w"> </span><span class="mi">1</span><span class="p">)</span><span class="w"> </span><span class="k">AS</span><span class="w"> </span><span class="n">schema_version</span>
+<a id="__codelineno-15-10" name="__codelineno-15-10" href="#__codelineno-15-10"></a><span class="k">FROM</span><span class="w"> </span><span class="ss">&quot;ProvenanceRecord&quot;</span><span class="w"> </span><span class="n">p</span>
+<a id="__codelineno-15-11" name="__codelineno-15-11" href="#__codelineno-15-11"></a><span class="k">WHERE</span><span class="w"> </span><span class="n">entity_id</span><span class="w"> </span><span class="k">IS</span><span class="w"> </span><span class="k">NOT</span><span class="w"> </span><span class="k">NULL</span>
+<a id="__codelineno-15-12" name="__codelineno-15-12" href="#__codelineno-15-12"></a><span class="k">GROUP</span><span class="w"> </span><span class="k">BY</span><span class="w"> </span><span class="n">entity_id</span><span class="p">,</span><span class="w"> </span><span class="n">entity_type</span><span class="p">;</span>
 </code></pre></div>
-<p>Note: the actual provenance table is named <code>provenance</code> (not <code>provenance_events</code>) in the v0.1
-SQLite implementation. The SDK's <code>query()</code> implementation JOINs against this view to resolve
-<code>created_at</code> and <code>updated_at</code> in a single query rather than N+1 provenance lookups. The
+<blockquote>
+<p><strong>Note:</strong> The pre-migration view excluded <code>SOFT_DELETE</code> operations from <code>updated_at</code>.
+After the migration, <code>SOFT_DELETE</code> maps to <code>operation = 'availability_change'</code> (Decision
+9.6.B), but not all <code>availability_change</code> records represent hard deletions — the distinction
+lives in the <code>patch</code> column. The view above includes all operations in <code>updated_at</code>; refining
+the exclusion logic is deferred to a future sec6 revision.</p>
+</blockquote>
+<p>The SDK's <code>query()</code> implementation JOINs against this view to resolve <code>created_at</code>,
+<code>updated_at</code>, and <code>schema_version</code> in a single query rather than N+1 provenance lookups. The
 <code>get()</code> implementation uses a direct provenance subquery for individual entity reads.</p>
 <hr />
 <h3 id="67-history-api">6.7 History API<a class="headerlink" href="#67-history-api" title="Permanent link">&para;</a></h3>

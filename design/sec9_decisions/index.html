@@ -4084,6 +4084,28 @@
   
 </li>
         
+          <li class="md-nav__item">
+  <a href="#decision-95e-referenceloaderschema_fragment-merges-at-plugin-registration-instance-validation-runs-after-merge-new-2026-04-25" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Decision 9.5.E — ReferenceLoader.schema_fragment merges at plugin registration; instance validation runs after merge [NEW 2026-04-25]
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#decision-95f-referenceloaderentity_type-is-declarative-multivalued-true-string-loader-code-owns-runtime-ingestion-order-new-2026-04-25" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Decision 9.5.F — ReferenceLoader.entity_type is declarative multivalued: true string; loader code owns runtime ingestion order [NEW 2026-04-25]
+      
+    </span>
+  </a>
+  
+</li>
+        
       </ul>
     </nav>
   
@@ -4150,6 +4172,17 @@
     <span class="md-ellipsis">
       
         Decision 9.6.F — Known transition-period fallbacks flagged explicitly [NEW 2026-04-18]
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#decision-96g-actor-context-propagated-via-contextvar-not-method-signatures-new-2026-04-26" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Decision 9.6.G — Actor context propagated via ContextVar, not method signatures [NEW 2026-04-26]
       
     </span>
   </a>
@@ -4667,6 +4700,22 @@
 <li><strong>Deferred parts of the proposal:</strong> UUID pattern on <code>Entity.id</code> (would break existing test fixtures using ids like "s1"; postpone until a test-fixture cleanup pass); <code>client.get(uuid)</code> overload without <code>entity_type</code> (requires deeper restructuring of <code>QueryService</code> which routes by entity_type today); one-time backfill migration (unnecessary — the <code>entities</code> table always had the type column).</li>
 <li><strong>Revert:</strong> Remove the four methods (two adapters × {single, batch}) and two client methods. Low blast radius.</li>
 </ul>
+<h3 id="decision-95e-referenceloaderschema_fragment-merges-at-plugin-registration-instance-validation-runs-after-merge-new-2026-04-25">Decision 9.5.E — <code>ReferenceLoader.schema_fragment</code> merges at plugin registration; instance validation runs after merge [NEW 2026-04-25]<a class="headerlink" href="#decision-95e-referenceloaderschema_fragment-merges-at-plugin-registration-instance-validation-runs-after-merge-new-2026-04-25" title="Permanent link">&para;</a></h3>
+<ul>
+<li><strong>Finding (PTS-67 design discussion):</strong> A <code>ReferenceLoader</code> instance may reference classes declared in its own <code>schema_fragment</code> slot. Those classes don't exist in the merged <code>SchemaView</code> until the plugin's fragment is installed, so the lifecycle has to fix three things: (i) when the fragment is merged into the SchemaView, (ii) when the <code>ReferenceLoader</code> instance itself is validated against that view, and (iii) what the error surface looks like if either step fails.</li>
+<li><strong>Alternatives considered:</strong> (A) merge fragment at plugin registration; validate the loader instance against the merged view immediately; failures abort registration. (B) lazy merge on first loader invocation; instance validation deferred until first use. (C) eager merge at registration but defer instance validation to first invocation.</li>
+<li><strong>Chosen:</strong> (A). Per Director-of-Bioinformatics direction (PTS-67): the <code>schema_fragment</code> is loaded at plugin registration time, and end-user installation of a reference loader should not surface schema or data validation issues — the validation surface is plugin-developer-facing, not end-user-facing.</li>
+<li><strong>Consequences:</strong> Plugin registration becomes a two-step lockstep: Hippo (1) merges <code>schema_fragment</code> into the live <code>SchemaView</code>, then (2) validates the <code>ReferenceLoader</code> instance against the merged view so its <code>entity_type</code> references resolve. Failure at either step aborts plugin registration with a single error path (<code>plugin X failed to register: &lt;reason&gt;</code>); partial state — fragment merged but instance rejected, or instance accepted before its fragment loads — is impossible. End users never see fragment-or-instance validation errors at runtime; those are caught by the plugin developer at registration. This locks the contract for sec9 §9.5 and for the <code>reference-loader-shape</code> OpenSpec change.</li>
+<li><strong>Revert:</strong> Switch to (B) lazy-merge; would let invalid plugins register and fail mid-flight on first loader invocation. Higher operational cost (errors surface in user code paths instead of at registration); not recommended.</li>
+</ul>
+<h3 id="decision-95f-referenceloaderentity_type-is-declarative-multivalued-true-string-loader-code-owns-runtime-ingestion-order-new-2026-04-25">Decision 9.5.F — <code>ReferenceLoader.entity_type</code> is declarative <code>multivalued: true</code> string; loader code owns runtime ingestion order [NEW 2026-04-25]<a class="headerlink" href="#decision-95f-referenceloaderentity_type-is-declarative-multivalued-true-string-loader-code-owns-runtime-ingestion-order-new-2026-04-25" title="Permanent link">&para;</a></h3>
+<ul>
+<li><strong>Finding (PTS-67 design discussion):</strong> A multi-class <code>ReferenceLoader</code> (e.g. an ontology loader populating <code>Substance</code> and <code>Reaction</code>) needs some way to express the relationship between the classes it touches. Two open sub-questions: (i) does the order of <code>entity_type</code> entries carry runtime data-ingestion semantics — e.g., insert <code>Substance</code> rows before <code>Reaction</code> rows for FK satisfaction — or is it an unordered set? (ii) does per-class metadata (count estimates, intra-loader dependencies) live alongside each <code>entity_type</code> entry as a record, on separate <code>ReferenceLoader</code> instances per class, or somewhere else?</li>
+<li><strong>Alternatives considered:</strong> (A) <code>entity_type</code> is an ordered list and Hippo enforces ingestion order from it; per-class metadata baked into a <code>LoaderTarget</code> record range. (B) <code>entity_type</code> is an unordered set; per-class metadata on separate <code>ReferenceLoader</code> instances. (C) <code>entity_type</code> is <code>multivalued: true</code> over <code>string</code>; treated as a declarative listing of which classes the loader populates; the loader's own code owns runtime data-ingestion order; per-class metadata is not modeled in the schema.</li>
+<li><strong>Chosen:</strong> (C). Per Director-of-Bioinformatics direction (PTS-67): "Correct data-loading semantics is the loader developer's responsibility — we don't need any validation baked into the class. The <code>entity_type</code> slot is purely for provenance and discoverability." By the time end users install the plugin and trigger a load, all schema-resolution and ingestion-ordering concerns have already been resolved at the developer's layer.</li>
+<li><strong>Consequences:</strong> <code>ReferenceLoader.entity_type</code> is declared as <code>multivalued: true</code> with <code>range: string</code>. Hippo records the list — for provenance (what classes did this loader populate?) and for discoverability via <code>SchemaRegistry.reference_loaders()</code> — but does <strong>not</strong> drive runtime data load order from it. Multi-class loaders ordering FK-dependent inserts (e.g., insert <code>Substance</code> rows before <code>Reaction</code> rows) handle that ordering inside their own loader code; the schema doesn't replicate that contract. Per-class metadata (count estimates, etc.) is not part of the <code>ReferenceLoader</code> shape today; if a future plugin needs Hippo to surface per-class metadata, promote <code>entity_type</code> to a <code>LoaderTarget</code> record range — mechanical migration, no semantics change for existing loaders. Wave-3 ReferenceLoader development documentation must explicitly call out the developer's responsibility for correct data-loading semantics so this contract isn't rediscovered later.</li>
+<li><strong>Revert:</strong> Promote <code>entity_type</code> to <code>range: LoaderTarget</code> and treat order as load-order semantics. Mechanical migration but reopens the design question; only worth doing if Hippo gains a concrete need to drive ingestion from declared metadata.</li>
+</ul>
 <hr />
 <h2 id="96-provenance-as-a-linkml-class">9.6 Provenance as a LinkML Class<a class="headerlink" href="#96-provenance-as-a-linkml-class" title="Permanent link">&para;</a></h2>
 <h3 id="decision-96a-split-provenance-as-linkml-class-into-declaration-only-dedicated-provenance-migration-change-new-2026-04-21">Decision 9.6.A — Split <code>provenance-as-linkml-class</code> into declaration-only + dedicated <code>provenance-migration</code> change [NEW 2026-04-21]<a class="headerlink" href="#decision-96a-split-provenance-as-linkml-class-into-declaration-only-dedicated-provenance-migration-change-new-2026-04-21" title="Permanent link">&para;</a></h3>
@@ -4794,6 +4843,24 @@
 <li><strong>Fallback 2 — <code>schema_version = ""</code> on every new row.</strong> Sec9 §9.6 specifies that the SDK captures <code>schema_version</code> from <code>SchemaRegistry</code> at write time. The adapter's <code>ProvenanceStore.__init__</code> accepts a <code>schema_version</code> parameter but neither <code>SQLiteAdapter</code> nor <code>PostgresAdapter</code> thread a registry through at construction, so every new row's <code>schema_version</code> column is an empty string. NOT NULL is satisfied syntactically; the semantic contract is not. Follow-up: plumb the registry (or a schema-version string derived from it) into both adapters, populated at adapter construction or on first write after schema load.</li>
 <li><strong>Why (tracking, not fixing now):</strong> Both fallbacks are additive-compatible — removing them later won't require a data migration (new rows would just get richer values). Fixing them in this commit would expand the blast radius beyond "rewrite the provenance layer" into "propagate a schema registry through construction" and "plumb per-request actor context" — both multi-day undertakings on their own.</li>
 <li><strong>Revert / fix-forward:</strong> Not applicable (these are known gaps to close, not decisions to revert).</li>
+</ul>
+<h3 id="decision-96g-actor-context-propagated-via-contextvar-not-method-signatures-new-2026-04-26">Decision 9.6.G — Actor context propagated via ContextVar, not method signatures [NEW 2026-04-26]<a class="headerlink" href="#decision-96g-actor-context-propagated-via-contextvar-not-method-signatures-new-2026-04-26" title="Permanent link">&para;</a></h3>
+<ul>
+<li><strong>Finding (Decision 9.6.F follow-up):</strong> Several <code>ProvenanceStore.record()</code> call sites in <code>ingestion_service.py</code> and the storage adapters pass <code>actor_id=None</code>, producing <code>actor_id = "unknown"</code> rows. Fixing these by threading an <code>actor_id</code> parameter through every write-method signature (<code>put</code>, <code>create</code>, <code>update</code>, <code>replace</code>, <code>delete</code>) would add 5+ parameter pairs and expand the blast radius significantly. A request-scoped ContextVar is the standard Python pattern for this problem.</li>
+<li><strong>Alternatives considered:</strong></li>
+<li>(A) Explicit <code>actor_id</code> on every public SDK method — predictable but loud; adds 10+ signature changes across <code>HippoClient</code>, <code>IngestionService</code>, and adapter <code>create</code>/<code>delete</code>.</li>
+<li>(B) Client-level default actor set at <code>HippoClient.__init__</code> — works for single-actor SDK use but fails for per-request multi-actor scenarios (FastAPI with multiple concurrent users).</li>
+<li>(C) <code>ContextVar</code> in <code>hippo.core.context</code> — per-request isolation is automatic; no signature pollution; plays well with async.</li>
+<li><strong>Chosen:</strong> (C). <code>hippo.core.context.current_actor</code> is a <code>ContextVar[Optional[str]]</code> with a <code>with_actor(actor_id)</code> context manager for direct SDK use.</li>
+<li><strong>Resolution order in <code>ProvenanceStore.record()</code>:</strong></li>
+<li>Explicit <code>actor_id=</code> kwarg (highest priority — existing call sites with real actors)</li>
+<li>Legacy <code>user_context=</code> shim (Decision 9.6.B)</li>
+<li><code>current_actor.get()</code> from the ContextVar (set by middleware or <code>with_actor()</code>)</li>
+<li><code>"unknown"</code> sentinel (last resort — satisfies NOT NULL; flags unmigrated paths)</li>
+<li><strong>FastAPI integration:</strong> <code>PassThroughAuthMiddleware.__call__</code> calls <code>current_actor.set(actor_id)</code> at request entry and resets via token in a <code>try/finally</code> block, so each async request carries its own isolated actor value.</li>
+<li><strong>Scope note:</strong> <code>track_creation</code>, <code>track_update</code>, <code>track_deletion</code> in <code>sqlite_adapter.py</code> produce in-memory records only (no DB writes) with <code>actor_id=""</code>. These are not part of the 9.6.F sentinel problem and are unchanged.</li>
+<li><strong>Why:</strong> ContextVar is the idiomatic Python pattern for request-scoped state in both sync and async contexts. It avoids signature pollution, works naturally with FastAPI's async request lifecycle, and is compatible with threadpool (<code>concurrent.futures</code>) use via <code>copy_context()</code>. The sentinel remains as a safety net — its presence in the audit log signals that a call site still needs migration, without breaking the NOT NULL constraint.</li>
+<li><strong>Revert:</strong> Remove <code>hippo.core.context</code>; revert the three-line change in each adapter's <code>record()</code> and the middleware change. Low blast radius — all changes are additive.</li>
 </ul>
 <h3 id="decision-96e-legacy-user_context-strings-are-not-back-populated-to-actor_id-uuids-new-2026-04-18">Decision 9.6.E — Legacy <code>user_context</code> strings are not back-populated to <code>actor_id</code> UUIDs [NEW 2026-04-18]<a class="headerlink" href="#decision-96e-legacy-user_context-strings-are-not-back-populated-to-actor_id-uuids-new-2026-04-18" title="Permanent link">&para;</a></h3>
 <ul>
