@@ -1,5 +1,85 @@
 # Changelog
 
+## v0.5.0 — 2026-04-27
+
+### Breaking Changes
+
+- **`created_at` and `updated_at` dropped from entity tables (PTS-69).**
+  These columns no longer exist in the storage layer. Both fields are now computed
+  exclusively from the provenance log at read time and returned by `client.get()` and
+  `client.query()`. Run `hippo migrate` to drop the legacy columns from an existing
+  database; no data loss occurs because the provenance log is the authoritative source.
+
+- **`ValidationFailed` raised on write (PTS-70).**
+  Entities that fail schema validation now raise `ValidationFailed` at write time
+  (previously, failures were silently logged). Callers that write entities without catching
+  this exception will see it surface. This is intentional: silent validation bypass was a
+  data-integrity hazard.
+
+### New Features
+
+- **`hippo.models.<namespace>` direct-import surface (PTS-71).**
+  Pydantic model classes generated from a namespace's LinkML schema are now importable as
+  `from hippo.models.<namespace> import <ClassName>`. The namespace module is generated
+  lazily on first access and cached.
+
+- **Pydantic typed-client surface.**
+  `HippoClient` now exposes namespace-aware typed accessors backed by generated Pydantic
+  models. `client.<namespace>.get(id)` returns a typed instance; `client.<namespace>.query()`
+  returns `PaginatedResult[<Model>]`. The untyped `client.get()` / `client.query()` paths
+  remain unchanged.
+
+- **Computed temporal fields.**
+  `created_at` and `updated_at` are derived from the provenance log at read time via
+  `entity_provenance_summary` (a view created by `hippo migrate`). The values are consistent
+  with the provenance record rather than the entity table, which was the authoritative source
+  all along.
+
+- **Reference-loader shape (PTS-74).**
+  Reference loaders now produce well-typed fragments with explicit merge semantics: each
+  fragment declares its `entity_type`, and the loader merges overlapping fields according to
+  the schema rather than by positional order. The `ReferenceLoader` ABC and
+  `ConfigurableReferenceLoader` base class are the new extension points.
+
+- **actor_id ContextVar sentinel (PTS-68).**
+  Actor identity is now threaded through nested SDK calls automatically via a `ContextVar`.
+  The `UUID4_SENTINEL` value is resolved to the caller's actual UUID at write time;
+  callers no longer need to pass `actor=...` explicitly on every inner call.
+
+- **LinkML-native SchemaRegistry.**
+  `SchemaRegistry` loads and merges `hippo_core.yaml` (system-level schema: `id`,
+  `is_available`, `superseded_by`, `actor_id`) and `hippo_ext.yaml` (annotation
+  vocabulary: `hippo_unique`, `hippo_immutable`, `hippo_computed`) into a three-layer
+  merge with user schemas. `SchemaRegistry.validate_hippo_annotations()` hard-fails on
+  unknown `hippo_*` annotations.
+
+- **Provenance migration: ProvenanceRecord model.**
+  `ProvenanceStore` has been replaced by a `ProvenanceRecord` dataclass. A DDL
+  verification helper ensures the provenance table schema is current before writes;
+  a write-guard helper prevents in-flight provenance events from racing with schema
+  migration.
+
+- **Unified validation envelope + REST surface.**
+  The validation result envelope (`ValidationEnvelope`) now unifies SDK-level and
+  REST-level validation feedback. The FastAPI transport layer uses the same envelope
+  for 422 responses.
+
+### Bug Fixes
+
+- **actor_id UUID sentinel drift (PTS-68).** Under nested calls, the sentinel UUID was
+  occasionally propagated to storage instead of being resolved to the caller's identity.
+  The ContextVar implementation fixes this deterministically.
+
+- **Hard-fail on Pydantic generation failure.** A prior revision allowed silent pass-through
+  when model generation failed (e.g. due to a malformed schema). This is now a hard error
+  surfaced immediately at schema-load time.
+
+### Documentation
+
+- **`docs/reference_typed_client.md`** — user guide for the Pydantic typed-client surface (PTS-72).
+- **Sec6 provenance spec revision (PTS-73)** — light-touch pass to align the provenance spec
+  with the finalized `ProvenanceRecord` model and `entity_provenance_summary` view.
+
 ## v0.4.0 — 2026-04-14
 
 ### Breaking Changes
