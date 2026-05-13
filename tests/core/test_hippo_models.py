@@ -73,7 +73,7 @@ def client_factory():
 
     def _make(registry: SchemaRegistry) -> HippoClient:
         tmpdir = tempfile.mkdtemp()
-        storage = SQLiteAdapter(os.path.join(tmpdir, "models_test.db"))
+        storage = SQLiteAdapter(os.path.join(tmpdir, "models_test.db"), schema_registry=registry)
         created.append(storage)
         return HippoClient(storage=storage, registry=registry, bypass_validation=True)
 

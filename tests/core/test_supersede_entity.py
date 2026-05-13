@@ -9,6 +9,7 @@ import pytest
 from hippo.core.client import HippoClient
 from hippo.core.exceptions import EntityAlreadySupersededError, EntityNotFoundError
 from hippo.core.storage.adapters.sqlite_adapter import SQLiteAdapter
+from tests.conftest import _build_minimal_schema_registry
 
 
 class TestSupersededEntity:
@@ -23,7 +24,7 @@ class TestSupersededEntity:
     @pytest.fixture
     def client(self, db_path: str) -> HippoClient:
         """Create a HippoClient with SQLite storage."""
-        storage = SQLiteAdapter(db_path)
+        storage = SQLiteAdapter(db_path, schema_registry=_build_minimal_schema_registry())
         return HippoClient(storage=storage, bypass_validation=True)
 
     def test_supersede_entity_marks_source_as_unavailable(

@@ -8,6 +8,7 @@ import pytest
 
 from hippo.core.client import HippoClient
 from hippo.core.storage.adapters.sqlite_adapter import SQLiteAdapter
+from tests.conftest import _build_minimal_schema_registry
 from hippo.core.types import PaginatedResult
 
 
@@ -23,7 +24,7 @@ class TestProvenanceDerivedFields:
     @pytest.fixture
     def client(self, db_path: str) -> HippoClient:
         """Create a HippoClient with SQLite storage."""
-        storage = SQLiteAdapter(db_path)
+        storage = SQLiteAdapter(db_path, schema_registry=_build_minimal_schema_registry())
         return HippoClient(storage=storage, bypass_validation=True)
 
     def test_get_returns_provenance_derived_created_at(
@@ -129,7 +130,7 @@ class TestPaginatedResult:
     @pytest.fixture
     def client(self, db_path: str) -> HippoClient:
         """Create a HippoClient with SQLite storage."""
-        storage = SQLiteAdapter(db_path)
+        storage = SQLiteAdapter(db_path, schema_registry=_build_minimal_schema_registry())
         return HippoClient(storage=storage, bypass_validation=True)
 
     def test_non_empty_query_returns_paginated_result(

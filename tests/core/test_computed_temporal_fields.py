@@ -19,6 +19,7 @@ import pytest
 
 from hippo.core.client import HippoClient
 from hippo.core.storage.adapters.sqlite_adapter import SQLiteAdapter
+from tests.conftest import _build_minimal_schema_registry
 from hippo.core.types import TemporalRecord
 from hippo.linkml_bridge import SchemaRegistry
 
@@ -31,7 +32,7 @@ def db_path() -> str:
 
 @pytest.fixture
 def client(db_path: str) -> HippoClient:
-    storage = SQLiteAdapter(db_path)
+    storage = SQLiteAdapter(db_path, schema_registry=_build_minimal_schema_registry())
     return HippoClient(storage=storage, bypass_validation=True)
 
 
@@ -56,7 +57,7 @@ def client_with_versioned_schema(db_path: str) -> HippoClient:
         "        range: string\n"
     )
     registry = SchemaRegistry.from_yaml(yaml_text)
-    storage = SQLiteAdapter(db_path)
+    storage = SQLiteAdapter(db_path, schema_registry=_build_minimal_schema_registry())
     return HippoClient(storage=storage, registry=registry, bypass_validation=True)
 
 

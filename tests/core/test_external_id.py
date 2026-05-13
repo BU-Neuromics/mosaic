@@ -1,3 +1,4 @@
+from tests.conftest import _build_minimal_schema_registry
 """Unit tests for ExternalIdStorageAdapter."""
 
 import os
@@ -23,7 +24,7 @@ class TestExternalIdStorageAdapter:
     @pytest.fixture
     def adapter(self, db_path: str) -> SQLiteAdapter:
         """Create a SQLiteAdapter with external ID support."""
-        return SQLiteAdapter(db_path)
+        return SQLiteAdapter(db_path, schema_registry=_build_minimal_schema_registry())
 
     @pytest.fixture
     def external_id_store(self, adapter: SQLiteAdapter) -> ExternalIdStorageAdapter:

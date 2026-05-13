@@ -9,6 +9,7 @@ from fastapi.testclient import TestClient
 from hippo.api.factory import create_app
 from hippo.core.client import HippoClient
 from hippo.core.storage.adapters.sqlite_adapter import SQLiteAdapter
+from tests.conftest import _build_minimal_schema_registry
 from hippo.serve.routers import availability, health, ingest
 
 
@@ -20,7 +21,7 @@ def db_path():
 
 @pytest.fixture
 def hippo_client(db_path):
-    storage = SQLiteAdapter(db_path)
+    storage = SQLiteAdapter(db_path, schema_registry=_build_minimal_schema_registry())
     return HippoClient(storage=storage, bypass_validation=True)
 
 

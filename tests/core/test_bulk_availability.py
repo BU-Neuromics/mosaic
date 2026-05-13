@@ -7,6 +7,7 @@ import pytest
 
 from hippo.core.client import HippoClient
 from hippo.core.storage.adapters.sqlite_adapter import SQLiteAdapter
+from tests.conftest import _build_minimal_schema_registry
 
 
 class TestBulkAvailability:
@@ -19,7 +20,7 @@ class TestBulkAvailability:
 
     @pytest.fixture
     def client(self, db_path: str) -> HippoClient:
-        storage = SQLiteAdapter(db_path)
+        storage = SQLiteAdapter(db_path, schema_registry=_build_minimal_schema_registry())
         return HippoClient(storage=storage, bypass_validation=True)
 
     def test_bulk_set_unavailable(self, client: HippoClient) -> None:

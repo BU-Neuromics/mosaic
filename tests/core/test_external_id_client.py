@@ -8,6 +8,7 @@ import pytest
 from hippo.core.client import HippoClient
 from hippo.core.exceptions import EntityNotFoundError
 from hippo.core.storage.adapters.sqlite_adapter import SQLiteAdapter
+from tests.conftest import _build_minimal_schema_registry
 
 
 class TestHippoClientExternalId:
@@ -22,7 +23,7 @@ class TestHippoClientExternalId:
     @pytest.fixture
     def client(self, db_path: str) -> HippoClient:
         """Create a HippoClient with SQLite storage."""
-        storage = SQLiteAdapter(db_path)
+        storage = SQLiteAdapter(db_path, schema_registry=_build_minimal_schema_registry())
         return HippoClient(storage=storage, bypass_validation=True)
 
     def test_register_external_id(self, client: HippoClient) -> None:

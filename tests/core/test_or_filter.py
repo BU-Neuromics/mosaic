@@ -7,6 +7,7 @@ import pytest
 
 from hippo.core.client import HippoClient
 from hippo.core.storage.adapters.sqlite_adapter import SQLiteAdapter
+from tests.conftest import _build_minimal_schema_registry
 
 
 class TestORFilterComposition:
@@ -19,7 +20,7 @@ class TestORFilterComposition:
 
     @pytest.fixture
     def client(self, db_path: str) -> HippoClient:
-        storage = SQLiteAdapter(db_path)
+        storage = SQLiteAdapter(db_path, schema_registry=_build_minimal_schema_registry())
         c = HippoClient(storage=storage, bypass_validation=True)
         # Seed test data
         c.put("Sample", {"id": "s1", "name": "Alpha", "tissue": "brain"})

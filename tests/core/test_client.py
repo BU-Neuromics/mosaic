@@ -10,6 +10,7 @@ import pytest
 from hippo.core.client import HippoClient
 from hippo.core.exceptions import EntityNotFoundError, ValidationFailure
 from hippo.core.storage.adapters.sqlite_adapter import SQLiteAdapter
+from tests.conftest import _build_minimal_schema_registry
 
 
 class TestPutOperation:
@@ -24,7 +25,7 @@ class TestPutOperation:
     @pytest.fixture
     def client(self, db_path: str) -> HippoClient:
         """Create a HippoClient with SQLite storage."""
-        storage = SQLiteAdapter(db_path)
+        storage = SQLiteAdapter(db_path, schema_registry=_build_minimal_schema_registry())
         return HippoClient(storage=storage, bypass_validation=True)
 
     def test_put_creates_entity_with_generated_id(self, client: HippoClient) -> None:
@@ -86,7 +87,7 @@ class TestGetOperation:
     @pytest.fixture
     def client(self, db_path: str) -> HippoClient:
         """Create a HippoClient with SQLite storage."""
-        storage = SQLiteAdapter(db_path)
+        storage = SQLiteAdapter(db_path, schema_registry=_build_minimal_schema_registry())
         return HippoClient(storage=storage, bypass_validation=True)
 
     def test_get_returns_entity_with_metadata(self, client: HippoClient) -> None:
@@ -128,7 +129,7 @@ class TestQueryOperation:
     @pytest.fixture
     def client(self, db_path: str) -> HippoClient:
         """Create a HippoClient with SQLite storage."""
-        storage = SQLiteAdapter(db_path)
+        storage = SQLiteAdapter(db_path, schema_registry=_build_minimal_schema_registry())
         return HippoClient(storage=storage, bypass_validation=True)
 
     def test_query_returns_matching_entities(self, client: HippoClient) -> None:
@@ -213,7 +214,7 @@ class TestErrorCases:
     @pytest.fixture
     def client(self, db_path: str) -> HippoClient:
         """Create a HippoClient with SQLite storage."""
-        storage = SQLiteAdapter(db_path)
+        storage = SQLiteAdapter(db_path, schema_registry=_build_minimal_schema_registry())
         return HippoClient(storage=storage, bypass_validation=True)
 
     def test_get_nonexistent_entity_raises_error(self, client: HippoClient) -> None:
@@ -343,7 +344,7 @@ class TestTypeResolution:
 
     @pytest.fixture
     def client(self, db_path: str) -> HippoClient:
-        storage = SQLiteAdapter(db_path)
+        storage = SQLiteAdapter(db_path, schema_registry=_build_minimal_schema_registry())
         return HippoClient(storage=storage, bypass_validation=True)
 
     def test_resolve_type_returns_entity_type_for_known_uuid(

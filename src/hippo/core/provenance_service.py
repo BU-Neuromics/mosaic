@@ -154,9 +154,21 @@ class ProvenanceService:
 
         now = datetime.now(timezone.utc).isoformat()
 
+        # Per sec9 §9.6, supersession must be atomic: the entity-level
+        # state change, both provenance entries, and the relationship
+        # edge live in one transaction. The adapter's
+        # ``_set_per_class_superseded_by`` helper participates in the
+        # caller-owned cursor; the public ``mark_superseded`` wrapper is
+        # reserved for standalone callers.
         with self._storage._transaction() as conn:
             cursor = conn.cursor()
-
+            self._storage._set_per_class_superseded_by(
+                cursor,
+                source_entity.entity_type,
+                entity_id,
+                replacement_id,
+                is_available=False,
+            )
             cursor.execute(
                 """UPDATE entities SET is_available = 0, superseded_by = ?
                    WHERE id = ?""",

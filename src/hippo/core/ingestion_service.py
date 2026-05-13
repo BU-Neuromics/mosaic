@@ -1,6 +1,5 @@
 """IngestionService - Entity write operations (create, update, upsert, delete) facade."""
 
-import json
 import uuid
 from datetime import datetime, timezone
 from typing import Any, Optional
@@ -149,24 +148,13 @@ class IngestionService:
 
         if existing is not None:
             new_version = existing.version + 1
-            with self._storage._transaction() as conn:
-                cursor = conn.cursor()
-                cursor.execute(
-                    """UPDATE entities SET data = ?, version = ?
-                       WHERE id = ? AND is_available = 1""",
-                    (json.dumps(data), new_version, final_id),
-                )
-
-                provenance = self._storage._get_provenance_store(conn)
-                provenance.record(
-                    entity_id=final_id,
-                    entity_type=entity_type,
-                    operation="update",
-                    actor_id=None,
-                    patch=data,
-                )
-
-                self._sync_entity_to_fts(final_id, entity_type, data, is_available=True)
+            self._storage.update_data(
+                entity_id=final_id,
+                entity_type=entity_type,
+                data=data,
+                new_version=new_version,
+            )
+            self._sync_entity_to_fts(final_id, entity_type, data, is_available=True)
 
             temporal_map = self._storage.get_temporal([final_id])
             temporal = temporal_map.get(final_id)
@@ -275,24 +263,13 @@ class IngestionService:
 
         new_version = existing.version + 1
 
-        with self._storage._transaction() as conn:
-            cursor = conn.cursor()
-            cursor.execute(
-                """UPDATE entities SET data = ?, version = ?
-                   WHERE id = ? AND is_available = 1""",
-                (json.dumps(data), new_version, entity_id),
-            )
-
-            provenance = self._storage._get_provenance_store(conn)
-            provenance.record(
-                entity_id=entity_id,
-                entity_type=entity_type,
-                operation="update",
-                actor_id=None,
-                patch=data,
-            )
-
-            self._sync_entity_to_fts(entity_id, entity_type, data, is_available=True)
+        self._storage.update_data(
+            entity_id=entity_id,
+            entity_type=entity_type,
+            data=data,
+            new_version=new_version,
+        )
+        self._sync_entity_to_fts(entity_id, entity_type, data, is_available=True)
 
         temporal_map = self._storage.get_temporal([entity_id])
         temporal = temporal_map.get(entity_id)
@@ -393,25 +370,13 @@ class IngestionService:
                     failures.append({"id": eid, "error": f"Entity not found: {eid}"})
                     continue
 
-                with self._storage._transaction() as conn:
-                    cursor = conn.cursor()
-                    cursor.execute(
-                        """UPDATE entities SET is_available = ?
-                           WHERE id = ?""",
-                        (1 if is_available else 0, eid),
-                    )
-
-                    provenance = self._storage._get_provenance_store(conn)
-                    prov_patch: dict[str, Any] = {"is_available": is_available}
-                    if reason:
-                        prov_patch["reason"] = reason
-                    provenance.record(
-                        entity_id=eid,
-                        entity_type=entity_type,
-                        operation="availability_change",
-                        actor_id=actor,
-                        patch=prov_patch,
-                    )
+                self._storage.set_availability(
+                    entity_id=eid,
+                    entity_type=entity_type,
+                    is_available=is_available,
+                    actor=actor,
+                    reason=reason,
+                )
 
                 data = existing.data if existing else {}
                 self._sync_entity_to_fts(eid, entity_type, data, is_available=is_available)

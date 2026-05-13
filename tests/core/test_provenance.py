@@ -1,3 +1,4 @@
+from tests.conftest import _build_minimal_schema_registry
 """Tests for provenance tracking in SQLite adapter."""
 
 import json
@@ -30,7 +31,7 @@ class TestProvenanceTracking:
     @pytest.fixture
     def adapter(self, db_path: str) -> SQLiteAdapter:
         """Create a SQLite adapter."""
-        adapter = SQLiteAdapter(db_path, wal_mode=True)
+        adapter = SQLiteAdapter(db_path, wal_mode=True, schema_registry=_build_minimal_schema_registry())
         yield adapter
         adapter.close()
 
@@ -95,7 +96,7 @@ class TestProvenanceTracking:
 
     def test_create_provenance_event_generation(self, db_path: str) -> None:
         """Test 5.1: CREATE provenance event generation."""
-        adapter = SQLiteAdapter(db_path, wal_mode=True)
+        adapter = SQLiteAdapter(db_path, wal_mode=True, schema_registry=_build_minimal_schema_registry())
 
         entity = TestEntity(id="test-entity-1", name="Test Entity")
         adapter.create(entity)
@@ -115,7 +116,7 @@ class TestProvenanceTracking:
 
     def test_soft_delete_provenance_with_original_data(self, db_path: str) -> None:
         """Test 5.2: SOFT_DELETE provenance event with original data preservation."""
-        adapter = SQLiteAdapter(db_path, wal_mode=True)
+        adapter = SQLiteAdapter(db_path, wal_mode=True, schema_registry=_build_minimal_schema_registry())
 
         entity = TestEntity(id="test-entity-2", name="To Be Deleted")
         adapter.create(entity)
@@ -143,7 +144,7 @@ class TestProvenanceTracking:
 
     def test_transaction_bound_provenance_events(self, db_path: str) -> None:
         """Test 5.3: Integration test for transaction-bound provenance events."""
-        adapter = SQLiteAdapter(db_path, wal_mode=True)
+        adapter = SQLiteAdapter(db_path, wal_mode=True, schema_registry=_build_minimal_schema_registry())
 
         entity = TestEntity(id="test-entity-3", name="Transaction Test")
         adapter.create(entity)
@@ -169,7 +170,7 @@ class TestProvenanceTracking:
 
     def test_user_context_inclusion(self, db_path: str) -> None:
         """Test 5.4: User context inclusion in provenance records."""
-        adapter = SQLiteAdapter(db_path, wal_mode=True)
+        adapter = SQLiteAdapter(db_path, wal_mode=True, schema_registry=_build_minimal_schema_registry())
 
         entity = TestEntity(id="test-entity-4", name="User Context Test")
         adapter.create(entity, user_context="test-user@example.com")
@@ -191,7 +192,7 @@ class TestProvenanceTracking:
 
     def test_provenance_indexes_exist(self, db_path: str) -> None:
         """Test that ProvenanceRecord indexes are created (sec9 §9.6 names)."""
-        adapter = SQLiteAdapter(db_path, wal_mode=True)
+        adapter = SQLiteAdapter(db_path, wal_mode=True, schema_registry=_build_minimal_schema_registry())
 
         conn = sqlite3.connect(db_path)
         cursor = conn.cursor()
@@ -211,7 +212,7 @@ class TestProvenanceTracking:
 
     def test_provenance_table_schema(self, db_path: str) -> None:
         """Test that ProvenanceRecord table has the sec9 §9.6 column shape."""
-        adapter = SQLiteAdapter(db_path, wal_mode=True)
+        adapter = SQLiteAdapter(db_path, wal_mode=True, schema_registry=_build_minimal_schema_registry())
 
         conn = sqlite3.connect(db_path)
         cursor = conn.cursor()
@@ -239,7 +240,7 @@ class TestProvenanceTracking:
 
     def test_composite_index_exists(self, db_path: str) -> None:
         """Test that composite index on (entity_id, timestamp) exists."""
-        adapter = SQLiteAdapter(db_path, wal_mode=True)
+        adapter = SQLiteAdapter(db_path, wal_mode=True, schema_registry=_build_minimal_schema_registry())
 
         conn = sqlite3.connect(db_path)
         cursor = conn.cursor()
@@ -267,13 +268,13 @@ class TestHistoryMethods:
     @pytest.fixture
     def adapter(self, db_path: str) -> SQLiteAdapter:
         """Create a SQLite adapter."""
-        adapter = SQLiteAdapter(db_path, wal_mode=True)
+        adapter = SQLiteAdapter(db_path, wal_mode=True, schema_registry=_build_minimal_schema_registry())
         yield adapter
         adapter.close()
 
     def test_history_returns_chronological_order(self, db_path: str) -> None:
         """Test 5.2: history() returns records in chronological order."""
-        adapter = SQLiteAdapter(db_path, wal_mode=True)
+        adapter = SQLiteAdapter(db_path, wal_mode=True, schema_registry=_build_minimal_schema_registry())
 
         from hippo.core.storage.adapters.sqlite_adapter import SQLiteEntity
         from datetime import datetime, timezone
@@ -329,7 +330,7 @@ class TestHistoryMethods:
 
     def test_state_at_returns_correct_state(self, db_path: str) -> None:
         """Test 5.3: state_at() returns entity state at specified time."""
-        adapter = SQLiteAdapter(db_path, wal_mode=True)
+        adapter = SQLiteAdapter(db_path, wal_mode=True, schema_registry=_build_minimal_schema_registry())
 
         from hippo.core.storage.adapters.sqlite_adapter import SQLiteEntity
         from datetime import datetime, timezone
@@ -383,7 +384,7 @@ class TestHistoryMethods:
         """Test 5.4: state_at() raises TemporalQueryError for timestamp before creation."""
         from hippo.core.exceptions import TemporalQueryError
 
-        adapter = SQLiteAdapter(db_path, wal_mode=True)
+        adapter = SQLiteAdapter(db_path, wal_mode=True, schema_registry=_build_minimal_schema_registry())
 
         from hippo.core.storage.adapters.sqlite_adapter import SQLiteEntity
         from datetime import datetime, timezone, timedelta
@@ -411,7 +412,7 @@ class TestHistoryMethods:
 
     def test_state_at_none_for_deleted_entity(self, db_path: str) -> None:
         """Test that state_at() returns None for deleted entities at deletion time."""
-        adapter = SQLiteAdapter(db_path, wal_mode=True)
+        adapter = SQLiteAdapter(db_path, wal_mode=True, schema_registry=_build_minimal_schema_registry())
 
         from hippo.core.storage.adapters.sqlite_adapter import SQLiteEntity
         from datetime import datetime, timezone, timedelta
@@ -455,7 +456,7 @@ class TestHistoryClientAPI:
         from hippo.core.client import HippoClient
         from hippo.core.storage.adapters import SQLiteAdapter
 
-        adapter = SQLiteAdapter(db_path, wal_mode=True)
+        adapter = SQLiteAdapter(db_path, wal_mode=True, schema_registry=_build_minimal_schema_registry())
         client = HippoClient(storage=adapter)
         yield client
         adapter.close()

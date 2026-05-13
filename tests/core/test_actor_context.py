@@ -1,3 +1,4 @@
+from tests.conftest import _build_minimal_schema_registry
 """Tests for actor context propagation (Decision 9.6.G)."""
 
 import sqlite3
@@ -56,7 +57,7 @@ class TestProvenanceStorePicksUpContextVar:
     def test_actor_from_context_var_written_to_provenance(self, db_path: str):
         from hippo.core.storage.adapters.sqlite_adapter import SQLiteAdapter, SQLiteEntity
 
-        adapter = SQLiteAdapter(db_path, wal_mode=True)
+        adapter = SQLiteAdapter(db_path, wal_mode=True, schema_registry=_build_minimal_schema_registry())
         now = "2026-01-01T00:00:00"
 
         entity = SQLiteEntity(
@@ -77,7 +78,7 @@ class TestProvenanceStorePicksUpContextVar:
     def test_fallback_to_unknown_when_no_context(self, db_path: str):
         from hippo.core.storage.adapters.sqlite_adapter import SQLiteAdapter, SQLiteEntity
 
-        adapter = SQLiteAdapter(db_path, wal_mode=True)
+        adapter = SQLiteAdapter(db_path, wal_mode=True, schema_registry=_build_minimal_schema_registry())
         now = "2026-01-01T00:00:00"
 
         entity = SQLiteEntity(
@@ -96,7 +97,7 @@ class TestProvenanceStorePicksUpContextVar:
     def test_explicit_kwarg_overrides_context_var(self, db_path: str):
         from hippo.core.storage.adapters.sqlite_adapter import SQLiteAdapter
 
-        adapter = SQLiteAdapter(db_path, wal_mode=True)
+        adapter = SQLiteAdapter(db_path, wal_mode=True, schema_registry=_build_minimal_schema_registry())
 
         with adapter._transaction() as conn:
             from hippo.core.storage.adapters.sqlite_adapter import SQLiteEntity

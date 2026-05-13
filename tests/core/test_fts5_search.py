@@ -2,6 +2,7 @@
 
 import pytest
 from hippo.core.storage.adapters.sqlite_adapter import SQLiteAdapter, SQLiteEntity
+from tests.conftest import _build_minimal_schema_registry
 from hippo.core.storage import ScoredMatch
 from hippo.core.exceptions import SearchCapabilityError
 
@@ -46,7 +47,7 @@ class TestFTS5SearchIntegration:
 
     def test_search_with_fts_indexed_field(self, temp_db_path):
         """Test search returns matching entities with scores."""
-        adapter = SQLiteAdapter(temp_db_path)
+        adapter = SQLiteAdapter(temp_db_path, schema_registry=_build_minimal_schema_registry())
 
         entity = SQLiteEntity(
             id="test-1",
@@ -75,7 +76,7 @@ class TestFTS5SearchIntegration:
 
     def test_search_partial_term_match(self, temp_db_path):
         """Test search finds entity by partial term match."""
-        adapter = SQLiteAdapter(temp_db_path)
+        adapter = SQLiteAdapter(temp_db_path, schema_registry=_build_minimal_schema_registry())
 
         entity = SQLiteEntity(
             id="test-2",
@@ -106,7 +107,7 @@ class TestFTS5SearchIntegration:
 
     def test_search_case_insensitive(self, temp_db_path):
         """Test search is case-insensitive."""
-        adapter = SQLiteAdapter(temp_db_path)
+        adapter = SQLiteAdapter(temp_db_path, schema_registry=_build_minimal_schema_registry())
 
         entity = SQLiteEntity(
             id="test-3",
@@ -130,7 +131,7 @@ class TestFTS5SearchIntegration:
 
     def test_search_results_ordered_by_score_desc(self, temp_db_path):
         """Test search results are ordered by score descending."""
-        adapter = SQLiteAdapter(temp_db_path)
+        adapter = SQLiteAdapter(temp_db_path, schema_registry=_build_minimal_schema_registry())
 
         entity1 = SQLiteEntity(
             id="test-a",
@@ -171,7 +172,7 @@ class TestFTS5SearchIntegration:
 
     def test_search_scores_normalized_to_0_1_range(self, temp_db_path):
         """Test normalized scores are in [0.0, 1.0] range."""
-        adapter = SQLiteAdapter(temp_db_path)
+        adapter = SQLiteAdapter(temp_db_path, schema_registry=_build_minimal_schema_registry())
 
         entity = SQLiteEntity(
             id="test-4",
@@ -197,7 +198,7 @@ class TestFTS5SearchIntegration:
 
     def test_search_empty_results_for_non_matching_query(self, temp_db_path):
         """Test empty results for non-matching query."""
-        adapter = SQLiteAdapter(temp_db_path)
+        adapter = SQLiteAdapter(temp_db_path, schema_registry=_build_minimal_schema_registry())
 
         entity = SQLiteEntity(
             id="test-5",
@@ -225,7 +226,7 @@ class TestFTS5SearchCapabilityError:
 
     def test_search_non_fts_field_raises_error(self, temp_db_path):
         """Test searching non-FTS field raises SearchCapabilityError."""
-        adapter = SQLiteAdapter(temp_db_path)
+        adapter = SQLiteAdapter(temp_db_path, schema_registry=_build_minimal_schema_registry())
 
         entity = SQLiteEntity(
             id="test-6",
@@ -249,7 +250,7 @@ class TestFTS5SearchCapabilityError:
 
     def test_search_capability_error_suggests_fts(self, temp_db_path):
         """Test SearchCapabilityError suggests enabling FTS."""
-        adapter = SQLiteAdapter(temp_db_path)
+        adapter = SQLiteAdapter(temp_db_path, schema_registry=_build_minimal_schema_registry())
 
         entity = SQLiteEntity(
             id="test-7",
@@ -276,7 +277,7 @@ class TestFTS5SearchMinScore:
 
     def test_min_score_filters_results(self, temp_db_path):
         """Test min_score filters out low-scored entities."""
-        adapter = SQLiteAdapter(temp_db_path)
+        adapter = SQLiteAdapter(temp_db_path, schema_registry=_build_minimal_schema_registry())
 
         entity1 = SQLiteEntity(
             id="test-high",
@@ -317,7 +318,7 @@ class TestFTS5SearchMinScore:
 
     def test_min_score_zero_returns_all(self, temp_db_path):
         """Test min_score=0.0 returns all matches."""
-        adapter = SQLiteAdapter(temp_db_path)
+        adapter = SQLiteAdapter(temp_db_path, schema_registry=_build_minimal_schema_registry())
 
         entity = SQLiteEntity(
             id="test-8",
@@ -346,7 +347,7 @@ class TestFTS5SearchLimit:
 
     def test_limit_restricts_results(self, temp_db_path):
         """Test limit restricts result count."""
-        adapter = SQLiteAdapter(temp_db_path)
+        adapter = SQLiteAdapter(temp_db_path, schema_registry=_build_minimal_schema_registry())
 
         _create_fts_table(adapter, "fts_document_content", ["content"])
 
@@ -374,7 +375,7 @@ class TestFTS5SearchLimit:
 
     def test_limit_defaults_to_100(self, temp_db_path):
         """Test limit defaults to 100."""
-        adapter = SQLiteAdapter(temp_db_path)
+        adapter = SQLiteAdapter(temp_db_path, schema_registry=_build_minimal_schema_registry())
 
         entity = SQLiteEntity(
             id="test-9",
@@ -398,7 +399,7 @@ class TestFTS5SearchLimit:
 
     def test_limit_higher_than_matches_returns_all(self, temp_db_path):
         """Test limit higher than matches returns all."""
-        adapter = SQLiteAdapter(temp_db_path)
+        adapter = SQLiteAdapter(temp_db_path, schema_registry=_build_minimal_schema_registry())
 
         _create_fts_table(adapter, "fts_document_content", ["content"])
 

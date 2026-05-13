@@ -1,3 +1,4 @@
+from tests.conftest import _build_minimal_schema_registry
 """Tests for SQLite WAL mode concurrent access."""
 
 import os
@@ -24,20 +25,20 @@ class TestWALModeConcurrentAccess:
     @pytest.fixture
     def adapter(self, db_path: str) -> SQLiteAdapter:
         """Create a SQLite adapter with WAL mode."""
-        adapter = SQLiteAdapter(db_path, wal_mode=True)
+        adapter = SQLiteAdapter(db_path, wal_mode=True, schema_registry=_build_minimal_schema_registry())
         yield adapter
         adapter.close()
 
     def test_wal_mode_enabled(self, db_path: str) -> None:
         """Test that WAL mode is enabled."""
-        adapter = SQLiteAdapter(db_path, wal_mode=True)
+        adapter = SQLiteAdapter(db_path, wal_mode=True, schema_registry=_build_minimal_schema_registry())
         mode = adapter.get_journal_mode()
         assert mode == "wal"
         adapter.close()
 
     def test_concurrent_reads_during_write_operations(self, db_path: str) -> None:
         """Test 2.1: Concurrent reads during write operations."""
-        adapter = SQLiteAdapter(db_path, wal_mode=True)
+        adapter = SQLiteAdapter(db_path, wal_mode=True, schema_registry=_build_minimal_schema_registry())
 
         class TestEntity:
             def __init__(self, id: str):
@@ -85,7 +86,7 @@ class TestWALModeConcurrentAccess:
 
     def test_multiple_readers_with_active_writer(self, db_path: str) -> None:
         """Test 2.2: Multiple readers with active writer."""
-        adapter = SQLiteAdapter(db_path, wal_mode=True)
+        adapter = SQLiteAdapter(db_path, wal_mode=True, schema_registry=_build_minimal_schema_registry())
 
         class TestEntity:
             def __init__(self, id: str):
@@ -133,7 +134,7 @@ class TestWALModeConcurrentAccess:
 
     def test_no_blocking_between_read_write(self, db_path: str) -> None:
         """Test 2.3: Verify no blocking occurs between read/write operations."""
-        adapter = SQLiteAdapter(db_path, wal_mode=True)
+        adapter = SQLiteAdapter(db_path, wal_mode=True, schema_registry=_build_minimal_schema_registry())
 
         class TestEntity:
             def __init__(self, id: str):
@@ -179,7 +180,7 @@ class TestWALModeConcurrentAccess:
 
     def test_checkpoint_operations_execute(self, db_path: str) -> None:
         """Test 3.1: Verify checkpoint operations execute correctly."""
-        adapter = SQLiteAdapter(db_path, wal_mode=True)
+        adapter = SQLiteAdapter(db_path, wal_mode=True, schema_registry=_build_minimal_schema_registry())
 
         class TestEntity:
             def __init__(self, id: str):
@@ -195,7 +196,7 @@ class TestWALModeConcurrentAccess:
 
     def test_wal_file_created(self, db_path: str) -> None:
         """Test 3.2: Verify WAL file is created after writes."""
-        adapter = SQLiteAdapter(db_path, wal_mode=True)
+        adapter = SQLiteAdapter(db_path, wal_mode=True, schema_registry=_build_minimal_schema_registry())
 
         class TestEntity:
             def __init__(self, id: str):
@@ -219,12 +220,12 @@ class TestWALModeConcurrentAccess:
             def __init__(self, id: str):
                 self.id = id
 
-        adapter1 = SQLiteAdapter(db_path, wal_mode=True)
+        adapter1 = SQLiteAdapter(db_path, wal_mode=True, schema_registry=_build_minimal_schema_registry())
         entity = TestEntity(id="persist-test")
         adapter1.create(entity)
         adapter1.close()
 
-        adapter2 = SQLiteAdapter(db_path, wal_mode=True)
+        adapter2 = SQLiteAdapter(db_path, wal_mode=True, schema_registry=_build_minimal_schema_registry())
         read_entity = adapter2.read("persist-test")
         assert read_entity is not None
         adapter2.close()
@@ -236,7 +237,7 @@ class TestWALModeConcurrentAccess:
             def __init__(self, id: str):
                 self.id = id
 
-        adapter = SQLiteAdapter(db_path, wal_mode=True)
+        adapter = SQLiteAdapter(db_path, wal_mode=True, schema_registry=_build_minimal_schema_registry())
 
         for i in range(100):
             entity = TestEntity(id=f"entity-{i}")

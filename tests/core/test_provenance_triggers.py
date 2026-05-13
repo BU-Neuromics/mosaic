@@ -1,3 +1,4 @@
+from tests.conftest import _build_minimal_schema_registry
 """Tests for ProvenanceRecord immutability triggers (sec9 §9.6 / Decision 9.6.C).
 
 The SQLite adapter installs two triggers on the ``ProvenanceRecord``
@@ -27,7 +28,7 @@ class TestProvenanceImmutability:
 
     @pytest.fixture
     def adapter(self, db_path: str) -> SQLiteAdapter:
-        adapter = SQLiteAdapter(db_path, wal_mode=True)
+        adapter = SQLiteAdapter(db_path, wal_mode=True, schema_registry=_build_minimal_schema_registry())
         yield adapter
         adapter.close()
 

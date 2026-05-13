@@ -13,6 +13,7 @@ from hippo.core.relationship import (
     RelationshipNotFoundError,
 )
 from hippo.core.storage.adapters.sqlite_adapter import SQLiteAdapter
+from tests.conftest import _build_minimal_schema_registry
 
 
 class TestRelateOperation:
@@ -27,7 +28,7 @@ class TestRelateOperation:
     @pytest.fixture
     def client(self, db_path: str) -> HippoClient:
         """Create a HippoClient with SQLite storage."""
-        storage = SQLiteAdapter(db_path)
+        storage = SQLiteAdapter(db_path, schema_registry=_build_minimal_schema_registry())
         return HippoClient(storage=storage, bypass_validation=True)
 
     @pytest.fixture
@@ -141,7 +142,7 @@ class TestUnrelateOperation:
     @pytest.fixture
     def client(self, db_path: str) -> HippoClient:
         """Create a HippoClient with SQLite storage."""
-        storage = SQLiteAdapter(db_path)
+        storage = SQLiteAdapter(db_path, schema_registry=_build_minimal_schema_registry())
         return HippoClient(storage=storage, bypass_validation=True)
 
     @pytest.fixture
@@ -229,7 +230,7 @@ class TestTraverseOperation:
     @pytest.fixture
     def client(self, db_path: str) -> HippoClient:
         """Create a HippoClient with SQLite storage."""
-        storage = SQLiteAdapter(db_path)
+        storage = SQLiteAdapter(db_path, schema_registry=_build_minimal_schema_registry())
         return HippoClient(storage=storage, bypass_validation=True)
 
     @pytest.fixture
@@ -309,7 +310,7 @@ class TestFindRelationships:
     @pytest.fixture
     def client(self, db_path: str) -> HippoClient:
         """Create a HippoClient with SQLite storage."""
-        storage = SQLiteAdapter(db_path)
+        storage = SQLiteAdapter(db_path, schema_registry=_build_minimal_schema_registry())
         return HippoClient(storage=storage, bypass_validation=True)
 
     @pytest.fixture

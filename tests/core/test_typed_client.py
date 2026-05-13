@@ -10,6 +10,7 @@ import pytest
 from hippo.core.client import HippoClient
 from hippo.core.exceptions import ValidationFailed
 from hippo.core.storage.adapters.sqlite_adapter import SQLiteAdapter
+from tests.conftest import _build_minimal_schema_registry
 from hippo.core.typed_client import (
     EntityAccessor,
     Namespace,
@@ -53,7 +54,7 @@ def client_factory():
 
     def _make(registry: SchemaRegistry) -> HippoClient:
         tmpdir = tempfile.mkdtemp()
-        storage = SQLiteAdapter(os.path.join(tmpdir, "typed.db"))
+        storage = SQLiteAdapter(os.path.join(tmpdir, "typed.db"), schema_registry=registry)
         created.append(storage)
         return HippoClient(
             storage=storage, registry=registry, bypass_validation=True
@@ -441,7 +442,7 @@ class TestGenericTypedParity:
 
 class TestNoRegistry:
     def test_client_without_registry_has_no_typed_accessors(self):
-        storage = SQLiteAdapter(":memory:")
+        storage = SQLiteAdapter(":memory:", schema_registry=_build_minimal_schema_registry())
         try:
             client = HippoClient(storage=storage, bypass_validation=True)
             # No registry → no typed surface built
@@ -492,7 +493,7 @@ def validating_client_factory():
 
     def _make(registry: SchemaRegistry) -> HippoClient:
         tmpdir = tempfile.mkdtemp()
-        storage = SQLiteAdapter(os.path.join(tmpdir, "typed_val.db"))
+        storage = SQLiteAdapter(os.path.join(tmpdir, "typed_val.db"), schema_registry=registry)
         created.append(storage)
         return HippoClient(storage=storage, registry=registry)
 

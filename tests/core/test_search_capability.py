@@ -8,6 +8,7 @@ import pytest
 from hippo.core.client import HippoClient
 from hippo.core.exceptions import SearchCapabilityError
 from hippo.core.storage.adapters.sqlite_adapter import SQLiteAdapter
+from tests.conftest import _build_minimal_schema_registry
 from tests.support.linkml_schemas import build_registry
 
 
@@ -15,7 +16,7 @@ class TestSearchCapabilities:
     def test_sqlite_adapter_search_capabilities_returns_fts(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             db_path = os.path.join(tmpdir, "test.db")
-            adapter = SQLiteAdapter(db_path)
+            adapter = SQLiteAdapter(db_path, schema_registry=_build_minimal_schema_registry())
             assert adapter.search_capabilities() == {"fts"}
             adapter.close()
 
@@ -29,7 +30,7 @@ class TestStartupValidation:
     def test_startup_succeeds_with_fts_search_mode(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             db_path = os.path.join(tmpdir, "test.db")
-            storage = SQLiteAdapter(db_path)
+            storage = SQLiteAdapter(db_path, schema_registry=_build_minimal_schema_registry())
             registry = build_registry(
                 {
                     "TestEntity": {
@@ -52,7 +53,7 @@ class TestStartupValidation:
     def test_startup_raises_error_with_embedding_search_mode(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             db_path = os.path.join(tmpdir, "test.db")
-            storage = SQLiteAdapter(db_path)
+            storage = SQLiteAdapter(db_path, schema_registry=_build_minimal_schema_registry())
             registry = build_registry(
                 {
                     "TestEntity": {
@@ -93,7 +94,7 @@ class TestStartupValidation:
     def test_startup_succeeds_without_schemas(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             db_path = os.path.join(tmpdir, "test.db")
-            storage = SQLiteAdapter(db_path)
+            storage = SQLiteAdapter(db_path, schema_registry=_build_minimal_schema_registry())
             client = HippoClient(storage=storage, registry=None, bypass_validation=True)
             assert client is not None
             storage.close()
