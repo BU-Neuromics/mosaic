@@ -1,60 +1,32 @@
 """DDL generation from a LinkML-backed SchemaRegistry.
 
-Walks the classes exposed by a ``SchemaRegistry``, maps LinkML built-in types
-to SQLite column types, and emits ``CREATE TABLE`` / ``CREATE INDEX`` statements
-with Hippo's system columns (``is_available``, ``superseded_by``) and
-partial-index semantics. LinkML's own SQL generator is not used directly
-because we need Hippo-specific naming conventions and system columns.
+Delegates base DDL generation to LinkML's ``SQLTableGenerator``, then
+post-processes for Hippo-specific extras: ``superseded_by`` column,
+partial indexes (``hippo_index_partial``), FTS5 virtual tables
+(``hippo_search: fts5``), and append-only triggers (``hippo_append_only``).
 """
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
-from typing import Any, Optional
+import re
+import tempfile
+import yaml
+from pathlib import Path
+from typing import Any
+
+from linkml.generators.sqltablegen import SQLTableGenerator
 
 from hippo.core.storage.fts import FTSFieldMetadata, FTSTableMetadata
 from hippo.linkml_bridge import (
+    HIPPO_APPEND_ONLY,
     HIPPO_INDEX,
     HIPPO_INDEX_PARTIAL,
     HIPPO_UNIQUE,
     SchemaRegistry,
     annotation_value,
     slot_default,
+    _flatten_for_validator,
 )
-
-
-@dataclass
-class ColumnDefinition:
-    name: str
-    column_type: str
-    not_null: bool = False
-    default: Any = None
-    primary_key: bool = False
-
-
-@dataclass
-class ForeignKeyDefinition:
-    columns: list[str]
-    references_table: str
-    references_columns: list[str]
-    on_delete: Optional[str] = None
-
-
-@dataclass
-class IndexDefinition:
-    name: str
-    columns: list[str]
-    unique: bool = False
-    partial_where: Optional[str] = None
-
-
-@dataclass
-class TableDefinition:
-    name: str
-    columns: list[ColumnDefinition] = field(default_factory=list)
-    foreign_keys: list[ForeignKeyDefinition] = field(default_factory=list)
-    unique_constraints: list[list[str]] = field(default_factory=list)
-    indexes: list[IndexDefinition] = field(default_factory=list)
 
 
 class DDLGenerator:
@@ -82,192 +54,225 @@ class DDLGenerator:
     IS_AVAILABLE_PREDICATE = "is_available = 1"
 
     def __init__(self) -> None:
-        self._tables: dict[str, TableDefinition] = {}
+        pass
 
     def generate(self, registry: SchemaRegistry) -> list[str]:
-        self._tables = {}
+        """Generate SQLite DDL via LinkML SQLTableGenerator + Hippo post-processing."""
         sv = registry.schema_view
 
-        for class_name in registry.class_names():
-            cls = sv.get_class(class_name)
-            if cls is None or cls.abstract:
-                continue
-            self._build_table(registry, class_name)
+        # Step 1: Flatten schema to self-contained dict (resolves imports inline)
+        flat_schema = _flatten_for_validator(sv)
 
-        ordered = self._topological_sort()
-        statements: list[str] = []
-        for name in ordered:
-            table = self._tables[name]
-            statements.append(self._render_create_table(table))
-            for index in table.indexes:
-                statements.append(self._render_create_index(name, index))
+        # Step 2: Write to temp file for SQLTableGenerator
+        with tempfile.NamedTemporaryFile(
+            mode="w", suffix=".yaml", delete=False
+        ) as tmp:
+            yaml.safe_dump(flat_schema, tmp, sort_keys=False)
+            tmp_path = tmp.name
+
+        try:
+            # Step 3: Generate base DDL with LinkML SQLTableGenerator
+            gen = SQLTableGenerator(
+                schema=tmp_path,
+                generate_abstract_class_ddl=True,
+                autogenerate_index=False,
+            )
+            raw_ddl = gen.generate_ddl()
+        finally:
+            Path(tmp_path).unlink()
+
+        # Step 4: Parse DDL string into statements
+        base_statements = self._parse_ddl_string(raw_ddl)
+
+        # Step 5: Filter and post-process CREATE TABLE statements
+        concrete_classes = {
+            name for name in registry.class_names()
+            if not (cls := sv.get_class(name)) or not cls.abstract
+        }
+
+        table_statements = []
+        index_statements = []
+
+        for stmt in base_statements:
+            if "CREATE TABLE" in stmt:
+                table_name = self._extract_table_name(stmt)
+                # Filter: keep only concrete classes (drop linktables, abstract)
+                if table_name not in concrete_classes:
+                    continue
+                # Post-process this CREATE TABLE
+                stmt = self._post_process_create_table(stmt, registry, table_name)
+                table_statements.append(stmt)
+            elif "CREATE INDEX" in stmt or "CREATE UNIQUE INDEX" in stmt:
+                # Indexes from SQLTableGenerator (we disabled autogenerate_index)
+                index_statements.append(stmt)
+
+        # Step 6: Add Hippo-specific indexes, unique constraints, triggers
+        hippo_extras = self._generate_hippo_extras(registry, concrete_classes)
+
+        # Step 7: Add FTS5 virtual tables
+        fts_planner = FTSMigrationPlanner()
+        fts_planner.add_registry(registry)
+        fts_statements = fts_planner.generate_fts_ddl()
+
+        return table_statements + hippo_extras + index_statements + fts_statements
+
+    def _parse_ddl_string(self, raw_ddl: str) -> list[str]:
+        """Parse semicolon-delimited DDL string into statement list.
+
+        LinkML SQLTableGenerator emits all tables in one string with comments.
+        We split on CREATE TABLE markers to isolate each table statement.
+        """
+        statements = []
+        # Split on CREATE TABLE to get individual table blocks
+        parts = raw_ddl.split("\nCREATE TABLE ")
+        for i, part in enumerate(parts):
+            if i == 0:
+                # First part is just comments before any tables
+                continue
+            # Reconstruct the CREATE TABLE statement
+            stmt = "CREATE TABLE " + part
+            # Find the end of this statement (");")
+            end_idx = stmt.find(");")
+            if end_idx != -1:
+                stmt = stmt[:end_idx + 2]  # Include the ");
+            statements.append(stmt)
         return statements
 
-    def _build_table(
-        self, registry: SchemaRegistry, class_name: str
-    ) -> TableDefinition:
-        if class_name in self._tables:
-            return self._tables[class_name]
+    def _extract_table_name(self, create_table_stmt: str) -> str:
+        """Extract table name from 'CREATE TABLE name (...);' or 'CREATE TABLE "name" (...);'."""
+        match = re.search(r'CREATE TABLE (?:"([^"]+)"|(\w+))', create_table_stmt, re.IGNORECASE)
+        if not match:
+            return ""
+        return match.group(1) or match.group(2)
 
+    def _post_process_create_table(
+        self, stmt: str, registry: SchemaRegistry, table_name: str
+    ) -> str:
+        """Post-process CREATE TABLE: fix BOOLEAN→INTEGER, inject DEFAULTs, add superseded_by."""
         sv = registry.schema_view
-        cls = sv.get_class(class_name)
-        table = TableDefinition(name=class_name)
 
-        id_slot = registry.identifier_slot(class_name)
-        id_name = id_slot.name if id_slot is not None else "id"
-        table.columns.append(
-            ColumnDefinition(
-                name=id_name, column_type="TEXT", not_null=True, primary_key=True
-            )
+        # Fix BOOLEAN → INTEGER for is_available (handles both quoted and unquoted)
+        stmt = re.sub(
+            r'\bis_available\s+BOOLEAN\b',
+            'is_available INTEGER',
+            stmt,
+            flags=re.IGNORECASE,
         )
 
-        known_classes = set(registry.class_names())
-        for slot in registry.induced_slots(class_name):
-            if slot.name == id_name:
-                continue
-            col_type = self._map_slot_type(slot, known_classes)
+        # Inject DEFAULT 1 for is_available if not present (handles both quoted and unquoted)
+        if 'is_available' in stmt:
+            is_avail_match = re.search(
+                r'\bis_available\s+INTEGER(?:\s+NOT\s+NULL)?',
+                stmt,
+                re.IGNORECASE
+            )
+            if is_avail_match and "DEFAULT" not in is_avail_match.group():
+                stmt = re.sub(
+                    r'(\bis_available\s+INTEGER(?:\s+NOT\s+NULL)?)',
+                    r"\1 DEFAULT 1",
+                    stmt,
+                    flags=re.IGNORECASE,
+                )
+
+        # Inject ifabsent DEFAULTs for other slots (SQLTableGenerator doesn't emit them)
+        # Handle both quoted and unquoted column names
+        for slot in registry.induced_slots(table_name):
             default = slot_default(slot)
-            column = ColumnDefinition(
-                name=slot.name,
-                column_type=col_type,
-                not_null=bool(slot.required),
-                default=default,
-            )
-            table.columns.append(column)
+            if default is not None and slot.name != "is_available":
+                # Match "name TYPE" or "\tname TYPE" - look for the column line
+                # before next comma or newline
+                pattern = rf'(\b{re.escape(slot.name)}\s+\w+(?:\([^)]+\))?(?:\s+NOT\s+NULL)?)'
+                match = re.search(pattern, stmt, re.IGNORECASE)
+                if match and "DEFAULT" not in match.group():
+                    col_def = match.group()
+                    new_col_def = col_def + f" DEFAULT {self._format_default(default)}"
+                    stmt = stmt.replace(col_def, new_col_def, 1)
 
-            if annotation_value(slot, HIPPO_UNIQUE):
-                table.unique_constraints.append([slot.name])
+        # Fallback: add is_available if missing (for schemas without is_a: Entity)
+        if not re.search(r'\bis_available\b', stmt):
+            constraint_pattern = r',\n\t((?:PRIMARY KEY|FOREIGN KEY|UNIQUE|CHECK))'
+            if re.search(constraint_pattern, stmt):
+                stmt = re.sub(
+                    constraint_pattern,
+                    r',\n\t"is_available" INTEGER NOT NULL DEFAULT 1,\n\t\1',
+                    stmt,
+                    count=1,
+                )
 
-            if annotation_value(slot, HIPPO_INDEX):
-                partial = bool(annotation_value(slot, HIPPO_INDEX_PARTIAL))
-                table.indexes.append(
-                    IndexDefinition(
-                        name=f"idx_{class_name}_{slot.name}",
-                        columns=[slot.name],
-                        partial_where=self.IS_AVAILABLE_PREDICATE if partial else None,
+        # Inject superseded_by column before table constraints (PRIMARY KEY, FOREIGN KEY, etc.)
+        # In SQLite, columns must come before constraints
+        if 'superseded_by' not in stmt:
+            # Find first constraint line (PRIMARY KEY, FOREIGN KEY, UNIQUE, CHECK)
+            # and inject superseded_by before it
+            constraint_pattern = r',\n\t((?:PRIMARY KEY|FOREIGN KEY|UNIQUE|CHECK))'
+            if re.search(constraint_pattern, stmt):
+                stmt = re.sub(
+                    constraint_pattern,
+                    r',\n\t"superseded_by" TEXT,\n\t\1',
+                    stmt,
+                    count=1,
+                )
+            else:
+                # No constraints, inject before closing paren
+                stmt = re.sub(
+                    r'\n\);$',
+                    r',\n\t"superseded_by" TEXT\n);',
+                    stmt,
+                    flags=re.MULTILINE,
+                )
+
+        return stmt
+
+    def _generate_hippo_extras(
+        self, registry: SchemaRegistry, concrete_classes: set[str]
+    ) -> list[str]:
+        """Generate Hippo-specific indexes, unique constraints, triggers."""
+        sv = registry.schema_view
+        statements = []
+
+        for class_name in concrete_classes:
+            cls = sv.get_class(class_name)
+            if cls is None:
+                continue
+
+            # hippo_index / hippo_index_partial annotations
+            for slot in registry.induced_slots(class_name):
+                if annotation_value(slot, HIPPO_INDEX):
+                    partial = bool(annotation_value(slot, HIPPO_INDEX_PARTIAL))
+                    idx_name = f"idx_{class_name}_{slot.name}"
+                    idx_sql = f'CREATE INDEX "{idx_name}" ON "{class_name}" ("{slot.name}")'
+                    if partial:
+                        idx_sql += f" WHERE {self.IS_AVAILABLE_PREDICATE}"
+                    idx_sql += ";"
+                    statements.append(idx_sql)
+
+                # hippo_unique: emit CREATE UNIQUE INDEX
+                if annotation_value(slot, HIPPO_UNIQUE):
+                    idx_name = f"idx_{class_name}_{slot.name}_unique"
+                    statements.append(
+                        f'CREATE UNIQUE INDEX "{idx_name}" ON "{class_name}" ("{slot.name}");'
                     )
-                )
 
-            if slot.range in known_classes:
-                table.foreign_keys.append(
-                    ForeignKeyDefinition(
-                        columns=[slot.name],
-                        references_table=slot.range,
-                        references_columns=["id"],
-                    )
-                )
+            # hippo_append_only: emit trigger rejecting UPDATE/DELETE
+            if annotation_value(cls, HIPPO_APPEND_ONLY):
+                statements.extend(self._generate_append_only_triggers(class_name))
 
-        # is_available: preferred path is declared on Entity in hippo_core
-        # (flows in via induced_slots above). Fallback hardcoded here for
-        # schemas that don't `is_a: Entity` (e.g., ad-hoc test fixtures).
-        # superseded_by stays hardcoded for now; scheduled to be redesigned in
-        # the Wave 2 provenance-as-linkml-class change where supersession is
-        # modeled via ProvenanceRecord.
-        existing_column_names = {col.name for col in table.columns}
-        if "is_available" not in existing_column_names:
-            table.columns.append(
-                ColumnDefinition(
-                    name="is_available",
-                    column_type="INTEGER",
-                    not_null=True,
-                    default=1,
-                )
-            )
-        table.columns.append(
-            ColumnDefinition(
-                name="superseded_by", column_type="TEXT", not_null=False, default=None
-            )
-        )
+        return statements
 
-        for uk in (cls.unique_keys or {}).values():
-            slots = list(uk.unique_key_slots or [])
-            if slots:
-                table.unique_constraints.append(slots)
-
-        for parent_name in cls.is_a and [cls.is_a] or []:
-            parent_cls = sv.get_class(parent_name)
-            if parent_cls is not None and not parent_cls.abstract:
-                self._build_table(registry, parent_name)
-                table.foreign_keys.append(
-                    ForeignKeyDefinition(
-                        columns=[id_name],
-                        references_table=parent_name,
-                        references_columns=[id_name],
-                        on_delete="CASCADE",
-                    )
-                )
-
-        self._tables[class_name] = table
-        return table
-
-    def _map_slot_type(self, slot: Any, known_classes: set[str]) -> str:
-        rng = slot.range
-        if rng in known_classes:
-            return "TEXT"
-        if rng is None:
-            return "TEXT"
-        return self.TYPE_MAPPING.get(rng, "TEXT")
-
-    def _topological_sort(self) -> list[str]:
-        visited: set[str] = set()
-        ordered: list[str] = []
-
-        def visit(name: str) -> None:
-            if name in visited:
-                return
-            visited.add(name)
-            table = self._tables.get(name)
-            if table is not None:
-                for fk in table.foreign_keys:
-                    if fk.references_table in self._tables:
-                        visit(fk.references_table)
-            ordered.append(name)
-
-        for name in self._tables:
-            visit(name)
-        return ordered
-
-    def _render_create_table(self, table: TableDefinition) -> str:
-        pieces: list[str] = []
-        pk_cols = [c.name for c in table.columns if c.primary_key]
-
-        for col in table.columns:
-            col_sql = f'"{col.name}" {col.column_type}'
-            if col.primary_key and len(pk_cols) == 1:
-                col_sql += " PRIMARY KEY"
-            if col.not_null and not col.primary_key:
-                col_sql += " NOT NULL"
-            if col.default is not None:
-                col_sql += f" DEFAULT {self._format_default(col.default)}"
-            pieces.append(col_sql)
-
-        for fk in table.foreign_keys:
-            cols = ", ".join(f'"{c}"' for c in fk.columns)
-            refs = ", ".join(f'"{c}"' for c in fk.references_columns)
-            fk_sql = f'FOREIGN KEY ({cols}) REFERENCES "{fk.references_table}"({refs})'
-            if fk.on_delete:
-                fk_sql += f" ON DELETE {fk.on_delete}"
-            pieces.append(fk_sql)
-
-        if len(pk_cols) > 1:
-            pk_sql = ", ".join(f'"{c}"' for c in pk_cols)
-            pieces.append(f"PRIMARY KEY ({pk_sql})")
-
-        for unique_cols in table.unique_constraints:
-            cols = ", ".join(f'"{c}"' for c in unique_cols)
-            pieces.append(f"UNIQUE ({cols})")
-
-        return f'CREATE TABLE "{table.name}" (\n    ' + ",\n    ".join(pieces) + "\n);"
-
-    def _render_create_index(self, table_name: str, index: IndexDefinition) -> str:
-        cols = ", ".join(f'"{c}"' for c in index.columns)
-        if index.partial_where:
-            return (
-                f'CREATE INDEX "{index.name}" ON "{table_name}" ({cols}) '
-                f"WHERE {index.partial_where};"
-            )
-        unique = "UNIQUE " if index.unique else ""
-        return f'CREATE {unique}INDEX "{index.name}" ON "{table_name}" ({cols});'
+    def _generate_append_only_triggers(self, table_name: str) -> list[str]:
+        """Generate triggers that reject UPDATE and DELETE on append-only tables."""
+        return [
+            f"""CREATE TRIGGER "prevent_update_{table_name}"
+BEFORE UPDATE ON "{table_name}"
+BEGIN
+    SELECT RAISE(ABORT, 'UPDATE not allowed on append-only table {table_name}');
+END;""",
+            f"""CREATE TRIGGER "prevent_delete_{table_name}"
+BEFORE DELETE ON "{table_name}"
+BEGIN
+    SELECT RAISE(ABORT, 'DELETE not allowed on append-only table {table_name}');
+END;""",
+        ]
 
     @staticmethod
     def _format_default(value: Any) -> str:
