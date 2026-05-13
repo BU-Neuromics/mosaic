@@ -11,7 +11,7 @@ description: >-
   `design/reference_hippo_core.md` for the per-class reference.
 
 license: https://creativecommons.org/publicdomain/zero/1.0/
-version: 0.4.0
+version: 0.5.0
 
 prefixes:
   linkml: https://w3id.org/linkml/
@@ -291,6 +291,72 @@ classes:
           ReferenceLoader instance is validated. Classes declared here are
           available for use in `entity_type` and in the user schema after
           registration (Decision 9.5.E).
+
+  ExternalID:
+    is_a: Entity
+    description: >-
+      A stable cross-system identifier linking a Hippo entity to an ID
+      managed by an external source system (e.g., STARLIMS barcode, HALO
+      sample ID, Donor DB donor number). Lifecycle-tracked: each
+      ExternalID instance is created, superseded, and retired via the
+      normal entity machinery — same write path, same provenance, same
+      query semantics as any other entity class. See sec3 §3.4 and the
+      β-refactor handoff (sec9 PR 1.1) for context.
+
+      Note on lifecycle flags: `is_available` (inherited from Entity) is
+      the standard entity-lifecycle flag that reflects soft-delete /
+      supersede / archived state. `is_active` is a narrower flag meaning
+      "this external-system mapping is currently in use". An ExternalID
+      may be `is_available: true` (entity-level: not deleted) but
+      `is_active: false` (mapping-level: superseded by a newer mapping).
+
+      `(source_system, value)` must be unique within active records
+      (`is_active = true`). The uniqueness constraint is declared here
+      as a logical `unique_keys` block; the partial-index enforcement
+      against `is_active = true` is wired in the DDL wrapper (PR 1.2).
+    attributes:
+      value:
+        range: string
+        required: true
+        description: >-
+          The identifier string as it appears in the source system.
+        annotations:
+          hippo_index: true
+      source_system:
+        range: string
+        required: true
+        description: >-
+          Stable name of the originating system (e.g., "STARLIMS",
+          "HALO", "DONOR_DB"). Controlled by deployers; not validated
+          against an enum by hippo_core.
+      entity:
+        range: Entity
+        required: true
+        description: >-
+          The Hippo entity this external ID belongs to. UUID reference;
+          resolves via `_entity_registry` in relational adapters
+          (Phase 2, PR 2.4).
+      is_active:
+        range: boolean
+        required: true
+        ifabsent: "true"
+        description: >-
+          Whether this external-system mapping is currently in use.
+          Set to false when superseded by a newer ExternalID for the
+          same source_system. Supersession is recorded via a
+          ProvenanceRecord with operation `supersede`; the predecessor
+          UUID is carried in `derived_from_id`. Distinct from
+          `is_available`, which reflects entity-lifecycle state
+          (soft-delete / archive / distribute).
+    unique_keys:
+      source_system_value_active:
+        description: >-
+          Within active records, a (source_system, value) pair must be
+          unique. Partial-index enforcement (WHERE is_active = true)
+          is added by the DDL wrapper in PR 1.2.
+        unique_key_slots:
+          - source_system
+          - value
 
 #
 # ---------------------------------------------------------------------------

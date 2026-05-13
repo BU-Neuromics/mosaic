@@ -671,6 +671,78 @@ class TestAppendOnlyClassesHelper:
         assert "AbstractLog" not in reg.append_only_classes()
 
 
+class TestHippoCoreExternalID:
+    """ExternalID class shipped in hippo_core (sec3 §3.4, β-refactor PR 1.1).
+    First-class lifecycle-tracked entity for cross-system ID mapping. The
+    legacy external_id_store is not retired yet — that happens in Phase 2.
+    """
+
+    def _schema_importing_hippo_core(self) -> str:
+        return (
+            "id: https://example.org/test\n"
+            "name: test\n"
+            "prefixes: {linkml: 'https://w3id.org/linkml/'}\n"
+            "default_range: string\n"
+            "imports:\n"
+            "  - linkml:types\n"
+            "  - hippo_core\n"
+            "classes: {}\n"
+        )
+
+    def test_external_id_present_in_hippo_core(self):
+        reg = SchemaRegistry.from_yaml(self._schema_importing_hippo_core())
+        assert "ExternalID" in reg.class_names()
+
+    def test_external_id_inherits_entity_slots(self):
+        reg = SchemaRegistry.from_yaml(self._schema_importing_hippo_core())
+        slot_names = {s.name for s in reg.induced_slots("ExternalID")}
+        # Inherited from Entity
+        assert "id" in slot_names
+        assert "is_available" in slot_names
+
+    def test_external_id_has_declared_slots(self):
+        reg = SchemaRegistry.from_yaml(self._schema_importing_hippo_core())
+        slot_names = {s.name for s in reg.induced_slots("ExternalID")}
+        expected = {"value", "source_system", "entity", "is_active"}
+        assert expected.issubset(slot_names)
+
+    def test_value_slot_has_hippo_index_annotation(self):
+        reg = SchemaRegistry.from_yaml(self._schema_importing_hippo_core())
+        slots = {s.name: s for s in reg.induced_slots("ExternalID")}
+        from hippo.linkml_bridge import annotation_value, HIPPO_INDEX
+        assert annotation_value(slots["value"], HIPPO_INDEX) is True
+
+    def test_source_system_slot_not_indexed(self):
+        # Only `value` is marked hippo_index per PR 1.1 spec; source_system
+        # benefits from the composite unique_keys index, not a standalone one.
+        reg = SchemaRegistry.from_yaml(self._schema_importing_hippo_core())
+        slots = {s.name: s for s in reg.induced_slots("ExternalID")}
+        from hippo.linkml_bridge import annotation_value, HIPPO_INDEX
+        assert annotation_value(slots["source_system"], HIPPO_INDEX) is not True
+
+    def test_is_active_default_is_true(self):
+        reg = SchemaRegistry.from_yaml(self._schema_importing_hippo_core())
+        slots = {s.name: s for s in reg.induced_slots("ExternalID")}
+        from hippo.linkml_bridge import slot_default
+        assert slot_default(slots["is_active"]) is True
+
+    def test_entity_slot_range_is_entity(self):
+        reg = SchemaRegistry.from_yaml(self._schema_importing_hippo_core())
+        slots = {s.name: s for s in reg.induced_slots("ExternalID")}
+        assert slots["entity"].range == "Entity"
+
+    def test_unique_keys_block_declared(self):
+        reg = SchemaRegistry.from_yaml(self._schema_importing_hippo_core())
+        sv = reg.schema_view
+        cls = sv.get_class("ExternalID")
+        assert cls is not None
+        assert cls.unique_keys
+        key_names = set(cls.unique_keys.keys())
+        assert "source_system_value_active" in key_names
+        uk = cls.unique_keys["source_system_value_active"]
+        assert set(uk.unique_key_slots) == {"source_system", "value"}
+
+
 class TestReferenceLoadersHelper:
     """SchemaRegistry.reference_loaders() — returns concrete subclasses of
     ReferenceLoader in the merged schema (sec9 §9.5, reference-loader-shape).
