@@ -227,6 +227,7 @@ The agent should not re-litigate these. They were settled in the conversation th
 | Schema migration | **Stays hippo-owned (`schema_diff.py`, `migration.py`)** | linkml-store has zero migration support; α doesn't change this. |
 | `EntityStore` typing | **Drop `Generic[T]`; use `dict[str, Any]`** | Keep the protocol simple; backend-agnostic. |
 | Linkml-store adoption | **Stubbed only as future plug-in (`LinkMLStoreAdapter`)** | Real adoption is issue #2. β stubs the file to document intent. |
+| Tree-root slot naming (PR 3.1) | **`snake_case(ClassName) + "s"`, honoring `hippo_accessor` overrides; tree-root class held off the SchemaView** | Aligns the wire format with the typed-client accessor surface so users see one convention. Holding the synthetic class off the SchemaView keeps DDL/diff/typed-client unaware of it. Bundled fix: `hippo_accessor: processes` on `Process` to avoid the `processs` (triple-s) plural. |
 
 ---
 

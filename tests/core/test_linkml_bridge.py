@@ -8,7 +8,9 @@ from hippo.linkml_bridge import (
     HIPPO_SEARCH,
     HIPPO_INDEX,
     HIPPO_INDEX_PARTIAL,
+    TREE_ROOT_CLASS_NAME,
     SchemaRegistry,
+    default_accessor,
 )
 
 
@@ -797,3 +799,151 @@ class TestReferenceLoadersHelper:
         )
         reg = SchemaRegistry.from_yaml(schema)
         assert "AbstractLoader" not in reg.reference_loaders()
+
+
+class TestTreeRootSynthesis:
+    """`_HippoInstanceBundle` is synthesized at SchemaRegistry construction
+    with one multivalued slot per concrete class (sec9 PR 3.1).
+
+    The synthesized class is held on the registry and injected only into
+    the validator schema — it is NOT added to the SchemaView, so DDL
+    generation, schema-diff, and the typed-client surface remain unaware
+    of it. Use the dedicated accessors (``tree_root_class_name``,
+    ``tree_root_class``, ``tree_root_slots``) for introspection.
+    """
+
+    def test_tree_root_class_name_accessor(self, registry: SchemaRegistry):
+        assert registry.tree_root_class_name() == "_HippoInstanceBundle"
+        assert registry.tree_root_class_name() == TREE_ROOT_CLASS_NAME
+
+    def test_tree_root_not_in_class_names(self, registry: SchemaRegistry):
+        # The synthetic class is held off the SchemaView so DDL/diff/
+        # typed-client never see it.
+        assert TREE_ROOT_CLASS_NAME not in registry.class_names()
+        assert registry.has_class(TREE_ROOT_CLASS_NAME) is False
+        assert registry.get_class(TREE_ROOT_CLASS_NAME) is None
+
+    def test_tree_root_flag_is_set(self, registry: SchemaRegistry):
+        cls = registry.tree_root_class()
+        assert cls.tree_root is True
+        assert cls.name == TREE_ROOT_CLASS_NAME
+
+    def test_user_concrete_classes_have_slots(self, registry: SchemaRegistry):
+        slot_names = {s.name for s in registry.tree_root_slots()}
+        assert "projects" in slot_names
+        assert "samples" in slot_names
+
+    def test_bundled_concrete_classes_have_slots(self, registry: SchemaRegistry):
+        slot_names = {s.name for s in registry.tree_root_slots()}
+        # ProvenanceRecord, Validator, ReferenceLoader, ExternalID come from
+        # the imported hippo_core schema.
+        assert "provenance_records" in slot_names
+        assert "validators" in slot_names
+        assert "reference_loaders" in slot_names
+        assert "external_ids" in slot_names
+
+    def test_abstract_entity_excluded(self, registry: SchemaRegistry):
+        slot_names = {s.name for s in registry.tree_root_slots()}
+        # `Entity` is abstract — must not get a tree-root slot.
+        assert "entitys" not in slot_names
+        assert "entities" not in slot_names
+
+    def test_hippo_accessor_override_used_for_process(
+        self, registry: SchemaRegistry
+    ):
+        # `hippo_core.yaml` annotates `Process` with
+        # `hippo_accessor: processes` so the naive `+ "s"` pluralizer
+        # (which would yield `processs`) is overridden.
+        slot_names = {s.name for s in registry.tree_root_slots()}
+        assert "processes" in slot_names
+        assert "processs" not in slot_names
+
+    def test_slots_are_multivalued_and_inlined(self, registry: SchemaRegistry):
+        slots_by_name = {s.name: s for s in registry.tree_root_slots()}
+        samples = slots_by_name["samples"]
+        assert samples.multivalued is True
+        assert samples.inlined is True
+        assert samples.inlined_as_list is True
+        assert samples.range == "Sample"
+
+    def test_validate_against_tree_root_accepts_valid_bundle(
+        self, registry: SchemaRegistry
+    ):
+        bundle = {
+            "projects": [{"id": "p1", "name": "Proj", "is_available": True}],
+            "samples": [
+                {
+                    "id": "s1",
+                    "name": "Tissue A",
+                    "project_id": "p1",
+                    "is_available": True,
+                }
+            ],
+        }
+        errors = registry.validate(bundle, registry.tree_root_class_name())
+        assert errors == []
+
+    def test_validate_against_tree_root_rejects_unknown_slot(
+        self, registry: SchemaRegistry
+    ):
+        bundle = {"not_a_class": [{"id": "x"}]}
+        errors = registry.validate(bundle, registry.tree_root_class_name())
+        assert errors  # closed schema rejects undeclared slot
+
+    def test_validate_against_tree_root_propagates_class_errors(
+        self, registry: SchemaRegistry
+    ):
+        # Sample requires `name`. Validation must catch missing fields on
+        # nested instances inside the tree.
+        bundle = {"samples": [{"id": "s1", "is_available": True}]}
+        errors = registry.validate(bundle, registry.tree_root_class_name())
+        assert errors
+        assert any("'name'" in e and "required" in e for e in errors)
+
+    def test_default_accessor_helper_matches_slot_names(self):
+        # Sanity-check the algorithm the synthesis relies on.
+        assert default_accessor("Sample") == "samples"
+        assert default_accessor("TissueType") == "tissue_types"
+        assert default_accessor("DNASample") == "dna_samples"
+        assert default_accessor("ExternalID") == "external_ids"
+        assert default_accessor("ProvenanceRecord") == "provenance_records"
+
+    def test_collision_with_reserved_class_name_raises(self):
+        from hippo.core.exceptions import SchemaError
+
+        schema = (
+            "id: https://example.org/t\n"
+            "name: t\n"
+            "prefixes: {linkml: 'https://w3id.org/linkml/'}\n"
+            "default_range: string\n"
+            "imports: [linkml:types, hippo_core]\n"
+            "classes:\n"
+            "  _HippoInstanceBundle:\n"
+            "    description: oops\n"
+            "    attributes:\n"
+            "      id: {identifier: true}\n"
+        )
+        with pytest.raises(SchemaError):
+            SchemaRegistry.from_yaml(schema)
+
+    def test_slot_name_collision_raises(self):
+        from hippo.core.exceptions import SchemaError
+
+        # Two classes whose snake_case_plural would collide and neither
+        # overrides via hippo_accessor → synthesis must refuse.
+        schema = (
+            "id: https://example.org/t\n"
+            "name: t\n"
+            "prefixes: {linkml: 'https://w3id.org/linkml/'}\n"
+            "default_range: string\n"
+            "imports: [linkml:types, hippo_core]\n"
+            "classes:\n"
+            "  WidgetCount:\n"
+            "    is_a: Entity\n"
+            "    annotations: {hippo_accessor: counts}\n"
+            "  GadgetCount:\n"
+            "    is_a: Entity\n"
+            "    annotations: {hippo_accessor: counts}\n"
+        )
+        with pytest.raises(SchemaError):
+            SchemaRegistry.from_yaml(schema)

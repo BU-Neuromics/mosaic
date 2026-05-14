@@ -172,6 +172,8 @@ classes:
   Process:
     is_a: Entity
     class_uri: prov:Activity
+    annotations:
+      hippo_accessor: processes
     description: >-
       Composite activity — a grouping of atomic `ProvenanceRecord` entries
       under one logical execution. Reference-data loads, schema migrations,

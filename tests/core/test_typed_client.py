@@ -241,24 +241,29 @@ class TestAccessorOverride:
 
 class TestCollisionDetection:
     def test_case1_same_namespace_duplicate_accessor(self, client_factory):
-        # Two classes in namespace `tissue` both resolving to `dna_samples`
-        reg = _reg(
-            "  DNASample:\n"
-            "    is_a: Entity\n"
-            "    annotations:\n"
-            "      hippo_namespace: tissue\n"
-            "    attributes:\n"
-            "      name: {range: string}\n"
-            "  DnaSample:\n"
-            "    is_a: Entity\n"
-            "    annotations:\n"
-            "      hippo_namespace: tissue\n"
-            "    attributes:\n"
-            "      label: {range: string}\n"
-        )
-        with pytest.raises(TypedClientError) as exc:
-            client_factory(reg)
-        assert exc.value.case == "duplicate_accessor"
+        # Two classes resolving to `dna_samples`. Since PR 3.1 introduced
+        # the flat tree-root wire format, collisions on the (flat) slot
+        # name are caught at SchemaRegistry construction with a
+        # `SchemaError` — which fires before the typed-client surface
+        # would have raised its own `duplicate_accessor` error. The
+        # disambiguation message still names `hippo_accessor`.
+        from hippo.core.exceptions import SchemaError
+
+        with pytest.raises(SchemaError) as exc:
+            _reg(
+                "  DNASample:\n"
+                "    is_a: Entity\n"
+                "    annotations:\n"
+                "      hippo_namespace: tissue\n"
+                "    attributes:\n"
+                "      name: {range: string}\n"
+                "  DnaSample:\n"
+                "    is_a: Entity\n"
+                "    annotations:\n"
+                "      hippo_namespace: tissue\n"
+                "    attributes:\n"
+                "      label: {range: string}\n"
+            )
         assert "dna_samples" in str(exc.value)
         assert "hippo_accessor" in str(exc.value)
 

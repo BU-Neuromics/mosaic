@@ -14,7 +14,6 @@ contract and ``design/sec9_decisions.md`` for the design rationale.
 from __future__ import annotations
 
 import logging
-import re
 import textwrap
 from typing import Any, Iterable, Optional
 
@@ -28,6 +27,7 @@ from hippo.linkml_bridge import (
     HIPPO_NAMESPACE,
     SchemaRegistry,
     annotation_value,
+    default_accessor,
 )
 
 
@@ -85,22 +85,6 @@ SDK_RESERVED_NAMES: frozenset[str] = frozenset(
 # ``root`` is reserved as the alias for flat root-namespace access. A
 # user schema MUST NOT declare ``hippo_namespace: root``.
 ROOT_NAMESPACE_RESERVED = "root"
-
-
-def default_accessor(class_name: str) -> str:
-    """Derive the default accessor from a class name.
-
-    `snake_case(ClassName) + "s"`. Handles common cases:
-    - `Sample` → `samples`
-    - `TissueType` → `tissue_types`
-    - `DNASample` → `dna_samples`
-    """
-    # Convert CamelCase / UPPERCase runs to snake_case. The two regexes
-    # split acronyms (`DNASample` → `DNA_Sample`) then handle the
-    # ClassName → Class_Name boundary.
-    s1 = re.sub(r"([A-Z]+)([A-Z][a-z])", r"\1_\2", class_name)
-    snake = re.sub(r"([a-z0-9])([A-Z])", r"\1_\2", s1).lower()
-    return f"{snake}s"
 
 
 def _is_valid_identifier(name: str) -> bool:
