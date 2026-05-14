@@ -64,56 +64,89 @@ print(f'Created: {sample[\"id\"]}')
 
 ## Validation Pipeline
 
-Hippo provides a built-in validation pipeline that ensures all write operations pass through registered validators before being processed.
+Hippo validates all write operations against a LinkML schema. Two paths:
 
-### Basic Setup
+- **CLI** — `hippo validate` checks a schema file and/or an instance data bundle.
+- **SDK** — custom `WriteValidator` subclasses run before every `client.put()`.
+
+### Schema and Data Validation (CLI)
+
+Schemas are standard [LinkML](https://linkml.io/) YAML files. Here is a minimal example:
+
+```yaml
+# schema.yaml
+id: https://example.org/my-schema
+name: my_schema
+prefixes:
+  linkml: https://w3id.org/linkml/
+imports:
+  - linkml:types
+default_range: string
+
+classes:
+  Sample:
+    attributes:
+      sample_id:
+        range: string
+        required: true
+        identifier: true
+      name:
+        range: string
+        required: true
+      collection_date:
+        range: date
+```
+
+Instance data uses a **tree-root bundle** format — a YAML mapping whose top-level keys are the pluralized class names and whose values are lists of instances:
+
+```yaml
+# bundle.yaml
+samples:
+  - id: S001
+    sample_id: SMPL-001
+    name: Test Sample
+    collection_date: "2024-03-15"
+```
+
+Validate the schema alone, or the schema together with a data bundle:
+
+```bash
+# Validate a LinkML schema file — exits non-zero on any LinkML error
+hippo validate --schema schema.yaml
+
+# Validate a data bundle against the schema
+hippo validate --schema schema.yaml --data bundle.yaml
+```
+
+Pass `--validate-schema` to `hippo ingest` to validate the bundle before writing:
+
+```bash
+hippo ingest --file bundle.yaml --validate-schema schema.yaml
+```
+
+### Custom Write Validators (SDK)
+
+Add application-level rules via `WriteValidator` subclasses. These run in the validation pipeline before every `client.put()`:
 
 ```python
 from hippo import HippoClient, ValidationPipeline
 from hippo.core.validation import WriteOperation, WriteValidator, ValidationResult
 
-# Create a validation pipeline
-pipeline = ValidationPipeline()
-
-# Add custom validators
 class RequiredFieldsValidator(WriteValidator):
     def validate(self, operation: WriteOperation) -> ValidationResult:
         if not operation.data.get("name"):
             return ValidationResult(is_valid=False, errors=["name is required"])
         return ValidationResult(is_valid=True)
 
+pipeline = ValidationPipeline()
 pipeline.add_validator(RequiredFieldsValidator())
 
-# Create client with pipeline
 client = HippoClient(pipeline=pipeline)
 
-# Write operations automatically validate
 try:
-    entity = client.create("Sample", {"id": "123", "name": "Test"})
+    entity = client.put("Sample", {"id": "S001", "name": "Test"})
 except ValidationFailure as e:
-    print(f"Validation failed: {e.format_detailed_message()}")
-```
-
-### Configuration
-
-Validation can also be configured via YAML/JSON schema:
-
-```yaml
-# schema.yaml
-name: Sample
-version: "1.0"
-fields:
-  - name: id
-    type: string
-    required: true
-  - name: name
-    type: string
-    required: true
-validators:
-  - name: required-fields
-    type: custom
-    enabled: true
-    priority: 10
+    print(f"Validation failed: {e.errors}")
 ```
 
 ## Entity Relationships

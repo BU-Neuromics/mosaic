@@ -121,7 +121,7 @@ hippo migrate --schema-dir custom/schemas --db-path custom/data/hippo.db
 
 ## validate
 
-Validate schemas or configuration files against defined rules.
+Validate a LinkML schema file and/or an instance YAML bundle.
 
 ### Usage
 
@@ -133,31 +133,35 @@ hippo validate [OPTIONS]
 
 | Option | Type | Default | Description |
 |--------|------|---------|-------------|
-| `--schema`, `-s` | `string` | `None` | Path to schema file to validate |
-| `--config`, `-c` | `string` | `None` | Path to config file to validate |
+| `--schema`, `-s` | `string` | `None` | Path to a LinkML schema file or directory |
+| `--data`, `-d` | `string` | `None` | Path to an instance YAML bundle to validate against `--schema` |
+| `--config`, `-c` | `string` | `None` | Path to a Hippo config file to validate |
 | `--verbose`, `-v` | `boolean` | `false` | Show detailed validation output |
+
+`--data` requires `--schema`. `--config` is independent.
 
 ### Example
 
 ```bash
-# Validate default configuration
-hippo validate
+# Validate a LinkML schema — exits non-zero on any LinkML error
+hippo validate --schema schemas/brain_study.yaml
 
-# Validate a specific schema file
-hippo validate --schema schemas/entities.yaml
+# Validate a data bundle against a schema
+hippo validate --schema schemas/brain_study.yaml --data data/samples.yaml
 
-# Validate a specific config file
+# Validate a Hippo config file
 hippo validate --config config/production.yaml
-
-# Validate with verbose output
-hippo validate --schema schemas/entities.yaml --verbose
 ```
 
 ---
 
 ## ingest
 
-Ingest data from configured external sources.
+Ingest a LinkML-native instance YAML bundle into Hippo, or load data via a generic loader.
+
+The default path (`--file`) accepts a **tree-root bundle**: a YAML mapping whose top-level keys are pluralized class names (`samples:`, `projects:`, …) and whose values are lists of instance dicts. Identity is by the `id` slot on each instance — re-ingesting an existing id updates it in place.
+
+CSV/JSON/SQL operational data files are not accepted here; pass `--type` + `--config` for those.
 
 ### Usage
 
@@ -169,20 +173,23 @@ hippo ingest [OPTIONS]
 
 | Option | Type | Default | Description |
 |--------|------|---------|-------------|
-| `--config`, `-c` | `string` | `None` | Path to data sources configuration file |
-| `--dry-run` | `boolean` | `false` | Preview ingestion without applying changes |
+| `--file`, `-f` | `string` | `None` | Path to a LinkML-native instance YAML bundle |
+| `--validate-schema` | `string` | `None` | Path to a LinkML schema file or directory; bundle is validated before any writes |
+| `--dry-run` | `boolean` | `false` | Validate and preview without writing |
+| `--type`, `-t` | `string` | `None` | Loader type for generic loaders: `csv`, `json`, or `sql` |
+| `--config`, `-c` | `string` | `None` | Path to loader config file (for `--type csv/json/sql`) |
 
 ### Example
 
 ```bash
-# Ingest using default configuration
-hippo ingest
+# Ingest a bundle, validating it against the schema first
+hippo ingest --file data/samples.yaml --validate-schema schemas/brain_study.yaml
 
-# Ingest from specific configuration file
-hippo ingest --config data-sources.yaml
+# Dry run — validate and show what would be written
+hippo ingest --file data/samples.yaml --validate-schema schemas/brain_study.yaml --dry-run
 
-# Preview ingestion without making changes
-hippo ingest --dry-run
+# Generic CSV loader (separate path)
+hippo ingest --type csv --file donors.csv --config donors_mapping.yaml
 ```
 
 ---
