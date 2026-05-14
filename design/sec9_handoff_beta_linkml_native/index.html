@@ -1,0 +1,4484 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="Bioinformatics Analysis Software System — platform documentation">
+      
+      
+      
+      
+      
+      
+        
+      
+      
+      <link rel="icon" href="../../../assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.6">
+    
+    
+      
+        <title>sec9 Handoff — β Refactor: Finish LinkML-Native Migration - BASS Documentation</title>
+      
+    
+    
+      <link rel="stylesheet" href="../../../assets/stylesheets/main.484c7ddc.min.css">
+      
+        
+        <link rel="stylesheet" href="../../../assets/stylesheets/palette.ab4e12ef.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Inter:300,300i,400,400i,700,700i%7CJetBrains+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Inter";--md-code-font:"JetBrains Mono"}</style>
+      
+    
+    
+      <link rel="stylesheet" href="../../../stylesheets/custom.css">
+    
+    <script>__md_scope=new URL("../../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="teal" data-md-color-accent="cyan">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#sec9-handoff-refactor-finish-linkml-native-migration" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+<header class="md-header" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href="../../.." title="BASS Documentation" class="md-header__button md-logo" aria-label="BASS Documentation" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            BASS Documentation
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              sec9 Handoff — β Refactor: Finish LinkML-Native Migration
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: light)" data-md-color-scheme="default" data-md-color-primary="teal" data-md-color-accent="cyan"  aria-label="Switch to dark mode"  type="radio" name="__palette" id="__palette_0">
+    
+      <label class="md-header__button md-icon" title="Switch to dark mode" for="__palette_1" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a4 4 0 0 0-4 4 4 4 0 0 0 4 4 4 4 0 0 0 4-4 4 4 0 0 0-4-4m0 10a6 6 0 0 1-6-6 6 6 0 0 1 6-6 6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: dark)" data-md-color-scheme="slate" data-md-color-primary="teal" data-md-color-accent="cyan"  aria-label="Switch to light mode"  type="radio" name="__palette" id="__palette_1">
+    
+      <label class="md-header__button md-icon" title="Switch to light mode" for="__palette_0" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 18c-.89 0-1.74-.2-2.5-.55C11.56 16.5 13 14.42 13 12s-1.44-4.5-3.5-5.45C10.26 6.2 11.11 6 12 6a6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+        <div class="md-search__suggest" data-md-component="search-suggest"></div>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+            
+<nav class="md-tabs" aria-label="Tabs" data-md-component="tabs">
+  <div class="md-grid">
+    <ul class="md-tabs__list">
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../../.." class="md-tabs__link">
+        
+  
+  
+    
+  
+  Home
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../../platform/" class="md-tabs__link">
+          
+  
+  
+  Platform
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../" class="md-tabs__link">
+          
+  
+  
+  Hippo
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../../cappella/" class="md-tabs__link">
+          
+  
+  
+  Cappella
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../../aperture/" class="md-tabs__link">
+          
+  
+  
+  Aperture
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../../bridge/" class="md-tabs__link">
+          
+  
+  
+  Bridge
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../../canon/" class="md-tabs__link">
+          
+  
+  
+  Canon
+
+        </a>
+      </li>
+    
+  
+
+      
+    </ul>
+  </div>
+</nav>
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+  
+
+
+<nav class="md-nav md-nav--primary md-nav--lifted" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href="../../.." title="BASS Documentation" class="md-nav__button md-logo" aria-label="BASS Documentation" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    BASS Documentation
+  </label>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../.." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Home
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_2" >
+        
+          
+          <label class="md-nav__link" for="__nav_2" id="__nav_2_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Platform
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_2_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_2">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Platform
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../platform/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    BASS Platform
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../platform/src/overview/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Overview
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../platform/src/architecture/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Architecture
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../platform/src/getting-started/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Getting Started
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../platform/src/deployment/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Deployment
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../platform/src/glossary/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Glossary
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_2_7" >
+        
+          
+          <label class="md-nav__link" for="__nav_2_7" id="__nav_2_7_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Design Spec
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_2_7_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_2_7">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Design Spec
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../platform/src/design/sec1_overview/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Platform Overview
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../platform/src/design/sec2_components/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Component Architecture
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../platform/src/design/sec3_integration/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Integration Patterns
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../platform/src/design/sec4_unified_ingestion/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Unified Ingestion
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../platform/src/design/sec5_integration_test_strategy/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Integration Test Strategy
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_3" >
+        
+          
+          <label class="md-nav__link" for="__nav_3" id="__nav_3_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Hippo
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Hippo
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Hippo — Metadata Tracking Service
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_3_2" >
+        
+          
+          <label class="md-nav__link" for="__nav_3_2" id="__nav_3_2_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    User Docs
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_3_2_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3_2">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    User Docs
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../docs/introduction/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Introduction
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../docs/installation/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Installation
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../docs/quickstart/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Quick Start
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../docs/schema-guide/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Schema Guide
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../docs/data-model/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Data Model
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../docs/configuration/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Configuration
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../docs/cli-reference/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    CLI Reference
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../docs/api-reference/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    API Reference
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_3_3" >
+        
+          
+          <label class="md-nav__link" for="__nav_3_3" id="__nav_3_3_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Design Spec
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_3_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3_3">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Design Spec
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../sec1_overview/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Overview & Scope
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../sec2_architecture/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Architecture
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../sec3_data_model/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Data Model
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../sec3b_relational_storage/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Relational Storage
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../sec4_api_layer/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    API Layer
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../sec5_ingestion/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Ingestion & Integration
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../sec6_provenance/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Provenance & Audit
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../sec7_nfr/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Non-Functional Requirements
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../sec8_auth_integration/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Auth Integration
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../appendix_a_example_schema_omics/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Appendix A: Example Schema
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../appendix_b_implementation_guide/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Appendix B: Implementation Guide
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../reference_hippo_yaml/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Reference: hippo.yaml
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../reference_validators_yaml/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Reference: validators.yaml
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../reference_cel_context/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Reference: CEL Context
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_4" >
+        
+          
+          <label class="md-nav__link" for="__nav_4" id="__nav_4_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Cappella
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_4">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Cappella
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../cappella/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Cappella — Integration &amp; Harmonization Engine
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_4_2" >
+        
+          
+          <label class="md-nav__link" for="__nav_4_2" id="__nav_4_2_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    User Docs
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_4_2_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_4_2">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    User Docs
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../cappella/docs/introduction/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Introduction
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../cappella/docs/installation/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Installation
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../cappella/docs/overview/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Overview
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../cappella/docs/quickstart/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Quick Start
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../cappella/docs/user_guide/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    User Guide
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../cappella/docs/workflows/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Workflows
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_4_3" >
+        
+          
+          <label class="md-nav__link" for="__nav_4_3" id="__nav_4_3_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Design Spec
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_4_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_4_3">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Design Spec
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../cappella/design/sec1_overview/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Overview & Scope
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../cappella/design/sec2_architecture/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Architecture
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../cappella/design/sec3_adapters/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Adapter System
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../cappella/design/sec4_audit/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Audit & Observability
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../cappella/design/sec5_workflows/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Collection Resolution
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../cappella/design/sec6_nfr/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Non-Functional Requirements
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../cappella/design/sec7_testing/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Trigger Engine Testing
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_5" >
+        
+          
+          <label class="md-nav__link" for="__nav_5" id="__nav_5_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Aperture
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_5_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_5">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Aperture
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../aperture/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Aperture — Interface Layer
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_5_2" >
+        
+          
+          <label class="md-nav__link" for="__nav_5_2" id="__nav_5_2_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    User Docs
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_5_2_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_5_2">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    User Docs
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../aperture/docs/introduction/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Introduction
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../aperture/docs/quickstart/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Quick Start
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../aperture/docs/cli-reference/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    CLI Reference
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_5_3" >
+        
+          
+          <label class="md-nav__link" for="__nav_5_3" id="__nav_5_3_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Design Spec
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_5_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_5_3">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Design Spec
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../aperture/design/sec1_overview/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Overview & Scope
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../aperture/design/sec2_architecture/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Architecture
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../aperture/design/sec3_cli/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    CLI Design
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../aperture/design/sec4_web_ui/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Web Interface (v0.2)
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../aperture/design/sec5_api_clients/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    API Clients (v0.2)
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../aperture/design/sec6_nfr/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Non-Functional Requirements
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_6" >
+        
+          
+          <label class="md-nav__link" for="__nav_6" id="__nav_6_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Bridge
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_6_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_6">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Bridge
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../bridge/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Bridge — Integration Middleware
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_6_2" >
+        
+          
+          <label class="md-nav__link" for="__nav_6_2" id="__nav_6_2_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    User Docs
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_6_2_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_6_2">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    User Docs
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../bridge/docs/introduction/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Introduction
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../bridge/docs/auth/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Authentication
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../bridge/docs/security-model/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Security Model
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../bridge/docs/admin-guide/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Admin Guide
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_6_3" >
+        
+          
+          <label class="md-nav__link" for="__nav_6_3" id="__nav_6_3_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Design Spec
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_6_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_6_3">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Design Spec
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../bridge/design/sec1_overview/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Overview & Scope
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../bridge/design/sec2_architecture/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Architecture
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../bridge/design/sec3_api_unification/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Unified API Design
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../bridge/design/sec4_auth/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Authentication & Authorization
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../bridge/design/sec5_sync/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Cross-Component Sync
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../bridge/design/sec6_nfr/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Non-Functional Requirements
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_7" >
+        
+          
+          <label class="md-nav__link" for="__nav_7" id="__nav_7_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Canon
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_7_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_7">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Canon
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../canon/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Canon — Semantic Artifact Resolver
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_7_2" >
+        
+          
+          <label class="md-nav__link" for="__nav_7_2" id="__nav_7_2_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    User Docs
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_7_2_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_7_2">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    User Docs
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../canon/docs/introduction/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Introduction
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../canon/docs/quickstart/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Quick Start
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../canon/docs/user-guide/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    User Guide
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_7_3" >
+        
+          
+          <label class="md-nav__link" for="__nav_7_3" id="__nav_7_3_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Design Spec
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_7_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_7_3">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Design Spec
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../canon/design/sec1_overview/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Overview & Scope
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../canon/design/sec2_architecture/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Architecture
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../canon/design/sec3_rules_dsl/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Rules DSL
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../canon/design/sec3b_cwl_integration/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    CWL Integration
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../canon/design/sec4_resolution_algorithm/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Resolution Algorithm
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../canon/design/sec5_executor_adapters/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Executor Adapters
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../canon/design/sec5b_storage_adapters/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Storage Adapters
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../canon/design/sec6_hippo_integration/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Hippo Integration
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../canon/design/sec7_nfr/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Non-Functional Requirements
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../canon/design/sec8_dynamic_rules/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Dynamic Rules
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../canon/design/reference_canon_yaml/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Reference: canon.yaml
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../canon/design/reference_canon_rules_yaml/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Reference: canon_rules.yaml
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../canon/design/appendix_a_rnaseq_example/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Appendix A: RNA-seq Example
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#tldr" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        TL;DR
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#read-first" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Read first
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#scope" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Scope
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Scope">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#in-scope" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        In scope
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#out-of-scope" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Out of scope
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#architecture-invariants" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Architecture invariants
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#phased-work-plan" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Phased work plan
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Phased work plan">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#phase-1-schema-level-groundwork-steps-3-4-5-6" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Phase 1: Schema-level groundwork (Steps 3, 4, 5, 6)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#phase-2-storage-migration-step-2" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Phase 2: Storage migration (Step 2)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#phase-3-wire-format-issue-1-closure-steps-1-7" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Phase 3: Wire format + Issue #1 closure (Steps 1, 7)
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#decisions-log" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Decisions log
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#what-done-looks-like" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        What "done" looks like
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#gotchas-known-traps" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Gotchas / known traps
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#pointers-to-related-work" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Pointers to related work
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+
+<h1 id="sec9-handoff-refactor-finish-linkml-native-migration">sec9 Handoff — β Refactor: Finish LinkML-Native Migration<a class="headerlink" href="#sec9-handoff-refactor-finish-linkml-native-migration" title="Permanent link">&para;</a></h1>
+<p><strong>Date:</strong> 2026-05-13
+<strong>Target completion:</strong> ~2–3 weeks of focused engineering
+<strong>Closes:</strong> Issue #1 (<code>hippo validate</code> is a stub)
+<strong>Defers to planned issues:</strong> #2, #3, #4, #5 (all labeled <code>planned</code>; do not pick up)</p>
+<hr />
+<h2 id="tldr">TL;DR<a class="headerlink" href="#tldr" title="Permanent link">&para;</a></h2>
+<p>Finish hippo's migration to a LinkML-native storage and ingest stack. Specifically: (a) replace the legacy generic <code>entities (id, type, data_blob)</code> table with per-class typed tables; (b) replace the EntityYAML wrapper format with LinkML-native instance YAML; (c) delegate SQL DDL emission to LinkML's <code>SQLTableGenerator</code> (with a thin hippo wrapper for FTS5, partial indexes, and system columns); (d) model <code>ExternalID</code> as a first-class LinkML class instead of a hand-coded side table; (e) tighten the <code>EntityStore</code> adapter protocol so a future <code>LinkMLStoreAdapter</code> (issue #2) is a drop-in.</p>
+<p>Adopting <code>linkml-store</code> itself is <strong>out of scope</strong> for this work — see issue #2 for the future α path. The spike report (<code>sec9_spike_linkml_store.md</code>) concluded β is the right ship-now path; α is the right destination once internal v1.0 lands.</p>
+<hr />
+<h2 id="read-first">Read first<a class="headerlink" href="#read-first" title="Permanent link">&para;</a></h2>
+<p>Read these in order before starting:</p>
+<ol>
+<li><strong><code>hippo/design/sec9_spike_linkml_store.md</code></strong> — the spike that produced the β-vs-α decision. Explains what we ruled out and why.</li>
+<li><strong><code>hippo/design/sec9_linkml_redesign.md</code> §9.1, §9.5, §9.6, §9.7</strong> — broader LinkML-redesign rationale and existing decisions.</li>
+<li><strong><code>hippo/src/hippo/schemas/hippo_core.yaml</code></strong> — the LinkML schema that defines <code>Entity</code>, <code>ProvenanceRecord</code>, <code>Process</code>, etc. The output of step 4 in this handoff <em>modifies this file</em>.</li>
+<li><strong><code>hippo/src/hippo/linkml_bridge.py</code></strong> — <code>SchemaRegistry</code> and the LinkML wrapper. This is the seam everything builds on.</li>
+<li><strong><code>hippo/src/hippo/core/storage/__init__.py</code></strong> — <code>EntityStore</code> ABC, the adapter contract. This is the seam that must survive intact.</li>
+<li><strong>GitHub Issue #1</strong> — the user-visible target of this work. Closing it is the acceptance signal for Phase 3.</li>
+</ol>
+<hr />
+<h2 id="scope">Scope<a class="headerlink" href="#scope" title="Permanent link">&para;</a></h2>
+<h3 id="in-scope">In scope<a class="headerlink" href="#in-scope" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>Step</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1</td>
+<td>Retire <code>EntityYAML</code> wrapper format (<code>entities: [{type, data, external_id}]</code>) in favor of LinkML-native instance YAML (tree-root pattern).</td>
+</tr>
+<tr>
+<td>2</td>
+<td>Per-class typed tables for domain entities — drop the legacy generic <code>entities (id, entity_type, is_available, version, data)</code> table. SDK writes go to <code>&lt;ClassName&gt;</code> tables.</td>
+</tr>
+<tr>
+<td>3</td>
+<td>Delegate SQL DDL emission to LinkML's <code>SQLTableGenerator</code>; hippo wraps for FTS5 virtual tables, partial indexes, system columns (<code>is_available</code>, <code>superseded_by</code>), and <code>hippo_append_only</code> triggers.</td>
+</tr>
+<tr>
+<td>4</td>
+<td><code>ExternalID</code> becomes a LinkML class in <code>hippo_core.yaml</code> (<code>is_a: Entity</code>). The hand-coded <code>external_id_store</code> and <code>external_ids</code> table retire; lookups go through normal entity machinery.</td>
+</tr>
+<tr>
+<td>5</td>
+<td>Tighten <code>EntityStore</code> protocol: drop <code>Generic[T] = SQLiteEntity</code> typing leak; accept <code>SchemaRegistry</code> in adapter constructor; verify SDK has no <code>isinstance(adapter, …)</code> checks.</td>
+</tr>
+<tr>
+<td>6</td>
+<td>Stub <code>hippo/src/hippo/core/storage/adapters/linkml_store_adapter.py</code> declaring <code>LinkMLStoreAdapter(EntityStore)</code> with <code>NotImplementedError</code> bodies — documents the future plug-in point for issue #2.</td>
+</tr>
+<tr>
+<td>7</td>
+<td>Close Issue #1: <code>hippo validate --schema</code> runs <code>SchemaRegistry.from_path()</code>; <code>hippo validate --data</code> validates LinkML-native instance YAML; <code>hippo ingest</code> consumes LinkML-native YAML.</td>
+</tr>
+</tbody>
+</table>
+<h3 id="out-of-scope">Out of scope<a class="headerlink" href="#out-of-scope" title="Permanent link">&para;</a></h3>
+<ul>
+<li><strong>Do not adopt <code>linkml-store</code></strong> as a runtime dependency for storage. Issue #2 (<code>planned</code>) tracks this for the future α work.</li>
+<li><strong>Do not file upstream PRs</strong> to <code>linkml-store</code> or <code>linkml</code> as part of this work. Issues #3 and #4 (<code>planned</code>) track those at hippo's pace.</li>
+<li><strong>Do not probe Postgres or Neo4j backends.</strong> Issue #5 (<code>planned</code>) tracks spike follow-ups.</li>
+<li><strong>Do not touch <code>core/storage/migration.py</code> or <code>schema_diff.py</code></strong> beyond the surface area required by steps 2 and 3. These remain hippo-owned (linkml-store has no migration support; see spike §11).</li>
+<li><strong>Do not change the REST / GraphQL transport layers</strong> beyond what the storage changes force.</li>
+<li><strong>Do not introduce CSV/JSON/SQL loader changes.</strong> EntityYAML retirement is the only ingest-format change in scope.</li>
+</ul>
+<hr />
+<h2 id="architecture-invariants">Architecture invariants<a class="headerlink" href="#architecture-invariants" title="Permanent link">&para;</a></h2>
+<p>These must remain true after every PR in this work. The agent should reject its own changes that violate any of them.</p>
+<ol>
+<li><strong><code>EntityStore</code> is the adapter contract.</strong> The SDK (<code>HippoClient</code>) consumes <code>EntityStore</code> only. No <code>isinstance(adapter, SQLiteAdapter)</code> anywhere above <code>core/storage/</code>. No reaching into adapter internals (<code>adapter._provenance_store.x</code> etc.).</li>
+<li><strong>Provenance is unconditional.</strong> Every entity write produces a <code>ProvenanceRecord</code> in the same transaction. This is true today; do not weaken it.</li>
+<li><strong>No hard deletes.</strong> Availability transitions via <code>is_available</code> boolean; soft-delete semantics preserved (sec9 §9.7).</li>
+<li><strong>Closed-schema validation.</strong> Every write passes through the existing <code>WriteValidator</code> chain → <code>SchemaRegistry.validate()</code> → LinkML closed-schema check. No write bypasses validation.</li>
+<li><strong><code>hippo_append_only</code> is enforced.</strong> <code>ProvenanceRecord</code> and any other class annotated <code>hippo_append_only: true</code> must reject UPDATE and DELETE at the adapter layer.</li>
+<li><strong>Schema-driven, not config-driven.</strong> Class names, slot names, ranges, and relationships are read from the LinkML <code>SchemaView</code> — never hardcoded.</li>
+<li><strong>Hippo annotations are validated.</strong> All <code>hippo_*</code> annotations must continue to validate against <code>hippo_ext.yaml</code> at registry construction time. See <code>linkml_bridge.py:_validate_hippo_annotations</code>.</li>
+<li><strong>System columns live on the schema, not in code.</strong> <code>is_available</code> and <code>id</code> are declared on <code>Entity</code> in <code>hippo_core.yaml</code>. The DDL wrapper adds <code>superseded_by</code> (no LinkML equivalent yet) until issue #4 lands.</li>
+</ol>
+<hr />
+<h2 id="phased-work-plan">Phased work plan<a class="headerlink" href="#phased-work-plan" title="Permanent link">&para;</a></h2>
+<p>Three phases, each PR-sized at the boundaries. Phases must land in order — Phase 2 reads the schema changes from Phase 1; Phase 3 reads the storage shape from Phase 2.</p>
+<h3 id="phase-1-schema-level-groundwork-steps-3-4-5-6">Phase 1: Schema-level groundwork (Steps 3, 4, 5, 6)<a class="headerlink" href="#phase-1-schema-level-groundwork-steps-3-4-5-6" title="Permanent link">&para;</a></h3>
+<p><strong>Goal:</strong> establish the schema and protocol shape that Phase 2 will write against. No SDK-visible behavior changes; the legacy <code>entities</code> table still exists.</p>
+<p><strong>Suggested PR boundaries</strong> — one PR per:</p>
+<ul>
+<li><strong>PR 1.1 — <code>ExternalID</code> LinkML class (Step 4).</strong></li>
+<li>Add <code>ExternalID</code> class to <code>hippo_core.yaml</code> with slots: <code>id</code> (identifier, UUID), <code>value</code> (the source-system ID string), <code>source_system</code> (string), <code>entity</code> (range Entity, the target), <code>is_active</code> (boolean, default true). <code>is_a: Entity</code>.</li>
+<li>Mark <code>value</code> as <code>hippo_index: true</code> for lookup performance; <code>(source_system, value)</code> should also be unique within active records — add <code>unique_keys:</code> block.</li>
+<li>Update <code>Operation</code> enum: keep <code>external_id_add</code> / <code>external_id_remove</code> (now reference <code>ExternalID</code> instances).</li>
+<li><strong>Do not</strong> delete the legacy <code>external_id_store</code> yet. Phase 2 migrates writes; this PR only declares the new shape.</li>
+<li>
+<p><strong>Tests:</strong> <code>tests/core/test_linkml_bridge.py</code> should pick up the new class. Add a test that <code>ExternalID</code> is in <code>registry.class_names()</code>.</p>
+</li>
+<li>
+<p><strong>PR 1.2 — Delegate DDL to LinkML's <code>SQLTableGenerator</code> (Step 3).</strong></p>
+</li>
+<li>Replace the body of <code>hippo/src/hippo/core/storage/ddl_generator.py:DDLGenerator.generate()</code> with a thin wrapper:<ol>
+<li>Call <code>linkml.generators.sqltablegen.SQLTableGenerator(schema).generate_ddl()</code> to get base DDL.</li>
+<li>Post-process for hippo extras:</li>
+<li>Inject <code>superseded_by TEXT NULL</code> on every per-class table that doesn't already declare it.</li>
+<li>Emit <code>CREATE INDEX … WHERE is_available = 1</code> for slots annotated <code>hippo_index_partial: true</code>.</li>
+<li>Emit FTS5 virtual tables for slots annotated <code>hippo_search: fts5</code>.</li>
+<li>Emit triggers (SQLite) rejecting UPDATE/DELETE on tables for classes annotated <code>hippo_append_only: true</code>.</li>
+<li>Topological FK ordering: trust LinkML's output. Only re-sort if a test demonstrates it's required.</li>
+</ol>
+</li>
+<li>The <code>FTSMigrationPlanner</code> and FTS-emission code in <code>ddl_generator.py</code> can stay; just rewire to call the wrapper.</li>
+<li><strong>Tests:</strong> <code>tests/core/test_ddl_generator.py</code> — most tests should pass unchanged. Update any that assert exact DDL string output (the LinkML output differs in whitespace/ordering from hippo's hand-rolled version).</li>
+<li>
+<p><strong>Verification:</strong> existing DDL output for <code>hippo_core.yaml</code> classes should produce equivalent tables (same columns, same constraints, same indexes) before/after. Compare via <code>EXPLAIN</code>/<code>PRAGMA table_info</code>, not raw string diff.</p>
+</li>
+<li>
+<p><strong>PR 1.3 — Tighten <code>EntityStore</code> protocol (Step 5).</strong></p>
+</li>
+<li>In <code>hippo/src/hippo/core/storage/__init__.py</code>:<ul>
+<li>Change <code>class EntityStore(ABC, Generic[T])</code> → <code>class EntityStore(ABC)</code>. Drop the <code>T</code> type parameter throughout. Use <code>dict[str, Any]</code> for entity records, or introduce a <code>EntityRecord</code> <code>TypedDict</code> if more structure helps. <strong>Decision: prefer plain <code>dict[str, Any]</code> — keep this simple.</strong></li>
+<li>Update <code>SQLiteAdapter</code>, <code>PostgresAdapter</code> to match. <code>SQLiteEntity</code> and <code>PostgresEntity</code> can stay as internal helpers but should not appear in the public protocol signature.</li>
+<li>Add <code>schema_registry: SchemaRegistry</code> as a required <code>__init__</code> parameter to <code>EntityStore</code> (and concrete adapters). Pass it through from <code>HippoClient</code> (already constructed there from user schema dir).</li>
+</ul>
+</li>
+<li><strong>Verify</strong> no <code>isinstance(adapter, SQLiteAdapter)</code> calls anywhere in <code>hippo/src/hippo/core/client.py</code>, <code>hippo/src/hippo/cli/</code>, <code>hippo/src/hippo/serve/</code>. <code>grep -rn "isinstance.*Adapter"</code> should show no production code matches.</li>
+<li>
+<p><strong>Tests:</strong> existing adapter tests should pass after threading <code>schema_registry</code> through their fixtures. Anything that grabs <code>SQLiteAdapter.&lt;internal&gt;</code> needs to be rewritten against the protocol or moved to <code>tests/core/storage/test_sqlite_adapter_internals.py</code> (a new, clearly-internal-only file).</p>
+</li>
+<li>
+<p><strong>PR 1.4 — Stub <code>LinkMLStoreAdapter</code> (Step 6).</strong></p>
+</li>
+<li>Create <code>hippo/src/hippo/core/storage/adapters/linkml_store_adapter.py</code>:<ul>
+<li>Declare <code>class LinkMLStoreAdapter(EntityStore)</code> with all abstract methods raising <code>NotImplementedError("Reserved for future Option α adoption — see GitHub Issue #2")</code>.</li>
+<li>Module docstring references issue #2 and <code>sec9_spike_linkml_store.md</code>.</li>
+</ul>
+</li>
+<li>Do <strong>not</strong> register the adapter anywhere or attempt to import <code>linkml_store</code>.</li>
+<li><strong>Tests:</strong> none required; this is a documentation stub.</li>
+</ul>
+<p><strong>Phase 1 acceptance criteria:</strong>
+- All existing tests pass.
+- <code>EntityStore</code> is no longer generic; <code>schema_registry</code> is a required constructor argument.
+- <code>hippo_core.yaml</code> declares <code>ExternalID</code>.
+- <code>ddl_generator.py</code> produces equivalent tables to before, but via <code>SQLTableGenerator</code> underneath.
+- <code>linkml_store_adapter.py</code> exists as a stub.</p>
+<hr />
+<h3 id="phase-2-storage-migration-step-2">Phase 2: Storage migration (Step 2)<a class="headerlink" href="#phase-2-storage-migration-step-2" title="Permanent link">&para;</a></h3>
+<p><strong>Goal:</strong> SDK writes go to per-class typed tables. Drop the legacy <code>entities</code> blob table. ExternalID migrates to its new class-backed shape.</p>
+<p><strong>This is the biggest phase.</strong> It changes how <code>HippoClient.put/read/query</code> work internally and touches every adapter method.</p>
+<p><strong>Suggested PR boundaries:</strong></p>
+<ul>
+<li><strong>PR 2.1 — Per-class table emission and writes.</strong></li>
+<li><code>SQLiteAdapter._init_database()</code> should call the new <code>DDLGenerator</code> (from PR 1.2) for the user schema, emitting per-class tables.</li>
+<li>Rewrite <code>SQLiteAdapter.create()</code> / <code>read()</code> / <code>update()</code> / <code>delete()</code> / <code>find()</code> to operate on the per-class table for <code>data["entity_type"]</code> instead of the generic <code>entities</code> table.</li>
+<li>The legacy <code>entities</code> table creation in <code>sqlite_adapter.py:970–986</code> can stay temporarily during migration; mark it <code># DEPRECATED — remove in PR 2.3</code>.</li>
+<li>
+<p><strong>Tests:</strong> integration tests under <code>tests/integration/</code> will need significant updates. Aim to keep tests <em>semantic</em> (assert "an entity of type X with name Y exists") rather than tied to the table layout.</p>
+</li>
+<li>
+<p><strong>PR 2.2 — ExternalID writes via entity machinery.</strong></p>
+</li>
+<li>Replace <code>ExternalIdStorageAdapter</code> writes with normal entity creates of <code>ExternalID</code> instances.</li>
+<li><code>register_external_id(entity_id, value, source_system)</code> becomes: <code>client.put("ExternalID", {"value": ..., "source_system": ..., "entity": entity_id, "is_active": True})</code> + a <code>ProvenanceRecord</code> with operation <code>external_id_add</code>.</li>
+<li><code>get_by_external_id(value, source_system)</code> becomes a query against the <code>ExternalID</code> table joined on <code>is_active = 1</code>.</li>
+<li><code>supersede_external_id(...)</code> becomes a soft-update: set <code>is_active = false</code> on the old row, create a new row, link via provenance with operation <code>supersede</code>.</li>
+<li>Update <code>provenance_service.py:206–280</code> and adjacent paths.</li>
+<li>
+<p><strong>Tests:</strong> <code>tests/core/test_external_id.py</code>, <code>tests/core/test_external_id_client.py</code>. Behavior should be unchanged at the API level (<code>client.register_external_id</code> etc. still work the same way).</p>
+</li>
+<li>
+<p><strong>PR 2.3 — Drop legacy <code>entities</code> table and <code>external_ids</code> table.</strong></p>
+</li>
+<li>Remove the <code>CREATE TABLE IF NOT EXISTS entities (...)</code> block from <code>sqlite_adapter.py</code>.</li>
+<li>Remove the <code>external_ids</code> table creation.</li>
+<li>Remove <code>ExternalIdStorageAdapter</code> class.</li>
+<li>Anything that still reads from <code>entities</code> or <code>external_ids</code> after this PR is a bug — fix it.</li>
+<li>
+<p><strong>Tests:</strong> full integration suite. If a test references the <code>entities</code> table directly via SQL, rewrite it to go through the SDK.</p>
+</li>
+<li>
+<p><strong>PR 2.4 — <code>_entity_registry</code> shadow table for cross-class UUID lookup.</strong></p>
+</li>
+<li>With per-class tables, <code>client.read(uuid)</code> can't scan one table. Two options were discussed:<ul>
+<li>(a) Maintain a <code>_entity_registry(uuid PRIMARY KEY, class_name TEXT NOT NULL)</code> table updated by post-insert hooks. Fast lookup.</li>
+<li>(b) Query <code>ProvenanceRecord</code> for <code>(entity_id = uuid)</code> and read <code>entity_type</code>. Slower but no extra table.</li>
+</ul>
+</li>
+<li><strong>Decision: implement (a).</strong> It's small, it's fast, and it's what sec9 implies.</li>
+<li>Add the table to <code>_init_database()</code>. Maintain it in <code>create()</code> / supersede paths.</li>
+<li><strong>Tests:</strong> add <code>test_cross_class_uuid_lookup</code> covering "I have a UUID and don't know the class — give me the entity."</li>
+</ul>
+<p><strong>Phase 2 acceptance criteria:</strong>
+- No row anywhere in any test DB ends up in a legacy <code>entities</code> or <code>external_ids</code> table.
+- All existing functional tests pass.
+- <code>client.read(uuid)</code> works without the caller knowing the class.
+- ProvenanceRecord still records every write.</p>
+<hr />
+<h3 id="phase-3-wire-format-issue-1-closure-steps-1-7">Phase 3: Wire format + Issue #1 closure (Steps 1, 7)<a class="headerlink" href="#phase-3-wire-format-issue-1-closure-steps-1-7" title="Permanent link">&para;</a></h3>
+<p><strong>Goal:</strong> retire EntityYAML; <code>hippo validate</code> and <code>hippo ingest</code> consume LinkML-native instance YAML; close Issue #1.</p>
+<p><strong>Suggested PR boundaries:</strong></p>
+<ul>
+<li><strong>PR 3.1 — Tree-root LinkML synthesis for instance ingest.</strong></li>
+<li>At <code>SchemaRegistry</code> construction time, synthesize a tree-root class (e.g., <code>_HippoInstanceBundle</code>) with one multivalued slot per concrete class in the schema. Slot name: snake-cased class name pluralized (or class name as-is — pick one convention and document it; sec3 §3.6 hints, decide and write it down).</li>
+<li>This synthesis is internal — user schemas don't need to declare a tree root.</li>
+<li>Add <code>SchemaRegistry.tree_root_class_name() -&gt; str</code> accessor.</li>
+<li>
+<p><strong>Tests:</strong> <code>tests/core/test_linkml_bridge.py</code> — assert the tree-root class is synthesized correctly for a sample schema.</p>
+</li>
+<li>
+<p><strong>PR 3.2 — <code>hippo validate --schema</code>, <code>--data</code>.</strong></p>
+</li>
+<li>Rewrite <code>hippo/src/hippo/cli/main.py:241–316</code> (the <code>validate</code> command).<ul>
+<li><code>--schema</code>: call <code>SchemaRegistry.from_path(path)</code>. If it raises <code>SchemaError</code>, print errors and exit 1. If it succeeds, print "Schema is valid LinkML with N classes."</li>
+<li><code>--data</code>: load the YAML file as a dict, call <code>registry.validate(content, registry.tree_root_class_name())</code>. Print errors with file path + per-entry locations; exit 1 if any.</li>
+<li>The current <code>--config</code> flag can stay as today (validates the hippo config file shape) — out of scope for this work.</li>
+</ul>
+</li>
+<li>
+<p><strong>Tests:</strong> rewrite <code>tests/integration/test_validate_cli.py</code> to use real LinkML schemas. Cover:</p>
+<ul>
+<li>Valid LinkML schema passes.</li>
+<li>"Garbage" schema (Test 2 from Issue #1: <code>{this_is_not_linkml: true, random_key: 42}</code>) fails with a useful error. <strong>This is the key acceptance test for Issue #1.</strong></li>
+<li>Valid data bundle passes.</li>
+<li>Bundle missing required field (Test 5 from Issue #1) fails with field-named error.</li>
+</ul>
+</li>
+<li>
+<p><strong>PR 3.3 — Retire <code>EntityYAMLLoader</code> and <code>ingest_entity_file</code>.</strong></p>
+</li>
+<li>Delete <code>hippo/src/hippo/core/loaders/entity_yaml.py</code>.</li>
+<li>Rewrite <code>hippo/src/hippo/cli/commands/ingest.py</code> to consume LinkML-native instance YAML against the tree-root class. The new function (e.g., <code>ingest_linkml_yaml</code>) loads the file, validates each entry against the appropriate target class via <code>registry.validate</code>, then writes via <code>client.put</code> per entry.</li>
+<li>Add <code>--validate-schema PATH</code> option to <code>hippo ingest</code> so dry-run validation matches Phase 3.2.</li>
+<li>Update <code>tests/cli/test_ingest.py</code> — rewrite all fixtures from <code>entities: [...]</code> to LinkML-native shape.</li>
+<li>Delete the three "DSL" string artifacts in <code>cli/main.py:359</code>, <code>:366</code>, <code>:395</code>.</li>
+<li>
+<p><strong>Tests:</strong> <code>test_ingest_*</code> tests should mostly survive with new fixtures.</p>
+</li>
+<li>
+<p><strong>PR 3.4 — Documentation.</strong></p>
+</li>
+<li>Update <code>hippo/README.md</code> "Validation Pipeline" section: the CLI path now actually validates. Show a real LinkML schema + instance YAML example.</li>
+<li>Update <code>hippo/docs/</code> user-facing guides to drop EntityYAML references.</li>
+<li>Update <code>hippo/CLAUDE.md</code> if any references to EntityYAML remain.</li>
+</ul>
+<p><strong>Phase 3 acceptance criteria:</strong>
+- Issue #1 closes. The reporter's Test 2 (garbage schema → "all checks passed") now produces a real error.
+- <code>hippo validate --schema garbage.yaml</code> exits non-zero.
+- <code>hippo ingest --file &lt;linkml-native.yaml&gt;</code> works against a tree-root schema.
+- <code>linkml-validate</code> (the upstream binary) can validate hippo entity files unchanged — no more wrapper-format error.
+- No string "DSL" or "EntityYAML" remains in <code>src/hippo/</code> (the loader file is deleted).</p>
+<hr />
+<h2 id="decisions-log">Decisions log<a class="headerlink" href="#decisions-log" title="Permanent link">&para;</a></h2>
+<p>The agent should not re-litigate these. They were settled in the conversation that produced this handoff.</p>
+<table>
+<thead>
+<tr>
+<th>Decision</th>
+<th>Choice</th>
+<th>Rationale</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Storage abstraction</td>
+<td><strong>β: delegate DDL to LinkML's <code>SQLTableGenerator</code>; keep hand-coded adapters</strong></td>
+<td>Ship velocity priority; α adoption is issue #2 (post-1.0).</td>
+</tr>
+<tr>
+<td>Wire format</td>
+<td><strong>Tree-root LinkML instance YAML</strong></td>
+<td>Most ergonomic; matches LinkML tutorials; <code>linkml-validate</code> works directly.</td>
+</tr>
+<tr>
+<td>ExternalID modeling</td>
+<td><strong>Option D: first-class LinkML class on <code>hippo_core.yaml</code></strong></td>
+<td>Sec3 §3.4 already designs it as lifecycle-tracked identity. Modeling it as a class is the LinkML-pure answer.</td>
+</tr>
+<tr>
+<td>Adapter constructor</td>
+<td><strong><code>SchemaRegistry</code> is a required parameter</strong></td>
+<td>Future <code>LinkMLStoreAdapter</code> needs the same signature.</td>
+</tr>
+<tr>
+<td>Cross-class UUID lookup</td>
+<td><strong><code>_entity_registry(uuid, class_name)</code> shadow table</strong></td>
+<td>Faster than scanning ProvenanceRecord; sec9 implies this name already.</td>
+</tr>
+<tr>
+<td>Append-only enforcement</td>
+<td><strong>SQLite triggers (β); future adapter overrides (α)</strong></td>
+<td>Both backends honor <code>hippo_append_only</code> at the storage layer.</td>
+</tr>
+<tr>
+<td>Schema migration</td>
+<td><strong>Stays hippo-owned (<code>schema_diff.py</code>, <code>migration.py</code>)</strong></td>
+<td>linkml-store has zero migration support; α doesn't change this.</td>
+</tr>
+<tr>
+<td><code>EntityStore</code> typing</td>
+<td><strong>Drop <code>Generic[T]</code>; use <code>dict[str, Any]</code></strong></td>
+<td>Keep the protocol simple; backend-agnostic.</td>
+</tr>
+<tr>
+<td>Linkml-store adoption</td>
+<td><strong>Stubbed only as future plug-in (<code>LinkMLStoreAdapter</code>)</strong></td>
+<td>Real adoption is issue #2. β stubs the file to document intent.</td>
+</tr>
+<tr>
+<td>Tree-root slot naming (PR 3.1)</td>
+<td><strong><code>snake_case(ClassName) + "s"</code>, honoring <code>hippo_accessor</code> overrides; tree-root class held off the SchemaView</strong></td>
+<td>Aligns the wire format with the typed-client accessor surface so users see one convention. Holding the synthetic class off the SchemaView keeps DDL/diff/typed-client unaware of it. Bundled fix: <code>hippo_accessor: processes</code> on <code>Process</code> to avoid the <code>processs</code> (triple-s) plural.</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="what-done-looks-like">What "done" looks like<a class="headerlink" href="#what-done-looks-like" title="Permanent link">&para;</a></h2>
+<p>After all three phases land:</p>
+<ol>
+<li>Issue #1 is closed by PR 3.2.</li>
+<li><code>hippo validate --schema garbage.yaml</code> reports a real LinkML error and exits non-zero.</li>
+<li><code>linkml-validate</code> from the upstream <code>linkml</code> package can validate hippo entity files without needing the wrapper format unwrapped.</li>
+<li><code>hippo</code> has no <code>EntityYAML</code>, no <code>entities: [...]</code> wrapper, no string <code>DSL</code> anywhere in <code>src/</code>.</li>
+<li>Every domain class has its own SQL table; the generic <code>entities</code> blob table is gone.</li>
+<li><code>ExternalID</code> is a normal entity class — same write path, same provenance, same query semantics.</li>
+<li><code>EntityStore</code> is the only interface between SDK and storage; no SQLite-specific leaks.</li>
+<li><code>LinkMLStoreAdapter</code> exists as a stub for the future α work (issue #2).</li>
+<li>The full integration test suite passes.</li>
+<li>Documentation reflects the new wire format.</li>
+</ol>
+<hr />
+<h2 id="gotchas-known-traps">Gotchas / known traps<a class="headerlink" href="#gotchas-known-traps" title="Permanent link">&para;</a></h2>
+<ul>
+<li><strong><code>hippo_core.yaml</code> is loaded as a bundled resource via <code>importlib.resources</code></strong> (see <code>linkml_bridge.py:_hippo_core_resource_path</code>). Changes to the file are picked up at runtime, but the package install path matters — verify edits propagate via <code>uv run</code> rather than <code>python</code>.</li>
+<li><strong>Schema version field in <code>ProvenanceRecord</code> is required</strong> (<code>schema_version</code> slot is <code>required: true</code>). Every write — including the new ExternalID writes — must populate it. <code>SQLiteAdapter</code> already threads it from the registry; verify the path survives the Phase 2 rewrite.</li>
+<li><strong>The <code>entities</code> table appears in raw SQL strings inside FTS triggers</strong> in <code>sqlite_adapter.py:1191</code> (<code>content_table: str = "entities"</code>). FTS5 content tables reference the source table by name. When per-class tables replace <code>entities</code>, the FTS planner must emit per-class FTS triggers.</li>
+<li><strong>Tests under <code>tests/integration/test_validate_cli.py</code> use a made-up schema format</strong> (<code>name</code>, <code>entities[*].properties</code>) that was never real LinkML. Phase 3 must rewrite these tests against real LinkML schemas. Don't assume they're correct — they were testing the <em>stub</em> behavior.</li>
+<li><strong>The reporter's Test 5 in Issue #1's comments</strong> (entity missing required <code>name</code> field) is the most concrete acceptance test. Use that exact fixture as a regression test in PR 3.2.</li>
+<li><strong><code>PydanticGenerator</code> is already used in <code>typed_client.py:459</code>.</strong> No changes needed there — but verify it still works after Phase 1's DDL delegation. Pydantic generation and SQL generation are independent code paths.</li>
+</ul>
+<hr />
+<h2 id="pointers-to-related-work">Pointers to related work<a class="headerlink" href="#pointers-to-related-work" title="Permanent link">&para;</a></h2>
+<ul>
+<li><strong>GitHub Issue #1</strong> — the user-visible target. Updates as PRs land.</li>
+<li><strong>GitHub Issue #2</strong> (<code>planned</code>) — future α adoption of <code>linkml-store</code>. Do not pick up.</li>
+<li><strong>GitHub Issue #3</strong> (<code>planned</code>) — upstream <code>linkml-store</code> contributions. Do not pick up.</li>
+<li><strong>GitHub Issue #4</strong> (<code>planned</code>) — upstream <code>LinkML SQLTableGenerator</code> contributions. Do not pick up.</li>
+<li><strong>GitHub Issue #5</strong> (<code>planned</code>) — spike follow-ups (Postgres, Neo4j, benchmark). Do not pick up.</li>
+<li><strong><code>hippo/design/sec9_spike_linkml_store.md</code></strong> — the spike that justifies β over α.</li>
+<li><strong><code>hippo/design/sec9_linkml_redesign.md</code></strong> — broader sec9 design context.</li>
+<li><strong><code>hippo/spike/linkml-store/</code></strong> — throwaway spike probe scripts. Safe to delete after β lands.</li>
+</ul>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+          <button type="button" class="md-top md-icon" data-md-component="top" hidden>
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8z"/></svg>
+  Back to top
+</button>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": "../../..", "features": ["navigation.tabs", "navigation.sections", "navigation.expand", "navigation.top", "search.highlight", "search.suggest", "content.code.copy"], "search": "../../../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+    
+    
+      <script src="../../../assets/javascripts/bundle.79ae519e.min.js"></script>
+      
+    
+  </body>
+</html>
