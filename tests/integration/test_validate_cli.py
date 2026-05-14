@@ -1,19 +1,59 @@
-"""Integration tests for the validate CLI command.
+"""Integration tests for the ``hippo validate`` CLI command.
 
-Tests schema and config file validation through the CLI, covering
-valid files, invalid files, missing files, and default validation.
+The CLI runs real LinkML validation (sec9 PR 3.2):
+- ``--schema PATH``: loads via ``SchemaRegistry.from_path`` — fails on
+  non-LinkML YAML, even when it parses as a dict.
+- ``--schema PATH --data BUNDLE``: validates a tree-root instance bundle
+  against the schema, surfacing field-level LinkML errors.
+
+The key acceptance regression for GitHub Issue #1: the "garbage" schema
+``{this_is_not_linkml: true, random_key: 42, noise: [a, b, c]}`` must
+exit non-zero with a real LinkML error.
 """
 
 import tempfile
 from pathlib import Path
 
 import pytest
-import yaml
 from typer.testing import CliRunner
 
 from hippo.cli.main import app
 
 runner = CliRunner()
+
+
+# Minimal LinkML schema used across happy-path tests. Imports hippo_core so
+# concrete classes (Project, Sample) extend Entity and the tree-root bundle
+# carries the matching multivalued slots.
+VALID_SCHEMA_YAML = """\
+id: https://example.org/hippo/test/validate_cli
+name: validate_cli_schema
+description: Minimal LinkML schema for validate CLI tests.
+
+prefixes:
+  linkml: https://w3id.org/linkml/
+
+imports:
+  - linkml:types
+  - hippo_core
+
+default_range: string
+
+classes:
+  Project:
+    is_a: Entity
+    attributes:
+      name:
+        required: true
+
+  Sample:
+    is_a: Entity
+    attributes:
+      name:
+        required: true
+      project_id:
+        range: Project
+"""
 
 
 @pytest.fixture
@@ -22,125 +62,174 @@ def tmp_dir():
         yield Path(tmpdir)
 
 
-def _write_yaml(tmp_dir: Path, content, filename: str) -> Path:
-    path = tmp_dir / filename
-    path.write_text(yaml.dump(content, default_flow_style=False))
+@pytest.fixture
+def valid_schema(tmp_dir: Path) -> Path:
+    path = tmp_dir / "schema.yaml"
+    path.write_text(VALID_SCHEMA_YAML)
     return path
 
 
 class TestValidateCLISchema:
-    def test_validate_valid_schema(self, tmp_dir):
-        schema = {
-            "name": "biobank",
-            "entities": [
-                {
-                    "name": "sample",
-                    "properties": [
-                        {"name": "sample_id", "type": "string", "required": True},
-                    ],
-                }
-            ],
-        }
-        path = _write_yaml(tmp_dir, schema, "schema.yaml")
-        result = runner.invoke(app, ["validate", "--schema", str(path)])
-        assert result.exit_code == 0
-        assert "Validation complete" in result.output
+    def test_valid_linkml_schema_passes(self, valid_schema: Path):
+        result = runner.invoke(app, ["validate", "--schema", str(valid_schema)])
+        assert result.exit_code == 0, result.output
+        assert "Schema is valid LinkML" in result.output
+        assert "classes" in result.output
 
-    def test_validate_schema_nonexistent(self, tmp_dir):
+    def test_garbage_schema_fails(self, tmp_dir: Path):
+        """Issue #1 Test 2 — the killer demo.
+
+        A YAML file with no LinkML structure must exit non-zero with a
+        real error message. Before PR 3.2 this returned "all checks
+        passed" — the regression that motivated the rewrite.
+        """
+        path = tmp_dir / "garbage.yaml"
+        path.write_text(
+            "this_is_not_linkml: true\n"
+            "random_key: 42\n"
+            "noise: [a, b, c]\n"
+        )
+        result = runner.invoke(app, ["validate", "--schema", str(path)])
+        assert result.exit_code == 1
+        assert "Invalid LinkML schema" in result.output
+
+    def test_missing_schema_file(self, tmp_dir: Path):
         result = runner.invoke(
             app, ["validate", "--schema", str(tmp_dir / "missing.yaml")]
         )
         assert result.exit_code == 1
         assert "not found" in result.output
 
-    def test_validate_schema_not_dict(self, tmp_dir):
-        """A YAML file whose root is a list should fail validation."""
-        path = tmp_dir / "bad_schema.yaml"
-        path.write_text("- item1\n- item2\n")
+    def test_malformed_yaml_schema_fails(self, tmp_dir: Path):
+        path = tmp_dir / "broken.yaml"
+        path.write_text("classes:\n  Foo: { unclosed: \n")
         result = runner.invoke(app, ["validate", "--schema", str(path)])
         assert result.exit_code == 1
-        assert "Invalid schema format" in result.output
 
-    def test_validate_schema_with_all_field_types(self, tmp_dir):
-        """Schema with every Hippo type should pass validation."""
-        schema = {
-            "name": "all_types",
-            "entities": [
-                {
-                    "name": "everything",
-                    "properties": [
-                        {"name": "f_str", "type": "string"},
-                        {"name": "f_int", "type": "integer"},
-                        {"name": "f_float", "type": "float"},
-                        {"name": "f_bool", "type": "boolean"},
-                        {"name": "f_date", "type": "date"},
-                        {"name": "f_dt", "type": "datetime"},
-                        {"name": "f_uri", "type": "uri"},
-                        {"name": "f_list", "type": "list"},
-                        {"name": "f_dict", "type": "dict"},
-                        {
-                            "name": "f_enum",
-                            "type": "enum",
-                            "values": ["a", "b"],
-                        },
-                    ],
-                }
-            ],
-        }
-        path = _write_yaml(tmp_dir, schema, "full_types.yaml")
-        result = runner.invoke(app, ["validate", "--schema", str(path)])
-        assert result.exit_code == 0
+    def test_schema_directory(self, tmp_dir: Path):
+        schema_dir = tmp_dir / "schemas"
+        schema_dir.mkdir()
+        (schema_dir / "schema.yaml").write_text(VALID_SCHEMA_YAML)
+        result = runner.invoke(app, ["validate", "--schema", str(schema_dir)])
+        assert result.exit_code == 0, result.output
+        assert "Schema is valid LinkML" in result.output
+
+
+class TestValidateCLIData:
+    def test_valid_bundle_passes(self, valid_schema: Path, tmp_dir: Path):
+        bundle = tmp_dir / "bundle.yaml"
+        bundle.write_text(
+            "projects:\n"
+            "  - id: p1\n"
+            "    name: Project One\n"
+            "    is_available: true\n"
+            "samples:\n"
+            "  - id: s1\n"
+            "    name: Tissue A\n"
+            "    project_id: p1\n"
+            "    is_available: true\n"
+        )
+        result = runner.invoke(
+            app,
+            ["validate", "--schema", str(valid_schema), "--data", str(bundle)],
+        )
+        assert result.exit_code == 0, result.output
         assert "Validation complete" in result.output
 
-    def test_validate_empty_schema(self, tmp_dir):
-        """An empty dict should still pass basic structural validation."""
-        path = _write_yaml(tmp_dir, {}, "empty.yaml")
-        result = runner.invoke(app, ["validate", "--schema", str(path)])
-        # Empty dict is a valid dict
+    def test_missing_required_field_fails(
+        self, valid_schema: Path, tmp_dir: Path
+    ):
+        """Issue #1 Test 5 — entity missing a required field must fail
+        with a field-named error.
+        """
+        bundle = tmp_dir / "broken.yaml"
+        bundle.write_text(
+            "samples:\n"
+            "  - id: s1\n"
+            "    project_id: p1\n"
+            "    is_available: true\n"
+        )
+        result = runner.invoke(
+            app,
+            ["validate", "--schema", str(valid_schema), "--data", str(bundle)],
+        )
+        assert result.exit_code == 1
+        assert "name" in result.output
+        assert "required" in result.output
+
+    def test_unknown_top_level_slot_fails(
+        self, valid_schema: Path, tmp_dir: Path
+    ):
+        bundle = tmp_dir / "rogue.yaml"
+        bundle.write_text(
+            "not_a_class:\n"
+            "  - id: x\n"
+        )
+        result = runner.invoke(
+            app,
+            ["validate", "--schema", str(valid_schema), "--data", str(bundle)],
+        )
+        assert result.exit_code == 1
+
+    def test_data_without_schema_errors(self, tmp_dir: Path):
+        bundle = tmp_dir / "bundle.yaml"
+        bundle.write_text("projects: []\n")
+        result = runner.invoke(app, ["validate", "--data", str(bundle)])
+        assert result.exit_code == 1
+        assert "--data requires --schema" in result.output
+
+    def test_data_file_missing(self, valid_schema: Path, tmp_dir: Path):
+        result = runner.invoke(
+            app,
+            [
+                "validate",
+                "--schema",
+                str(valid_schema),
+                "--data",
+                str(tmp_dir / "missing.yaml"),
+            ],
+        )
+        assert result.exit_code == 1
+        assert "not found" in result.output
+
+    def test_data_not_a_mapping(self, valid_schema: Path, tmp_dir: Path):
+        bundle = tmp_dir / "list.yaml"
+        bundle.write_text("- item1\n- item2\n")
+        result = runner.invoke(
+            app,
+            ["validate", "--schema", str(valid_schema), "--data", str(bundle)],
+        )
+        assert result.exit_code == 1
+        assert "mapping" in result.output
+
+
+class TestValidateCLIDefault:
+    def test_no_args_validates_default_config(self):
+        result = runner.invoke(app, ["validate"])
         assert result.exit_code == 0
+        assert "Default configuration is valid" in result.output
 
 
 class TestValidateCLIConfig:
-    def test_validate_valid_config(self, tmp_dir):
-        config = {"storage": {"backend": "sqlite", "path": "data/hippo.db"}}
-        path = _write_yaml(tmp_dir, config, "config.yaml")
+    """The legacy ``--config`` flag is preserved (out of scope for PR 3.2)."""
+
+    def test_valid_config(self, tmp_dir: Path):
+        path = tmp_dir / "config.yaml"
+        path.write_text("storage:\n  backend: sqlite\n")
         result = runner.invoke(app, ["validate", "--config", str(path)])
         assert result.exit_code == 0
         assert "Validation complete" in result.output
 
-    def test_validate_config_nonexistent(self, tmp_dir):
+    def test_missing_config(self, tmp_dir: Path):
         result = runner.invoke(
             app, ["validate", "--config", str(tmp_dir / "missing.yaml")]
         )
         assert result.exit_code == 1
         assert "not found" in result.output
 
-    def test_validate_config_not_dict(self, tmp_dir):
+    def test_config_not_dict(self, tmp_dir: Path):
         path = tmp_dir / "bad_config.yaml"
-        path.write_text("just a string")
+        path.write_text("just a string\n")
         result = runner.invoke(app, ["validate", "--config", str(path)])
         assert result.exit_code == 1
         assert "Invalid config format" in result.output
-
-
-class TestValidateCLIDefault:
-    def test_validate_no_args(self):
-        """With no --schema or --config, validates default configuration."""
-        result = runner.invoke(app, ["validate"])
-        assert result.exit_code == 0
-        assert "Default configuration is valid" in result.output
-
-
-class TestValidateCLICombined:
-    def test_validate_both_schema_and_config(self, tmp_dir):
-        schema = {"name": "test", "entities": []}
-        config = {"storage": {"backend": "sqlite"}}
-        schema_path = _write_yaml(tmp_dir, schema, "schema.yaml")
-        config_path = _write_yaml(tmp_dir, config, "config.yaml")
-
-        result = runner.invoke(
-            app,
-            ["validate", "--schema", str(schema_path), "--config", str(config_path)],
-        )
-        assert result.exit_code == 0
-        assert "Validation complete" in result.output

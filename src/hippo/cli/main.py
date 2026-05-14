@@ -240,7 +240,13 @@ def migrate(
 @app.command()
 def validate(
     schema: str = typer.Option(
-        None, "--schema", "-s", help="Path to schema file to validate"
+        None, "--schema", "-s", help="Path to a LinkML schema file or directory"
+    ),
+    data: str = typer.Option(
+        None,
+        "--data",
+        "-d",
+        help="Path to an instance YAML bundle to validate against --schema",
     ),
     config: str = typer.Option(
         None, "--config", "-c", help="Path to config file to validate"
@@ -249,21 +255,18 @@ def validate(
         False, "--verbose", "-v", help="Show detailed validation output"
     ),
 ) -> None:
-    """Validate schemas against defined rules or application configuration.
-
-    This command validates schema files or configuration files to ensure they
-    conform to the expected structure and format.
+    """Validate a LinkML schema and/or an instance YAML bundle.
 
     Usage:
-      hippo validate                    # Validate default configuration
-      hippo validate --schema my-schema.yaml  # Validate specific schema
-      hippo validate --config my-config.yaml  # Validate specific config
-      hippo validate --verbose              # Show detailed output
+      hippo validate                                   # Validate default configuration
+      hippo validate --schema schema.yaml              # Validate LinkML schema only
+      hippo validate --schema schema.yaml --data bundle.yaml
+                                                       # Validate instance bundle against schema
+      hippo validate --config my-config.yaml           # Validate Hippo config file shape
     """
     from pathlib import Path
     import yaml
 
-    # Basic validation check for both schema and config files if provided
     if config and not Path(config).exists():
         typer.echo(f"Error: Configuration file not found: {config}", err=True)
         raise typer.Exit(1)
@@ -272,46 +275,70 @@ def validate(
         typer.echo(f"Error: Schema file not found: {schema}", err=True)
         raise typer.Exit(1)
 
-    # If no arguments provided, validate default configuration
+    if data and not schema:
+        typer.echo("Error: --data requires --schema", err=True)
+        raise typer.Exit(1)
+
+    if data and not Path(data).exists():
+        typer.echo(f"Error: Data file not found: {data}", err=True)
+        raise typer.Exit(1)
+
     if not schema and not config:
         typer.echo("Validating default Hippo configuration...")
-        # Here we'd add more comprehensive validation logic for the full system
-        # including defaults and environment variables
         typer.echo("Default configuration is valid")
         return
 
-    typer.echo("Validating specified configuration...")
+    registry = None
+    if schema:
+        from hippo.linkml_bridge import SchemaRegistry
 
-    try:
-        if schema:
-            # Validate schema file specifically using existing schema validation logic
-            typer.echo(f"Validating schema: {schema}")
-            with open(schema, "r") as f:
-                content = yaml.safe_load(f)
+        typer.echo(f"Validating schema: {schema}")
+        try:
+            registry = SchemaRegistry.from_path(schema)
+        except Exception as e:
+            typer.echo(f"Error: Invalid LinkML schema: {e}", err=True)
+            raise typer.Exit(1)
+        typer.echo(
+            f"Schema is valid LinkML with {len(registry.class_names())} classes."
+        )
 
-            # Basic structural checks
-            if not isinstance(content, dict):
-                typer.echo(
-                    "Error: Invalid schema format - expected dictionary", err=True
-                )
-                raise typer.Exit(1)
+    if data:
+        assert registry is not None
+        typer.echo(f"Validating data: {data}")
+        try:
+            content = yaml.safe_load(Path(data).read_text())
+        except yaml.YAMLError as e:
+            typer.echo(f"Error: Failed to parse {data}: {e}", err=True)
+            raise typer.Exit(1)
 
-        if config:
-            # Validate a simple configuration file
-            typer.echo(f"Validating config: {config}")
-            with open(config, "r") as f:
-                config_content = yaml.safe_load(f)
+        if not isinstance(content, dict):
+            typer.echo(
+                f"Error: {data}: expected a YAML mapping at the top level "
+                f"(tree-root bundle), got {type(content).__name__}",
+                err=True,
+            )
+            raise typer.Exit(1)
 
-            # Basic validation for config structure
-            if not isinstance(config_content, dict):
-                typer.echo(
-                    "Error: Invalid config format - expected dictionary", err=True
-                )
-                raise typer.Exit(1)
+        errors = registry.validate(content, registry.tree_root_class_name())
+        if errors:
+            typer.echo(f"Error: {data}: {len(errors)} validation error(s):", err=True)
+            for err in errors:
+                typer.echo(f"  - {err}", err=True)
+            raise typer.Exit(1)
 
-    except Exception as e:
-        typer.echo(f"Error during validation: {e}", err=True)
-        raise typer.Exit(1)
+    if config:
+        typer.echo(f"Validating config: {config}")
+        try:
+            config_content = yaml.safe_load(Path(config).read_text())
+        except yaml.YAMLError as e:
+            typer.echo(f"Error: Failed to parse {config}: {e}", err=True)
+            raise typer.Exit(1)
+
+        if not isinstance(config_content, dict):
+            typer.echo(
+                "Error: Invalid config format - expected dictionary", err=True
+            )
+            raise typer.Exit(1)
 
     typer.echo("Validation complete - all checks passed")
 
