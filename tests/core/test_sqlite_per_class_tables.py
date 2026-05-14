@@ -194,3 +194,127 @@ class TestFindUsesPerClassTable:
         )
         assert len(results) == 1
         assert results[0].data["name"] == "Alpha"
+
+
+def _multi_class_registry() -> SchemaRegistry:
+    return build_registry(
+        {
+            "Sample": {
+                "attributes": {
+                    "id": {"identifier": True, "required": True},
+                    "name": {"range": "string", "required": True},
+                    "tissue": {"range": "string"},
+                }
+            },
+            "Project": {
+                "attributes": {
+                    "id": {"identifier": True, "required": True},
+                    "title": {"range": "string", "required": True},
+                }
+            },
+        }
+    )
+
+
+class TestCrossClassUuidLookup:
+    """Given only a UUID, the adapter must return the correct typed
+    entity without the caller knowing the class up front (sec9 §9.5 /
+    PR 2.4 ``_entity_registry`` shadow table)."""
+
+    @pytest.fixture
+    def db_path(self) -> Iterator[str]:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            yield os.path.join(tmpdir, "cross_class.db")
+
+    @pytest.fixture
+    def adapter(self, db_path: str) -> SQLiteAdapter:
+        return SQLiteAdapter(db_path, schema_registry=_multi_class_registry())
+
+    @pytest.fixture
+    def client(self, adapter: SQLiteAdapter) -> HippoClient:
+        return HippoClient(
+            storage=adapter,
+            registry=adapter.schema_registry,
+            bypass_validation=True,
+        )
+
+    def test_cross_class_uuid_lookup(
+        self, client: HippoClient, adapter: SQLiteAdapter
+    ) -> None:
+        sample = client.put("Sample", {"name": "S001", "tissue": "DLPFC"})
+        project = client.put("Project", {"title": "Atlas"})
+
+        # Given only the UUID — no entity_type — the adapter resolves the
+        # class and returns the typed payload.
+        sample_entity = adapter.read(sample["id"])
+        assert sample_entity is not None
+        assert sample_entity.entity_type == "Sample"
+        assert sample_entity.data["name"] == "S001"
+        assert sample_entity.data["tissue"] == "DLPFC"
+
+        project_entity = adapter.read(project["id"])
+        assert project_entity is not None
+        assert project_entity.entity_type == "Project"
+        assert project_entity.data["title"] == "Atlas"
+
+        # resolve_type / resolve_types must agree.
+        assert adapter.resolve_type(sample["id"]) == "Sample"
+        assert adapter.resolve_type(project["id"]) == "Project"
+        assert adapter.resolve_types([sample["id"], project["id"]]) == {
+            sample["id"]: "Sample",
+            project["id"]: "Project",
+        }
+
+    def test_registry_populated_for_each_create(
+        self, client: HippoClient, db_path: str
+    ) -> None:
+        sample = client.put("Sample", {"name": "S001"})
+        project = client.put("Project", {"title": "Atlas"})
+
+        conn = sqlite3.connect(db_path)
+        try:
+            rows = conn.execute(
+                "SELECT uuid, class_name FROM _entity_registry "
+                "WHERE uuid IN (?, ?) ORDER BY class_name",
+                (sample["id"], project["id"]),
+            ).fetchall()
+        finally:
+            conn.close()
+
+        assert rows == [(project["id"], "Project"), (sample["id"], "Sample")]
+
+    def test_registry_backfills_from_provenance_on_reinit(
+        self, client: HippoClient, adapter: SQLiteAdapter, db_path: str
+    ) -> None:
+        # Simulate a pre-PR-2.4 DB that has ProvenanceRecord entries but
+        # an empty _entity_registry: clear the registry and re-instantiate
+        # the adapter. The idempotent backfill in _init_database must
+        # re-populate the registry from ProvenanceRecord 'create' events.
+        sample = client.put("Sample", {"name": "S001"})
+        project = client.put("Project", {"title": "Atlas"})
+
+        conn = sqlite3.connect(db_path)
+        try:
+            conn.execute("DELETE FROM _entity_registry")
+            conn.commit()
+        finally:
+            conn.close()
+
+        SQLiteAdapter(db_path, schema_registry=_multi_class_registry())
+
+        conn = sqlite3.connect(db_path)
+        try:
+            rows = conn.execute(
+                "SELECT uuid, class_name FROM _entity_registry "
+                "WHERE uuid IN (?, ?) ORDER BY class_name",
+                (sample["id"], project["id"]),
+            ).fetchall()
+        finally:
+            conn.close()
+
+        assert rows == [(project["id"], "Project"), (sample["id"], "Sample")]
+
+    def test_unknown_uuid_returns_none(self, adapter: SQLiteAdapter) -> None:
+        assert adapter.resolve_type("not-a-real-uuid") is None
+        assert adapter.read("not-a-real-uuid") is None
+        assert adapter.resolve_types(["not-a-real-uuid"]) == {}

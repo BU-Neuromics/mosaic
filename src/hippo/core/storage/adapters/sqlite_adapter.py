@@ -886,6 +886,27 @@ class SQLiteAdapter(EntityStore):
                 )
             """)
 
+            # Shadow table for cross-class UUID → class_name lookup
+            # (sec9 §9.5 / PR 2.4). With per-class typed tables,
+            # ``read(uuid)`` would otherwise need to scan every class
+            # table or join ``ProvenanceRecord``; this O(1) lookup is
+            # maintained inline by ``create()``. Idempotent backfill
+            # below covers DBs created before this table existed.
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS _entity_registry (
+                    uuid TEXT PRIMARY KEY,
+                    class_name TEXT NOT NULL
+                )
+            """)
+            cursor.execute("""
+                INSERT OR IGNORE INTO _entity_registry (uuid, class_name)
+                SELECT entity_id, entity_type
+                FROM "ProvenanceRecord"
+                WHERE operation = 'create'
+                  AND entity_id IS NOT NULL
+                  AND entity_type IS NOT NULL
+            """)
+
             cursor.execute("""
                 CREATE INDEX IF NOT EXISTS idx_relationships_source
                 ON relationships(source_id)
@@ -1227,10 +1248,10 @@ class SQLiteAdapter(EntityStore):
     ) -> SQLiteEntity:
         """Create a new entity in the store.
 
-        Writes a typed row to the per-class table for ``entity.entity_type``
-        and records a ``create`` ``ProvenanceRecord``. Cross-class UUID
-        lookup (``resolve_type`` / ``read``) is served by joining
-        ``ProvenanceRecord`` until PR 2.4 introduces ``_entity_registry``.
+        Writes a typed row to the per-class table for ``entity.entity_type``,
+        registers ``(uuid, class_name)`` in ``_entity_registry`` for fast
+        cross-class lookup (sec9 §9.5), and records a ``create``
+        ``ProvenanceRecord``.
         """
         import uuid
 
@@ -1262,6 +1283,12 @@ class SQLiteAdapter(EntityStore):
 
             self._insert_per_class(cursor, entity_type, entity_id, entity_data,
                                    is_available=is_available)
+
+            cursor.execute(
+                "INSERT OR IGNORE INTO _entity_registry (uuid, class_name) "
+                "VALUES (?, ?)",
+                (entity_id, entity_type),
+            )
 
             provenance = self._get_provenance_store(conn)
             provenance.record(
@@ -1378,10 +1405,10 @@ class SQLiteAdapter(EntityStore):
     def read(self, entity_id: str) -> Optional[SQLiteEntity]:
         """Read an entity by its ID (available entities only).
 
-        Cross-class UUID lookup is served by ``ProvenanceRecord``: the
-        earliest record for ``entity_id`` carries the ``entity_type``;
-        the typed row then comes from the per-class table. Returns
-        ``None`` when the entity is unknown or not currently available.
+        Cross-class UUID lookup is served by ``_entity_registry``: the
+        registered ``class_name`` for ``entity_id`` is read first, then
+        the typed row comes from the per-class table. Returns ``None``
+        when the entity is unknown or not currently available.
         """
         entity_type = self.resolve_type(entity_id)
         if entity_type is None:
@@ -1391,23 +1418,18 @@ class SQLiteAdapter(EntityStore):
     def resolve_type(self, entity_id: str) -> Optional[str]:
         """Return the entity_type for a given UUID, or None if unknown.
 
-        Reads the ``entity_type`` from the earliest ``ProvenanceRecord``
-        for ``entity_id``. Includes entities regardless of availability —
-        the type is still meaningful for archived / superseded rows. Per
-        sec9 §9.5's identity model, this is the relational adapter's
-        implementation of UUID → type resolution. PR 2.4 replaces this
-        with a fast ``_entity_registry`` shadow-table lookup.
+        Looks up the class via the ``_entity_registry`` shadow table
+        (sec9 §9.5). Includes entities regardless of availability — the
+        type is still meaningful for archived / superseded rows.
         """
         with self._transaction() as conn:
             cursor = conn.cursor()
             cursor.execute(
-                'SELECT entity_type FROM "ProvenanceRecord" '
-                "WHERE entity_id = ? AND entity_type IS NOT NULL "
-                "ORDER BY timestamp ASC LIMIT 1",
+                "SELECT class_name FROM _entity_registry WHERE uuid = ?",
                 (entity_id,),
             )
             row = cursor.fetchone()
-            return row["entity_type"] if row else None
+            return row["class_name"] if row else None
 
     def resolve_types(self, entity_ids: list[str]) -> dict[str, str]:
         """Batch variant of ``resolve_type``. Returns a dict keyed by id.
@@ -1421,17 +1443,11 @@ class SQLiteAdapter(EntityStore):
             cursor = conn.cursor()
             placeholders = ",".join("?" for _ in entity_ids)
             cursor.execute(
-                f'SELECT entity_id, entity_type FROM "ProvenanceRecord" '
-                f"WHERE entity_id IN ({placeholders}) "
-                f"AND entity_type IS NOT NULL "
-                f"ORDER BY timestamp ASC",
+                f"SELECT uuid, class_name FROM _entity_registry "
+                f"WHERE uuid IN ({placeholders})",
                 tuple(entity_ids),
             )
-            resolved: dict[str, str] = {}
-            for row in cursor.fetchall():
-                # ORDER BY timestamp ASC → first row per id is the create.
-                resolved.setdefault(row["entity_id"], row["entity_type"])
-            return resolved
+            return {row["uuid"]: row["class_name"] for row in cursor.fetchall()}
 
     def read_any(self, entity_id: str) -> Optional[SQLiteEntity]:
         """Read an entity by its ID, regardless of availability.

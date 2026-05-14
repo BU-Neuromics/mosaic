@@ -242,6 +242,15 @@ class TestProvenanceIntegrity:
                 'INSERT INTO "Sample" (id, is_available) VALUES (?, 1)',
                 ("no-create-1",),
             )
+            # PR 2.4: class lookup now goes through ``_entity_registry``.
+            # Seed the registry so resolve_type returns "Sample"; the
+            # integrity check downstream must still flag the missing
+            # 'create' record.
+            conn.execute(
+                "INSERT INTO _entity_registry (uuid, class_name) "
+                "VALUES (?, 'Sample')",
+                ("no-create-1",),
+            )
             conn.execute(
                 'INSERT INTO "ProvenanceRecord" '
                 '(id, entity_id, entity_type, operation, actor_id, '
