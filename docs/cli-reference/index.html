@@ -5424,7 +5424,7 @@
 </code></pre></div>
 <hr />
 <h2 id="validate">validate<a class="headerlink" href="#validate" title="Permanent link">&para;</a></h2>
-<p>Validate schemas or configuration files against defined rules.</p>
+<p>Validate a LinkML schema file and/or an instance YAML bundle.</p>
 <h3 id="usage_3">Usage<a class="headerlink" href="#usage_3" title="Permanent link">&para;</a></h3>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a>hippo<span class="w"> </span>validate<span class="w"> </span><span class="o">[</span>OPTIONS<span class="o">]</span>
 </code></pre></div>
@@ -5443,13 +5443,19 @@
 <td><code>--schema</code>, <code>-s</code></td>
 <td><code>string</code></td>
 <td><code>None</code></td>
-<td>Path to schema file to validate</td>
+<td>Path to a LinkML schema file or directory</td>
+</tr>
+<tr>
+<td><code>--data</code>, <code>-d</code></td>
+<td><code>string</code></td>
+<td><code>None</code></td>
+<td>Path to an instance YAML bundle to validate against <code>--schema</code></td>
 </tr>
 <tr>
 <td><code>--config</code>, <code>-c</code></td>
 <td><code>string</code></td>
 <td><code>None</code></td>
-<td>Path to config file to validate</td>
+<td>Path to a Hippo config file to validate</td>
 </tr>
 <tr>
 <td><code>--verbose</code>, <code>-v</code></td>
@@ -5459,22 +5465,22 @@
 </tr>
 </tbody>
 </table>
+<p><code>--data</code> requires <code>--schema</code>. <code>--config</code> is independent.</p>
 <h3 id="example_3">Example<a class="headerlink" href="#example_3" title="Permanent link">&para;</a></h3>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a><span class="c1"># Validate default configuration</span>
-<a id="__codelineno-7-2" name="__codelineno-7-2" href="#__codelineno-7-2"></a>hippo<span class="w"> </span>validate
+<div class="highlight"><pre><span></span><code><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a><span class="c1"># Validate a LinkML schema — exits non-zero on any LinkML error</span>
+<a id="__codelineno-7-2" name="__codelineno-7-2" href="#__codelineno-7-2"></a>hippo<span class="w"> </span>validate<span class="w"> </span>--schema<span class="w"> </span>schemas/brain_study.yaml
 <a id="__codelineno-7-3" name="__codelineno-7-3" href="#__codelineno-7-3"></a>
-<a id="__codelineno-7-4" name="__codelineno-7-4" href="#__codelineno-7-4"></a><span class="c1"># Validate a specific schema file</span>
-<a id="__codelineno-7-5" name="__codelineno-7-5" href="#__codelineno-7-5"></a>hippo<span class="w"> </span>validate<span class="w"> </span>--schema<span class="w"> </span>schemas/entities.yaml
+<a id="__codelineno-7-4" name="__codelineno-7-4" href="#__codelineno-7-4"></a><span class="c1"># Validate a data bundle against a schema</span>
+<a id="__codelineno-7-5" name="__codelineno-7-5" href="#__codelineno-7-5"></a>hippo<span class="w"> </span>validate<span class="w"> </span>--schema<span class="w"> </span>schemas/brain_study.yaml<span class="w"> </span>--data<span class="w"> </span>data/samples.yaml
 <a id="__codelineno-7-6" name="__codelineno-7-6" href="#__codelineno-7-6"></a>
-<a id="__codelineno-7-7" name="__codelineno-7-7" href="#__codelineno-7-7"></a><span class="c1"># Validate a specific config file</span>
+<a id="__codelineno-7-7" name="__codelineno-7-7" href="#__codelineno-7-7"></a><span class="c1"># Validate a Hippo config file</span>
 <a id="__codelineno-7-8" name="__codelineno-7-8" href="#__codelineno-7-8"></a>hippo<span class="w"> </span>validate<span class="w"> </span>--config<span class="w"> </span>config/production.yaml
-<a id="__codelineno-7-9" name="__codelineno-7-9" href="#__codelineno-7-9"></a>
-<a id="__codelineno-7-10" name="__codelineno-7-10" href="#__codelineno-7-10"></a><span class="c1"># Validate with verbose output</span>
-<a id="__codelineno-7-11" name="__codelineno-7-11" href="#__codelineno-7-11"></a>hippo<span class="w"> </span>validate<span class="w"> </span>--schema<span class="w"> </span>schemas/entities.yaml<span class="w"> </span>--verbose
 </code></pre></div>
 <hr />
 <h2 id="ingest">ingest<a class="headerlink" href="#ingest" title="Permanent link">&para;</a></h2>
-<p>Ingest data from configured external sources.</p>
+<p>Ingest a LinkML-native instance YAML bundle into Hippo, or load data via a generic loader.</p>
+<p>The default path (<code>--file</code>) accepts a <strong>tree-root bundle</strong>: a YAML mapping whose top-level keys are pluralized class names (<code>samples:</code>, <code>projects:</code>, …) and whose values are lists of instance dicts. Identity is by the <code>id</code> slot on each instance — re-ingesting an existing id updates it in place.</p>
+<p>CSV/JSON/SQL operational data files are not accepted here; pass <code>--type</code> + <code>--config</code> for those.</p>
 <h3 id="usage_4">Usage<a class="headerlink" href="#usage_4" title="Permanent link">&para;</a></h3>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a>hippo<span class="w"> </span>ingest<span class="w"> </span><span class="o">[</span>OPTIONS<span class="o">]</span>
 </code></pre></div>
@@ -5490,28 +5496,46 @@
 </thead>
 <tbody>
 <tr>
-<td><code>--config</code>, <code>-c</code></td>
+<td><code>--file</code>, <code>-f</code></td>
 <td><code>string</code></td>
 <td><code>None</code></td>
-<td>Path to data sources configuration file</td>
+<td>Path to a LinkML-native instance YAML bundle</td>
+</tr>
+<tr>
+<td><code>--validate-schema</code></td>
+<td><code>string</code></td>
+<td><code>None</code></td>
+<td>Path to a LinkML schema file or directory; bundle is validated before any writes</td>
 </tr>
 <tr>
 <td><code>--dry-run</code></td>
 <td><code>boolean</code></td>
 <td><code>false</code></td>
-<td>Preview ingestion without applying changes</td>
+<td>Validate and preview without writing</td>
+</tr>
+<tr>
+<td><code>--type</code>, <code>-t</code></td>
+<td><code>string</code></td>
+<td><code>None</code></td>
+<td>Loader type for generic loaders: <code>csv</code>, <code>json</code>, or <code>sql</code></td>
+</tr>
+<tr>
+<td><code>--config</code>, <code>-c</code></td>
+<td><code>string</code></td>
+<td><code>None</code></td>
+<td>Path to loader config file (for <code>--type csv/json/sql</code>)</td>
 </tr>
 </tbody>
 </table>
 <h3 id="example_4">Example<a class="headerlink" href="#example_4" title="Permanent link">&para;</a></h3>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a><span class="c1"># Ingest using default configuration</span>
-<a id="__codelineno-9-2" name="__codelineno-9-2" href="#__codelineno-9-2"></a>hippo<span class="w"> </span>ingest
+<div class="highlight"><pre><span></span><code><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a><span class="c1"># Ingest a bundle, validating it against the schema first</span>
+<a id="__codelineno-9-2" name="__codelineno-9-2" href="#__codelineno-9-2"></a>hippo<span class="w"> </span>ingest<span class="w"> </span>--file<span class="w"> </span>data/samples.yaml<span class="w"> </span>--validate-schema<span class="w"> </span>schemas/brain_study.yaml
 <a id="__codelineno-9-3" name="__codelineno-9-3" href="#__codelineno-9-3"></a>
-<a id="__codelineno-9-4" name="__codelineno-9-4" href="#__codelineno-9-4"></a><span class="c1"># Ingest from specific configuration file</span>
-<a id="__codelineno-9-5" name="__codelineno-9-5" href="#__codelineno-9-5"></a>hippo<span class="w"> </span>ingest<span class="w"> </span>--config<span class="w"> </span>data-sources.yaml
+<a id="__codelineno-9-4" name="__codelineno-9-4" href="#__codelineno-9-4"></a><span class="c1"># Dry run — validate and show what would be written</span>
+<a id="__codelineno-9-5" name="__codelineno-9-5" href="#__codelineno-9-5"></a>hippo<span class="w"> </span>ingest<span class="w"> </span>--file<span class="w"> </span>data/samples.yaml<span class="w"> </span>--validate-schema<span class="w"> </span>schemas/brain_study.yaml<span class="w"> </span>--dry-run
 <a id="__codelineno-9-6" name="__codelineno-9-6" href="#__codelineno-9-6"></a>
-<a id="__codelineno-9-7" name="__codelineno-9-7" href="#__codelineno-9-7"></a><span class="c1"># Preview ingestion without making changes</span>
-<a id="__codelineno-9-8" name="__codelineno-9-8" href="#__codelineno-9-8"></a>hippo<span class="w"> </span>ingest<span class="w"> </span>--dry-run
+<a id="__codelineno-9-7" name="__codelineno-9-7" href="#__codelineno-9-7"></a><span class="c1"># Generic CSV loader (separate path)</span>
+<a id="__codelineno-9-8" name="__codelineno-9-8" href="#__codelineno-9-8"></a>hippo<span class="w"> </span>ingest<span class="w"> </span>--type<span class="w"> </span>csv<span class="w"> </span>--file<span class="w"> </span>donors.csv<span class="w"> </span>--config<span class="w"> </span>donors_mapping.yaml
 </code></pre></div>
 <hr />
 <h2 id="reference">reference<a class="headerlink" href="#reference" title="Permanent link">&para;</a></h2>
