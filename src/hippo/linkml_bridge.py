@@ -15,8 +15,11 @@ value-type mismatches, and wrong-target attachments surface as
 
 from __future__ import annotations
 
+import copy
 import importlib.resources
 import re
+import warnings
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Optional, Union
 
@@ -401,6 +404,324 @@ def _build_tree_root_class(sv: SchemaView) -> ClassDefinition:
     )
 
 
+# ---------------------------------------------------------------------------
+# Reference loader fragment merge engine (sec2 §2.14.5 / §2.14.6,
+# decisions D2.14.G + D2.14.H).
+# ---------------------------------------------------------------------------
+
+PROVIDED_BY_ANNOTATION = "provided_by"
+LOADER_DEPENDS_ON_ANNOTATION = "loader_depends_on"
+
+
+@dataclass(frozen=True)
+class LoaderFragmentSpec:
+    """A single reference-loader fragment ready for merge.
+
+    ``loader_name`` is the loader's stable identifier (``ReferenceLoader.name``).
+    ``package_name`` is the Python distribution that ships the loader
+    (e.g., ``hippo-reference-fma``) — surfaced in collision error messages.
+    ``package_version`` is the installed package version, recorded in the
+    injected ``provided_by`` attribution.  ``fragment`` is the dict returned
+    by ``ReferenceLoader.schema_fragment()``.
+    """
+
+    loader_name: str
+    package_name: str
+    package_version: str
+    fragment: dict
+
+
+def _validate_loader_prefix(
+    spec: LoaderFragmentSpec, sibling_prefixes: dict[str, str]
+) -> str:
+    """Apply Rule 1. Returns the validated prefix.
+
+    Raises ``ConfigError`` on missing prefix, mismatch with ``loader_name``,
+    or collision with an already-seen sibling fragment.
+    """
+    from hippo.core.exceptions import ConfigError
+
+    prefix = spec.fragment.get("default_prefix")
+    if not prefix:
+        raise ConfigError(
+            f"Reference loader {spec.loader_name!r} (package "
+            f"{spec.package_name!r}) is missing `default_prefix:` in its "
+            f"schema_fragment(). Spec §2.14.5 Rule 1 requires every fragment "
+            f"to declare `default_prefix: {spec.loader_name}`.",
+            field_name="default_prefix",
+            loader_name=spec.loader_name,
+            package_name=spec.package_name,
+        )
+    if prefix != spec.loader_name:
+        raise ConfigError(
+            f"Reference loader {spec.loader_name!r} (package "
+            f"{spec.package_name!r}) declared `default_prefix: {prefix!r}` but "
+            f"spec §2.14.5 Rule 1 requires it to equal the loader name "
+            f"({spec.loader_name!r}).",
+            field_name="default_prefix",
+            loader_name=spec.loader_name,
+            package_name=spec.package_name,
+            actual_prefix=prefix,
+        )
+    if prefix in sibling_prefixes:
+        other_pkg = sibling_prefixes[prefix]
+        raise ConfigError(
+            f"Two reference loaders declare `default_prefix: {prefix!r}` — "
+            f"package {spec.package_name!r} and package {other_pkg!r}. Loader "
+            f"prefixes must be unique (spec §2.14.5 Rule 1).",
+            field_name="default_prefix",
+            prefix=prefix,
+            packages=[spec.package_name, other_pkg],
+        )
+    return prefix
+
+
+def _inject_provided_by_annotation(element: dict, attribution: str) -> None:
+    """Set ``annotations.provided_by.value = attribution`` on a class/slot dict.
+
+    Existing ``annotations`` blocks are preserved; a pre-existing
+    ``provided_by`` is overwritten so the engine remains authoritative.
+    Handles both dict-shape and list-shape annotation blocks.
+    """
+    annotations = element.get("annotations")
+    if isinstance(annotations, list):
+        # List form: [{tag: ..., value: ...}, ...]. Rebuild as dict for our use.
+        rebuilt: dict[str, Any] = {}
+        for entry in annotations:
+            if isinstance(entry, dict) and "tag" in entry:
+                rebuilt[entry["tag"]] = entry
+        annotations = rebuilt
+        element["annotations"] = annotations
+    elif annotations is None:
+        annotations = {}
+        element["annotations"] = annotations
+    annotations[PROVIDED_BY_ANNOTATION] = {
+        "tag": PROVIDED_BY_ANNOTATION,
+        "value": attribution,
+    }
+
+
+def _prepare_loader_fragment(
+    spec: LoaderFragmentSpec,
+    *,
+    deployed_imports: set[str],
+    deployed_prefixes: set[str],
+) -> dict:
+    """Apply Rule 2 (strip colliding imports) and Rule 3 (inject ``provided_by``).
+
+    Returns a deep-copied fragment dict; the input is not mutated.
+    """
+    prepared = copy.deepcopy(spec.fragment)
+
+    # Rule 2 — imports policy. Always strip `linkml:types`. Strip any import
+    # already present in the deployed schema, and any CURIE-form import whose
+    # prefix is already known. Loader-private imports (full URLs, paths, or
+    # CURIEs under a fragment-owned prefix) pass through unchanged.
+    raw_imports = prepared.get("imports") or []
+    kept: list[str] = []
+    for imp in raw_imports:
+        if imp == "linkml:types":
+            continue
+        if imp in deployed_imports:
+            continue
+        if ":" in imp and "//" not in imp:
+            pfx = imp.split(":", 1)[0]
+            if pfx in deployed_prefixes:
+                continue
+        kept.append(imp)
+    if kept:
+        prepared["imports"] = kept
+    else:
+        prepared.pop("imports", None)
+
+    # Rule 3 — provided_by injection. Stamp every class, every top-level slot,
+    # and every per-class `attributes:` entry the fragment introduces.
+    attribution = f"{spec.loader_name}@{spec.package_version}"
+
+    classes = prepared.get("classes") or {}
+    for cls_name, cls in list(classes.items()):
+        if not isinstance(cls, dict):
+            # LinkML accepts `ClassName:` (null body) as shorthand — promote
+            # to a dict so the annotation has somewhere to land.
+            cls = {} if cls is None else cls
+            classes[cls_name] = cls
+            if not isinstance(cls, dict):
+                continue
+        _inject_provided_by_annotation(cls, attribution)
+        attributes = cls.get("attributes") or {}
+        for attr_name, attr in list(attributes.items()):
+            if attr is None:
+                attr = {}
+                attributes[attr_name] = attr
+            if isinstance(attr, dict):
+                _inject_provided_by_annotation(attr, attribution)
+
+    slots = prepared.get("slots") or {}
+    for slot_name, slot in list(slots.items()):
+        if slot is None:
+            slot = {}
+            slots[slot_name] = slot
+        if isinstance(slot, dict):
+            _inject_provided_by_annotation(slot, attribution)
+
+    return prepared
+
+
+def _emit_loader_depends_on_warnings(
+    spec: LoaderFragmentSpec, installed_loader_names: set[str]
+) -> None:
+    """Apply Rule 4. Warn — never raise — when a declared dependency is absent."""
+    annotations = spec.fragment.get("annotations") or {}
+    if not isinstance(annotations, dict):
+        return
+    node = annotations.get(LOADER_DEPENDS_ON_ANNOTATION)
+    if isinstance(node, dict):
+        raw = node.get("value")
+    else:
+        raw = node
+    if raw is None or raw == "":
+        return
+    deps = [d.strip() for d in str(raw).split(",") if d.strip()]
+    for dep in deps:
+        if dep in installed_loader_names:
+            continue
+        warnings.warn(
+            f"Reference loader {spec.loader_name!r} declared "
+            f"`loader_depends_on: {dep!r}` but no loader named {dep!r} is "
+            f"installed. Cross-loader foreign keys are advisory in v1 "
+            f"(spec §2.14.6) — install the dependency to silence this warning.",
+            UserWarning,
+            stacklevel=3,
+        )
+
+
+def _merge_prepared_fragment(deployed_sv: SchemaView, prepared: dict) -> SchemaView:
+    """Combine a deployed ``SchemaView`` with a prepared fragment into a new view.
+
+    Reuses ``_flatten_for_validator`` so the merged view is self-contained
+    (no unresolved imports). Loader-introduced classes/slots/enums/types win
+    on key collision because the prefix-uniqueness rule means a class name
+    showing up in two fragments is not possible from upstream callers; if it
+    does happen (e.g., a class name colliding with a deployed name), the
+    fragment is the more specific contribution and overwrites.
+    """
+    base = _flatten_for_validator(deployed_sv)
+    base.setdefault("classes", {})
+    base.setdefault("slots", {})
+    base.setdefault("enums", {})
+    base.setdefault("types", {})
+    base.setdefault("prefixes", {})
+    base.setdefault("imports", [])
+
+    for section in ("classes", "slots", "enums", "types"):
+        for key, value in (prepared.get(section) or {}).items():
+            base[section][key] = value
+
+    for pfx, uri in (prepared.get("prefixes") or {}).items():
+        base["prefixes"].setdefault(pfx, uri)
+
+    for imp in prepared.get("imports") or []:
+        if imp not in base["imports"]:
+            base["imports"].append(imp)
+
+    # Drop empty sections so the resulting YAML stays tidy.
+    for section in ("classes", "slots", "enums", "types", "prefixes"):
+        if not base[section]:
+            del base[section]
+
+    return SchemaView(yaml.safe_dump(base), importmap=_bundled_importmap())
+
+
+def merge_loader_fragment(
+    deployed_sv: SchemaView,
+    spec: LoaderFragmentSpec,
+    *,
+    sibling_prefixes: Optional[dict[str, str]] = None,
+    installed_loader_names: Optional[set[str]] = None,
+) -> SchemaView:
+    """Merge a reference-loader schema fragment into ``deployed_sv``.
+
+    Implements decision D2.14.G (mandatory per-loader prefix, ``imports:``
+    policy, ``provided_by`` injection) and D2.14.H (soft
+    ``loader_depends_on`` warning).
+
+    Parameters
+    ----------
+    deployed_sv:
+        The active deployed ``SchemaView`` (typically Hippo core +
+        user schema) the fragment is being merged into.
+    spec:
+        The loader fragment to merge.
+    sibling_prefixes:
+        Maps ``default_prefix → package_name`` for fragments already
+        merged in the same install batch. Used for prefix-collision
+        detection across loaders. Callers iterating over multiple
+        fragments should accumulate this map between calls.
+    installed_loader_names:
+        Names of every reference loader the caller treats as installed.
+        Used only to silence ``loader_depends_on`` warnings — missing
+        dependencies emit a ``UserWarning`` and never block the merge.
+
+    Returns
+    -------
+    SchemaView
+        A new ``SchemaView`` containing the merged schema. ``deployed_sv``
+        is not mutated.
+
+    Raises
+    ------
+    ConfigError
+        On Rule 1 violations (missing/mismatched/colliding prefix).
+    """
+    sibling_prefixes = sibling_prefixes if sibling_prefixes is not None else {}
+    installed_loader_names = (
+        installed_loader_names if installed_loader_names is not None else set()
+    )
+
+    _validate_loader_prefix(spec, sibling_prefixes)
+
+    deployed_imports = set(deployed_sv.schema.imports or [])
+    deployed_prefixes = set((deployed_sv.schema.prefixes or {}).keys())
+    prepared = _prepare_loader_fragment(
+        spec,
+        deployed_imports=deployed_imports,
+        deployed_prefixes=deployed_prefixes,
+    )
+
+    _emit_loader_depends_on_warnings(spec, installed_loader_names)
+
+    return _merge_prepared_fragment(deployed_sv, prepared)
+
+
+def merge_loader_fragments(
+    deployed_sv: SchemaView,
+    specs: list[LoaderFragmentSpec],
+    *,
+    installed_loader_names: Optional[set[str]] = None,
+) -> SchemaView:
+    """Merge a batch of reference-loader fragments sequentially.
+
+    Accumulates ``sibling_prefixes`` across iterations so prefix collisions
+    across the batch surface as ``ConfigError`` from the colliding call. If
+    ``installed_loader_names`` is None it defaults to ``{spec.loader_name
+    for spec in specs}`` so a batch can satisfy its own internal
+    cross-references without the caller having to pre-compute the set.
+    """
+    if installed_loader_names is None:
+        installed_loader_names = {spec.loader_name for spec in specs}
+    sibling_prefixes: dict[str, str] = {}
+    sv = deployed_sv
+    for spec in specs:
+        sv = merge_loader_fragment(
+            sv,
+            spec,
+            sibling_prefixes=sibling_prefixes,
+            installed_loader_names=installed_loader_names,
+        )
+        sibling_prefixes[spec.loader_name] = spec.package_name
+    return sv
+
+
 class SchemaRegistry:
     """Hippo-facing schema registry backed by a LinkML ``SchemaView``."""
 
@@ -477,6 +798,24 @@ class SchemaRegistry:
     @classmethod
     def from_yaml(cls, yaml_text: str) -> "SchemaRegistry":
         return cls(SchemaView(yaml_text, importmap=_bundled_importmap()))
+
+    def with_loader_fragments(
+        self,
+        specs: list[LoaderFragmentSpec],
+        *,
+        installed_loader_names: Optional[set[str]] = None,
+    ) -> "SchemaRegistry":
+        """Return a new registry whose schema includes ``specs`` merged in.
+
+        Thin convenience wrapper over :func:`merge_loader_fragments` so the
+        reference-loader install path (sec2 §2.14.5) can hand off a batch of
+        fragments without callers needing to thread the SchemaView themselves.
+        Original registry is not mutated.
+        """
+        merged_sv = merge_loader_fragments(
+            self._sv, specs, installed_loader_names=installed_loader_names
+        )
+        return SchemaRegistry(merged_sv)
 
     @property
     def schema_view(self) -> SchemaView:
