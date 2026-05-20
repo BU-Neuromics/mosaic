@@ -1597,6 +1597,89 @@
     </span>
   </a>
   
+    <nav class="md-nav" aria-label="2.14 Reference Loader System">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#2141-version-semantics" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2.14.1 Version Semantics
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#2142-load-parameters" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2.14.2 Load Parameters
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#2143-caching-contract" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2.14.3 Caching Contract
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#2144-upgrade-semantics" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2.14.4 Upgrade Semantics
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#2145-schema-fragment-merge-rules" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2.14.5 Schema-Fragment Merge Rules
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#2146-cross-loader-foreign-keys" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2.14.6 Cross-Loader Foreign Keys
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#2147-test-fixtures" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2.14.7 Test Fixtures
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
 </li>
         
           <li class="md-nav__item">
@@ -4432,6 +4515,89 @@
     </span>
   </a>
   
+    <nav class="md-nav" aria-label="2.14 Reference Loader System">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#2141-version-semantics" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2.14.1 Version Semantics
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#2142-load-parameters" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2.14.2 Load Parameters
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#2143-caching-contract" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2.14.3 Caching Contract
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#2144-upgrade-semantics" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2.14.4 Upgrade Semantics
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#2145-schema-fragment-merge-rules" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2.14.5 Schema-Fragment Merge Rules
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#2146-cross-loader-foreign-keys" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2.14.6 Cross-Loader Foreign Keys
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#2147-test-fixtures" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2.14.7 Test Fixtures
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
 </li>
         
           <li class="md-nav__item">
@@ -5175,47 +5341,221 @@ Redundant entries (child listed with parent) emit a startup warning.</p>
 <hr />
 <h3 id="214-reference-loader-system">2.14 Reference Loader System<a class="headerlink" href="#214-reference-loader-system" title="Permanent link">&para;</a></h3>
 <p>Reference loaders install community-standard ontology data as regular Hippo entities.
-Distributed as <code>hippo-reference-&lt;name&gt;</code> packages, discovered via <code>hippo.reference_loaders</code>
-entry points.</p>
+Distributed as <code>hippo-reference-&lt;name&gt;</code> packages, discovered via two entry point groups:
+<code>hippo.reference_loaders</code> (the ABC subclass) and <code>hippo.reference_loader_cli</code> (an optional
+<code>typer.Typer</code> app mounted under <code>hippo reference &lt;name&gt; ...</code>).</p>
 <p><strong><code>ReferenceLoader</code> ABC:</strong></p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-20-1" name="__codelineno-20-1" href="#__codelineno-20-1"></a><span class="k">class</span><span class="w"> </span><span class="nc">ReferenceLoader</span><span class="p">(</span><span class="n">ABC</span><span class="p">):</span>
-<a id="__codelineno-20-2" name="__codelineno-20-2" href="#__codelineno-20-2"></a>    <span class="n">name</span><span class="p">:</span> <span class="nb">str</span>           <span class="c1"># e.g. &quot;fma&quot;, &quot;ensembl&quot;, &quot;go&quot;</span>
-<a id="__codelineno-20-3" name="__codelineno-20-3" href="#__codelineno-20-3"></a>    <span class="n">description</span><span class="p">:</span> <span class="nb">str</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-20-1" name="__codelineno-20-1" href="#__codelineno-20-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">abc</span><span class="w"> </span><span class="kn">import</span> <span class="n">ABC</span><span class="p">,</span> <span class="n">abstractmethod</span>
+<a id="__codelineno-20-2" name="__codelineno-20-2" href="#__codelineno-20-2"></a><span class="kn">from</span><span class="w"> </span><span class="nn">pydantic</span><span class="w"> </span><span class="kn">import</span> <span class="n">BaseModel</span>
+<a id="__codelineno-20-3" name="__codelineno-20-3" href="#__codelineno-20-3"></a><span class="kn">import</span><span class="w"> </span><span class="nn">typer</span>
 <a id="__codelineno-20-4" name="__codelineno-20-4" href="#__codelineno-20-4"></a>
-<a id="__codelineno-20-5" name="__codelineno-20-5" href="#__codelineno-20-5"></a>    <span class="nd">@abstractmethod</span>
-<a id="__codelineno-20-6" name="__codelineno-20-6" href="#__codelineno-20-6"></a>    <span class="k">def</span><span class="w"> </span><span class="nf">versions</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]:</span> <span class="o">...</span>
-<a id="__codelineno-20-7" name="__codelineno-20-7" href="#__codelineno-20-7"></a>    <span class="c1"># Available version strings</span>
+<a id="__codelineno-20-5" name="__codelineno-20-5" href="#__codelineno-20-5"></a><span class="k">class</span><span class="w"> </span><span class="nc">ReferenceLoader</span><span class="p">(</span><span class="n">ABC</span><span class="p">):</span>
+<a id="__codelineno-20-6" name="__codelineno-20-6" href="#__codelineno-20-6"></a>    <span class="n">name</span><span class="p">:</span> <span class="nb">str</span>           <span class="c1"># e.g. &quot;fma&quot;, &quot;ensembl&quot;, &quot;go&quot; — must match entry point key</span>
+<a id="__codelineno-20-7" name="__codelineno-20-7" href="#__codelineno-20-7"></a>    <span class="n">description</span><span class="p">:</span> <span class="nb">str</span>
 <a id="__codelineno-20-8" name="__codelineno-20-8" href="#__codelineno-20-8"></a>
-<a id="__codelineno-20-9" name="__codelineno-20-9" href="#__codelineno-20-9"></a>    <span class="nd">@abstractmethod</span>
-<a id="__codelineno-20-10" name="__codelineno-20-10" href="#__codelineno-20-10"></a>    <span class="k">def</span><span class="w"> </span><span class="nf">entity_types</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]:</span> <span class="o">...</span>
-<a id="__codelineno-20-11" name="__codelineno-20-11" href="#__codelineno-20-11"></a>    <span class="c1"># Entity type names this loader creates</span>
+<a id="__codelineno-20-9" name="__codelineno-20-9" href="#__codelineno-20-9"></a>    <span class="c1"># Optional: Typer app mounted as `hippo reference &lt;name&gt; &lt;subcmd&gt; ...`</span>
+<a id="__codelineno-20-10" name="__codelineno-20-10" href="#__codelineno-20-10"></a>    <span class="c1"># Register via the hippo.reference_loader_cli entry point.</span>
+<a id="__codelineno-20-11" name="__codelineno-20-11" href="#__codelineno-20-11"></a>    <span class="n">subcommands_app</span><span class="p">:</span> <span class="n">typer</span><span class="o">.</span><span class="n">Typer</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
 <a id="__codelineno-20-12" name="__codelineno-20-12" href="#__codelineno-20-12"></a>
-<a id="__codelineno-20-13" name="__codelineno-20-13" href="#__codelineno-20-13"></a>    <span class="nd">@abstractmethod</span>
-<a id="__codelineno-20-14" name="__codelineno-20-14" href="#__codelineno-20-14"></a>    <span class="k">def</span><span class="w"> </span><span class="nf">schema_fragment</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">:</span> <span class="o">...</span>
-<a id="__codelineno-20-15" name="__codelineno-20-15" href="#__codelineno-20-15"></a>    <span class="c1"># Entity type + relationship definitions in LinkML format.</span>
-<a id="__codelineno-20-16" name="__codelineno-20-16" href="#__codelineno-20-16"></a>    <span class="c1"># Merged into the deployed schema on install.</span>
-<a id="__codelineno-20-17" name="__codelineno-20-17" href="#__codelineno-20-17"></a>
-<a id="__codelineno-20-18" name="__codelineno-20-18" href="#__codelineno-20-18"></a>    <span class="nd">@abstractmethod</span>
-<a id="__codelineno-20-19" name="__codelineno-20-19" href="#__codelineno-20-19"></a>    <span class="k">def</span><span class="w"> </span><span class="nf">load</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">client</span><span class="p">:</span> <span class="n">HippoClient</span><span class="p">,</span> <span class="n">version</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">LoadResult</span><span class="p">:</span> <span class="o">...</span>
-<a id="__codelineno-20-20" name="__codelineno-20-20" href="#__codelineno-20-20"></a>    <span class="c1"># Ingests the reference dataset at the given version.</span>
+<a id="__codelineno-20-13" name="__codelineno-20-13" href="#__codelineno-20-13"></a>    <span class="c1"># Optional: Pydantic v2 model for load() parameters.</span>
+<a id="__codelineno-20-14" name="__codelineno-20-14" href="#__codelineno-20-14"></a>    <span class="c1"># When declared, the CLI auto-renders --flag args and validates user input.</span>
+<a id="__codelineno-20-15" name="__codelineno-20-15" href="#__codelineno-20-15"></a>    <span class="n">load_params_schema</span><span class="p">:</span> <span class="nb">type</span><span class="p">[</span><span class="n">BaseModel</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+<a id="__codelineno-20-16" name="__codelineno-20-16" href="#__codelineno-20-16"></a>
+<a id="__codelineno-20-17" name="__codelineno-20-17" href="#__codelineno-20-17"></a>    <span class="nd">@abstractmethod</span>
+<a id="__codelineno-20-18" name="__codelineno-20-18" href="#__codelineno-20-18"></a>    <span class="k">def</span><span class="w"> </span><span class="nf">versions</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]:</span> <span class="o">...</span>
+<a id="__codelineno-20-19" name="__codelineno-20-19" href="#__codelineno-20-19"></a>    <span class="c1"># Available version slugs. Format is loader-defined and opaque to Hippo.</span>
+<a id="__codelineno-20-20" name="__codelineno-20-20" href="#__codelineno-20-20"></a>    <span class="c1"># Loaders SHOULD include &quot;test&quot; as a pseudo-version (see §2.14.7).</span>
+<a id="__codelineno-20-21" name="__codelineno-20-21" href="#__codelineno-20-21"></a>
+<a id="__codelineno-20-22" name="__codelineno-20-22" href="#__codelineno-20-22"></a>    <span class="nd">@abstractmethod</span>
+<a id="__codelineno-20-23" name="__codelineno-20-23" href="#__codelineno-20-23"></a>    <span class="k">def</span><span class="w"> </span><span class="nf">entity_types</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]:</span> <span class="o">...</span>
+<a id="__codelineno-20-24" name="__codelineno-20-24" href="#__codelineno-20-24"></a>    <span class="c1"># Entity type names this loader creates (declarative — for provenance/discovery only).</span>
+<a id="__codelineno-20-25" name="__codelineno-20-25" href="#__codelineno-20-25"></a>
+<a id="__codelineno-20-26" name="__codelineno-20-26" href="#__codelineno-20-26"></a>    <span class="nd">@abstractmethod</span>
+<a id="__codelineno-20-27" name="__codelineno-20-27" href="#__codelineno-20-27"></a>    <span class="k">def</span><span class="w"> </span><span class="nf">schema_fragment</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">:</span> <span class="o">...</span>
+<a id="__codelineno-20-28" name="__codelineno-20-28" href="#__codelineno-20-28"></a>    <span class="c1"># LinkML fragment defining this loader&#39;s entity types and relationships.</span>
+<a id="__codelineno-20-29" name="__codelineno-20-29" href="#__codelineno-20-29"></a>    <span class="c1"># Must declare default_prefix: matching the loader name (see §2.14.5).</span>
+<a id="__codelineno-20-30" name="__codelineno-20-30" href="#__codelineno-20-30"></a>
+<a id="__codelineno-20-31" name="__codelineno-20-31" href="#__codelineno-20-31"></a>    <span class="nd">@abstractmethod</span>
+<a id="__codelineno-20-32" name="__codelineno-20-32" href="#__codelineno-20-32"></a>    <span class="k">def</span><span class="w"> </span><span class="nf">load</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">client</span><span class="p">:</span> <span class="n">HippoClient</span><span class="p">,</span> <span class="n">version</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+<a id="__codelineno-20-33" name="__codelineno-20-33" href="#__codelineno-20-33"></a>             <span class="n">params</span><span class="p">:</span> <span class="n">BaseModel</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">LoadResult</span><span class="p">:</span> <span class="o">...</span>
+<a id="__codelineno-20-34" name="__codelineno-20-34" href="#__codelineno-20-34"></a>    <span class="c1"># Ingest the reference dataset at the given version.</span>
+<a id="__codelineno-20-35" name="__codelineno-20-35" href="#__codelineno-20-35"></a>    <span class="c1"># params is an instance of load_params_schema, or None if not declared.</span>
+<a id="__codelineno-20-36" name="__codelineno-20-36" href="#__codelineno-20-36"></a>
+<a id="__codelineno-20-37" name="__codelineno-20-37" href="#__codelineno-20-37"></a>    <span class="k">def</span><span class="w"> </span><span class="nf">upgrade</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">client</span><span class="p">:</span> <span class="n">HippoClient</span><span class="p">,</span> <span class="n">from_version</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">to_version</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+<a id="__codelineno-20-38" name="__codelineno-20-38" href="#__codelineno-20-38"></a>                <span class="n">params</span><span class="p">:</span> <span class="n">BaseModel</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">LoadResult</span><span class="p">:</span>
+<a id="__codelineno-20-39" name="__codelineno-20-39" href="#__codelineno-20-39"></a>        <span class="c1"># Default: runs load(to_version, params). Override for efficient diffs.</span>
+<a id="__codelineno-20-40" name="__codelineno-20-40" href="#__codelineno-20-40"></a>        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="n">client</span><span class="p">,</span> <span class="n">to_version</span><span class="p">,</span> <span class="n">params</span><span class="p">)</span>
+<a id="__codelineno-20-41" name="__codelineno-20-41" href="#__codelineno-20-41"></a>
+<a id="__codelineno-20-42" name="__codelineno-20-42" href="#__codelineno-20-42"></a>    <span class="k">def</span><span class="w"> </span><span class="nf">validate</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">user_artifact</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">ValidationResult</span><span class="p">:</span>
+<a id="__codelineno-20-43" name="__codelineno-20-43" href="#__codelineno-20-43"></a>        <span class="c1"># Recommended, not required. Validate a user-supplied artifact against this</span>
+<a id="__codelineno-20-44" name="__codelineno-20-44" href="#__codelineno-20-44"></a>        <span class="c1"># loader&#39;s schema. Default raises NotImplementedError; the CLI surfaces a</span>
+<a id="__codelineno-20-45" name="__codelineno-20-45" href="#__codelineno-20-45"></a>        <span class="c1"># &quot;this loader doesn&#39;t expose a validator&quot; message in that case.</span>
+<a id="__codelineno-20-46" name="__codelineno-20-46" href="#__codelineno-20-46"></a>        <span class="k">raise</span> <span class="ne">NotImplementedError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">name</span><span class="si">}</span><span class="s2"> does not implement validate()&quot;</span><span class="p">)</span>
+</code></pre></div>
+<p><strong>Entry points</strong> (in the loader package's <code>pyproject.toml</code>):</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-21-1" name="__codelineno-21-1" href="#__codelineno-21-1"></a><span class="k">[project.entry-points.</span><span class="s2">&quot;hippo.reference_loaders&quot;</span><span class="k">]</span>
+<a id="__codelineno-21-2" name="__codelineno-21-2" href="#__codelineno-21-2"></a><span class="n">ensembl</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;hippo_reference_ensembl.loader:EnsemblLoader&quot;</span>
+<a id="__codelineno-21-3" name="__codelineno-21-3" href="#__codelineno-21-3"></a>
+<a id="__codelineno-21-4" name="__codelineno-21-4" href="#__codelineno-21-4"></a><span class="c1"># Optional — only needed if the loader exposes subcommands:</span>
+<a id="__codelineno-21-5" name="__codelineno-21-5" href="#__codelineno-21-5"></a><span class="k">[project.entry-points.</span><span class="s2">&quot;hippo.reference_loader_cli&quot;</span><span class="k">]</span>
+<a id="__codelineno-21-6" name="__codelineno-21-6" href="#__codelineno-21-6"></a><span class="n">ensembl</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;hippo_reference_ensembl.cli:app&quot;</span>
 </code></pre></div>
 <p><strong>Install lifecycle (<code>hippo reference install &lt;name&gt; [--version &lt;v&gt;]</code>):</strong>
 1. Resolve loader from <code>hippo.reference_loaders</code> entry points
-2. Call <code>loader.schema_fragment()</code> and merge into deployed schema
+2. Call <code>loader.schema_fragment()</code> and merge into deployed schema (see §2.14.5)
 3. Run <code>hippo migrate</code> (additive = non-interactive; structural = prompt for confirmation)
-4. Call <code>loader.load(client, version)</code> to ingest
+4. Call <code>loader.load(client, version, params)</code> — source data fetched via <code>client.cached_fetch</code>
+   (see §2.14.3)
 5. Record <code>{loader_name: version}</code> in <code>hippo_meta</code> under key <code>reference_versions</code></p>
+<p><strong>Upgrade lifecycle (<code>hippo reference upgrade &lt;name&gt; [--version &lt;v&gt;] [--prune-old]</code>):</strong>
+Calls <code>loader.upgrade(client, from_version, to_version, params)</code>. The new version's entities
+are ingested additively by default; pass <code>--prune-old</code> to remove the prior version's rows
+after the new install succeeds (see §2.14.4).</p>
 <p><strong>User schema dependency declaration:</strong></p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-21-1" name="__codelineno-21-1" href="#__codelineno-21-1"></a><span class="c1"># schema.yaml</span>
-<a id="__codelineno-21-2" name="__codelineno-21-2" href="#__codelineno-21-2"></a><span class="nt">requires</span><span class="p">:</span>
-<a id="__codelineno-21-3" name="__codelineno-21-3" href="#__codelineno-21-3"></a><span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">hippo-reference-fma&gt;=3.3</span>
-<a id="__codelineno-21-4" name="__codelineno-21-4" href="#__codelineno-21-4"></a><span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">hippo-reference-ensembl&gt;=GRCh38.109</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-22-1" name="__codelineno-22-1" href="#__codelineno-22-1"></a><span class="c1"># schema.yaml — exact-match pins only for v1 (range comparators are deferred)</span>
+<a id="__codelineno-22-2" name="__codelineno-22-2" href="#__codelineno-22-2"></a><span class="nt">requires</span><span class="p">:</span>
+<a id="__codelineno-22-3" name="__codelineno-22-3" href="#__codelineno-22-3"></a><span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">hippo-reference-fma==3.3</span>
+<a id="__codelineno-22-4" name="__codelineno-22-4" href="#__codelineno-22-4"></a><span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">hippo-reference-ensembl==mus_musculus.GRCm39.115</span>
 </code></pre></div>
 <p><code>hippo validate</code> fails fast with a clear install suggestion if a required loader is missing.
 Users reference loader-provided entity types by name without redeclaring them.</p>
-<p><strong>Collision detection:</strong> Two packages declaring the same entity type name → <code>ConfigError</code> at
-startup identifying both packages.</p>
-<p><strong>Extending loader-provided types:</strong> Deferred to post-v0.1.</p>
+<p><strong>Coupling notes (D1 ↔ D4 ↔ D5):</strong></p>
+<p>These three decisions interact. Implementers of the ABC surface must understand all three:</p>
+<ul>
+<li><strong>D1 → D5</strong>: Sub-command apps declared via <code>subcommands_app</code> receive <code>client</code> via Typer
+  context injection. This means the loader CLI shares the same <code>HippoClient</code> instance (and
+  thus the same <code>client.cache_dir</code>) as <code>load()</code>. Any subcommand that fetches source data MUST
+  use <code>client.cached_fetch</code> — not a private download path.</li>
+<li><strong>D4 → D1</strong>: <code>load_params_schema</code> is shared between <code>load()</code> and the CLI. When a subcommand
+  triggers a load, it renders <code>--flag</code> args from the same Pydantic model, validates them, and
+  passes the validated instance to <code>load()</code>. The schema is the single source of truth for both
+  surfaces.</li>
+<li><strong>D4 → D5</strong>: <code>cached_fetch</code> is the canonical download path for all <code>load()</code> calls regardless
+  of how they are invoked — directly via SDK, CLI, or subcommand.</li>
+</ul>
+<hr />
+<h4 id="2141-version-semantics">2.14.1 Version Semantics<a class="headerlink" href="#2141-version-semantics" title="Permanent link">&para;</a></h4>
+<p>Version strings returned by <code>versions()</code> are <strong>opaque slugs</strong> whose format is entirely
+loader-defined. Hippo does not parse or compare them.</p>
+<p>Examples of valid version slugs:
+- <code>"GRCh38.109"</code> — a single-organism release
+- <code>"mus_musculus.GRCm39.115"</code> — organism + assembly + release
+- <code>"2024-01-15"</code> — date-stamped snapshot</p>
+<p><strong>v1 constraint — exact-match <code>requires:</code> only.</strong> The <code>requires:</code> directive in <code>schema.yaml</code>
+accepts only exact-match pins (<code>hippo-reference-ensembl==mus_musculus.GRCm39.115</code>). Range
+comparators (<code>&gt;=</code>, <code>~=</code>, <code>^=</code>) are deferred to v2, which may introduce an optional
+<code>parse_version(s) -&gt; tuple</code> ABC method letting Hippo evaluate ranges. Until then, users pin
+exact versions; the install check is string equality only.</p>
+<p>Users who need a range constraint should pin the lowest acceptable version and upgrade
+explicitly with <code>hippo reference upgrade</code>.</p>
+<hr />
+<h4 id="2142-load-parameters">2.14.2 Load Parameters<a class="headerlink" href="#2142-load-parameters" title="Permanent link">&para;</a></h4>
+<p>Loaders that accept runtime parameters (e.g., organism, gene-biotype filter) declare them via:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-23-1" name="__codelineno-23-1" href="#__codelineno-23-1"></a><span class="k">class</span><span class="w"> </span><span class="nc">EnsemblParams</span><span class="p">(</span><span class="n">BaseModel</span><span class="p">):</span>
+<a id="__codelineno-23-2" name="__codelineno-23-2" href="#__codelineno-23-2"></a>    <span class="n">organism</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;homo_sapiens&quot;</span>
+<a id="__codelineno-23-3" name="__codelineno-23-3" href="#__codelineno-23-3"></a>    <span class="n">release</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+<a id="__codelineno-23-4" name="__codelineno-23-4" href="#__codelineno-23-4"></a>    <span class="n">gene_biotypes</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="p">[</span><span class="s2">&quot;protein_coding&quot;</span><span class="p">]</span>
+<a id="__codelineno-23-5" name="__codelineno-23-5" href="#__codelineno-23-5"></a>
+<a id="__codelineno-23-6" name="__codelineno-23-6" href="#__codelineno-23-6"></a><span class="k">class</span><span class="w"> </span><span class="nc">EnsemblLoader</span><span class="p">(</span><span class="n">ReferenceLoader</span><span class="p">):</span>
+<a id="__codelineno-23-7" name="__codelineno-23-7" href="#__codelineno-23-7"></a>    <span class="n">load_params_schema</span> <span class="o">=</span> <span class="n">EnsemblParams</span>
+<a id="__codelineno-23-8" name="__codelineno-23-8" href="#__codelineno-23-8"></a>
+<a id="__codelineno-23-9" name="__codelineno-23-9" href="#__codelineno-23-9"></a>    <span class="k">def</span><span class="w"> </span><span class="nf">load</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">client</span><span class="p">,</span> <span class="n">version</span><span class="p">,</span> <span class="n">params</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+<a id="__codelineno-23-10" name="__codelineno-23-10" href="#__codelineno-23-10"></a>        <span class="n">p</span> <span class="o">=</span> <span class="n">params</span> <span class="ow">or</span> <span class="n">EnsemblParams</span><span class="p">()</span>
+<a id="__codelineno-23-11" name="__codelineno-23-11" href="#__codelineno-23-11"></a>        <span class="o">...</span>
+</code></pre></div>
+<p>When <code>load_params_schema</code> is declared:
+- <code>hippo reference install ensembl --organism mus_musculus</code> renders <code>--flag</code> args from the
+  model and validates them before invoking <code>load()</code>.
+- <code>load()</code> always receives a validated model instance (or <code>None</code> if no schema is declared).
+- The same model is used for <code>upgrade()</code> calls.</p>
+<p>Loaders that do not declare a schema receive <code>params=None</code> in <code>load()</code> and <code>upgrade()</code>.</p>
+<hr />
+<h4 id="2143-caching-contract">2.14.3 Caching Contract<a class="headerlink" href="#2143-caching-contract" title="Permanent link">&para;</a></h4>
+<p><code>HippoClient</code> exposes two caching primitives for loaders:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-24-1" name="__codelineno-24-1" href="#__codelineno-24-1"></a><span class="n">client</span><span class="o">.</span><span class="n">cache_dir</span><span class="p">:</span> <span class="n">Path</span>
+<a id="__codelineno-24-2" name="__codelineno-24-2" href="#__codelineno-24-2"></a><span class="c1"># Resolves to $HIPPO_CACHE_DIR/&lt;loader_name&gt;/ if set,</span>
+<a id="__codelineno-24-3" name="__codelineno-24-3" href="#__codelineno-24-3"></a><span class="c1"># else ~/.cache/hippo/references/&lt;loader_name&gt;/.</span>
+<a id="__codelineno-24-4" name="__codelineno-24-4" href="#__codelineno-24-4"></a>
+<a id="__codelineno-24-5" name="__codelineno-24-5" href="#__codelineno-24-5"></a><span class="n">client</span><span class="o">.</span><span class="n">cached_fetch</span><span class="p">(</span><span class="n">url</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">expected_sha256</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Path</span>
+<a id="__codelineno-24-6" name="__codelineno-24-6" href="#__codelineno-24-6"></a><span class="c1"># Content-addressable HTTP fetch. Returns local path to cached file.</span>
+<a id="__codelineno-24-7" name="__codelineno-24-7" href="#__codelineno-24-7"></a><span class="c1"># If expected_sha256 is supplied, verifies on download and raises</span>
+<a id="__codelineno-24-8" name="__codelineno-24-8" href="#__codelineno-24-8"></a><span class="c1"># CacheIntegrityError on mismatch.</span>
+</code></pre></div>
+<p><strong>MUST rule:</strong> Loaders MUST use <code>client.cached_fetch</code> for any network download larger than
+1 MB. This enables:
+- <code>hippo reference clean-cache</code> to manage disk usage via a single location
+- CI mounts of <code>client.cache_dir</code> for deterministic, network-free re-runs
+- Reproducible audits (content-addressed, optionally hash-verified)</p>
+<p>Loaders that access small static files (&lt;1 MB, bundled in the package) may skip
+<code>cached_fetch</code> for those files only. All large reference archives MUST go through
+<code>cached_fetch</code>.</p>
+<hr />
+<h4 id="2144-upgrade-semantics">2.14.4 Upgrade Semantics<a class="headerlink" href="#2144-upgrade-semantics" title="Permanent link">&para;</a></h4>
+<p><strong>Default — additive.</strong> <code>upgrade()</code> loads the new version's entities alongside the existing
+ones. Entities from the old version remain queryable until explicitly pruned. This preserves
+existing FK references in user data.</p>
+<p><strong><code>--prune-old</code> — opt-in destructive.</strong> When passed to <code>hippo reference upgrade</code>, Hippo removes
+the prior version's rows <em>after</em> the new install succeeds. Destructive; gated behind an
+explicit flag. Never the default.</p>
+<p><strong><code>upgrade()</code> ABC method.</strong> The default implementation calls <code>load(to_version, params)</code>. Loaders
+with efficient diff logic override it:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-25-1" name="__codelineno-25-1" href="#__codelineno-25-1"></a><span class="k">def</span><span class="w"> </span><span class="nf">upgrade</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">client</span><span class="p">,</span> <span class="n">from_version</span><span class="p">,</span> <span class="n">to_version</span><span class="p">,</span> <span class="n">params</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+<a id="__codelineno-25-2" name="__codelineno-25-2" href="#__codelineno-25-2"></a>    <span class="c1"># e.g., fetch only changed records since from_version</span>
+<a id="__codelineno-25-3" name="__codelineno-25-3" href="#__codelineno-25-3"></a>    <span class="o">...</span>
+</code></pre></div>
+<p>Migrate-with-deprecation semantics (marking old rows as superseded without deleting them) are
+deferred to v2 once entity write paths support row-superseded marking.</p>
+<hr />
+<h4 id="2145-schema-fragment-merge-rules">2.14.5 Schema-Fragment Merge Rules<a class="headerlink" href="#2145-schema-fragment-merge-rules" title="Permanent link">&para;</a></h4>
+<p>Every loader's <code>schema_fragment()</code> return value is a LinkML YAML dict. Three rules govern
+how fragments merge into the deployed schema:</p>
+<p><strong>Rule 1 — Mandatory per-loader prefix.</strong> Every fragment MUST declare
+<code>default_prefix: &lt;loader_name&gt;:</code> (e.g., <code>default_prefix: ensembl:</code>). All classes and slots in
+the fragment carry that prefix. User schemas reference loader-provided types as <code>ensembl:Gene</code>.
+Two loaders declaring the same prefix → <code>ConfigError</code> at install time with both package names
+identified.</p>
+<p><strong>Rule 2 — <code>imports:</code> policy.</strong> Loader fragments MUST NOT redeclare <code>linkml:types</code> or any
+prefix already present in the deployed schema. Hippo strips colliding top-level imports before
+merging and supplies them from the merged registry. Loader-private imports (URLs unique to this
+loader) pass through unchanged.</p>
+<p><strong>Rule 3 — Traceability annotation.</strong> On merge, Hippo injects
+<code>annotations: { provided_by: { value: "&lt;loader_name&gt;@&lt;package_version&gt;" } }</code> on every class
+and slot introduced by the fragment. This annotation survives in <code>SchemaView</code> for runtime
+introspection (e.g., <code>hippo status</code> can show which loader owns which classes).</p>
+<p><strong>Collision detection</strong> (existing rule, now superseded by Rule 1): with mandatory unique
+prefixes per loader, class-name collisions across loaders can no longer occur. Two loaders
+declaring the same prefix → <code>ConfigError</code> at install.</p>
+<hr />
+<h4 id="2146-cross-loader-foreign-keys">2.14.6 Cross-Loader Foreign Keys<a class="headerlink" href="#2146-cross-loader-foreign-keys" title="Permanent link">&para;</a></h4>
+<p>v1 does <strong>not</strong> validate cross-loader foreign keys and does <strong>not</strong> transitively pull in
+loader dependencies via <code>requires:</code>.</p>
+<p>Loaders that reference entity types from another loader SHOULD annotate their fragment:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-26-1" name="__codelineno-26-1" href="#__codelineno-26-1"></a><span class="c1"># In the loader&#39;s schema_fragment() return value</span>
+<a id="__codelineno-26-2" name="__codelineno-26-2" href="#__codelineno-26-2"></a><span class="nt">annotations</span><span class="p">:</span>
+<a id="__codelineno-26-3" name="__codelineno-26-3" href="#__codelineno-26-3"></a><span class="w">  </span><span class="nt">loader_depends_on</span><span class="p">:</span>
+<a id="__codelineno-26-4" name="__codelineno-26-4" href="#__codelineno-26-4"></a><span class="w">    </span><span class="nt">value</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;fma&quot;</span><span class="w">   </span><span class="c1"># or a comma-separated list: &quot;fma,go&quot;</span>
+</code></pre></div>
+<p>At install/validate time, Hippo emits a <strong>warning</strong> (not an error) if a declared
+<code>loader_depends_on</code> loader is not installed. This warns the developer without blocking the
+install.</p>
+<p>v2 may promote this to a hard FK with transitive <code>requires:</code> resolution once real-world usage
+warrants it. This is a known v1 limitation.</p>
+<hr />
+<h4 id="2147-test-fixtures">2.14.7 Test Fixtures<a class="headerlink" href="#2147-test-fixtures" title="Permanent link">&para;</a></h4>
+<p>Loaders SHOULD implement a <code>"test"</code> pseudo-version:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-27-1" name="__codelineno-27-1" href="#__codelineno-27-1"></a><span class="k">def</span><span class="w"> </span><span class="nf">versions</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]:</span>
+<a id="__codelineno-27-2" name="__codelineno-27-2" href="#__codelineno-27-2"></a>    <span class="k">return</span> <span class="p">[</span><span class="s2">&quot;test&quot;</span><span class="p">,</span> <span class="s2">&quot;mus_musculus.GRCm39.115&quot;</span><span class="p">,</span> <span class="s2">&quot;homo_sapiens.GRCh38.110&quot;</span><span class="p">]</span>
+</code></pre></div>
+<p>The <code>"test"</code> version SHOULD:
+- Return a deterministic, network-free subset bundled in the package (e.g.,
+  <code>&lt;package&gt;/fixtures/tiny.tar.gz</code>)
+- Be usable without credentials or network access
+- Be stable across package versions (no external data fetch)</p>
+<p>CI pipelines use <code>hippo reference install &lt;name&gt; --version test</code> to install the fixture
+dataset without a live network connection. This is a convention, not enforced by the ABC;
+loaders that omit <code>"test"</code> will not break Hippo, but their downstream consumers lose the
+hermetic test path.</p>
+<p><code>"test"</code> is a <strong>reserved slug</strong> — Hippo will never generate it as a real release version.</p>
 <hr />
 <h3 id="215-error-hierarchy">2.15 Error Hierarchy<a class="headerlink" href="#215-error-hierarchy" title="Permanent link">&para;</a></h3>
 <p>All Hippo exceptions inherit from <code>HippoError</code>. The full hierarchy is specified in

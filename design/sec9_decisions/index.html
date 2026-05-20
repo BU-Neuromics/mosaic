@@ -4560,6 +4560,122 @@
   
 </li>
       
+        <li class="md-nav__item">
+  <a href="#214-reference-loader-contract" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2.14 Reference Loader Contract
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="2.14 Reference Loader Contract">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#decision-214a-loader-specific-sub-commands-entry-point-registered-typer-sub-app" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Decision 2.14.A — Loader-specific sub-commands: entry-point-registered Typer sub-app
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#decision-214b-validateuser_artifact-recommended-not-required" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Decision 2.14.B — validate(user_artifact): recommended, not required
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#decision-214c-version-semantics-per-organism-opaque-slug-exact-match-requires-for-v1" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Decision 2.14.C — Version semantics: per-organism opaque slug; exact-match requires: for v1
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#decision-214d-load-params-pydantic-v2-model-optional-declaration" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Decision 2.14.D — load() params: Pydantic v2 model, optional declaration
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#decision-214e-caching-contract-clientcache_dir-clientcached_fetch-required-for-large-downloads" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Decision 2.14.E — Caching contract: client.cache_dir + client.cached_fetch required for large downloads
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#decision-214f-upgrade-semantics-additive-default-prune-old-opt-in-separate-upgrade-abc-method" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Decision 2.14.F — Upgrade semantics: additive default, --prune-old opt-in, separate upgrade() ABC method
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#decision-214g-schema-fragment-merge-mandatory-per-loader-prefix-imports-policy-provided_by-injection" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Decision 2.14.G — Schema-fragment merge: mandatory per-loader prefix, imports: policy, provided_by injection
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#decision-214h-cross-loader-fks-out-of-scope-for-v1-loader_depends_on-soft-annotation-supported" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Decision 2.14.H — Cross-loader FKs: out of scope for v1, loader_depends_on soft annotation supported
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#decision-214i-test-fixtures-test-pseudo-version-reserved-convention" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Decision 2.14.I — Test fixtures: "test" pseudo-version reserved convention
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
     </ul>
   
 </nav>
@@ -5054,6 +5170,72 @@
 <li><strong>Added non-goals:</strong> no full PROV-O ontology import (only selective URIs); no human-readable IDs (UUIDs only); no first-class merge/fission primitives in this redesign.</li>
 <li><strong>Why:</strong> These came up during the drafting pass and are worth making explicit so they don't silently get interpreted differently.</li>
 <li><strong>Revert:</strong> Remove any individually.</li>
+</ul>
+<hr />
+<h2 id="214-reference-loader-contract">2.14 Reference Loader Contract<a class="headerlink" href="#214-reference-loader-contract" title="Permanent link">&para;</a></h2>
+<p>Decisions D1–D9 were locked by the Director of Bioinformatics in <a href="/PTS/issues/PTS-215">PTS-215</a> in response to <a href="https://github.com/VA-NCPTSDBB-Bioinformatics/drylims/issues/6">GitHub issue #6</a>, which identified nine unresolved contract gaps before the downstream <code>hippo-reference-ensembl</code> package could ship. The full rationale is in the <a href="/PTS/issues/PTS-215#document-plan">PTS-215 plan document</a>.</p>
+<h3 id="decision-214a-loader-specific-sub-commands-entry-point-registered-typer-sub-app">Decision 2.14.A — Loader-specific sub-commands: entry-point-registered Typer sub-app<a class="headerlink" href="#decision-214a-loader-specific-sub-commands-entry-point-registered-typer-sub-app" title="Permanent link">&para;</a></h3>
+<ul>
+<li><strong>Alternatives:</strong> (a) Entry-point-registered <code>typer.Typer</code> sub-app; (b) ABC <code>subcommands()</code> returning a declarative spec that Hippo renders; (c) no special CLI integration.</li>
+<li><strong>Chosen:</strong> (a). Loader declares a second entry point <code>hippo.reference_loader_cli</code> pointing at a <code>typer.Typer</code> instance. Hippo mounts it under <code>hippo reference &lt;name&gt; ...</code>.</li>
+<li><strong>Why:</strong> Hippo standardizes on Typer throughout. Option (b) would require building a spec-to-Typer renderer (~hundreds of LOC, ongoing maintenance) for a portability dimension Hippo does not need. Option (a) is ~10 lines of glue and matches the entry-point pattern already used for loader discovery. The API-surface coupling to Typer is real but accepted: if the CLI framework ever changes, loaders re-export their subcommands.</li>
+<li><strong>Revert:</strong> Remove the <code>hippo.reference_loader_cli</code> entry point group and drop <code>subcommands_app</code> from the ABC. Existing sub-commands would need to be relocated or dropped. Moderate blast radius.</li>
+</ul>
+<h3 id="decision-214b-validateuser_artifact-recommended-not-required">Decision 2.14.B — <code>validate(user_artifact)</code>: recommended, not required<a class="headerlink" href="#decision-214b-validateuser_artifact-recommended-not-required" title="Permanent link">&para;</a></h3>
+<ul>
+<li><strong>Alternatives:</strong> (a) Required abstract method (all loaders must implement); (b) Recommended method with default <code>NotImplementedError</code>; (c) Not in the ABC at all.</li>
+<li><strong>Chosen:</strong> (b). <code>validate()</code> is on the ABC with a default <code>NotImplementedError</code>. The CLI handles the error gracefully ("this loader doesn't expose a validator"). Loaders that have nothing user-side to validate omit the override.</li>
+<li><strong>Why:</strong> An integration point users demonstrably need. Downstream packages benefit from a uniform contract. Forcing all loaders to implement one would over-fit to the FMA/GO case where user-side artifact validation exists; most ontology loaders have nothing to validate.</li>
+<li><strong>Revert:</strong> Promote to <code>@abstractmethod</code>. Every existing loader must add a <code>validate()</code> stub. Low blast radius (mechanical).</li>
+</ul>
+<h3 id="decision-214c-version-semantics-per-organism-opaque-slug-exact-match-requires-for-v1">Decision 2.14.C — Version semantics: per-organism opaque slug; exact-match <code>requires:</code> for v1<a class="headerlink" href="#decision-214c-version-semantics-per-organism-opaque-slug-exact-match-requires-for-v1" title="Permanent link">&para;</a></h3>
+<ul>
+<li><strong>Alternatives:</strong> (a) Per-organism slug as the version string, opaque to Hippo; (b) Release-only version plus organism as a separate <code>load()</code> kwarg; (c) Extras-style <code>hippo-reference-ensembl[mus_musculus]&gt;=...</code> dependency syntax.</li>
+<li><strong>Chosen:</strong> (a). <code>versions()</code> returns opaque slugs like <code>mus_musculus.GRCm39.115</code>. Format is loader-defined; Hippo performs only string equality when checking <code>requires:</code>. Range comparators (<code>&gt;=</code>, <code>~=</code>) are deferred to v2. A future v2 may add an optional <code>parse_version(s) -&gt; tuple</code> ABC method.</li>
+<li><strong>Why:</strong> Option (b) conflates "release X exists for mouse" with "release X exists for human." Option (c) couples Hippo's <code>requires:</code> parser to a specific Python-packaging convention and leaks an implementation detail into the public contract — loaders may eventually be non-Python. Known v1 limitation: <code>&gt;=</code> constraints are inexpressible; users pin exact versions.</li>
+<li><strong>Revert:</strong> Adopt (b) or (c). Either requires changes to the <code>requires:</code> parser and <code>versions()</code> contract. Moderate blast radius.</li>
+</ul>
+<h3 id="decision-214d-load-params-pydantic-v2-model-optional-declaration">Decision 2.14.D — <code>load()</code> params: Pydantic v2 model, optional declaration<a class="headerlink" href="#decision-214d-load-params-pydantic-v2-model-optional-declaration" title="Permanent link">&para;</a></h3>
+<ul>
+<li><strong>Alternatives:</strong> (a) <code>**kwargs</code> with no schema; (b) Pydantic v2 model declared on the ABC as a class attribute; (c) LinkML fragment as params schema; (d) TypedDict.</li>
+<li><strong>Chosen:</strong> (b). ABC adds <code>load_params_schema: type[BaseModel] | None = None</code>. When declared, the CLI auto-renders <code>--flag</code> args from the model and validates user input. <code>load()</code> signature changes to <code>load(client, version, params: BaseModel | None = None)</code>.</li>
+<li><strong>Why:</strong> Hippo already uses Pydantic v2 throughout (CRUD models, HippoClient). Pydantic gives free CLI rendering via tooling, runtime validation, and JSON schema export. LinkML is the right tool for data shape, not runtime call parameters. TypedDict provides no runtime validation. The shared model between <code>load()</code> and the CLI (D1↔D4 coupling) makes the choice load-bearing.</li>
+<li><strong>Revert:</strong> Revert to <code>**kwargs</code>. Drop <code>load_params_schema</code> from the ABC. Loaders that declared schemas would need to internalize their own CLI rendering. Moderate blast radius.</li>
+</ul>
+<h3 id="decision-214e-caching-contract-clientcache_dir-clientcached_fetch-required-for-large-downloads">Decision 2.14.E — Caching contract: <code>client.cache_dir</code> + <code>client.cached_fetch</code> required for large downloads<a class="headerlink" href="#decision-214e-caching-contract-clientcache_dir-clientcached_fetch-required-for-large-downloads" title="Permanent link">&para;</a></h3>
+<ul>
+<li><strong>Alternatives:</strong> (a) <code>HippoClient.cache_dir</code> and <code>client.cached_fetch(url)</code> — Hippo-managed; (b) Loader picks its own cache path; (c) User passes <code>--cache-dir</code> flag to each command.</li>
+<li><strong>Chosen:</strong> (a). <code>HippoClient.cache_dir: Path</code> resolves to <code>$HIPPO_CACHE_DIR/&lt;loader_name&gt;/</code> if set, else <code>~/.cache/hippo/references/&lt;loader_name&gt;/</code>. <code>client.cached_fetch(url, *, expected_sha256=None) -&gt; Path</code> is a content-addressable cache with optional sha256 verification. Loaders MUST use it for any download &gt;1 MB.</li>
+<li><strong>Why:</strong> A single managed location enables <code>hippo reference clean-cache</code>, CI mount, and deterministic re-runs. Option (b) scatters cache directories unpredictably. Option (c) imposes per-command ceremony on users. The coupling to <code>HippoClient</code> (D1↔D5) means subcommand apps already have access to the same cache path as <code>load()</code>.</li>
+<li><strong>Revert:</strong> Remove <code>cached_fetch</code> and <code>cache_dir</code> from <code>HippoClient</code>. Drop the MUST rule. Loaders revert to self-managed paths. High blast radius if any loader is already using <code>cached_fetch</code>.</li>
+</ul>
+<h3 id="decision-214f-upgrade-semantics-additive-default-prune-old-opt-in-separate-upgrade-abc-method">Decision 2.14.F — Upgrade semantics: additive default, <code>--prune-old</code> opt-in, separate <code>upgrade()</code> ABC method<a class="headerlink" href="#decision-214f-upgrade-semantics-additive-default-prune-old-opt-in-separate-upgrade-abc-method" title="Permanent link">&para;</a></h3>
+<ul>
+<li><strong>Alternatives:</strong> (a) Additive default with explicit <code>--prune-old</code> prune; (b) Replace-by-default (old version rows overwritten); (c) Migrate-with-deprecation (old rows marked superseded, not deleted).</li>
+<li><strong>Chosen:</strong> (a). <code>upgrade()</code> is a separate ABC method (default: <code>load(to_version, params)</code>). Loaders override for efficient diffs. <code>--prune-old</code> removes prior version rows only after the new install succeeds. Option (c) is deferred to v2 pending entity write path support for row-superseded marking.</li>
+<li><strong>Why:</strong> Additive aligns with how Hippo already keys versioned entities (e.g., <code>GeneVersion.gene_stable_id.version</code>). User FKs into old rows don't break on upgrade by default. Replace-by-default would silently invalidate user data. Migrate-with-deprecation requires infrastructure that doesn't exist in v1.</li>
+<li><strong>Revert:</strong> Change the default to replace semantics. High blast radius — would invalidate existing user data on upgrade.</li>
+</ul>
+<h3 id="decision-214g-schema-fragment-merge-mandatory-per-loader-prefix-imports-policy-provided_by-injection">Decision 2.14.G — Schema-fragment merge: mandatory per-loader prefix, <code>imports:</code> policy, <code>provided_by</code> injection<a class="headerlink" href="#decision-214g-schema-fragment-merge-mandatory-per-loader-prefix-imports-policy-provided_by-injection" title="Permanent link">&para;</a></h3>
+<ul>
+<li><strong>Alternatives:</strong> Separate sub-decisions for prefix rules, <code>imports:</code> policy, and traceability annotation; unified schema-fragment merge rule.</li>
+<li><strong>Chosen:</strong> Three sub-rules unified as one decision. (1) Every fragment MUST declare <code>default_prefix: &lt;loader_name&gt;:</code>. Two loaders declaring the same prefix → <code>ConfigError</code>. (2) Fragments MUST NOT redeclare <code>linkml:types</code> or prefixes already in the deployed schema; Hippo strips colliding top-level imports. (3) Hippo injects <code>annotations: { provided_by: { value: "&lt;loader_name&gt;@&lt;pkg_version&gt;" } }</code> on every class/slot the fragment introduces.</li>
+<li><strong>Why:</strong> The mandatory unique prefix rule makes the existing class-name collision detection automatic (same-prefix check subsumes same-name check). The <code>imports:</code> policy prevents loaders from causing merge failures by re-importing types already present. The <code>provided_by</code> annotation enables runtime introspection of which loader introduced which classes.</li>
+<li><strong>Revert:</strong> Remove any sub-rule individually. Dropping the prefix mandate would require restoring the old name-collision detection logic. Low-to-moderate blast radius per sub-rule.</li>
+</ul>
+<h3 id="decision-214h-cross-loader-fks-out-of-scope-for-v1-loader_depends_on-soft-annotation-supported">Decision 2.14.H — Cross-loader FKs: out of scope for v1, <code>loader_depends_on</code> soft annotation supported<a class="headerlink" href="#decision-214h-cross-loader-fks-out-of-scope-for-v1-loader_depends_on-soft-annotation-supported" title="Permanent link">&para;</a></h3>
+<ul>
+<li><strong>Alternatives:</strong> (a) Hard FK validation at install time; (b) Transitive <code>requires:</code> resolution; (c) Out-of-scope, no annotation; (d) Out-of-scope, <code>loader_depends_on</code> soft annotation with warning.</li>
+<li><strong>Chosen:</strong> (d). v1 does not validate cross-loader FKs. Loaders MAY annotate their fragment with <code>loader_depends_on: [&lt;other_loader_name&gt;]</code>. Hippo emits a <strong>warning</strong> if a declared dependency is not installed; it does not block the install.</li>
+<li><strong>Why:</strong> Cross-loader FK validation requires a transitive dependency resolution mechanism that adds significant complexity with unclear real-world benefit at v1 scale. Documenting the limitation explicitly (rather than silently allowing broken FKs) gives loader authors and users a clear signal. The soft annotation is a forward-compatibility hook for v2 hard FK support.</li>
+<li><strong>Revert:</strong> (c) — remove the annotation support entirely. Very low blast radius. Or promote to (a/b) in v2.</li>
+</ul>
+<h3 id="decision-214i-test-fixtures-test-pseudo-version-reserved-convention">Decision 2.14.I — Test fixtures: <code>"test"</code> pseudo-version reserved convention<a class="headerlink" href="#decision-214i-test-fixtures-test-pseudo-version-reserved-convention" title="Permanent link">&para;</a></h3>
+<ul>
+<li><strong>Alternatives:</strong> (a) <code>"test"</code> as a reserved returned version with bundled fixture data; (b) <code>include_test=True</code> flag on <code>load()</code> / <code>versions()</code>; (c) No convention — leave testing to loader authors.</li>
+<li><strong>Chosen:</strong> (a). Loaders SHOULD include <code>"test"</code> in <code>versions()</code>. The <code>"test"</code> version loads a deterministic, network-free subset bundled in the package. This is a convention, not enforced by the ABC. CI pipelines use <code>hippo reference install &lt;name&gt; --version test</code>. <code>"test"</code> is a reserved slug — Hippo will never generate it as a real release version.</li>
+<li><strong>Why:</strong> Per advisor feedback: a <code>--flag</code> approach (option b) adds complexity to the ABC surface with no benefit over a plain string version. <code>"test"</code> as a regular returned version is simpler; the loader code decides what <code>"test"</code> means. Loaders that omit it don't break Hippo, but their downstream consumers lose the hermetic test path.</li>
+<li><strong>Revert:</strong> Remove the reserved-slug guarantee. Low blast radius.</li>
 </ul>
 
 
