@@ -291,6 +291,8 @@ def validate(
     registry = None
     if schema:
         from hippo.linkml_bridge import SchemaRegistry
+        from hippo.requires import check_requires, extract_requires
+        from hippo.core.exceptions import SchemaError
 
         typer.echo(f"Validating schema: {schema}")
         try:
@@ -301,6 +303,27 @@ def validate(
         typer.echo(
             f"Schema is valid LinkML with {len(registry.class_names())} classes."
         )
+
+        # PTS-227 — `requires:` directive (exact-match v1).
+        try:
+            pins = extract_requires(schema)
+        except SchemaError as e:
+            typer.echo(f"Error: Invalid `requires:` in {schema}: {e.message}", err=True)
+            raise typer.Exit(1)
+        if pins:
+            require_errors = check_requires(pins)
+            if require_errors:
+                typer.echo(
+                    f"Error: {schema}: {len(require_errors)} reference-loader "
+                    f"requirement error(s):",
+                    err=True,
+                )
+                for msg in require_errors:
+                    typer.echo(f"  - {msg}", err=True)
+                raise typer.Exit(1)
+            typer.echo(
+                f"`requires:` satisfied — {len(pins)} reference loader(s) pinned."
+            )
 
     if data:
         assert registry is not None

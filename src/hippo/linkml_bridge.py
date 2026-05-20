@@ -48,6 +48,11 @@ _SLOT_ANNOTATION_SUBSET = "slot_annotation"
 # which by LinkML convention use UpperCamelCase.
 TREE_ROOT_CLASS_NAME = "_HippoInstanceBundle"
 
+# Top-level YAML keys that Hippo recognises but LinkML's meta-schema does
+# not. ``SchemaRegistry.from_path`` strips these before constructing a
+# ``SchemaView`` so the LinkML parser stays strict on every other key.
+_HIPPO_TOP_LEVEL_KEYS = frozenset({"requires"})
+
 
 def default_accessor(class_name: str) -> str:
     """Derive the default accessor / tree-root slot name from a class name.
@@ -753,6 +758,18 @@ class SchemaRegistry:
         p = Path(path)
         if p.is_dir():
             return cls._from_directory(p)
+        # Hippo-specific top-level directives (``requires:``, PTS-227) are
+        # not part of the LinkML meta-schema; strip them before handing
+        # the document to SchemaView so the LinkML parser stays strict.
+        # ``hippo.requires.extract_requires`` reads the same file directly
+        # to recover the directive.
+        raw = p.read_text()
+        doc = yaml.safe_load(raw) or {}
+        if isinstance(doc, dict) and _HIPPO_TOP_LEVEL_KEYS & doc.keys():
+            doc = {k: v for k, v in doc.items() if k not in _HIPPO_TOP_LEVEL_KEYS}
+            return cls(
+                SchemaView(yaml.safe_dump(doc), importmap=_bundled_importmap())
+            )
         return cls(SchemaView(str(p), importmap=_bundled_importmap()))
 
     @classmethod
