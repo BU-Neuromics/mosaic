@@ -1,9 +1,17 @@
 """Network-free ``ReferenceLoader`` for use in Hippo test suites.
 
 Implements every abstract method against an in-memory dataset so tests
-exercising loader discovery, the install lifecycle, and CLI plumbing
-have a concrete entry-point target without depending on a real
+exercising loader discovery, the install/upgrade lifecycle, and CLI
+plumbing have a concrete entry-point target without depending on a real
 reference package.
+
+The loader is deterministic: ``versions()`` lists ``"test"`` and ``"v1"``,
+both of which write a small fixed set of ``FakeTerm`` rows through the
+``HippoClient`` it is handed. Loader unit tests that need to simulate a
+failure mid-load can pass ``params=FakeLoadParams(fail_after=N)`` to
+abort the write after ``N`` entities; the rows written before the abort
+remain in the database (matching how a real loader behaves if its HTTP
+fetch dies mid-stream).
 """
 
 from __future__ import annotations
@@ -23,6 +31,11 @@ class FakeLoadParams(BaseModel):
     invoked with ``--flag`` args."""
 
     tag: str = "default"
+    # Internal test knob — if set, ``load()`` raises after persisting
+    # this many rows. Real loaders never expose this; it lives here so
+    # CLI tests can simulate a partial-load failure without monkey-
+    # patching the loader class.
+    fail_after: int | None = None
 
 
 class FakeReferenceLoader(ReferenceLoader):
@@ -35,13 +48,19 @@ class FakeReferenceLoader(ReferenceLoader):
     # In-memory dataset keyed by version. Kept tiny on purpose.
     _DATASET: dict[str, list[dict[str, Any]]] = {
         "test": [
-            {"id": "fake:001", "label": "alpha"},
-            {"id": "fake:002", "label": "beta"},
+            {"label": "alpha"},
+            {"label": "beta"},
         ],
         "v1": [
-            {"id": "fake:001", "label": "alpha"},
-            {"id": "fake:002", "label": "beta"},
-            {"id": "fake:003", "label": "gamma"},
+            {"label": "alpha"},
+            {"label": "beta"},
+            {"label": "gamma"},
+        ],
+        "v2": [
+            {"label": "alpha"},
+            {"label": "beta"},
+            {"label": "gamma"},
+            {"label": "delta"},
         ],
     }
 
@@ -69,7 +88,7 @@ class FakeReferenceLoader(ReferenceLoader):
 
     def load(
         self,
-        client: HippoClient,
+        client: "HippoClient",
         version: str,
         params: BaseModel | None = None,
     ) -> LoadResult:
@@ -80,7 +99,23 @@ class FakeReferenceLoader(ReferenceLoader):
                 error_messages=[f"unknown version: {version}"],
                 entity_type="FakeTerm",
             )
+
+        fail_after: int | None = None
+        if isinstance(params, FakeLoadParams):
+            fail_after = params.fail_after
+
+        entity_ids: list[str] = []
+        for index, row in enumerate(rows):
+            if fail_after is not None and index >= fail_after:
+                raise RuntimeError(
+                    f"FakeReferenceLoader simulated failure after "
+                    f"{fail_after} rows"
+                )
+            result = client.put("FakeTerm", dict(row))
+            entity_ids.append(result["id"])
+
         return LoadResult(
-            created=len(rows),
+            created=len(entity_ids),
             entity_type="FakeTerm",
+            entity_ids=entity_ids,
         )

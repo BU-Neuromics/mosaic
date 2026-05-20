@@ -1,68 +1,15 @@
-"""Integration tests for CLI reference and ingest commands."""
+"""Integration tests for CLI ingest commands.
 
-import json
+The ``hippo reference install`` legacy pip-flow tests previously housed
+here were superseded by the loader-driven lifecycle in PTS-229; their
+coverage lives in ``test_reference_install_upgrade.py``.
+"""
+
 import os
-import tempfile
 from pathlib import Path
 
 import pytest
 import yaml
-
-
-class TestReferenceInstall:
-    """Tests for hippo reference install command."""
-
-    @pytest.fixture(autouse=True)
-    def setup_test_env(self, monkeypatch, tmp_path):
-        """Set up test environment with temporary directories."""
-        test_data_dir = tmp_path / ".hippo" / "data"
-        test_data_dir.mkdir(parents=True)
-        monkeypatch.setenv("HOME", str(tmp_path))
-
-    def test_install_valid_package(self):
-        """Test installing a valid package."""
-        result = os.system("python -m hippo.cli.main reference install pyyaml")
-        assert result == 0
-
-    def test_install_invalid_package(self):
-        """Test installing a non-existent package shows error."""
-        result = os.system(
-            "python -m hippo.cli.main reference install non-existent-package-xyz 2>&1"
-        )
-        assert result != 0
-
-    def test_install_already_installed_package(self):
-        """Test installing an already installed package shows error."""
-        os.system("python -m hippo.cli.main reference install pyyaml")
-        result = os.system("python -m hippo.cli.main reference install pyyaml 2>&1")
-        assert result != 0
-
-
-class TestReferenceList:
-    """Tests for hippo reference list command."""
-
-    @pytest.fixture(autouse=True)
-    def setup_test_env(self, monkeypatch, tmp_path):
-        """Set up test environment with temporary directories."""
-        test_data_dir = tmp_path / ".hippo" / "data"
-        test_data_dir.mkdir(parents=True)
-        monkeypatch.setenv("HOME", str(tmp_path))
-
-    def test_list_with_installed_loaders(self):
-        """Test listing with installed loaders."""
-        os.system("python -m hippo.cli.main reference install pyyaml")
-        result = os.system("python -m hippo.cli.main reference list")
-        assert result == 0
-
-    def test_list_with_no_loaders(self):
-        """Test listing with no loaders installed."""
-        installed_file = (
-            Path.home() / ".hippo" / "data" / "references" / "installed.json"
-        )
-        if installed_file.exists():
-            installed_file.unlink()
-        result = os.system("python -m hippo.cli.main reference list")
-        assert result == 0
 
 
 class TestIngest:

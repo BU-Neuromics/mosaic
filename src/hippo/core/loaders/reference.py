@@ -36,6 +36,13 @@ class LoadResult:
     errors: int = 0
     error_messages: list[str] = field(default_factory=list)
     entity_type: str | None = None
+    # IDs of entities the loader wrote during this invocation. Populated
+    # by loaders that want ``hippo reference upgrade --prune-old`` to be
+    # able to remove the prior version's rows after a successful
+    # upgrade. Empty when the loader does not opt into prune support;
+    # ``--prune-old`` then refuses with a clear error rather than
+    # silently no-op'ing.
+    entity_ids: list[str] = field(default_factory=list)
 
 
 class ReferenceLoader(ABC):

@@ -12,6 +12,25 @@ from pydantic import BaseModel
 from hippo.core.loaders.reference import LoadResult, ReferenceLoader
 
 
+class _StubClient:
+    """Tiny stand-in for HippoClient used by loader unit tests.
+
+    Returns a deterministic synthetic UUID for each ``put`` so
+    LoadResult.entity_ids is populated without spinning up a real
+    storage adapter.
+    """
+
+    def __init__(self) -> None:
+        self._counter = 0
+        self.puts: list[tuple[str, dict]] = []
+
+    def put(self, entity_type: str, data: dict) -> dict:
+        self._counter += 1
+        entity_id = f"stub-{entity_type}-{self._counter:03d}"
+        self.puts.append((entity_type, dict(data)))
+        return {"id": entity_id, "entity_type": entity_type, "data": data}
+
+
 # ---------------------------------------------------------------------------
 # ABC enforcement
 # ---------------------------------------------------------------------------
@@ -141,6 +160,7 @@ class TestLoadResult:
         assert r.errors == 0
         assert r.error_messages == []
         assert r.entity_type is None
+        assert r.entity_ids == []
 
     def test_entity_type_for_multi_class_loaders(self):
         r = LoadResult(created=3, entity_type="FakeTerm")
@@ -173,10 +193,18 @@ class TestFakeReferenceLoader:
         from hippo.testing.fake_reference_loader import FakeReferenceLoader
 
         loader = FakeReferenceLoader()
-        result = loader.load(client=None, version="test")
+        # ``load()`` calls ``client.put()`` on each row (PTS-229 made the
+        # fake actually persist so install/upgrade tests have rows to
+        # query/prune). A small stub is sufficient for this unit-level
+        # contract check — the integration test in
+        # tests/cli/test_reference_install_upgrade.py covers the real
+        # client path end-to-end.
+        client = _StubClient()
+        result = loader.load(client=client, version="test")
         assert isinstance(result, LoadResult)
         assert result.created == 2
         assert result.entity_type == "FakeTerm"
+        assert len(result.entity_ids) == 2
 
     def test_fake_loader_unknown_version_returns_error(self):
         from hippo.testing.fake_reference_loader import FakeReferenceLoader
