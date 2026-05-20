@@ -883,6 +883,38 @@ def reference_list() -> None:
         raise typer.Exit(1)
 
 
+@reference_app.command(name="clean-cache")
+def reference_clean_cache(
+    name: str = typer.Argument(
+        None,
+        help=(
+            "Optional loader name. If omitted, removes the entire "
+            "reference-loader cache root."
+        ),
+    ),
+) -> None:
+    """Remove cached reference-loader downloads (sec2 §2.14.3)."""
+    from hippo.cli.commands.reference import clean_reference_cache
+
+    try:
+        result = clean_reference_cache(name)
+    except Exception as e:
+        typer.echo(f"Error: {e}", err=True)
+        raise typer.Exit(1)
+    scope = result["scope"]
+    path = result["path"]
+    if result["removed"]:
+        if scope is None:
+            typer.echo(f"Removed reference cache root: {path}")
+        else:
+            typer.echo(f"Removed cache for loader '{scope}': {path}")
+    else:
+        if scope is None:
+            typer.echo(f"No reference cache found at {path}")
+        else:
+            typer.echo(f"No cache found for loader '{scope}' at {path}")
+
+
 @app.command()
 def install_ref(
     source: str = typer.Argument(...),
