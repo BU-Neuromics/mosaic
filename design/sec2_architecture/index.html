@@ -5424,7 +5424,7 @@ Users reference loader-provided entity types by name without redeclaring them.</
 <ul>
 <li><strong>D1 → D5</strong>: Sub-command apps declared via <code>subcommands_app</code> receive <code>client</code> via Typer
   context injection. This means the loader CLI shares the same <code>HippoClient</code> instance (and
-  thus the same <code>client.cache_dir</code>) as <code>load()</code>. Any subcommand that fetches source data MUST
+  thus the same <code>client.cache_dir_for(...)</code> resolution) as <code>load()</code>. Any subcommand that fetches source data MUST
   use <code>client.cached_fetch</code> — not a private download path.</li>
 <li><strong>D4 → D1</strong>: <code>load_params_schema</code> is shared between <code>load()</code> and the CLI. When a subcommand
   triggers a load, it renders <code>--flag</code> args from the same Pydantic model, validates them, and
@@ -5472,19 +5472,26 @@ explicitly with <code>hippo reference upgrade</code>.</p>
 <hr />
 <h4 id="2143-caching-contract">2.14.3 Caching Contract<a class="headerlink" href="#2143-caching-contract" title="Permanent link">&para;</a></h4>
 <p><code>HippoClient</code> exposes two caching primitives for loaders:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-24-1" name="__codelineno-24-1" href="#__codelineno-24-1"></a><span class="n">client</span><span class="o">.</span><span class="n">cache_dir</span><span class="p">:</span> <span class="n">Path</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-24-1" name="__codelineno-24-1" href="#__codelineno-24-1"></a><span class="n">client</span><span class="o">.</span><span class="n">cache_dir_for</span><span class="p">(</span><span class="n">loader_name</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Path</span>
 <a id="__codelineno-24-2" name="__codelineno-24-2" href="#__codelineno-24-2"></a><span class="c1"># Resolves to $HIPPO_CACHE_DIR/&lt;loader_name&gt;/ if set,</span>
-<a id="__codelineno-24-3" name="__codelineno-24-3" href="#__codelineno-24-3"></a><span class="c1"># else ~/.cache/hippo/references/&lt;loader_name&gt;/.</span>
+<a id="__codelineno-24-3" name="__codelineno-24-3" href="#__codelineno-24-3"></a><span class="c1"># else ~/.cache/hippo/references/&lt;loader_name&gt;/. Auto-mkdir.</span>
 <a id="__codelineno-24-4" name="__codelineno-24-4" href="#__codelineno-24-4"></a>
-<a id="__codelineno-24-5" name="__codelineno-24-5" href="#__codelineno-24-5"></a><span class="n">client</span><span class="o">.</span><span class="n">cached_fetch</span><span class="p">(</span><span class="n">url</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">expected_sha256</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Path</span>
-<a id="__codelineno-24-6" name="__codelineno-24-6" href="#__codelineno-24-6"></a><span class="c1"># Content-addressable HTTP fetch. Returns local path to cached file.</span>
-<a id="__codelineno-24-7" name="__codelineno-24-7" href="#__codelineno-24-7"></a><span class="c1"># If expected_sha256 is supplied, verifies on download and raises</span>
-<a id="__codelineno-24-8" name="__codelineno-24-8" href="#__codelineno-24-8"></a><span class="c1"># CacheIntegrityError on mismatch.</span>
+<a id="__codelineno-24-5" name="__codelineno-24-5" href="#__codelineno-24-5"></a><span class="n">client</span><span class="o">.</span><span class="n">cached_fetch</span><span class="p">(</span><span class="n">url</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">expected_sha256</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+<a id="__codelineno-24-6" name="__codelineno-24-6" href="#__codelineno-24-6"></a>                    <span class="n">loader_name</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Path</span>
+<a id="__codelineno-24-7" name="__codelineno-24-7" href="#__codelineno-24-7"></a><span class="c1"># Content-addressable HTTP fetch. Returns the local path to the cached</span>
+<a id="__codelineno-24-8" name="__codelineno-24-8" href="#__codelineno-24-8"></a><span class="c1"># file. The path is keyed by sha256 of the URL inside</span>
+<a id="__codelineno-24-9" name="__codelineno-24-9" href="#__codelineno-24-9"></a><span class="c1"># cache_dir_for(loader_name) so repeated calls are stable. When</span>
+<a id="__codelineno-24-10" name="__codelineno-24-10" href="#__codelineno-24-10"></a><span class="c1"># expected_sha256 is supplied the digest is verified on download AND on</span>
+<a id="__codelineno-24-11" name="__codelineno-24-11" href="#__codelineno-24-11"></a><span class="c1"># cache hit; mismatch raises CacheIntegrityError and removes the</span>
+<a id="__codelineno-24-12" name="__codelineno-24-12" href="#__codelineno-24-12"></a><span class="c1"># offending file so the next call re-downloads cleanly.</span>
 </code></pre></div>
+<p><code>HippoClient</code> is loader-agnostic — per-loader scoping happens via the <code>loader_name</code>
+argument so a single client instance can serve many loaders without stateful
+per-loader binding.</p>
 <p><strong>MUST rule:</strong> Loaders MUST use <code>client.cached_fetch</code> for any network download larger than
 1 MB. This enables:
 - <code>hippo reference clean-cache</code> to manage disk usage via a single location
-- CI mounts of <code>client.cache_dir</code> for deterministic, network-free re-runs
+- CI mounts of the cache root for deterministic, network-free re-runs
 - Reproducible audits (content-addressed, optionally hash-verified)</p>
 <p>Loaders that access small static files (&lt;1 MB, bundled in the package) may skip
 <code>cached_fetch</code> for those files only. All large reference archives MUST go through
