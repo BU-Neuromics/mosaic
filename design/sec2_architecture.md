@@ -628,57 +628,285 @@ Redundant entries (child listed with parent) emit a startup warning.
 ### 2.14 Reference Loader System
 
 Reference loaders install community-standard ontology data as regular Hippo entities.
-Distributed as `hippo-reference-<name>` packages, discovered via `hippo.reference_loaders`
-entry points.
+Distributed as `hippo-reference-<name>` packages, discovered via two entry point groups:
+`hippo.reference_loaders` (the ABC subclass) and `hippo.reference_loader_cli` (an optional
+`typer.Typer` app mounted under `hippo reference <name> ...`).
 
 **`ReferenceLoader` ABC:**
 
 ```python
+from abc import ABC, abstractmethod
+from pydantic import BaseModel
+import typer
+
 class ReferenceLoader(ABC):
-    name: str           # e.g. "fma", "ensembl", "go"
+    name: str           # e.g. "fma", "ensembl", "go" — must match entry point key
     description: str
+
+    # Optional: Typer app mounted as `hippo reference <name> <subcmd> ...`
+    # Register via the hippo.reference_loader_cli entry point.
+    subcommands_app: typer.Typer | None = None
+
+    # Optional: Pydantic v2 model for load() parameters.
+    # When declared, the CLI auto-renders --flag args and validates user input.
+    load_params_schema: type[BaseModel] | None = None
 
     @abstractmethod
     def versions(self) -> list[str]: ...
-    # Available version strings
+    # Available version slugs. Format is loader-defined and opaque to Hippo.
+    # Loaders SHOULD include "test" as a pseudo-version (see §2.14.7).
 
     @abstractmethod
     def entity_types(self) -> list[str]: ...
-    # Entity type names this loader creates
+    # Entity type names this loader creates (declarative — for provenance/discovery only).
 
     @abstractmethod
     def schema_fragment(self) -> dict: ...
-    # Entity type + relationship definitions in LinkML format.
-    # Merged into the deployed schema on install.
+    # LinkML fragment defining this loader's entity types and relationships.
+    # Must declare default_prefix: matching the loader name (see §2.14.5).
 
     @abstractmethod
-    def load(self, client: HippoClient, version: str, **kwargs) -> LoadResult: ...
-    # Ingests the reference dataset at the given version.
+    def load(self, client: HippoClient, version: str,
+             params: BaseModel | None = None) -> LoadResult: ...
+    # Ingest the reference dataset at the given version.
+    # params is an instance of load_params_schema, or None if not declared.
+
+    def upgrade(self, client: HippoClient, from_version: str, to_version: str,
+                params: BaseModel | None = None) -> LoadResult:
+        # Default: runs load(to_version, params). Override for efficient diffs.
+        return self.load(client, to_version, params)
+
+    def validate(self, user_artifact) -> ValidationResult:
+        # Recommended, not required. Validate a user-supplied artifact against this
+        # loader's schema. Default raises NotImplementedError; the CLI surfaces a
+        # "this loader doesn't expose a validator" message in that case.
+        raise NotImplementedError(f"{self.name} does not implement validate()")
+```
+
+**Entry points** (in the loader package's `pyproject.toml`):
+
+```toml
+[project.entry-points."hippo.reference_loaders"]
+ensembl = "hippo_reference_ensembl.loader:EnsemblLoader"
+
+# Optional — only needed if the loader exposes subcommands:
+[project.entry-points."hippo.reference_loader_cli"]
+ensembl = "hippo_reference_ensembl.cli:app"
 ```
 
 **Install lifecycle (`hippo reference install <name> [--version <v>]`):**
 1. Resolve loader from `hippo.reference_loaders` entry points
-2. Call `loader.schema_fragment()` and merge into deployed schema
+2. Call `loader.schema_fragment()` and merge into deployed schema (see §2.14.5)
 3. Run `hippo migrate` (additive = non-interactive; structural = prompt for confirmation)
-4. Call `loader.load(client, version)` to ingest
+4. Call `loader.load(client, version, params)` — source data fetched via `client.cached_fetch`
+   (see §2.14.3)
 5. Record `{loader_name: version}` in `hippo_meta` under key `reference_versions`
+
+**Upgrade lifecycle (`hippo reference upgrade <name> [--version <v>] [--prune-old]`):**
+Calls `loader.upgrade(client, from_version, to_version, params)`. The new version's entities
+are ingested additively by default; pass `--prune-old` to remove the prior version's rows
+after the new install succeeds (see §2.14.4).
 
 **User schema dependency declaration:**
 
 ```yaml
-# schema.yaml
+# schema.yaml — exact-match pins only for v1 (range comparators are deferred)
 requires:
-  - hippo-reference-fma>=3.3
-  - hippo-reference-ensembl>=GRCh38.109
+  - hippo-reference-fma==3.3
+  - hippo-reference-ensembl==mus_musculus.GRCm39.115
 ```
 
 `hippo validate` fails fast with a clear install suggestion if a required loader is missing.
 Users reference loader-provided entity types by name without redeclaring them.
 
-**Collision detection:** Two packages declaring the same entity type name → `ConfigError` at
-startup identifying both packages.
+**Coupling notes (D1 ↔ D4 ↔ D5):**
 
-**Extending loader-provided types:** Deferred to post-v0.1.
+These three decisions interact. Implementers of the ABC surface must understand all three:
+
+- **D1 → D5**: Sub-command apps declared via `subcommands_app` receive `client` via Typer
+  context injection. This means the loader CLI shares the same `HippoClient` instance (and
+  thus the same `client.cache_dir`) as `load()`. Any subcommand that fetches source data MUST
+  use `client.cached_fetch` — not a private download path.
+- **D4 → D1**: `load_params_schema` is shared between `load()` and the CLI. When a subcommand
+  triggers a load, it renders `--flag` args from the same Pydantic model, validates them, and
+  passes the validated instance to `load()`. The schema is the single source of truth for both
+  surfaces.
+- **D4 → D5**: `cached_fetch` is the canonical download path for all `load()` calls regardless
+  of how they are invoked — directly via SDK, CLI, or subcommand.
+
+---
+
+#### 2.14.1 Version Semantics
+
+Version strings returned by `versions()` are **opaque slugs** whose format is entirely
+loader-defined. Hippo does not parse or compare them.
+
+Examples of valid version slugs:
+- `"GRCh38.109"` — a single-organism release
+- `"mus_musculus.GRCm39.115"` — organism + assembly + release
+- `"2024-01-15"` — date-stamped snapshot
+
+**v1 constraint — exact-match `requires:` only.** The `requires:` directive in `schema.yaml`
+accepts only exact-match pins (`hippo-reference-ensembl==mus_musculus.GRCm39.115`). Range
+comparators (`>=`, `~=`, `^=`) are deferred to v2, which may introduce an optional
+`parse_version(s) -> tuple` ABC method letting Hippo evaluate ranges. Until then, users pin
+exact versions; the install check is string equality only.
+
+Users who need a range constraint should pin the lowest acceptable version and upgrade
+explicitly with `hippo reference upgrade`.
+
+---
+
+#### 2.14.2 Load Parameters
+
+Loaders that accept runtime parameters (e.g., organism, gene-biotype filter) declare them via:
+
+```python
+class EnsemblParams(BaseModel):
+    organism: str = "homo_sapiens"
+    release: str | None = None
+    gene_biotypes: list[str] = ["protein_coding"]
+
+class EnsemblLoader(ReferenceLoader):
+    load_params_schema = EnsemblParams
+
+    def load(self, client, version, params=None):
+        p = params or EnsemblParams()
+        ...
+```
+
+When `load_params_schema` is declared:
+- `hippo reference install ensembl --organism mus_musculus` renders `--flag` args from the
+  model and validates them before invoking `load()`.
+- `load()` always receives a validated model instance (or `None` if no schema is declared).
+- The same model is used for `upgrade()` calls.
+
+Loaders that do not declare a schema receive `params=None` in `load()` and `upgrade()`.
+
+---
+
+#### 2.14.3 Caching Contract
+
+`HippoClient` exposes two caching primitives for loaders:
+
+```python
+client.cache_dir: Path
+# Resolves to $HIPPO_CACHE_DIR/<loader_name>/ if set,
+# else ~/.cache/hippo/references/<loader_name>/.
+
+client.cached_fetch(url: str, *, expected_sha256: str | None = None) -> Path
+# Content-addressable HTTP fetch. Returns local path to cached file.
+# If expected_sha256 is supplied, verifies on download and raises
+# CacheIntegrityError on mismatch.
+```
+
+**MUST rule:** Loaders MUST use `client.cached_fetch` for any network download larger than
+1 MB. This enables:
+- `hippo reference clean-cache` to manage disk usage via a single location
+- CI mounts of `client.cache_dir` for deterministic, network-free re-runs
+- Reproducible audits (content-addressed, optionally hash-verified)
+
+Loaders that access small static files (<1 MB, bundled in the package) may skip
+`cached_fetch` for those files only. All large reference archives MUST go through
+`cached_fetch`.
+
+---
+
+#### 2.14.4 Upgrade Semantics
+
+**Default — additive.** `upgrade()` loads the new version's entities alongside the existing
+ones. Entities from the old version remain queryable until explicitly pruned. This preserves
+existing FK references in user data.
+
+**`--prune-old` — opt-in destructive.** When passed to `hippo reference upgrade`, Hippo removes
+the prior version's rows *after* the new install succeeds. Destructive; gated behind an
+explicit flag. Never the default.
+
+**`upgrade()` ABC method.** The default implementation calls `load(to_version, params)`. Loaders
+with efficient diff logic override it:
+
+```python
+def upgrade(self, client, from_version, to_version, params=None):
+    # e.g., fetch only changed records since from_version
+    ...
+```
+
+Migrate-with-deprecation semantics (marking old rows as superseded without deleting them) are
+deferred to v2 once entity write paths support row-superseded marking.
+
+---
+
+#### 2.14.5 Schema-Fragment Merge Rules
+
+Every loader's `schema_fragment()` return value is a LinkML YAML dict. Three rules govern
+how fragments merge into the deployed schema:
+
+**Rule 1 — Mandatory per-loader prefix.** Every fragment MUST declare
+`default_prefix: <loader_name>:` (e.g., `default_prefix: ensembl:`). All classes and slots in
+the fragment carry that prefix. User schemas reference loader-provided types as `ensembl:Gene`.
+Two loaders declaring the same prefix → `ConfigError` at install time with both package names
+identified.
+
+**Rule 2 — `imports:` policy.** Loader fragments MUST NOT redeclare `linkml:types` or any
+prefix already present in the deployed schema. Hippo strips colliding top-level imports before
+merging and supplies them from the merged registry. Loader-private imports (URLs unique to this
+loader) pass through unchanged.
+
+**Rule 3 — Traceability annotation.** On merge, Hippo injects
+`annotations: { provided_by: { value: "<loader_name>@<package_version>" } }` on every class
+and slot introduced by the fragment. This annotation survives in `SchemaView` for runtime
+introspection (e.g., `hippo status` can show which loader owns which classes).
+
+**Collision detection** (existing rule, now superseded by Rule 1): with mandatory unique
+prefixes per loader, class-name collisions across loaders can no longer occur. Two loaders
+declaring the same prefix → `ConfigError` at install.
+
+---
+
+#### 2.14.6 Cross-Loader Foreign Keys
+
+v1 does **not** validate cross-loader foreign keys and does **not** transitively pull in
+loader dependencies via `requires:`.
+
+Loaders that reference entity types from another loader SHOULD annotate their fragment:
+
+```yaml
+# In the loader's schema_fragment() return value
+annotations:
+  loader_depends_on:
+    value: "fma"   # or a comma-separated list: "fma,go"
+```
+
+At install/validate time, Hippo emits a **warning** (not an error) if a declared
+`loader_depends_on` loader is not installed. This warns the developer without blocking the
+install.
+
+v2 may promote this to a hard FK with transitive `requires:` resolution once real-world usage
+warrants it. This is a known v1 limitation.
+
+---
+
+#### 2.14.7 Test Fixtures
+
+Loaders SHOULD implement a `"test"` pseudo-version:
+
+```python
+def versions(self) -> list[str]:
+    return ["test", "mus_musculus.GRCm39.115", "homo_sapiens.GRCh38.110"]
+```
+
+The `"test"` version SHOULD:
+- Return a deterministic, network-free subset bundled in the package (e.g.,
+  `<package>/fixtures/tiny.tar.gz`)
+- Be usable without credentials or network access
+- Be stable across package versions (no external data fetch)
+
+CI pipelines use `hippo reference install <name> --version test` to install the fixture
+dataset without a live network connection. This is a convention, not enforced by the ABC;
+loaders that omit `"test"` will not break Hippo, but their downstream consumers lose the
+hermetic test path.
+
+`"test"` is a **reserved slug** — Hippo will never generate it as a real release version.
 
 ---
 

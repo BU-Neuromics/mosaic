@@ -433,3 +433,72 @@ Review this file before sec9 is considered approved. If any decision is unwelcom
 - **Added non-goals:** no full PROV-O ontology import (only selective URIs); no human-readable IDs (UUIDs only); no first-class merge/fission primitives in this redesign.
 - **Why:** These came up during the drafting pass and are worth making explicit so they don't silently get interpreted differently.
 - **Revert:** Remove any individually.
+
+---
+
+## 2.14 Reference Loader Contract
+
+Decisions D1–D9 were locked by the Director of Bioinformatics in [PTS-215](/PTS/issues/PTS-215) in response to [GitHub issue #6](https://github.com/VA-NCPTSDBB-Bioinformatics/drylims/issues/6), which identified nine unresolved contract gaps before the downstream `hippo-reference-ensembl` package could ship. The full rationale is in the [PTS-215 plan document](/PTS/issues/PTS-215#document-plan).
+
+### Decision 2.14.A — Loader-specific sub-commands: entry-point-registered Typer sub-app
+
+- **Alternatives:** (a) Entry-point-registered `typer.Typer` sub-app; (b) ABC `subcommands()` returning a declarative spec that Hippo renders; (c) no special CLI integration.
+- **Chosen:** (a). Loader declares a second entry point `hippo.reference_loader_cli` pointing at a `typer.Typer` instance. Hippo mounts it under `hippo reference <name> ...`.
+- **Why:** Hippo standardizes on Typer throughout. Option (b) would require building a spec-to-Typer renderer (~hundreds of LOC, ongoing maintenance) for a portability dimension Hippo does not need. Option (a) is ~10 lines of glue and matches the entry-point pattern already used for loader discovery. The API-surface coupling to Typer is real but accepted: if the CLI framework ever changes, loaders re-export their subcommands.
+- **Revert:** Remove the `hippo.reference_loader_cli` entry point group and drop `subcommands_app` from the ABC. Existing sub-commands would need to be relocated or dropped. Moderate blast radius.
+
+### Decision 2.14.B — `validate(user_artifact)`: recommended, not required
+
+- **Alternatives:** (a) Required abstract method (all loaders must implement); (b) Recommended method with default `NotImplementedError`; (c) Not in the ABC at all.
+- **Chosen:** (b). `validate()` is on the ABC with a default `NotImplementedError`. The CLI handles the error gracefully ("this loader doesn't expose a validator"). Loaders that have nothing user-side to validate omit the override.
+- **Why:** An integration point users demonstrably need. Downstream packages benefit from a uniform contract. Forcing all loaders to implement one would over-fit to the FMA/GO case where user-side artifact validation exists; most ontology loaders have nothing to validate.
+- **Revert:** Promote to `@abstractmethod`. Every existing loader must add a `validate()` stub. Low blast radius (mechanical).
+
+### Decision 2.14.C — Version semantics: per-organism opaque slug; exact-match `requires:` for v1
+
+- **Alternatives:** (a) Per-organism slug as the version string, opaque to Hippo; (b) Release-only version plus organism as a separate `load()` kwarg; (c) Extras-style `hippo-reference-ensembl[mus_musculus]>=...` dependency syntax.
+- **Chosen:** (a). `versions()` returns opaque slugs like `mus_musculus.GRCm39.115`. Format is loader-defined; Hippo performs only string equality when checking `requires:`. Range comparators (`>=`, `~=`) are deferred to v2. A future v2 may add an optional `parse_version(s) -> tuple` ABC method.
+- **Why:** Option (b) conflates "release X exists for mouse" with "release X exists for human." Option (c) couples Hippo's `requires:` parser to a specific Python-packaging convention and leaks an implementation detail into the public contract — loaders may eventually be non-Python. Known v1 limitation: `>=` constraints are inexpressible; users pin exact versions.
+- **Revert:** Adopt (b) or (c). Either requires changes to the `requires:` parser and `versions()` contract. Moderate blast radius.
+
+### Decision 2.14.D — `load()` params: Pydantic v2 model, optional declaration
+
+- **Alternatives:** (a) `**kwargs` with no schema; (b) Pydantic v2 model declared on the ABC as a class attribute; (c) LinkML fragment as params schema; (d) TypedDict.
+- **Chosen:** (b). ABC adds `load_params_schema: type[BaseModel] | None = None`. When declared, the CLI auto-renders `--flag` args from the model and validates user input. `load()` signature changes to `load(client, version, params: BaseModel | None = None)`.
+- **Why:** Hippo already uses Pydantic v2 throughout (CRUD models, HippoClient). Pydantic gives free CLI rendering via tooling, runtime validation, and JSON schema export. LinkML is the right tool for data shape, not runtime call parameters. TypedDict provides no runtime validation. The shared model between `load()` and the CLI (D1↔D4 coupling) makes the choice load-bearing.
+- **Revert:** Revert to `**kwargs`. Drop `load_params_schema` from the ABC. Loaders that declared schemas would need to internalize their own CLI rendering. Moderate blast radius.
+
+### Decision 2.14.E — Caching contract: `client.cache_dir` + `client.cached_fetch` required for large downloads
+
+- **Alternatives:** (a) `HippoClient.cache_dir` and `client.cached_fetch(url)` — Hippo-managed; (b) Loader picks its own cache path; (c) User passes `--cache-dir` flag to each command.
+- **Chosen:** (a). `HippoClient.cache_dir: Path` resolves to `$HIPPO_CACHE_DIR/<loader_name>/` if set, else `~/.cache/hippo/references/<loader_name>/`. `client.cached_fetch(url, *, expected_sha256=None) -> Path` is a content-addressable cache with optional sha256 verification. Loaders MUST use it for any download >1 MB.
+- **Why:** A single managed location enables `hippo reference clean-cache`, CI mount, and deterministic re-runs. Option (b) scatters cache directories unpredictably. Option (c) imposes per-command ceremony on users. The coupling to `HippoClient` (D1↔D5) means subcommand apps already have access to the same cache path as `load()`.
+- **Revert:** Remove `cached_fetch` and `cache_dir` from `HippoClient`. Drop the MUST rule. Loaders revert to self-managed paths. High blast radius if any loader is already using `cached_fetch`.
+
+### Decision 2.14.F — Upgrade semantics: additive default, `--prune-old` opt-in, separate `upgrade()` ABC method
+
+- **Alternatives:** (a) Additive default with explicit `--prune-old` prune; (b) Replace-by-default (old version rows overwritten); (c) Migrate-with-deprecation (old rows marked superseded, not deleted).
+- **Chosen:** (a). `upgrade()` is a separate ABC method (default: `load(to_version, params)`). Loaders override for efficient diffs. `--prune-old` removes prior version rows only after the new install succeeds. Option (c) is deferred to v2 pending entity write path support for row-superseded marking.
+- **Why:** Additive aligns with how Hippo already keys versioned entities (e.g., `GeneVersion.gene_stable_id.version`). User FKs into old rows don't break on upgrade by default. Replace-by-default would silently invalidate user data. Migrate-with-deprecation requires infrastructure that doesn't exist in v1.
+- **Revert:** Change the default to replace semantics. High blast radius — would invalidate existing user data on upgrade.
+
+### Decision 2.14.G — Schema-fragment merge: mandatory per-loader prefix, `imports:` policy, `provided_by` injection
+
+- **Alternatives:** Separate sub-decisions for prefix rules, `imports:` policy, and traceability annotation; unified schema-fragment merge rule.
+- **Chosen:** Three sub-rules unified as one decision. (1) Every fragment MUST declare `default_prefix: <loader_name>:`. Two loaders declaring the same prefix → `ConfigError`. (2) Fragments MUST NOT redeclare `linkml:types` or prefixes already in the deployed schema; Hippo strips colliding top-level imports. (3) Hippo injects `annotations: { provided_by: { value: "<loader_name>@<pkg_version>" } }` on every class/slot the fragment introduces.
+- **Why:** The mandatory unique prefix rule makes the existing class-name collision detection automatic (same-prefix check subsumes same-name check). The `imports:` policy prevents loaders from causing merge failures by re-importing types already present. The `provided_by` annotation enables runtime introspection of which loader introduced which classes.
+- **Revert:** Remove any sub-rule individually. Dropping the prefix mandate would require restoring the old name-collision detection logic. Low-to-moderate blast radius per sub-rule.
+
+### Decision 2.14.H — Cross-loader FKs: out of scope for v1, `loader_depends_on` soft annotation supported
+
+- **Alternatives:** (a) Hard FK validation at install time; (b) Transitive `requires:` resolution; (c) Out-of-scope, no annotation; (d) Out-of-scope, `loader_depends_on` soft annotation with warning.
+- **Chosen:** (d). v1 does not validate cross-loader FKs. Loaders MAY annotate their fragment with `loader_depends_on: [<other_loader_name>]`. Hippo emits a **warning** if a declared dependency is not installed; it does not block the install.
+- **Why:** Cross-loader FK validation requires a transitive dependency resolution mechanism that adds significant complexity with unclear real-world benefit at v1 scale. Documenting the limitation explicitly (rather than silently allowing broken FKs) gives loader authors and users a clear signal. The soft annotation is a forward-compatibility hook for v2 hard FK support.
+- **Revert:** (c) — remove the annotation support entirely. Very low blast radius. Or promote to (a/b) in v2.
+
+### Decision 2.14.I — Test fixtures: `"test"` pseudo-version reserved convention
+
+- **Alternatives:** (a) `"test"` as a reserved returned version with bundled fixture data; (b) `include_test=True` flag on `load()` / `versions()`; (c) No convention — leave testing to loader authors.
+- **Chosen:** (a). Loaders SHOULD include `"test"` in `versions()`. The `"test"` version loads a deterministic, network-free subset bundled in the package. This is a convention, not enforced by the ABC. CI pipelines use `hippo reference install <name> --version test`. `"test"` is a reserved slug — Hippo will never generate it as a real release version.
+- **Why:** Per advisor feedback: a `--flag` approach (option b) adds complexity to the ABC surface with no benefit over a plain string version. `"test"` as a regular returned version is simpler; the loader code decides what `"test"` means. Loaders that omit it don't break Hippo, but their downstream consumers lose the hermetic test path.
+- **Revert:** Remove the reserved-slug guarantee. Low blast radius.
