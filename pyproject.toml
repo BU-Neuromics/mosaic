@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "hippo"
-version = "0.5.0"
+version = "0.6.0"
 description = "SDK-first, infrastructure-agnostic metadata tracking service for bioinformatics research"
 readme = "README.md"
 requires-python = ">=3.11"
