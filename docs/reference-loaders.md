@@ -75,16 +75,19 @@ hippo reference upgrade <name> [--version <v>] [--prune-old] [--flag ...]
 | Option | Description |
 |---|---|
 | `--version <v>` | Target version slug. Defaults to the latest non-test version. |
-| `--prune-old` | After the new version installs successfully, delete the prior version's rows. **Destructive — opt-in only.** Without this flag the old rows remain queryable alongside the new ones. |
+| `--prune-old` | Deactivates the prior version's rows (sets `is_available = false`) so they no longer appear in default queries. The rows remain in the database and are recoverable via the provenance log. **Opt-in — changes the default queryable surface.** Without this flag the old rows remain queryable alongside the new ones. |
 | `--<param> <val>` | Loader-specific flags (same as `install`). |
 
-**Default (additive) behavior:** new entities are ingested alongside existing ones. Foreign-key references in your data that point at the old version continue to resolve. Use `--prune-old` only when you are certain no user data references the prior version's entities.
+**Default (additive) behavior:** new entities are ingested alongside existing ones. Prior-version rows remain queryable — foreign-key references in your data that point at the old version continue to resolve. Use `--prune-old` only when you are certain no user data references the prior version's entities; it deactivates those rows (marks them unavailable and writes an `availability_change` provenance record) rather than removing them, so they remain auditable and recoverable.
+
+!!! note "Atomic gating guarantee"
+    `--prune-old` only runs after a fully clean load completes. If the new version fails mid-ingestion, the prior rows stay queryable — no deactivation occurs. This makes the flag safe to use: partial upgrades cannot leave you with both the old and new versions partially deactivated.
 
 ```bash
 # Additive upgrade — old rows stay
 hippo reference upgrade ensembl --version homo_sapiens.GRCh38.111
 
-# Destructive — remove prior version's rows after successful install
+# Opt-in: deactivate prior version's entities after successful install
 hippo reference upgrade ensembl --version homo_sapiens.GRCh38.111 --prune-old
 ```
 
