@@ -44,6 +44,8 @@ from pydantic_core import PydanticUndefined
 from hippo.core.loaders.reference import LoadResult, ReferenceLoader
 
 if TYPE_CHECKING:
+    import typer
+
     from hippo.core.client import HippoClient
     from hippo.linkml_bridge import SchemaRegistry
 
@@ -171,6 +173,57 @@ def discover_reference_loaders() -> list[dict[str, Any]]:
         )
 
     return loaders
+
+
+def discover_reference_loader_subapps() -> list[tuple[str, "typer.Typer"]]:
+    """Discover loader-provided Typer sub-apps via the
+    ``hippo.reference_loader_cli`` entry-point group (D2.14.A).
+
+    Each entry point must resolve to a :class:`typer.Typer` instance.
+    Anything else raises :class:`ReferenceLoaderRegistrationError` —
+    consistent with the strict reference-loader registration on the
+    sibling group (PTS-224). Sub-app registration is *optional*: a
+    loader registered only under ``hippo.reference_loaders`` simply
+    won't surface here, leaving ``hippo reference <name>`` to be served
+    by the parent group's install/upgrade/list verbs.
+    """
+    import typer
+    from importlib.metadata import entry_points
+
+    try:
+        eps = entry_points()
+        cli_eps = eps.select(group="hippo.reference_loader_cli")
+        eps_list = list(cli_eps)
+    except (TypeError, AttributeError):
+        try:
+            eps = entry_points()
+            eps_list = list(eps["hippo.reference_loader_cli"])
+        except (KeyError, TypeError):
+            eps_list = []
+
+    subapps: list[tuple[str, typer.Typer]] = []
+    for ep in eps_list:
+        loaded = ep.load()
+        if not isinstance(loaded, typer.Typer):
+            raise ReferenceLoaderRegistrationError(
+                f"Entry point 'hippo.reference_loader_cli:{ep.name}' "
+                f"({ep.value}) is not a typer.Typer instance"
+            )
+        subapps.append((ep.name, loaded))
+    return subapps
+
+
+def mount_reference_loader_subapps(reference_app: "typer.Typer") -> None:
+    """Mount discovered loader sub-apps under ``reference_app`` (D2.14.A).
+
+    Called at CLI startup so ``hippo reference <loader> --help`` and
+    ``hippo reference <loader> <subcmd> ...`` reflect the loader's own
+    Typer surface. Loaders without a ``hippo.reference_loader_cli``
+    entry are silently skipped — the install/upgrade/list verbs remain
+    available on the parent group regardless.
+    """
+    for loader_name, sub in discover_reference_loader_subapps():
+        reference_app.add_typer(sub, name=loader_name)
 
 
 def find_loader(name: str) -> dict[str, Any]:

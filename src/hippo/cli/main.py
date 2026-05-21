@@ -617,6 +617,15 @@ def reference() -> None:
 reference_app = typer.Typer(name="reference", help="Manage reference data")
 app.add_typer(reference_app, name="reference")
 
+# Mount loader-provided Typer sub-apps under `hippo reference <name>`
+# (D2.14.A / PTS-228). Loaders register a typer.Typer instance via the
+# `hippo.reference_loader_cli` entry point group; optional registration
+# means loaders without one still work via the parent install/upgrade/
+# list verbs.
+from hippo.cli.commands.reference import mount_reference_loader_subapps
+
+mount_reference_loader_subapps(reference_app)
+
 schema_app = typer.Typer(name="schema", help="Schema management commands")
 app.add_typer(schema_app, name="schema")
 

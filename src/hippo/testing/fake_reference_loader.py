@@ -18,6 +18,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
+import typer
 from pydantic import BaseModel, Field
 
 from hippo.core.loaders.reference import LoadResult, ReferenceLoader
@@ -271,3 +272,49 @@ class BareReferenceLoader(ReferenceLoader):
             entity_type="BareTerm",
             entity_ids=entity_ids,
         )
+
+
+# ---------------------------------------------------------------------------
+# Loader-provided Typer sub-app (D2.14.A / PTS-228). Registered via the
+# ``hippo.reference_loader_cli`` entry point under the same key as the
+# loader (`fake`), Hippo mounts it as ``hippo reference fake ...``.
+# ---------------------------------------------------------------------------
+
+
+fake_cli_app = typer.Typer(
+    name="fake",
+    help="Fake reference loader subcommands (test fixture).",
+)
+
+
+@fake_cli_app.command(name="echo")
+def _fake_echo(
+    message: str = typer.Argument("hello", help="Message to echo."),
+) -> None:
+    """Echo a message — exercises the mounted sub-app code path."""
+    typer.echo(message)
+
+
+@fake_cli_app.command(name="cache-path")
+def _fake_cache_path() -> None:
+    """Print the cache directory the loader would use.
+
+    Resolved via the canonical :meth:`HippoClient.cache_dir_for` path so
+    the sub-app and ``load()`` agree on the same per-loader cache root
+    (PTS-228 acceptance: same ``cache_dir_for('fake')``). The subcommand
+    instantiates an in-memory ``HippoClient`` because cache resolution
+    is stateless and doesn't depend on the on-disk database.
+    """
+    from hippo.core.client import HippoClient
+    from hippo.core.storage.adapters.sqlite_adapter import SQLiteAdapter
+    from hippo.linkml_bridge import SchemaRegistry
+    from linkml_runtime.utils.schemaview import SchemaView
+    import importlib.resources
+
+    hippo_core_path = importlib.resources.files("hippo.schemas").joinpath(
+        "hippo_core.yaml"
+    )
+    registry = SchemaRegistry(SchemaView(str(hippo_core_path)))
+    storage = SQLiteAdapter(":memory:", schema_registry=registry)
+    client = HippoClient(storage=storage, registry=registry)
+    typer.echo(str(client.cache_dir_for("fake")))

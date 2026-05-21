@@ -61,6 +61,9 @@ fake = "hippo.testing.fake_reference_loader:FakeReferenceLoader"
 rich = "hippo.testing.fake_reference_loader:RichParamsLoader"
 bare = "hippo.testing.fake_reference_loader:BareReferenceLoader"
 
+[project.entry-points."hippo.reference_loader_cli"]
+fake = "hippo.testing.fake_reference_loader:fake_cli_app"
+
 [tool.hatch.build.targets.wheel]
 packages = ["src/hippo"]
 
