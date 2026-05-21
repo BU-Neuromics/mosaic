@@ -4360,7 +4360,7 @@
 </tr>
 <tr>
 <td><code>--prune-old</code></td>
-<td>After the new version installs successfully, delete the prior version's rows. <strong>Destructive — opt-in only.</strong> Without this flag the old rows remain queryable alongside the new ones.</td>
+<td>Deactivates the prior version's rows (sets <code>is_available = false</code>) so they no longer appear in default queries. The rows remain in the database and are recoverable via the provenance log. <strong>Opt-in — changes the default queryable surface.</strong> Without this flag the old rows remain queryable alongside the new ones.</td>
 </tr>
 <tr>
 <td><code>--&lt;param&gt; &lt;val&gt;</code></td>
@@ -4368,11 +4368,15 @@
 </tr>
 </tbody>
 </table>
-<p><strong>Default (additive) behavior:</strong> new entities are ingested alongside existing ones. Foreign-key references in your data that point at the old version continue to resolve. Use <code>--prune-old</code> only when you are certain no user data references the prior version's entities.</p>
+<p><strong>Default (additive) behavior:</strong> new entities are ingested alongside existing ones. Prior-version rows remain queryable — foreign-key references in your data that point at the old version continue to resolve. Use <code>--prune-old</code> only when you are certain no user data references the prior version's entities; it deactivates those rows (marks them unavailable and writes an <code>availability_change</code> provenance record) rather than removing them, so they remain auditable and recoverable.</p>
+<div class="admonition note">
+<p class="admonition-title">Atomic gating guarantee</p>
+<p><code>--prune-old</code> only runs after a fully clean load completes. If the new version fails mid-ingestion, the prior rows stay queryable — no deactivation occurs. This makes the flag safe to use: partial upgrades cannot leave you with both the old and new versions partially deactivated.</p>
+</div>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a><span class="c1"># Additive upgrade — old rows stay</span>
 <a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a>hippo<span class="w"> </span>reference<span class="w"> </span>upgrade<span class="w"> </span>ensembl<span class="w"> </span>--version<span class="w"> </span>homo_sapiens.GRCh38.111
 <a id="__codelineno-6-3" name="__codelineno-6-3" href="#__codelineno-6-3"></a>
-<a id="__codelineno-6-4" name="__codelineno-6-4" href="#__codelineno-6-4"></a><span class="c1"># Destructive — remove prior version&#39;s rows after successful install</span>
+<a id="__codelineno-6-4" name="__codelineno-6-4" href="#__codelineno-6-4"></a><span class="c1"># Opt-in: deactivate prior version&#39;s entities after successful install</span>
 <a id="__codelineno-6-5" name="__codelineno-6-5" href="#__codelineno-6-5"></a>hippo<span class="w"> </span>reference<span class="w"> </span>upgrade<span class="w"> </span>ensembl<span class="w"> </span>--version<span class="w"> </span>homo_sapiens.GRCh38.111<span class="w"> </span>--prune-old
 </code></pre></div>
 <hr />

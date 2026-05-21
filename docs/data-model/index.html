@@ -5628,7 +5628,7 @@
 <a id="__codelineno-20-4" name="__codelineno-20-4" href="#__codelineno-20-4"></a>    <span class="n">entity_id</span><span class="o">=</span><span class="s2">&quot;abc-123&quot;</span>
 <a id="__codelineno-20-5" name="__codelineno-20-5" href="#__codelineno-20-5"></a><span class="p">)</span>
 </code></pre></div>
-<p><strong>Gap:</strong> The design spec describes soft delete via availability transitions, but the current implementation calls <code>storage.delete()</code> directly. The SQLite adapter may implement soft delete internally.</p>
+<p>Both the SQLite adapter (<code>sqlite_adapter.py:1634</code>) and the Postgres adapter (<code>postgres_adapter.py:1243</code>) implement soft delete: <code>delete()</code> sets <code>is_available = false</code> on the entity row and writes an <code>availability_change</code> provenance record carrying the full payload snapshot. The row remains physically present and is recoverable by replaying provenance.</p>
 <hr />
 <h2 id="sdk-types-reference">SDK Types Reference<a class="headerlink" href="#sdk-types-reference" title="Permanent link">&para;</a></h2>
 <p>This section documents the user-facing types exported from <code>hippo.core.types</code>.</p>
@@ -5934,7 +5934,7 @@
 <h3 id="2-soft-delete-implementation">2. Soft Delete Implementation<a class="headerlink" href="#2-soft-delete-implementation" title="Permanent link">&para;</a></h3>
 <ul>
 <li><strong>Design:</strong> Delete operations set <code>is_available = false</code> via availability transitions</li>
-<li><strong>Implementation:</strong> The <code>delete()</code> method calls <code>storage.delete()</code> directly; soft delete behavior depends on the storage adapter implementation</li>
+<li><strong>Implementation:</strong> Both the SQLite (<code>sqlite_adapter.py:1634</code>) and Postgres (<code>postgres_adapter.py:1243</code>) adapters perform soft delete — <code>delete()</code> sets <code>is_available = false</code> and writes an <code>availability_change</code> provenance record. The row remains physically present and recoverable.</li>
 </ul>
 <h3 id="3-relationship-properties">3. Relationship Properties<a class="headerlink" href="#3-relationship-properties" title="Permanent link">&para;</a></h3>
 <ul>
