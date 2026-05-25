@@ -140,8 +140,15 @@ class IngestionService:
         entity_type: str,
         data: dict[str, Any],
         entity_id: Optional[str] = None,
+        loader_context: Optional[tuple[str, str]] = None,
     ) -> dict[str, Any]:
-        """Internal put implementation for SQLite storage."""
+        """Internal put implementation for SQLite storage.
+
+        ``loader_context`` is threaded down to the storage adapter so the
+        write-log row insert shares the entity write's SQL transaction
+        (sec2 §2.14.9). It's ``None`` outside an active
+        ``HippoClient.load_context()``.
+        """
         final_id = entity_id or str(uuid.uuid4())
 
         existing = self._storage.read(final_id)
@@ -153,6 +160,7 @@ class IngestionService:
                 entity_type=entity_type,
                 data=data,
                 new_version=new_version,
+                loader_context=loader_context,
             )
             self._sync_entity_to_fts(final_id, entity_type, data, is_available=True)
 
@@ -174,7 +182,7 @@ class IngestionService:
                 version=1,
                 data=data,
             )
-            self._storage.create(entity)
+            self._storage.create(entity, loader_context=loader_context)
 
             self._sync_entity_to_fts(final_id, entity_type, data, is_available=True)
 

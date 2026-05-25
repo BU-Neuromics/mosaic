@@ -1263,9 +1263,18 @@ class PostgresAdapter(EntityStore):
     # ------------------------------------------------------------------
 
     def create(
-        self, entity: PostgresEntity, user_context: Optional[str] = None
+        self,
+        entity: PostgresEntity,
+        user_context: Optional[str] = None,
+        loader_context: Optional[tuple[str, str]] = None,
     ) -> PostgresEntity:
-        """Create a new entity using atomic upsert for multi-instance safety."""
+        """Create a new entity using atomic upsert for multi-instance safety.
+
+        When ``loader_context`` is a ``(loader_name, version)`` tuple
+        (set by ``HippoClient.load_context()``), a row is appended to
+        ``reference_write_log`` inside the same SQL transaction as the
+        entity write (sec2 §2.14.9 / Decision 2.14.J).
+        """
         entity_id = (
             entity.id if hasattr(entity, "id") and entity.id else str(uuid.uuid4())
         )
@@ -1312,6 +1321,16 @@ class PostgresAdapter(EntityStore):
                 actor_id=user_context,
                 patch=entity_data,
             )
+
+            if loader_context is not None:
+                loader_name, version = loader_context
+                cur.execute(
+                    "INSERT INTO reference_write_log "
+                    "(loader_name, version, entity_id, entity_type) "
+                    "VALUES (%s, %s, %s, %s) "
+                    "ON CONFLICT (loader_name, version, entity_id) DO NOTHING",
+                    (loader_name, version, entity_id, entity_type),
+                )
 
         return entity
 

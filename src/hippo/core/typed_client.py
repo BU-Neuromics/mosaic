@@ -57,6 +57,7 @@ SDK_RESERVED_NAMES: frozenset[str] = frozenset(
         "get_by_external_id",
         "history",
         "list_external_ids",
+        "load_context",
         "pipeline",
         "put",
         "query",
