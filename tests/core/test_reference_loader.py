@@ -9,14 +9,14 @@ from typing import Any
 import pytest
 from pydantic import BaseModel
 
-from hippo.core.loaders.reference import LoadResult, ReferenceLoader
+from hippo.core.loaders.reference import EntityRef, LoadResult, ReferenceLoader
 
 
 class _StubClient:
     """Tiny stand-in for HippoClient used by loader unit tests.
 
     Returns a deterministic synthetic UUID for each ``put`` so
-    LoadResult.entity_ids is populated without spinning up a real
+    ``LoadResult.entities`` is populated without spinning up a real
     storage adapter.
     """
 
@@ -92,7 +92,7 @@ class TestReferenceLoaderABC:
                 return {"default_prefix": "complete"}
 
             def load(self, client, version, params=None) -> LoadResult:
-                return LoadResult(created=1, entity_type="Foo")
+                return LoadResult(created=1)
 
         loader = Complete()
         assert loader.versions() == ["test"]
@@ -122,7 +122,7 @@ class _MinimalLoader(ReferenceLoader):
 
     def load(self, client, version, params=None) -> LoadResult:
         self.load_calls.append((client, version, params))
-        return LoadResult(created=1, entity_type="Thing")
+        return LoadResult(created=1)
 
 
 class TestDefaultMethods:
@@ -151,6 +151,38 @@ class TestDefaultMethods:
 # ---------------------------------------------------------------------------
 
 
+class TestEntityRef:
+    """v2 ``EntityRef`` handle (spec §2.14.8)."""
+
+    def test_is_frozen(self):
+        ref = EntityRef(id="abc", type="FakeTerm")
+        with pytest.raises(Exception):
+            ref.id = "xyz"  # type: ignore[misc]
+
+    def test_equality_and_hashable(self):
+        a = EntityRef(id="x", type="T")
+        b = EntityRef(id="x", type="T")
+        c = EntityRef(id="y", type="T")
+        assert a == b
+        assert hash(a) == hash(b)
+        assert a != c
+
+    def test_from_put_result_uses_id_and_entity_type(self):
+        put_dict = {
+            "id": "stub-FakeTerm-001",
+            "entity_type": "FakeTerm",
+            "data": {"label": "alpha"},
+        }
+        ref = EntityRef.from_put_result(put_dict)
+        assert ref == EntityRef(id="stub-FakeTerm-001", type="FakeTerm")
+
+    def test_from_put_result_missing_keys_raises(self):
+        with pytest.raises(KeyError):
+            EntityRef.from_put_result({"id": "x"})
+        with pytest.raises(KeyError):
+            EntityRef.from_put_result({"entity_type": "T"})
+
+
 class TestLoadResult:
     def test_defaults_are_zero_and_empty(self):
         r = LoadResult()
@@ -159,18 +191,37 @@ class TestLoadResult:
         assert r.unchanged == 0
         assert r.errors == 0
         assert r.error_messages == []
-        assert r.entity_type is None
-        assert r.entity_ids == []
+        assert r.entities == []
 
-    def test_entity_type_for_multi_class_loaders(self):
-        r = LoadResult(created=3, entity_type="FakeTerm")
-        assert r.entity_type == "FakeTerm"
+    def test_constructable_with_entities_and_counters(self):
+        refs = [
+            EntityRef(id="a", type="FakeTerm"),
+            EntityRef(id="b", type="FakeTerm"),
+        ]
+        r = LoadResult(created=2, entities=refs)
+        assert r.created == 2
+        assert r.entities == refs
+        # Mixed-class loaders use a heterogeneous list — D2.14.K-3.
+        mixed = LoadResult(
+            created=2,
+            entities=[
+                EntityRef(id="g1", type="Gene"),
+                EntityRef(id="t1", type="Transcript"),
+            ],
+        )
+        assert {e.type for e in mixed.entities} == {"Gene", "Transcript"}
 
     def test_error_messages_are_isolated_per_instance(self):
         a = LoadResult()
         b = LoadResult()
         a.error_messages.append("boom")
         assert b.error_messages == []
+
+    def test_entities_are_isolated_per_instance(self):
+        a = LoadResult()
+        b = LoadResult()
+        a.entities.append(EntityRef(id="x", type="T"))
+        assert b.entities == []
 
 
 # ---------------------------------------------------------------------------
@@ -203,8 +254,9 @@ class TestFakeReferenceLoader:
         result = loader.load(client=client, version="test")
         assert isinstance(result, LoadResult)
         assert result.created == 2
-        assert result.entity_type == "FakeTerm"
-        assert len(result.entity_ids) == 2
+        assert len(result.entities) == 2
+        assert all(isinstance(e, EntityRef) for e in result.entities)
+        assert all(e.type == "FakeTerm" for e in result.entities)
 
     def test_fake_loader_unknown_version_returns_error(self):
         from hippo.testing.fake_reference_loader import FakeReferenceLoader

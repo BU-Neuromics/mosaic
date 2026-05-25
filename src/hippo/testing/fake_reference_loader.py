@@ -21,7 +21,7 @@ from typing import TYPE_CHECKING, Any
 import typer
 from pydantic import BaseModel, Field
 
-from hippo.core.loaders.reference import LoadResult, ReferenceLoader
+from hippo.core.loaders.reference import EntityRef, LoadResult, ReferenceLoader
 
 if TYPE_CHECKING:
     from hippo.core.client import HippoClient
@@ -98,27 +98,26 @@ class FakeReferenceLoader(ReferenceLoader):
             return LoadResult(
                 errors=1,
                 error_messages=[f"unknown version: {version}"],
-                entity_type="FakeTerm",
             )
 
         fail_after: int | None = None
         if isinstance(params, FakeLoadParams):
             fail_after = params.fail_after
 
-        entity_ids: list[str] = []
+        entities: list[EntityRef] = []
         for index, row in enumerate(rows):
             if fail_after is not None and index >= fail_after:
                 raise RuntimeError(
                     f"FakeReferenceLoader simulated failure after "
                     f"{fail_after} rows"
                 )
-            result = client.put("FakeTerm", dict(row))
-            entity_ids.append(result["id"])
+            entities.append(
+                EntityRef.from_put_result(client.put("FakeTerm", dict(row)))
+            )
 
         return LoadResult(
-            created=len(entity_ids),
-            entity_type="FakeTerm",
-            entity_ids=entity_ids,
+            created=len(entities),
+            entities=entities,
         )
 
 
@@ -202,14 +201,13 @@ class RichParamsLoader(ReferenceLoader):
         type(self).last_params = params
 
         rows = self._DATASET.get(version, [])
-        entity_ids: list[str] = []
-        for row in rows:
-            result = client.put("RichTerm", dict(row))
-            entity_ids.append(result["id"])
+        entities: list[EntityRef] = [
+            EntityRef.from_put_result(client.put("RichTerm", dict(row)))
+            for row in rows
+        ]
         return LoadResult(
-            created=len(entity_ids),
-            entity_type="RichTerm",
-            entity_ids=entity_ids,
+            created=len(entities),
+            entities=entities,
         )
 
 
@@ -263,14 +261,13 @@ class BareReferenceLoader(ReferenceLoader):
     ) -> LoadResult:
         type(self).last_params_was_none = params is None
         rows = self._DATASET.get(version, [])
-        entity_ids: list[str] = []
-        for row in rows:
-            result = client.put("BareTerm", dict(row))
-            entity_ids.append(result["id"])
+        entities: list[EntityRef] = [
+            EntityRef.from_put_result(client.put("BareTerm", dict(row)))
+            for row in rows
+        ]
         return LoadResult(
-            created=len(entity_ids),
-            entity_type="BareTerm",
-            entity_ids=entity_ids,
+            created=len(entities),
+            entities=entities,
         )
 
 
