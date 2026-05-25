@@ -920,6 +920,27 @@ class SQLiteAdapter(EntityStore):
                 ON relationships(relationship_type)
             """)
 
+            # Reference-loader write log (sec2 §2.14.9 / Decision 2.14.J).
+            # Substrate for ``--prune-old``: records every entity written by
+            # a reference loader inside ``HippoClient.load_context()``.
+            # Composite PK collapses repeat writes of the same id within a
+            # ``(loader_name, version)`` window to a single row, keeping
+            # ``upgrade()`` re-writes and migration backfill idempotent.
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS reference_write_log (
+                    loader_name TEXT NOT NULL,
+                    version     TEXT NOT NULL,
+                    entity_id   TEXT NOT NULL,
+                    entity_type TEXT NOT NULL,
+                    written_at  TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    PRIMARY KEY (loader_name, version, entity_id)
+                )
+            """)
+            cursor.execute("""
+                CREATE INDEX IF NOT EXISTS idx_reference_write_log_lookup
+                ON reference_write_log (loader_name, version)
+            """)
+
             self._init_triggers(cursor)
 
             # Create entity_provenance_summary view before entity-level migrations.
@@ -958,6 +979,8 @@ class SQLiteAdapter(EntityStore):
             self._run_migrations(cursor)
 
             self._init_per_class_tables(cursor)
+
+            self._migrate_reference_entity_ids(cursor)
 
     def _init_per_class_tables(self, cursor: sqlite3.Cursor) -> None:
         """Emit per-class typed tables for every concrete class in the user schema.
@@ -1112,6 +1135,121 @@ class SQLiteAdapter(EntityStore):
             )
             if cursor.fetchone() is not None:
                 cursor.execute(f"DROP TABLE IF EXISTS {legacy}")
+
+    _REFERENCE_WRITE_LOG_MIGRATION_KEY = "_reference_write_log_v1_migrated"
+
+    def _migrate_reference_entity_ids(self, cursor: sqlite3.Cursor) -> None:
+        """One-time backfill from ``hippo_meta.reference_entity_ids`` JSON
+        blob to the ``reference_write_log`` table (sec2 §2.14.9).
+
+        v1 stored ``{loader_name: {version: [entity_id, ...]}}`` under the
+        ``reference_entity_ids`` meta key. v2 replaces that with the write
+        log. The first ``_init_database`` after this code lands performs
+        the backfill, then stamps a marker key so subsequent startups skip
+        entirely. The marker is required because the v1 ``_write_versions``
+        path is still in tree (removed in PTS-256) and would otherwise be
+        clobbered on every adapter init.
+
+        ``entity_type`` is resolved per id by looking it up in
+        ``_entity_registry`` first (created entities) and falling back to
+        ``ProvenanceRecord`` (survives any future entity deletion). Rows
+        whose type cannot be resolved are skipped — preferable to a hard
+        failure during init, since the prune flow that consumes the log
+        is opt-in.
+
+        ``INSERT OR IGNORE`` plus the composite primary key make the row
+        writes idempotent even if a previous migration crashed after
+        inserting some rows but before stamping the marker.
+        """
+        cursor.execute(
+            "SELECT 1 FROM hippo_meta WHERE key = ?",
+            (self._REFERENCE_WRITE_LOG_MIGRATION_KEY,),
+        )
+        if cursor.fetchone() is not None:
+            return
+
+        cursor.execute(
+            "SELECT value FROM hippo_meta WHERE key = 'reference_entity_ids'"
+        )
+        row = cursor.fetchone()
+        if row is not None:
+            raw = row["value"] if isinstance(row, sqlite3.Row) else row[0]
+            try:
+                payload = json.loads(raw)
+            except (TypeError, ValueError):
+                payload = None
+
+            if isinstance(payload, dict):
+                for loader_name, by_version in payload.items():
+                    if not isinstance(loader_name, str) or not isinstance(
+                        by_version, dict
+                    ):
+                        continue
+                    for version, entity_ids in by_version.items():
+                        if not isinstance(version, str) or not isinstance(
+                            entity_ids, list
+                        ):
+                            continue
+                        for entity_id in entity_ids:
+                            if not isinstance(entity_id, str):
+                                continue
+                            entity_type = (
+                                self._lookup_entity_type_for_migration(
+                                    cursor, entity_id
+                                )
+                            )
+                            if entity_type is None:
+                                continue
+                            cursor.execute(
+                                "INSERT OR IGNORE INTO reference_write_log "
+                                "(loader_name, version, entity_id, entity_type) "
+                                "VALUES (?, ?, ?, ?)",
+                                (loader_name, version, entity_id, entity_type),
+                            )
+
+            cursor.execute(
+                "DELETE FROM hippo_meta WHERE key = 'reference_entity_ids'"
+            )
+
+        now = datetime.now(timezone.utc).isoformat()
+        cursor.execute(
+            "INSERT INTO hippo_meta (key, value, updated_at) "
+            "VALUES (?, ?, ?) "
+            "ON CONFLICT(key) DO UPDATE SET value = excluded.value, "
+            "                                updated_at = excluded.updated_at",
+            (
+                self._REFERENCE_WRITE_LOG_MIGRATION_KEY,
+                json.dumps({"completed_at": now}, sort_keys=True),
+                now,
+            ),
+        )
+
+    @staticmethod
+    def _lookup_entity_type_for_migration(
+        cursor: sqlite3.Cursor, entity_id: str
+    ) -> Optional[str]:
+        """Best-effort entity_type lookup used by the v1→v2 backfill.
+
+        Checks ``_entity_registry`` first; falls back to ``ProvenanceRecord``
+        in case the registry was missed (older databases predating the
+        registry, or future entity-row removal).
+        """
+        cursor.execute(
+            "SELECT class_name FROM _entity_registry WHERE uuid = ?",
+            (entity_id,),
+        )
+        row = cursor.fetchone()
+        if row is not None:
+            return row["class_name"] if isinstance(row, sqlite3.Row) else row[0]
+        cursor.execute(
+            'SELECT entity_type FROM "ProvenanceRecord" '
+            "WHERE entity_id = ? AND entity_type IS NOT NULL LIMIT 1",
+            (entity_id,),
+        )
+        row = cursor.fetchone()
+        if row is not None:
+            return row["entity_type"] if isinstance(row, sqlite3.Row) else row[0]
+        return None
 
     def _get_provenance_store(self, conn: sqlite3.Connection) -> ProvenanceStore:
         """Get or create a ProvenanceStore for the given connection."""
