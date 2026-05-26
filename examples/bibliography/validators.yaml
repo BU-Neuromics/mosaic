@@ -1,0 +1,9 @@
+validators:
+  - name: doi_format
+    entity_types:
+      - JournalArticle
+    on:
+      - create
+      - update
+    condition: 'entity.doi == "" || entity.doi.matches("^10[.][0-9]{4,}/")'
+    error: "DOI must start with '10.' followed by at least four digits and a slash (e.g. 10.1038/nature12345)"
