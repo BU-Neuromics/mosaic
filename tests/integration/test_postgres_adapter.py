@@ -42,10 +42,12 @@ def adapter(minimal_schema_registry):
         cur = conn.cursor()
         cur.execute("DELETE FROM entity_external_ids")
         cur.execute("DELETE FROM relationships")
-        # Disable provenance triggers temporarily for cleanup
-        cur.execute("ALTER TABLE provenance DISABLE TRIGGER ALL")
-        cur.execute("DELETE FROM provenance")
-        cur.execute("ALTER TABLE provenance ENABLE TRIGGER ALL")
+        # Disable provenance triggers temporarily for cleanup. The table
+        # was renamed from ``provenance`` to ``ProvenanceRecord`` per
+        # sec9 §9.6 / Decision 9.6.D.
+        cur.execute('ALTER TABLE "ProvenanceRecord" DISABLE TRIGGER ALL')
+        cur.execute('DELETE FROM "ProvenanceRecord"')
+        cur.execute('ALTER TABLE "ProvenanceRecord" ENABLE TRIGGER ALL')
         cur.execute("DELETE FROM entities")
         # Drop any FTS tables
         cur.execute(
