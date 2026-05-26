@@ -97,6 +97,84 @@ class TestMigrationPlanner:
         assert len(plan.backfill_tasks) > 0
 
 
+class TestMigrationPlannerFromDiff:
+    def test_plan_from_diff_creates_new_tables_end_to_end(self, sqlite_connection):
+        # Regression for PTS-281: plan_migration_from_diff used to call
+        # ``DDLGenerator._build_table`` (removed in PTS-169) and crashed
+        # with AttributeError. Exercise the diff path end-to-end against
+        # a fresh DB so every concrete class lands in ``new_tables``.
+        from hippo.core.storage.schema_diff import diff_registry_against_database
+
+        reg = build_registry(
+            {
+                "Sample": {
+                    "attributes": {
+                        "id": {"identifier": True},
+                        "name": {"range": "string"},
+                        "title": {
+                            "range": "string",
+                            "annotations": {"hippo_search": "fts5"},
+                        },
+                    }
+                }
+            }
+        )
+        cursor = sqlite_connection.cursor()
+        _engine, schema_diff = diff_registry_against_database(reg, cursor)
+        assert "Sample" in schema_diff.new_tables
+
+        planner = MigrationPlanner()
+        planner.load_existing_fts_tables(cursor)
+        plan = planner.plan_migration_from_diff(schema_diff, reg, cursor)
+
+        assert "Sample" in plan.new_tables
+        assert any(
+            'CREATE TABLE "Sample"' in s for s in plan.ddl_statements
+        ), plan.ddl_statements
+        assert plan.fts_ddl_statements, "expected FTS DDL for hippo_search slot"
+
+        executor = MigrationExecutor(sqlite_connection)
+        result = executor.execute_migration(plan)
+        assert result.success is True, result.errors
+        assert "Sample" in result.tables_created
+
+    def test_plan_from_diff_handles_new_columns(self, sqlite_connection):
+        # New-columns branch goes through _alter_table_add_column, which
+        # also referenced a removed DDLGenerator._map_slot_type method.
+        cursor = sqlite_connection.cursor()
+        cursor.execute(
+            'CREATE TABLE "Sample" ("id" TEXT PRIMARY KEY, '
+            '"is_available" INTEGER NOT NULL DEFAULT 1)'
+        )
+        sqlite_connection.commit()
+
+        reg = build_registry(
+            {
+                "Sample": {
+                    "attributes": {
+                        "id": {"identifier": True},
+                        "note": {"range": "string"},
+                        "count": {"range": "integer"},
+                    }
+                }
+            }
+        )
+        from hippo.core.storage.schema_diff import diff_registry_against_database
+
+        _engine, schema_diff = diff_registry_against_database(reg, cursor)
+        assert "Sample" not in schema_diff.new_tables
+        assert "Sample" in schema_diff.new_columns
+
+        planner = MigrationPlanner()
+        planner.load_existing_fts_tables(cursor)
+        plan = planner.plan_migration_from_diff(schema_diff, reg, cursor)
+
+        assert any('ADD COLUMN "note" TEXT' in s for s in plan.alter_table_statements)
+        assert any(
+            'ADD COLUMN "count" INTEGER' in s for s in plan.alter_table_statements
+        )
+
+
 class TestMigrationExecutor:
     def test_execute_migration_creates_fts_tables(self, sqlite_connection):
         reg = build_registry(
