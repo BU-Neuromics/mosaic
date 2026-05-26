@@ -17,7 +17,10 @@ def init(
         None, "--path", "-p", help="Project directory path"
     ),
     template: str = typer.Option(
-        "basic", "--template", "-t", help="Template to use (basic, minimal, full)"
+        "bibliography",
+        "--template",
+        "-t",
+        help="Template to use (bibliography, basic, minimal, full)",
     ),
     storage: str = typer.Option(
         "sqlite",

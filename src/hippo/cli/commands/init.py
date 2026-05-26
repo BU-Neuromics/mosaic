@@ -15,7 +15,7 @@ from hippo.cli.templates import (
 class InitCommand:
     """Handles project initialization for Hippo."""
 
-    DEFAULT_TEMPLATE = "basic"
+    DEFAULT_TEMPLATE = "bibliography"
     VALID_STORAGE_BACKENDS = {"sqlite", "postgres"}
 
     def __init__(

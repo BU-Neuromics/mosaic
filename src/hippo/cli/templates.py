@@ -1,10 +1,24 @@
 """Template registry and loaders for hippo init."""
 
 from dataclasses import dataclass
+from importlib import resources
 from typing import Any
 
 
 TEMPLATES = {
+    "bibliography": {
+        "name": "Bibliography",
+        "description": (
+            "Domain-neutral citation-graph schema demonstrating Hippo's LinkML "
+            "runtime features (default)"
+        ),
+        "files": {
+            "schema.yaml": "bibliography_schema",
+            "config.json": "bibliography_config",
+            "README.md": "bibliography_readme",
+            ".gitignore": "basic_gitignore",
+        },
+    },
     "basic": {
         "name": "Basic",
         "description": "Minimal Hippo project with core configuration",
@@ -61,9 +75,60 @@ def list_templates() -> list[dict[str, str]]:
     ]
 
 
+def _load_bundled_resource(filename: str) -> str:
+    """Read a file packaged under hippo.cli.template_data."""
+    return (
+        resources.files("hippo.cli.template_data")
+        .joinpath(filename)
+        .read_text(encoding="utf-8")
+    )
+
+
 def get_template_file_content(file_key: str) -> str | None:
     """Get the content for a template file by key."""
+    if file_key == "bibliography_schema":
+        return _load_bundled_resource("bibliography.yaml")
+
     contents = {
+        "bibliography_config": """{
+  "schema_path": "schema.yaml",
+  "storage_backend": "sqlite",
+  "database_url": "data/hippo.db",
+  "validation_enabled": true
+}
+""",
+        "bibliography_readme": """# Hippo Bibliography Project
+
+This project was scaffolded by `hippo init` using the **bibliography**
+template — a domain-neutral citation graph (Author, Publication, Venue,
+Citation) that demonstrates Hippo's core LinkML runtime features:
+
+- Polymorphic entity hierarchies (Publication → JournalArticle / Preprint /
+  ConferencePaper)
+- Full-text search (`hippo_search: fts5`) on titles, abstracts, journal names
+- B-tree indexes (`hippo_index: true`) on FK-style slots
+- Entity supersession (preprint → journal article)
+
+## Quick start
+
+```bash
+# Apply the schema to the local SQLite database
+hippo migrate
+
+# Start the REST API server
+hippo serve
+
+# Validate a data bundle
+hippo validate --schema schema.yaml --data path/to/bundle.yaml
+```
+
+## Project layout
+
+- `schema.yaml` — LinkML schema (edit to model your own domain)
+- `hippo.yaml` — Hippo runtime config
+- `config.json` — legacy project config
+- `data/` — runtime data and SQLite database
+""",
         "basic_config": """{
   "version": "0.1",
   "storage": {

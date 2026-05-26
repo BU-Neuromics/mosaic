@@ -35,8 +35,16 @@ class TestTemplateRegistry:
 
     def test_list_templates(self):
         templates = list_templates()
-        assert len(templates) == 3
+        names = {t["name"] for t in templates}
+        assert names == {"bibliography", "basic", "minimal", "full"}
         assert all("name" in t and "description" in t for t in templates)
+
+    def test_get_template_bibliography(self):
+        template = get_template("bibliography")
+        assert template is not None
+        assert template.name == "bibliography"
+        assert "schema.yaml" in template.files
+        assert "config.json" in template.files
 
 
 class TestInitCommand:
@@ -129,6 +137,29 @@ class TestInitCommand:
 
         assert (project_dir / "config.json").exists()
 
+    def test_default_template_is_bibliography(self):
+        cmd = InitCommand(path=None, template="", force=False)
+        assert cmd.template_name == "bibliography"
+
+    def test_init_bibliography_template(self, temp_dir):
+        cmd = InitCommand(
+            path=str(temp_dir / "myproject"), template="bibliography", force=False
+        )
+        cmd.run()
+
+        project = temp_dir / "myproject"
+        schema_path = project / "schema.yaml"
+        config_path = project / "config.json"
+
+        assert schema_path.exists()
+        assert config_path.exists()
+
+        schema_text = schema_path.read_text()
+        assert "name: bibliography" in schema_text
+        assert "Author:" in schema_text
+        assert "Publication:" in schema_text
+        assert "Citation:" in schema_text
+
     def test_init_minimal_template(self, temp_dir):
         cmd = InitCommand(
             path=str(temp_dir / "myproject"), template="minimal", force=False
@@ -144,9 +175,24 @@ class TestInitCommand:
 class TestInitCommandIntegration:
     """Integration tests for hippo init command."""
 
-    def test_cli_init_basic(self):
+    def test_cli_init_default_produces_bibliography(self):
         with tempfile.TemporaryDirectory() as td:
             result = os.system(f"hippo init --path {td}/testproj")
+            assert result == 0
+
+            project = Path(td) / "testproj"
+            schema_path = project / "schema.yaml"
+            config_path = project / "config.json"
+
+            assert config_path.exists()
+            assert schema_path.exists()
+            schema_text = schema_path.read_text()
+            assert "name: bibliography" in schema_text
+            assert "Author:" in schema_text
+
+    def test_cli_init_basic_template(self):
+        with tempfile.TemporaryDirectory() as td:
+            result = os.system(f"hippo init --path {td}/testproj --template basic")
             assert result == 0
 
             config_path = Path(td) / "testproj" / "config.json"
