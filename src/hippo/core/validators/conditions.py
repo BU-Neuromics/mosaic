@@ -66,6 +66,12 @@ class CELCondition:
 
         try:
             return evaluate(self.expression, context)
+        except KeyError:
+            # common-expression-language >=0.6.0 raises KeyError on a
+            # missing-field reference; earlier versions raised ValueError
+            # with "No such key" in the message. Treat both as "field
+            # not present" → the condition is vacuously false.
+            return False
         except Exception as e:
             error_str = str(e)
             if "No such key" in error_str or "undefined" in error_str.lower():
