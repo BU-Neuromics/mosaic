@@ -5,6 +5,8 @@
 
 ---
 
+Below is the schema used by Hippo's first production deployment at the VA National PTSD Brain Bank. It demonstrates how a real biomedical metadata model is expressed in LinkML and run by Hippo. The same engine, given a different schema, would run a different application.
+
 > **This is an example deployment configuration, not part of the Hippo system spec.**
 > The entity types, fields, and relationships below illustrate how a multi-modal omics
 > research group might configure Hippo for tracking biological samples, sequencing data

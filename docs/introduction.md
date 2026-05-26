@@ -41,6 +41,7 @@ See the **[Quickstart](quickstart.md)** to have this running in five minutes.
 
 ### 1. Schema evolution with provenance preservation
 
+Hippo is an open-source, configurable metadata tracking service. It gives you a unified, queryable registry of entities, their fields, and the relationships between them — so that downstream systems, analysis pipelines, and data portals can reliably locate and filter metadata without manually managing spreadsheets or bespoke file manifests. See the [Comparison Guide](comparison.md) to evaluate Hippo against alternatives.
 Because provenance is a typed, DDL-generated table — not an event log bolted on after the fact — a Hippo deployment can evolve its schema across years without losing the ability to answer "what did this entity look like in 2022?" This is the property that matters most at production scale: the schema grows, the history stays intact.
 
 ### 2. PROV-O-native, not PROV-O-adjacent

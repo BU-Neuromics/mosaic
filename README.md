@@ -51,6 +51,7 @@ print(f'Created: {sample[\"id\"]}')
 | [CLI Reference](docs/cli-reference.md) | Command-line interface documentation |
 | [Data Model](docs/data-model.md) | Entity types, fields, and relationships |
 | [API Reference](docs/api-reference.md) | Complete SDK and REST API docs |
+| [Comparison Guide](docs/comparison.md) | When to use Hippo and when to use something else |
 
 ## Features
 
