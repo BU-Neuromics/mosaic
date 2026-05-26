@@ -6,7 +6,7 @@ from typing import Optional
 
 app = typer.Typer(
     name="hippo",
-    help="Hippo - Metadata Tracking Service for BASS",
+    help="Hippo — a runtime for LinkML schemas. Run a schema as a service with typed SDK, REST API, and PROV-O provenance.",
     add_completion=False,
 )
 
