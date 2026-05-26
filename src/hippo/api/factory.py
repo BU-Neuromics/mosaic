@@ -25,7 +25,11 @@ def create_app(
     hippo_client: Optional[HippoClient] = None,
     title: str = "Hippo API",
     version: str = "0.1.0",
-    description: str = "Metadata Tracking Service REST API",
+    description: str = (
+        "A runtime for LinkML schemas. Generates a typed SDK, REST API, "
+        "append-only provenance store, and dynamic validation from a "
+        "schema definition."
+    ),
     docs_url: str = "/docs",
     redoc_url: str = "/redoc",
     openapi_url: str = "/openapi.json",
