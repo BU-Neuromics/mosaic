@@ -516,15 +516,20 @@ def install_reference(
     load_result = loader.load(client, resolved_version, params)
     _abort_on_load_errors(name, resolved_version, load_result)
 
-    _write_versions(db, name, resolved_version, load_result.entity_ids)
+    # v2 LoadResult drops scalar `entity_type` / `entity_ids` for an
+    # advisory `entities: list[EntityRef]`. The substrate switch to the
+    # reference write log is child issue #4 (PTS-252); until then the
+    # lifecycle still persists the per-version ID list, derived here.
+    entity_ids, entity_type = _ids_and_type_from(load_result)
+    _write_versions(db, name, resolved_version, entity_ids)
 
     return {
         "name": name,
         "version": resolved_version,
         "status": "installed",
         "created": load_result.created,
-        "entity_type": load_result.entity_type,
-        "entity_ids": list(load_result.entity_ids),
+        "entity_type": entity_type,
+        "entity_ids": list(entity_ids),
     }
 
 
@@ -574,6 +579,10 @@ def upgrade_reference(
     load_result = loader.upgrade(client, from_version, resolved_to, params)
     _abort_on_load_errors(name, resolved_to, load_result)
 
+    # See note in install_reference(): v2 surfaces entities as
+    # EntityRef handles; lifecycle still persists the ID list.
+    entity_ids, entity_type = _ids_and_type_from(load_result)
+
     pruned_ids: list[str] = []
     if prune_old:
         prior_ids = _read_entity_ids(db).get(name, {}).get(from_version, [])
@@ -581,11 +590,11 @@ def upgrade_reference(
             raise ValueError(
                 f"--prune-old requested but no entity IDs were recorded for "
                 f"{name}@{from_version} (loader did not populate "
-                f"LoadResult.entity_ids at install time)."
+                f"LoadResult.entities at install time)."
             )
-        pruned_ids = _delete_entities(client, load_result.entity_type, prior_ids)
+        pruned_ids = _delete_entities(client, entity_type, prior_ids)
 
-    _write_versions(db, name, resolved_to, load_result.entity_ids)
+    _write_versions(db, name, resolved_to, entity_ids)
     if prune_old:
         _forget_entity_ids(db, name, from_version)
 
@@ -595,8 +604,8 @@ def upgrade_reference(
         "to_version": resolved_to,
         "status": "upgraded",
         "created": load_result.created,
-        "entity_type": load_result.entity_type,
-        "entity_ids": list(load_result.entity_ids),
+        "entity_type": entity_type,
+        "entity_ids": list(entity_ids),
         "pruned": pruned_ids,
     }
 
@@ -705,6 +714,23 @@ def _build_client(
     db_path.parent.mkdir(parents=True, exist_ok=True)
     storage = SQLiteAdapter(str(db_path), schema_registry=registry)
     return HippoClient(storage=storage, registry=registry)
+
+
+def _ids_and_type_from(
+    load_result: LoadResult,
+) -> tuple[list[str], str | None]:
+    """Project the advisory ``LoadResult.entities`` list into the (ids,
+    type) pair the lifecycle currently persists.
+
+    Bridge for the v2 ``LoadResult`` shape (D2.14.K). The persistence
+    substrate is replaced by the reference write log in child issue #4
+    (PTS-252); until then we keep the JSON-stored per-version ID map and
+    derive the inputs from ``entities``. ``type`` falls back to ``None``
+    when the loader leaves ``entities`` empty.
+    """
+    ids = [e.id for e in load_result.entities]
+    entity_type = load_result.entities[0].type if load_result.entities else None
+    return ids, entity_type
 
 
 def _abort_on_load_errors(

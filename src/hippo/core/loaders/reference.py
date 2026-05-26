@@ -20,14 +20,37 @@ if TYPE_CHECKING:
     from hippo.core.validation.validators import ValidationResult
 
 
+@dataclass(frozen=True)
+class EntityRef:
+    """Lightweight ``(id, type)`` handle to a written entity.
+
+    Accumulated into :attr:`LoadResult.entities` so multi-class loaders
+    can report heterogeneous writes without an iterable return type.
+    Advisory — not load-bearing for ``--prune-old`` (the reference write
+    log is the authoritative substrate per spec §2.14.9 / D2.14.J).
+    """
+
+    id: str
+    type: str
+
+    @classmethod
+    def from_put_result(cls, rec: dict) -> "EntityRef":
+        """Bridge from the dict returned by :meth:`HippoClient.put` to an
+        :class:`EntityRef`.
+
+        Use inside ``load()`` when assembling :attr:`LoadResult.entities`
+        for the advisory inspection list.
+        """
+        return cls(id=rec["id"], type=rec["entity_type"])
+
+
 @dataclass
 class LoadResult:
     """Outcome of a single :meth:`ReferenceLoader.load` or
     :meth:`ReferenceLoader.upgrade` invocation.
 
-    ``entity_type`` lets multi-class loaders report per-class counts by
-    returning one :class:`LoadResult` per entity type (or by aggregating
-    if the caller does not need the breakdown).
+    Counters answer "what happened"; :attr:`entities` answers "what was
+    written" and is advisory only (spec §2.14.8 / D2.14.K).
     """
 
     created: int = 0
@@ -35,14 +58,11 @@ class LoadResult:
     unchanged: int = 0
     errors: int = 0
     error_messages: list[str] = field(default_factory=list)
-    entity_type: str | None = None
-    # IDs of entities the loader wrote during this invocation. Populated
-    # by loaders that want ``hippo reference upgrade --prune-old`` to be
-    # able to remove the prior version's rows after a successful
-    # upgrade. Empty when the loader does not opt into prune support;
-    # ``--prune-old`` then refuses with a clear error rather than
-    # silently no-op'ing.
-    entity_ids: list[str] = field(default_factory=list)
+    # Advisory inspection list (spec §2.14.8). Loaders MAY populate it
+    # for CLI breakdown / tests; consumers MUST NOT treat it as
+    # authoritative — large loaders are encouraged to leave it empty and
+    # let the reference write log carry the prune substrate.
+    entities: list[EntityRef] = field(default_factory=list)
 
 
 class ReferenceLoader(ABC):

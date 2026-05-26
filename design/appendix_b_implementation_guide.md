@@ -409,3 +409,119 @@ define its behaviour. OpenSpec acceptance criteria should map directly to the te
 listed in §B.4.
 
 ---
+
+### B.8 ReferenceLoader v2 Authoring Patterns
+
+Authoritative spec for the v2 contract lives in `sec2_architecture.md` §2.14.8
+(`LoadResult` / `EntityRef` shape) and §2.14.9 (reference write log). The rationale
+is captured in `sec9_decisions.md` D2.14.J / D2.14.K / D2.14.L. This section is
+authoring guidance for agents writing or porting a `ReferenceLoader`; consult the
+spec sections above for the contract itself.
+
+#### B.8.1 Two patterns by scale
+
+Loader authors pick the pattern that matches their dataset size. Both produce the
+same CLI breakdown — the lifecycle layer falls back to the write log when
+`LoadResult.entities` is empty (§2.14.8), so the choice is purely about whether
+the loader process accumulates `EntityRef`s in memory.
+
+**Pattern A — small loader (≤ ~10⁴ entities, single-class or few-class).**
+Populate `entities` via `EntityRef.from_put_result(client.put(...))`. The list is
+cheap at this scale and gives the CLI a precise breakdown without a write-log
+query.
+
+```python
+from hippo.core.loaders.reference import EntityRef, LoadResult, ReferenceLoader
+
+class FakeTermLoader(ReferenceLoader):
+    name = "fake_terms"
+    ...
+
+    def load(self, client, version, params=None):
+        entities: list[EntityRef] = []
+        for row in self._rows_for(version):
+            entities.append(
+                EntityRef.from_put_result(client.put("FakeTerm", row))
+            )
+        return LoadResult(created=len(entities), entities=entities)
+```
+
+See `hippo/src/hippo/testing/fake_reference_loader.py` for the in-tree example.
+
+**Pattern B — large loader (~10⁵+ entities).** Skip the `entities` accumulator.
+Return scalar counters only; the reference write log (§2.14.9) already records
+every `client.put()` made inside the lifecycle `load_context` block, so
+`--prune-old` works with no loader-side cooperation.
+
+```python
+from collections import Counter
+from hippo.core.loaders.reference import LoadResult, ReferenceLoader
+
+class EnsemblGeneLoader(ReferenceLoader):
+    name = "ensembl_genes"
+    ...
+
+    def load(self, client, version, params=None):
+        counts: Counter[str] = Counter()
+        for row in parse_gtf(self._fetch(version)):
+            client.put("Gene", row)
+            counts["Gene"] += 1
+        # No EntityRef accumulation; the write log is authoritative for prune.
+        return LoadResult(created=sum(counts.values()))
+```
+
+#### B.8.2 `LoadResult.entities` is advisory only
+
+The write log (§2.14.9) is the **authoritative substrate** for `--prune-old`.
+`LoadResult.entities` is **advisory only**: consumers MUST NOT treat it as
+authoritative for any operation. In particular:
+
+- `entities` MAY be empty (Pattern B) or partial (a loader may sample one
+  `EntityRef` per entity type for inspection).
+- The lifecycle layer never derives prune sets from `entities`; it always reads
+  from `reference_write_log`.
+- The `hippo reference install` CLI breakdown queries the write log when
+  `entities` is empty, so the loader author does not have to choose between an
+  ergonomic CLI and operating at scale.
+
+If a loader author finds themselves wanting to reach back into `entities` from
+outside the loader, that is a signal they should be querying the write log
+instead.
+
+#### B.8.3 v1 → v2 migration (clean break)
+
+v2 is a clean break per D2.14.L — there is no deprecation window because the
+downstream loader count at the cut-over was zero. Any loader code that was
+written against v1 (the sibling `entity_type: str | None` + `entity_ids:
+list[str]` shape) needs a mechanical rewrite, not a careful port:
+
+1. Drop the `entity_type=...` and `entity_ids=[...]` kwargs from every
+   `LoadResult(...)` construction.
+2. Add `entities=[...]` populated via `EntityRef.from_put_result(client.put(...))`
+   for Pattern A loaders, or omit the kwarg entirely for Pattern B loaders.
+3. Replace any `--prune-old` reasoning that depended on `LoadResult.entity_ids`
+   with the assumption that prune now works for every loader — the platform
+   owns the substrate via the write log.
+
+The migration is bounded; v1 `LoadResult.entity_type` and `LoadResult.entity_ids`
+attributes no longer exist on the dataclass, so a port that misses one of them
+fails fast at import or call time rather than silently passing the wrong data.
+
+#### B.8.4 Lifecycle and write-log diagnostics
+
+Loader code never opens or queries `reference_write_log` directly — the
+lifecycle in `hippo/cli/commands/reference.py` wraps every `loader.load()` /
+`loader.upgrade()` call in `client.load_context(loader_name, version)` (§2.14.9).
+Inside the block, `client.put()` records a log row; outside the block it is a
+no-op for the log. User-data writes, ingestion CLI writes, and REST writes
+therefore never hit the log.
+
+`hippo reference doctor` (planned diagnostic command) reports orphan write-log
+rows — log rows whose `loader_name` is not present in
+`hippo_meta.reference_versions`. Orphans typically arise when a loader was
+force-removed without going through `hippo reference uninstall`; cleanup is
+manual until v3. The doctor command does not exist in source yet; the child
+issue that lands `--prune-old` and the lifecycle wiring owns the matching
+command surface.
+
+---

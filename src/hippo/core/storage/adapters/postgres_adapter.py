@@ -1054,6 +1054,27 @@ class PostgresAdapter(EntityStore):
                 ON relationships(relationship_type)
             """)
 
+            # Reference-loader write log (sec2 §2.14.9 / Decision 2.14.J).
+            # Substrate for ``--prune-old``: records every entity written by
+            # a reference loader inside ``HippoClient.load_context()``. The
+            # composite PK collapses repeat writes of the same id within a
+            # ``(loader_name, version)`` window to a single row, keeping
+            # ``upgrade()`` re-writes and the v1→v2 backfill idempotent.
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS reference_write_log (
+                    loader_name TEXT NOT NULL,
+                    version     TEXT NOT NULL,
+                    entity_id   TEXT NOT NULL,
+                    entity_type TEXT NOT NULL,
+                    written_at  TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    PRIMARY KEY (loader_name, version, entity_id)
+                )
+            """)
+            cur.execute("""
+                CREATE INDEX IF NOT EXISTS idx_reference_write_log_lookup
+                ON reference_write_log (loader_name, version)
+            """)
+
             cur.execute("""
                 CREATE TABLE IF NOT EXISTS entity_external_ids (
                     id TEXT PRIMARY KEY,
@@ -1115,6 +1136,127 @@ class PostgresAdapter(EntityStore):
                 cur.execute(
                     f"ALTER TABLE entities DROP COLUMN IF EXISTS {col}"
                 )
+
+            self._migrate_reference_entity_ids(cur)
+
+    _REFERENCE_WRITE_LOG_MIGRATION_KEY = "_reference_write_log_v1_migrated"
+
+    def _migrate_reference_entity_ids(self, cur: "psycopg.Cursor") -> None:
+        """One-time backfill from ``hippo_meta.reference_entity_ids`` JSON
+        blob to the ``reference_write_log`` table (sec2 §2.14.9).
+
+        v1 stored ``{loader_name: {version: [entity_id, ...]}}`` under the
+        ``reference_entity_ids`` meta key. v2 replaces that with the write
+        log. The first ``_init_database`` after this code lands performs
+        the backfill, then stamps a marker key so subsequent startups skip
+        entirely. The marker is required because the v1 ``_write_versions``
+        path is still in tree (removed in PTS-256) and would otherwise be
+        clobbered on every adapter init.
+
+        ``entity_type`` is resolved per id from the ``entities`` table
+        first, then ``ProvenanceRecord`` as a fallback (survives any
+        future entity-row removal). Rows whose type cannot be resolved are
+        skipped — preferable to a hard failure during init, since the
+        prune flow that consumes the log is opt-in.
+
+        ``ON CONFLICT DO NOTHING`` plus the composite primary key make the
+        row writes idempotent even if a previous migration crashed after
+        inserting some rows but before stamping the marker.
+        """
+        cur.execute(
+            "SELECT 1 FROM hippo_meta WHERE key = %s",
+            (self._REFERENCE_WRITE_LOG_MIGRATION_KEY,),
+        )
+        if cur.fetchone() is not None:
+            return
+
+        cur.execute(
+            "SELECT value FROM hippo_meta WHERE key = 'reference_entity_ids'"
+        )
+        row = cur.fetchone()
+        if row is not None:
+            raw = row["value"] if isinstance(row, dict) else row[0]
+            try:
+                payload = json.loads(raw)
+            except (TypeError, ValueError):
+                payload = None
+
+            if isinstance(payload, dict):
+                for loader_name, by_version in payload.items():
+                    if not isinstance(loader_name, str) or not isinstance(
+                        by_version, dict
+                    ):
+                        continue
+                    for version, entity_ids in by_version.items():
+                        if not isinstance(version, str) or not isinstance(
+                            entity_ids, list
+                        ):
+                            continue
+                        for entity_id in entity_ids:
+                            if not isinstance(entity_id, str):
+                                continue
+                            entity_type = (
+                                self._lookup_entity_type_for_migration(
+                                    cur, entity_id
+                                )
+                            )
+                            if entity_type is None:
+                                continue
+                            cur.execute(
+                                "INSERT INTO reference_write_log "
+                                "(loader_name, version, entity_id, entity_type) "
+                                "VALUES (%s, %s, %s, %s) "
+                                "ON CONFLICT (loader_name, version, entity_id) DO NOTHING",
+                                (loader_name, version, entity_id, entity_type),
+                            )
+
+            cur.execute(
+                "DELETE FROM hippo_meta WHERE key = 'reference_entity_ids'"
+            )
+
+        now = datetime.now(timezone.utc).isoformat()
+        cur.execute(
+            "INSERT INTO hippo_meta (key, value, updated_at) "
+            "VALUES (%s, %s, %s) "
+            "ON CONFLICT(key) DO UPDATE SET value = excluded.value, "
+            "                                updated_at = excluded.updated_at",
+            (
+                self._REFERENCE_WRITE_LOG_MIGRATION_KEY,
+                json.dumps({"completed_at": now}, sort_keys=True),
+                now,
+            ),
+        )
+
+    @staticmethod
+    def _lookup_entity_type_for_migration(
+        cur: "psycopg.Cursor", entity_id: str
+    ) -> Optional[str]:
+        """Best-effort entity_type lookup used by the v1→v2 backfill.
+
+        Checks the ``entities`` table first; falls back to
+        ``ProvenanceRecord`` in case the row has been removed in a future
+        cleanup pass.
+        """
+        cur.execute(
+            "SELECT entity_type FROM entities WHERE id = %s",
+            (entity_id,),
+        )
+        row = cur.fetchone()
+        if row is not None:
+            entity_type = row["entity_type"] if isinstance(row, dict) else row[0]
+            if entity_type:
+                return entity_type
+        cur.execute(
+            'SELECT entity_type FROM "ProvenanceRecord" '
+            "WHERE entity_id = %s AND entity_type IS NOT NULL LIMIT 1",
+            (entity_id,),
+        )
+        row = cur.fetchone()
+        if row is not None:
+            entity_type = row["entity_type"] if isinstance(row, dict) else row[0]
+            if entity_type:
+                return entity_type
+        return None
 
     # ------------------------------------------------------------------
     # EntityStore protocol implementation
