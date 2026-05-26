@@ -874,10 +874,14 @@ def reference_install(
     model), additional ``--<field-name>`` flags are accepted on this
     command and forwarded to the loader after validation.
     """
+    from pathlib import Path as _Path
+
     from hippo.cli.commands.reference import (
+        _resolve_breakdown_counts,
         find_loader,
         install_reference,
         parse_load_params,
+        render_breakdown,
     )
 
     db = db_path or "data/hippo.db"
@@ -899,9 +903,15 @@ def reference_install(
         )
         return
 
+    counts = _resolve_breakdown_counts(
+        result["entities"], _Path(db), result["name"], result["version"]
+    )
     typer.echo(
-        f"Installed {result['name']}@{result['version']}: "
-        f"{result['created']} row(s) created."
+        render_breakdown(
+            f"Installed {result['name']}@{result['version']}",
+            counts,
+            result["created"],
+        )
     )
 
 
@@ -934,9 +944,13 @@ def reference_upgrade(
     additional flags and are validated before being passed to
     :meth:`ReferenceLoader.upgrade`.
     """
+    from pathlib import Path as _Path
+
     from hippo.cli.commands.reference import (
+        _resolve_breakdown_counts,
         find_loader,
         parse_load_params,
+        render_breakdown,
         upgrade_reference,
     )
 
@@ -964,12 +978,19 @@ def reference_upgrade(
         )
         return
 
-    pruned = len(result.get("pruned", []))
-    typer.echo(
-        f"Upgraded {result['name']} {result['from_version']} → "
-        f"{result['to_version']}: {result['created']} new row(s), "
-        f"{pruned} prior row(s) pruned."
+    counts = _resolve_breakdown_counts(
+        result["entities"], _Path(db), result["name"], result["to_version"]
     )
+    typer.echo(
+        render_breakdown(
+            f"Upgraded {result['name']} {result['from_version']} → "
+            f"{result['to_version']}",
+            counts,
+            result["created"],
+        )
+    )
+    pruned = len(result.get("pruned", []))
+    typer.echo(f"{pruned} prior row(s) pruned.")
 
 
 @reference_app.command(name="list")
