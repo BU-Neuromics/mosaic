@@ -14,7 +14,7 @@ from linkml_runtime.linkml_model.meta import SlotDefinition
 
 from hippo.core.storage.ddl_generator import DDLGenerator, FTSMigrationPlanner
 from hippo.core.storage.schema_diff import SchemaDiff
-from hippo.linkml_bridge import SchemaRegistry, annotation_value, slot_default
+from hippo.linkml_bridge import SchemaRegistry, slot_default
 
 
 @dataclass
@@ -77,24 +77,21 @@ class MigrationPlanner:
         cursor: sqlite3.Cursor,
     ) -> MigrationPlan:
         plan = MigrationPlan()
-        sv = registry.schema_view
 
-        # Build the new-tables partial registry by re-running DDL for just those classes.
         if schema_diff.new_tables:
-            for class_name in schema_diff.new_tables:
-                self._ddl_generator._build_table(registry, class_name)
-            for class_name in schema_diff.new_tables:
-                table = self._ddl_generator._tables.get(class_name)
-                if table is None:
+            new_tables_set = set(schema_diff.new_tables)
+            # Generate full registry DDL via the LinkML-backed generator,
+            # then keep only statements owned by tables in the diff. FTS
+            # virtual tables are emitted by ``DDLGenerator.generate`` too,
+            # but we skip them here and re-emit via ``_fts_planner`` so
+            # the planner state stays consistent with backfill bookkeeping.
+            for stmt in self._ddl_generator.generate(registry):
+                if "CREATE VIRTUAL TABLE" in stmt:
                     continue
-                plan.ddl_statements.append(
-                    self._ddl_generator._render_create_table(table)
-                )
-                for index in table.indexes:
-                    plan.ddl_statements.append(
-                        self._ddl_generator._render_create_index(class_name, index)
-                    )
-                plan.new_tables.append(class_name)
+                owner = _ddl_owner_table(stmt)
+                if owner is not None and owner in new_tables_set:
+                    plan.ddl_statements.append(stmt)
+            plan.new_tables.extend(schema_diff.new_tables)
 
             for class_name in schema_diff.new_tables:
                 self._fts_planner.add_class(registry, class_name)
@@ -136,7 +133,13 @@ class MigrationPlanner:
         self, registry: SchemaRegistry, table_name: str, slot: SlotDefinition
     ) -> Optional[str]:
         known = set(registry.class_names())
-        col_type = self._ddl_generator._map_slot_type(slot, known)
+        rng = slot.range
+        if rng and rng in known:
+            col_type = "TEXT"
+        elif rng:
+            col_type = DDLGenerator.TYPE_MAPPING.get(rng, "TEXT")
+        else:
+            col_type = "TEXT"
         sql = f'ALTER TABLE "{table_name}" ADD COLUMN "{slot.name}" {col_type}'
         if slot.required:
             sql += " NOT NULL"
@@ -254,6 +257,39 @@ def _extract_table_name(ddl: str) -> Optional[str]:
 
     match = re.search(r'CREATE TABLE "?(\w+)"?', ddl, re.IGNORECASE)
     return match.group(1) if match else None
+
+
+def _ddl_owner_table(stmt: str) -> Optional[str]:
+    """Return the table a CREATE statement targets, or None.
+
+    Recognizes ``CREATE TABLE "name"``, ``CREATE [UNIQUE] INDEX … ON "table"``,
+    and ``CREATE TRIGGER … ON "table"`` (triggers may span lines, so use
+    DOTALL). Returns None for FTS virtual tables and any unrecognized form.
+    """
+    import re
+
+    m = re.search(
+        r'CREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?"?(\w+)"?',
+        stmt,
+        re.IGNORECASE,
+    )
+    if m:
+        return m.group(1)
+    m = re.search(
+        r'CREATE\s+(?:UNIQUE\s+)?INDEX\s+(?:IF\s+NOT\s+EXISTS\s+)?"[^"]+"\s+ON\s+"([^"]+)"',
+        stmt,
+        re.IGNORECASE,
+    )
+    if m:
+        return m.group(1)
+    m = re.search(
+        r'CREATE\s+TRIGGER\s+"[^"]+"\s+(?:BEFORE|AFTER|INSTEAD\s+OF)\s+\w+\s+ON\s+"([^"]+)"',
+        stmt,
+        re.IGNORECASE | re.DOTALL,
+    )
+    if m:
+        return m.group(1)
+    return None
 
 
 def _extract_fts_table_name(ddl: str) -> Optional[str]:
