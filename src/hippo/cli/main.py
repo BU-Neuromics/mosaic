@@ -291,6 +291,8 @@ def validate(
     registry = None
     if schema:
         from hippo.linkml_bridge import SchemaRegistry
+        from hippo.requires import check_requires, extract_requires
+        from hippo.core.exceptions import SchemaError
 
         typer.echo(f"Validating schema: {schema}")
         try:
@@ -301,6 +303,27 @@ def validate(
         typer.echo(
             f"Schema is valid LinkML with {len(registry.class_names())} classes."
         )
+
+        # PTS-227 — `requires:` directive (exact-match v1).
+        try:
+            pins = extract_requires(schema)
+        except SchemaError as e:
+            typer.echo(f"Error: Invalid `requires:` in {schema}: {e.message}", err=True)
+            raise typer.Exit(1)
+        if pins:
+            require_errors = check_requires(pins)
+            if require_errors:
+                typer.echo(
+                    f"Error: {schema}: {len(require_errors)} reference-loader "
+                    f"requirement error(s):",
+                    err=True,
+                )
+                for msg in require_errors:
+                    typer.echo(f"  - {msg}", err=True)
+                raise typer.Exit(1)
+            typer.echo(
+                f"`requires:` satisfied — {len(pins)} reference loader(s) pinned."
+            )
 
     if data:
         assert registry is not None
@@ -594,6 +617,15 @@ def reference() -> None:
 reference_app = typer.Typer(name="reference", help="Manage reference data")
 app.add_typer(reference_app, name="reference")
 
+# Mount loader-provided Typer sub-apps under `hippo reference <name>`
+# (D2.14.A / PTS-228). Loaders register a typer.Typer instance via the
+# `hippo.reference_loader_cli` entry point group; optional registration
+# means loaders without one still work via the parent install/upgrade/
+# list verbs.
+from hippo.cli.commands.reference import mount_reference_loader_subapps
+
+mount_reference_loader_subapps(reference_app)
+
 schema_app = typer.Typer(name="schema", help="Schema management commands")
 app.add_typer(schema_app, name="schema")
 
@@ -815,49 +847,193 @@ def schema_migrate(
         raise typer.Exit(1)
 
 
-@reference_app.command(name="install")
+@reference_app.command(
+    name="install",
+    # D2.14.D — loaders may declare a Pydantic `load_params_schema`
+    # whose fields are rendered as additional `--<field-name>` flags
+    # below the Typer-known options. Capture those tokens for the
+    # per-loader argparse parser instead of having Typer reject them.
+    context_settings={"allow_extra_args": True, "ignore_unknown_options": True},
+)
 def reference_install(
-    package: str = typer.Argument(..., help="Package name to install"),
-    source: str = typer.Option(
-        None, "--source", "-s", help="Package source (URL or local path)"
+    ctx: typer.Context,
+    name: str = typer.Argument(..., help="Reference loader name (entry-point key)"),
+    version: str = typer.Option(
+        None, "--version", help="Loader-defined version slug (e.g. v1, test)."
+    ),
+    db_path: str = typer.Option(
+        None, "--db-path", help="SQLite database path (default: data/hippo.db)"
+    ),
+    schema_dir: str = typer.Option(
+        None, "--schema-dir", help="Schema directory (default: schemas/)"
     ),
 ) -> None:
-    """Install a reference loader package."""
-    from hippo.cli.commands.reference import install_reference_loader
+    """Install a reference dataset via a registered loader (spec §2.14).
 
+    When the loader declares a ``load_params_schema`` (Pydantic v2
+    model), additional ``--<field-name>`` flags are accepted on this
+    command and forwarded to the loader after validation.
+    """
+    from hippo.cli.commands.reference import (
+        find_loader,
+        install_reference,
+        parse_load_params,
+    )
+
+    db = db_path or "data/hippo.db"
+    sd = schema_dir or "schemas"
     try:
-        result = install_reference_loader(package, source)
-        typer.echo(
-            f"Successfully installed '{result['name']}' version {result['version']}"
+        info = find_loader(name)
+        params = parse_load_params(info["instance"], list(ctx.args))
+        result = install_reference(
+            name, version, db_path=db, schema_dir=sd, params=params
         )
-    except Exception as e:
-        typer.echo(f"Error: {e}", err=True)
+    except Exception as exc:
+        typer.echo(f"Error: {exc}", err=True)
         raise typer.Exit(1)
+
+    if result["status"] == "already_installed":
+        typer.echo(
+            f"Loader {result['name']} is already installed at version "
+            f"{result['version']}; nothing to do."
+        )
+        return
+
+    typer.echo(
+        f"Installed {result['name']}@{result['version']}: "
+        f"{result['created']} {result['entity_type']} row(s) created."
+    )
+
+
+@reference_app.command(
+    name="upgrade",
+    context_settings={"allow_extra_args": True, "ignore_unknown_options": True},
+)
+def reference_upgrade(
+    ctx: typer.Context,
+    name: str = typer.Argument(..., help="Reference loader name (entry-point key)"),
+    version: str = typer.Option(
+        None, "--version", help="Loader-defined target version slug."
+    ),
+    db_path: str = typer.Option(
+        None, "--db-path", help="SQLite database path (default: data/hippo.db)"
+    ),
+    schema_dir: str = typer.Option(
+        None, "--schema-dir", help="Schema directory (default: schemas/)"
+    ),
+    prune_old: bool = typer.Option(
+        False,
+        "--prune-old",
+        help="Remove prior-version rows AFTER the new install succeeds.",
+    ),
+) -> None:
+    """Upgrade a previously installed reference loader to a new version (D2.14.F).
+
+    Same ``--<field-name>`` flag surface as ``install`` (D2.14.D): when
+    the loader declares ``load_params_schema``, its fields render as
+    additional flags and are validated before being passed to
+    :meth:`ReferenceLoader.upgrade`.
+    """
+    from hippo.cli.commands.reference import (
+        find_loader,
+        parse_load_params,
+        upgrade_reference,
+    )
+
+    db = db_path or "data/hippo.db"
+    sd = schema_dir or "schemas"
+    try:
+        info = find_loader(name)
+        params = parse_load_params(info["instance"], list(ctx.args))
+        result = upgrade_reference(
+            name,
+            version,
+            db_path=db,
+            schema_dir=sd,
+            prune_old=prune_old,
+            params=params,
+        )
+    except Exception as exc:
+        typer.echo(f"Error: {exc}", err=True)
+        raise typer.Exit(1)
+
+    if result["status"] == "already_at_version":
+        typer.echo(
+            f"Loader {result['name']} already at version "
+            f"{result['to_version']}; nothing to do."
+        )
+        return
+
+    pruned = len(result.get("pruned", []))
+    typer.echo(
+        f"Upgraded {result['name']} {result['from_version']} → "
+        f"{result['to_version']}: {result['created']} new "
+        f"{result['entity_type']} row(s), {pruned} prior row(s) pruned."
+    )
 
 
 @reference_app.command(name="list")
-def reference_list() -> None:
-    """List installed reference loader packages."""
+def reference_list(
+    db_path: str = typer.Option(
+        None, "--db-path", help="SQLite database path (default: data/hippo.db)"
+    ),
+) -> None:
+    """List discoverable reference loaders + installed versions."""
     from hippo.cli.commands.reference import list_reference_loaders
 
     try:
-        loaders = list_reference_loaders()
+        loaders = list_reference_loaders(db_path=db_path)
         if not loaders:
             typer.echo(
-                "No reference loaders installed. Use 'hippo reference install <package>' to add one."
+                "No reference loaders registered. Install a hippo-reference-* package "
+                "to expose one via the hippo.reference_loaders entry point group."
             )
             return
 
-        typer.echo(f"{'Name':<30} {'Version':<10} {'Description':<40}")
-        typer.echo("-" * 80)
+        typer.echo(f"{'Name':<20} {'Installed':<14} {'Package':<32} {'Description'}")
+        typer.echo("-" * 90)
         for loader in loaders:
-            desc = loader.get("description", "N/A")[:38]
+            installed = loader.get("installed_version") or "—"
+            desc = (loader.get("description") or "")[:40]
             typer.echo(
-                f"{loader['name']:<30} {loader.get('version', 'N/A'):<10} {desc:<40}"
+                f"{loader['name']:<20} {installed:<14} "
+                f"{loader['package']:<32} {desc}"
             )
+    except Exception as exc:
+        typer.echo(f"Error: {exc}", err=True)
+        raise typer.Exit(1)
+
+
+@reference_app.command(name="clean-cache")
+def reference_clean_cache(
+    name: str = typer.Argument(
+        None,
+        help=(
+            "Optional loader name. If omitted, removes the entire "
+            "reference-loader cache root."
+        ),
+    ),
+) -> None:
+    """Remove cached reference-loader downloads (sec2 §2.14.3)."""
+    from hippo.cli.commands.reference import clean_reference_cache
+
+    try:
+        result = clean_reference_cache(name)
     except Exception as e:
         typer.echo(f"Error: {e}", err=True)
         raise typer.Exit(1)
+    scope = result["scope"]
+    path = result["path"]
+    if result["removed"]:
+        if scope is None:
+            typer.echo(f"Removed reference cache root: {path}")
+        else:
+            typer.echo(f"Removed cache for loader '{scope}': {path}")
+    else:
+        if scope is None:
+            typer.echo(f"No reference cache found at {path}")
+        else:
+            typer.echo(f"No cache found for loader '{scope}' at {path}")
 
 
 @app.command()

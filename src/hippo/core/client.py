@@ -1,5 +1,9 @@
 """HippoClient - Main SDK client for Hippo Metadata Tracking Service."""
 
+import hashlib
+import os
+import urllib.request
+from pathlib import Path
 from typing import Any, Optional
 
 from hippo.core.ingestion_service import IngestionService
@@ -131,6 +135,109 @@ class HippoClient:
             root_alias._accessors[name] = accessor
             setattr(root_alias, name, accessor)
         self.root = root_alias  # type: ignore[attr-defined]
+
+    # -- Reference loader cache surface (sec2 §2.14.3, D2.14.E) --
+
+    @staticmethod
+    def _reference_cache_root() -> Path:
+        """Resolve the root directory holding per-loader reference caches.
+
+        ``$HIPPO_CACHE_DIR`` wins when set (the deployment opts into a
+        custom location, e.g. a CI mount); otherwise we default to
+        ``~/.cache/hippo/references/``. The directory is NOT created
+        here — :meth:`cache_dir_for` handles per-loader mkdir.
+        """
+        env = os.environ.get("HIPPO_CACHE_DIR")
+        if env:
+            return Path(env)
+        return Path.home() / ".cache" / "hippo" / "references"
+
+    def cache_dir_for(self, loader_name: str) -> Path:
+        """Return the per-loader cache directory, creating it on demand.
+
+        Resolves to ``$HIPPO_CACHE_DIR/<loader_name>/`` when the env var
+        is set, else ``~/.cache/hippo/references/<loader_name>/``. The
+        accessor is stateless: per-loader scoping happens via the
+        ``loader_name`` argument so a single ``HippoClient`` instance can
+        serve many loaders without per-loader binding (see PTS-225
+        rationale on §2.14.3).
+        """
+        if not loader_name:
+            raise ValueError("loader_name must be a non-empty string")
+        path = self._reference_cache_root() / loader_name
+        path.mkdir(parents=True, exist_ok=True)
+        return path
+
+    def cached_fetch(
+        self,
+        url: str,
+        *,
+        expected_sha256: Optional[str] = None,
+        loader_name: str,
+    ) -> Path:
+        """Content-addressable HTTP fetch for reference data.
+
+        Files are keyed by the sha256 of the request URL inside the
+        loader's cache directory so repeated calls return a stable path.
+        When ``expected_sha256`` is supplied the digest is verified on
+        download AND on cache hit (a corrupt cached file MUST NOT pass
+        silently); mismatches raise :class:`CacheIntegrityError` and the
+        offending file is removed so the next call re-downloads cleanly.
+        """
+        from hippo.core.exceptions import CacheIntegrityError
+
+        cache_dir = self.cache_dir_for(loader_name)
+        url_key = hashlib.sha256(url.encode("utf-8")).hexdigest()
+        target = cache_dir / url_key
+
+        if target.exists():
+            if expected_sha256 is not None:
+                actual = self._sha256_file(target)
+                if actual.lower() != expected_sha256.lower():
+                    target.unlink(missing_ok=True)
+                    raise CacheIntegrityError(
+                        "Cached file failed sha256 verification",
+                        url=url,
+                        path=str(target),
+                        expected_sha256=expected_sha256,
+                        actual_sha256=actual,
+                    )
+            return target
+
+        # Download to a sibling tmp path then rename so partial files
+        # never satisfy a later cache hit.
+        tmp = target.with_suffix(target.suffix + ".part")
+        try:
+            with urllib.request.urlopen(url) as resp, open(tmp, "wb") as fh:
+                while True:
+                    chunk = resp.read(64 * 1024)
+                    if not chunk:
+                        break
+                    fh.write(chunk)
+            if expected_sha256 is not None:
+                actual = self._sha256_file(tmp)
+                if actual.lower() != expected_sha256.lower():
+                    tmp.unlink(missing_ok=True)
+                    raise CacheIntegrityError(
+                        "Downloaded file failed sha256 verification",
+                        url=url,
+                        path=str(target),
+                        expected_sha256=expected_sha256,
+                        actual_sha256=actual,
+                    )
+            tmp.replace(target)
+        except BaseException:
+            tmp.unlink(missing_ok=True)
+            raise
+        return target
+
+    @staticmethod
+    def _sha256_file(path: Path) -> str:
+        h = hashlib.sha256()
+        with open(path, "rb") as fh:
+            for chunk in iter(lambda: fh.read(64 * 1024), b""):
+                h.update(chunk)
+        return h.hexdigest()
 
     # -- Property accessors (backwards compatibility) --
 

@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "hippo"
-version = "0.5.0"
+version = "0.6.0"
 description = "SDK-first, infrastructure-agnostic metadata tracking service for bioinformatics research"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -58,6 +58,11 @@ schema = "hippo.validators.schema_validator:SchemaValidator"
 
 [project.entry-points."hippo.reference_loaders"]
 fake = "hippo.testing.fake_reference_loader:FakeReferenceLoader"
+rich = "hippo.testing.fake_reference_loader:RichParamsLoader"
+bare = "hippo.testing.fake_reference_loader:BareReferenceLoader"
+
+[project.entry-points."hippo.reference_loader_cli"]
+fake = "hippo.testing.fake_reference_loader:fake_cli_app"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/hippo"]

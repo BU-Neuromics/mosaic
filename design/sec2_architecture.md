@@ -725,7 +725,7 @@ These three decisions interact. Implementers of the ABC surface must understand 
 
 - **D1 → D5**: Sub-command apps declared via `subcommands_app` receive `client` via Typer
   context injection. This means the loader CLI shares the same `HippoClient` instance (and
-  thus the same `client.cache_dir`) as `load()`. Any subcommand that fetches source data MUST
+  thus the same `client.cache_dir_for(...)` resolution) as `load()`. Any subcommand that fetches source data MUST
   use `client.cached_fetch` — not a private download path.
 - **D4 → D1**: `load_params_schema` is shared between `load()` and the CLI. When a subcommand
   triggers a load, it renders `--flag` args from the same Pydantic model, validates them, and
@@ -790,20 +790,28 @@ Loaders that do not declare a schema receive `params=None` in `load()` and `upgr
 `HippoClient` exposes two caching primitives for loaders:
 
 ```python
-client.cache_dir: Path
+client.cache_dir_for(loader_name: str) -> Path
 # Resolves to $HIPPO_CACHE_DIR/<loader_name>/ if set,
-# else ~/.cache/hippo/references/<loader_name>/.
+# else ~/.cache/hippo/references/<loader_name>/. Auto-mkdir.
 
-client.cached_fetch(url: str, *, expected_sha256: str | None = None) -> Path
-# Content-addressable HTTP fetch. Returns local path to cached file.
-# If expected_sha256 is supplied, verifies on download and raises
-# CacheIntegrityError on mismatch.
+client.cached_fetch(url: str, *, expected_sha256: str | None = None,
+                    loader_name: str) -> Path
+# Content-addressable HTTP fetch. Returns the local path to the cached
+# file. The path is keyed by sha256 of the URL inside
+# cache_dir_for(loader_name) so repeated calls are stable. When
+# expected_sha256 is supplied the digest is verified on download AND on
+# cache hit; mismatch raises CacheIntegrityError and removes the
+# offending file so the next call re-downloads cleanly.
 ```
+
+`HippoClient` is loader-agnostic — per-loader scoping happens via the `loader_name`
+argument so a single client instance can serve many loaders without stateful
+per-loader binding.
 
 **MUST rule:** Loaders MUST use `client.cached_fetch` for any network download larger than
 1 MB. This enables:
 - `hippo reference clean-cache` to manage disk usage via a single location
-- CI mounts of `client.cache_dir` for deterministic, network-free re-runs
+- CI mounts of the cache root for deterministic, network-free re-runs
 - Reproducible audits (content-addressed, optionally hash-verified)
 
 Loaders that access small static files (<1 MB, bundled in the package) may skip

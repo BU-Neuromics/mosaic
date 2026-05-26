@@ -291,6 +291,35 @@ class IngestionValidationError(IngestionError):
         )
 
 
+class CacheIntegrityError(HippoError):
+    """Raised when a cached or freshly downloaded file fails sha256 verification.
+
+    Triggered by :meth:`HippoClient.cached_fetch` when ``expected_sha256`` is
+    supplied and the computed digest does not match — either on the initial
+    download or on a subsequent cache hit that has been corrupted out-of-band
+    (sec2 §2.14.3, decision D2.14.E).
+    """
+
+    def __init__(
+        self,
+        message: str,
+        url: Optional[str] = None,
+        path: Optional[str] = None,
+        expected_sha256: Optional[str] = None,
+        actual_sha256: Optional[str] = None,
+        **context: Any,
+    ):
+        self.url = url
+        self.path = path
+        self.expected_sha256 = expected_sha256
+        self.actual_sha256 = actual_sha256
+        context["url"] = url
+        context["path"] = path
+        context["expected_sha256"] = expected_sha256
+        context["actual_sha256"] = actual_sha256
+        super().__init__(message, **context)
+
+
 class SearchCapabilityError(HippoError):
     """Exception raised when a search operation is attempted on a field
     that does not support full-text search.

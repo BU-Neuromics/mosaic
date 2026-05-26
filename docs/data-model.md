@@ -405,7 +405,7 @@ result = client.delete(
 )
 ```
 
-**Gap:** The design spec describes soft delete via availability transitions, but the current implementation calls `storage.delete()` directly. The SQLite adapter may implement soft delete internally.
+Both the SQLite adapter (`sqlite_adapter.py:1634`) and the Postgres adapter (`postgres_adapter.py:1243`) implement soft delete: `delete()` sets `is_available = false` on the entity row and writes an `availability_change` provenance record carrying the full payload snapshot. The row remains physically present and is recoverable by replaying provenance.
 
 ---
 
@@ -622,7 +622,7 @@ This section documents known gaps between the design specification and current i
 ### 2. Soft Delete Implementation
 
 - **Design:** Delete operations set `is_available = false` via availability transitions
-- **Implementation:** The `delete()` method calls `storage.delete()` directly; soft delete behavior depends on the storage adapter implementation
+- **Implementation:** Both the SQLite (`sqlite_adapter.py:1634`) and Postgres (`postgres_adapter.py:1243`) adapters perform soft delete — `delete()` sets `is_available = false` and writes an `availability_change` provenance record. The row remains physically present and recoverable.
 
 ### 3. Relationship Properties
 

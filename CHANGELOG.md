@@ -1,29 +1,58 @@
 # Changelog
 
-## v0.6.0 — 2026-05-14 (LinkML-native migration — Phase 3)
+## v0.6.0 — 2026-05-21 (LinkML-native Phase 2/3 + §2.14 Reference Loaders)
 
 ### Breaking Changes
 
 - **`EntityYAMLLoader` retired (PTS-178).** The legacy `entities: [{type, data, external_id}]` wrapper format is no longer accepted by `hippo ingest`. Instance files must now use the **tree-root bundle** format: a YAML mapping whose top-level keys are pluralized class names (`samples:`, `projects:`, …) and whose values are lists of instance dicts. The `ingest_entity_file` function is replaced by `ingest_linkml_yaml`.
 
-- **`hippo validate --schema` now performs real LinkML validation (PTS-177).** The previous implementation only checked that the file was a YAML dict. Schemas that pass structural checks but are not valid LinkML will now exit non-zero.
+- **`hippo validate --schema` now performs real LinkML validation (PTS-177).** The previous implementation only checked that the file was a YAML dict. Schemas that pass structural checks but are not valid LinkML will now exit non-zero. Closes GitHub Issue #1.
 
-### New Features
+- **Legacy `entities` blob table and `entity_external_ids` side-table dropped (PTS-174).** Every entity now lives in its own per-class typed table. Any code reading these tables via raw SQL must switch to the per-class tables (or use the SDK). `_run_migrations` idempotently drops the legacy tables on next adapter init for dev databases still carrying them.
+
+- **`EntityStore` protocol tightened (PTS-170).** `EntityStore(ABC, Generic[T])` is now `EntityStore(ABC)` with `dict[str, Any]` entity records and a required `schema_registry: SchemaRegistry` constructor parameter. External adapter implementations must adopt the new signature.
+
+### New Features — Reference Loaders (§2.14)
+
+- **`ReferenceLoader` ABC + `LoadResult` (PTS-224).** Reference loaders are discovered via the `hippo.reference_loaders` entry-point group and implement a uniform contract: `versions()`, `entity_types()`, `schema_fragment()`, `load()`, `upgrade()`, `validate()`. Non-subclass entries fail loud at discovery time. See `docs/writing-a-reference-loader.md` for the full author guide.
+
+- **`requires:` schema directive (PTS-227).** User schemas may pin a reference loader at an exact version (`requires: { loader_name: "==1.2.3" }`). `SchemaRegistry` enforces the pin against installed `hippo_meta.reference_versions` at load time and refuses to merge on mismatch. `_HIPPO_TOP_LEVEL_KEYS` is extended to strip this directive before constructing `SchemaView`.
+
+- **Schema fragment merge engine (PTS-226).** Loaders contribute additive LinkML fragments (`schema_fragment()`) that are merged into the working schema with explicit precedence: user schema > reference loaders > `hippo_core`/`hippo_ext`. `loader_depends_on` declarations surface as warnings when the dependency graph is inconsistent.
+
+- **`hippo reference install / upgrade / list / clean-cache` CLI + `hippo_meta.reference_versions` tracking (PTS-229).** Per-loader install/upgrade lifecycle persists the active version under `hippo_meta` so user-schema `requires:` pins can be evaluated. The `test` slug is reserved for fixture loaders shipped with the `hippo.testing` module.
+
+- **`HippoClient.cache_dir_for(loader_name)` + `cached_fetch(url, *, expected_sha256=None, loader_name)` (PTS-225).** Loaders converge on a single Hippo-managed, content-addressable HTTP cache rooted at `$HIPPO_CACHE_DIR` (default `~/.cache/hippo/references/`). Downloads land in a sibling `.part` and are atomically renamed; sha256 mismatch raises `CacheIntegrityError` and removes the corrupt file. `hippo reference clean-cache [<name>]` scopes deletion to a single loader or wipes the whole root.
+
+- **Pydantic `load_params_schema` rendered as CLI flags (PTS-230).** Loaders that declare a `load_params_schema` (Pydantic v2 `BaseModel`) get their fields auto-rendered as `--<field-name>` flags on `hippo reference install` and `upgrade`. Supported types: `str`, `int`, `bool`, `list[str]`, and `Optional[...]` of any of these. Field defaults are preserved; `list[str]` defaults are replaced (not extended) the first time the user passes a value. Exotic types fail loud at registration time with `ReferenceLoaderRegistrationError`.
+
+- **Loader-provided Typer sub-apps mounted under `hippo reference <name> ...` (PTS-228).** Loaders may register a `typer.Typer` instance via the `hippo.reference_loader_cli` entry-point group; Hippo enumerates that group at CLI startup and mounts each sub-app, sharing the same `cache_dir_for(<loader>)` resolution as `load()`. Sub-app registration is optional and orthogonal to the parent `install/upgrade/list` verbs.
+
+- **`CacheIntegrityError`** — new exception class in `core/exceptions.py` (PTS-225).
+
+### New Features — LinkML-native Storage (Phase 2/3)
+
+- **Per-class typed tables (PTS-168/172/173/174).** Domain entities are stored in dedicated `<ClassName>` tables generated by `LinkML SQLTableGenerator`. `ExternalID` is now a first-class LinkML class (declared in `hippo_core.yaml`, PTS-168) written through the normal entity machinery (PTS-173). The legacy generic `entities` blob table and hand-coded `external_ids` table have been dropped (PTS-174).
+
+- **`_entity_registry` shadow table (PTS-175).** `SQLiteAdapter` now maintains a `_entity_registry(uuid PRIMARY KEY, class_name TEXT NOT NULL)` table updated on every write. This enables `client.read(uuid)` without the caller knowing the target class. Pre-PR databases are idempotently backfilled from `ProvenanceRecord` create events on next adapter init.
+
+- **`_HippoInstanceBundle` tree-root synthesis (PTS-176).** `SchemaRegistry` synthesizes a tree-root class at construction time — one multivalued slot per concrete class in the schema, named by `snake_case(ClassName) + "s"` (overridable via `hippo_accessor` annotation). This class is held off the `SchemaView` so DDL/diff/typed-client machinery is unaware of it. `Process` declares `hippo_accessor: processes` to override the naive `+ "s"` pluralizer.
+
+- **DDL generation delegated to LinkML `SQLTableGenerator` (PTS-169).** `DDLGenerator.generate()` is a thin wrapper around the upstream generator with Hippo-specific post-processing: `superseded_by TEXT`, `ifabsent` defaults, SQLite-compatible `BOOLEAN→INTEGER`, partial indexes for `hippo_index_partial` slots, unique indexes for `hippo_unique`, and `BEFORE UPDATE/DELETE` triggers for `hippo_append_only` classes.
+
+### New Features — Ingest & Validate
 
 - **`hippo validate --data PATH` (PTS-177).** Validates a tree-root instance YAML bundle against a LinkML schema. Requires `--schema`. Field-level errors include path information (e.g. `/samples/0/name`). Closes GitHub Issue #1.
 
 - **`hippo ingest --validate-schema PATH` (PTS-178).** Pre-validates the instance bundle against the given schema before any writes. Identical validation logic to `hippo validate --schema --data`, making dry-run and live-ingest consistent.
 
-- **`_HippoInstanceBundle` tree-root synthesis (PTS-176).** `SchemaRegistry` synthesizes a tree-root class at construction time — one multivalued slot per concrete class in the schema, named by `snake_case(ClassName) + "s"` (overridable via `hippo_accessor` annotation). This class is held off the `SchemaView` so DDL/diff/typed-client machinery is unaware of it.
-
-- **`_entity_registry` shadow table (PTS-175).** `SQLiteAdapter` now maintains a `_entity_registry(uuid PRIMARY KEY, class_name TEXT NOT NULL)` table updated on every write. This enables `client.read(uuid)` without the caller knowing the target class.
-
-- **Per-class typed tables (PTS-172/173/174).** Domain entities are stored in dedicated `<ClassName>` tables generated by `LinkML SQLTableGenerator`. The legacy generic `entities` blob table and hand-coded `external_ids` table have been dropped. `ExternalID` is now a first-class LinkML class written through the normal entity machinery.
-
 ### Documentation
 
-- `README.md` Validation Pipeline section rewritten with a real LinkML schema example, tree-root instance YAML example, and CLI examples for `hippo validate` and `hippo ingest` (PTS-179).
-- `docs/cli-reference.md` updated: `validate` adds `--data` option; `ingest` adds `--validate-schema` option and updated description (PTS-179).
+- **§2.14 ReferenceLoader contract landed in `sec2_architecture.md` (PTS-215).** Full ABC signature, two entry-point groups, and seven sub-sections covering version semantics, load params, caching contract, upgrade semantics, schema-fragment merge rules, cross-loader FKs, and test fixtures. Decisions D2.14.A–I appended to `sec9_decisions.md`.
+- **`docs/reference-loaders.md` user guide and `docs/writing-a-reference-loader.md` author guide (PTS-231).** Covers `list/install/upgrade/clean-cache`, `$HIPPO_CACHE_DIR`, `requires: "=="` pinning, the reserved `test` slug, `hippo_meta.reference_versions`, the ABC walkthrough, `load_params_schema → CLI flags`, optional Typer sub-app, the "test" fixture pattern, the `cached_fetch` contract, `loader_depends_on`, and a ship checklist.
+- **Soft-delete language corrected in `reference-loaders.md` and `data-model.md` (PTS-238).** `--prune-old` deactivates rows (`is_available = false` + provenance record) rather than hard-deleting; the prior "destructive / remove rows" copy was misleading. Soft-delete invariant confirmed in both the SQLite and Postgres adapters.
+- **`README.md` Validation Pipeline section rewritten** with a real LinkML schema example, tree-root instance YAML example, and CLI examples for `hippo validate` and `hippo ingest` (PTS-179).
+- **`docs/cli-reference.md` updated**: `validate` adds `--data` option; `ingest` adds `--validate-schema` option (PTS-179).
 
 ---
 
