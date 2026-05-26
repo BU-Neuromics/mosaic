@@ -1,0 +1,218 @@
+# Quickstart end-to-end smoke test.
+#
+# This job runs the exact commands shown in docs/quickstart.md and asserts
+# on the expected output.  It is the authoritative check that the front door
+# works.  If this job and docs/quickstart.md ever drift, fix the quickstart —
+# the docs are the source of truth, not this file.
+#
+# See docs/quickstart.md for the human-readable version of every step below.
+
+name: Quickstart
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: quickstart-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  quickstart:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install hippo
+        run: uv pip install --system -e ".[dev]"
+
+      # ── Step 1: Initialize a project ────────────────────────────────────────
+      - name: Step 1 – hippo init
+        run: |
+          hippo init --path biblio_qs 2>&1 | tee init.out
+          grep -q "Hippo project initialized at biblio_qs" init.out
+          grep -q "Template: bibliography"                 init.out
+          grep -q "Storage: sqlite"                        init.out
+
+      # ── Step 2: Replace the schema ──────────────────────────────────────────
+      - name: Step 2 – write trimmed schema
+        run: |
+          cat > biblio_qs/schema.yaml << 'EOF'
+          id: https://example.org/hippo/quickstart/bibliography
+          name: bibliography
+
+          prefixes:
+            linkml: https://w3id.org/linkml/
+
+          imports:
+            - linkml:types
+            - hippo_core
+
+          default_range: string
+
+          classes:
+            Author:
+              is_a: Entity
+              attributes:
+                name:
+                  range: string
+                  required: true
+                orcid:
+                  range: string
+                email:
+                  range: string
+
+            Publication:
+              is_a: Entity
+              attributes:
+                title:
+                  range: string
+                  required: true
+                year:
+                  range: integer
+                doi:
+                  range: string
+                journal:
+                  range: string
+
+            Citation:
+              is_a: Entity
+              attributes:
+                citing_id:
+                  range: Publication
+                  required: true
+                cited_id:
+                  range: Publication
+                  required: true
+          EOF
+
+      # ── Step 3: SDK – create and query entities ──────────────────────────────
+      - name: Step 3 – write example.py
+        run: |
+          cat > biblio_qs/example.py << 'EOF'
+          from pathlib import Path
+          from hippo.linkml_bridge import SchemaRegistry
+          from hippo.core.client import HippoClient
+          from hippo.core.storage.adapters.sqlite_adapter import SQLiteAdapter
+          from hippo.core.pipeline import ValidationPipeline
+
+          HERE = Path(__file__).parent
+          registry = SchemaRegistry.from_path(HERE / "schema.yaml")
+          storage = SQLiteAdapter(str(HERE / "data" / "hippo.db"), schema_registry=registry)
+          client = HippoClient(storage=storage, registry=registry, pipeline=ValidationPipeline())
+
+          vaswani = client.create("Author", {
+              "name": "Ashish Vaswani",
+              "orcid": "0000-0003-3988-4444",
+              "email": "vaswani@example.org",
+          })
+          print(f"Created Author      : {vaswani['id'][:8]}...  {vaswani['data']['name']}")
+
+          transformer = client.create("Publication", {
+              "title": "Attention Is All You Need",
+              "year": 2017,
+              "doi": "10.5555/3295222.3295349",
+              "journal": "Advances in Neural Information Processing Systems",
+          })
+          print(f"Created Publication : {transformer['id'][:8]}...  {transformer['data']['title']}")
+
+          bert = client.create("Publication", {
+              "title": "BERT: Pre-training of Deep Bidirectional Transformers",
+              "year": 2018,
+              "journal": "NAACL-HLT",
+          })
+          print(f"Created Publication : {bert['id'][:8]}...  {bert['data']['title'][:45]}")
+
+          citation = client.create("Citation", {
+              "citing_id": bert["id"],
+              "cited_id": transformer["id"],
+          })
+          print(f"Created Citation    : {citation['id'][:8]}... (BERT -> Transformer)")
+
+          print("\nAll Publications:")
+          result = client.query("Publication")
+          for pub in result.items:
+              print(f"  [{pub['data']['year']}] {pub['data']['title'][:55]}")
+
+          fetched = client.get("Author", vaswani["id"])
+          print(f"\nFetched Author: {fetched['data']['name']}  (version {fetched['version']})")
+          EOF
+
+      - name: Step 3 – run example.py
+        run: |
+          cd biblio_qs && python example.py 2>&1 | tee ../example.out
+          grep -q "Created Author"                    ../example.out
+          grep -q "Ashish Vaswani"                    ../example.out
+          grep -q "Attention Is All You Need"         ../example.out
+          grep -q "BERT: Pre-training"                ../example.out
+          grep -q "BERT -> Transformer"               ../example.out
+          grep -q "\[2017\] Attention Is All You Need" ../example.out
+          grep -q "\[2018\] BERT"                     ../example.out
+          grep -q "Fetched Author: Ashish Vaswani"    ../example.out
+          grep -q "version 1"                         ../example.out
+
+      # ── Step 4: REST transport ───────────────────────────────────────────────
+      - name: Step 4 – write serve.py
+        run: |
+          cat > biblio_qs/serve.py << 'EOF'
+          from pathlib import Path
+          from hippo.linkml_bridge import SchemaRegistry
+          from hippo.core.client import HippoClient
+          from hippo.core.storage.adapters.sqlite_adapter import SQLiteAdapter
+          from hippo.core.pipeline import ValidationPipeline
+          from hippo.serve import create_default_app
+          import uvicorn
+
+          HERE = Path(__file__).parent
+          registry = SchemaRegistry.from_path(HERE / "schema.yaml")
+          storage = SQLiteAdapter(str(HERE / "data" / "hippo.db"), schema_registry=registry)
+          client = HippoClient(storage=storage, registry=registry, pipeline=ValidationPipeline())
+          app = create_default_app(hippo_client=client)
+
+          if __name__ == "__main__":
+              uvicorn.run(app, host="127.0.0.1", port=8000, log_level="warning")
+          EOF
+
+      - name: Step 4 – start server and run REST checks
+        run: |
+          cd biblio_qs && python serve.py &
+          SERVER_PID=$!
+
+          # Wait for the server to become ready (up to 15 s)
+          for i in $(seq 1 30); do
+            curl -fs http://127.0.0.1:8000/health > /dev/null 2>&1 && break
+            sleep 0.5
+          done
+          curl -fs http://127.0.0.1:8000/health > /dev/null || (echo "Server never became ready"; kill $SERVER_PID; exit 1)
+
+          # POST: ingest an Author via REST
+          POST_OUT=$(curl -s -X POST http://127.0.0.1:8000/ingest \
+            -H "Authorization: Bearer dev-token" \
+            -H "Content-Type: application/json" \
+            -d '{"entity_type":"Author","data":{"name":"Noam Shazeer","orcid":"0000-0001-7777-2222"}}')
+          echo "POST: $POST_OUT"
+          echo "$POST_OUT" | python -c "import sys,json; d=json.load(sys.stdin); assert d['data']['name']=='Noam Shazeer', 'POST name mismatch'; assert d['version']==1, 'POST version mismatch'"
+
+          # GET: list Authors (must include both SDK-created and REST-created)
+          GET_OUT=$(curl -s "http://127.0.0.1:8000/entities?entity_type=Author&limit=10" \
+            -H "Authorization: Bearer dev-token")
+          echo "GET: $GET_OUT"
+          echo "$GET_OUT" | python -c "
+          import sys, json
+          d = json.load(sys.stdin)
+          names = [i['data']['name'] for i in d['items']]
+          assert 'Ashish Vaswani' in names, f'Ashish Vaswani missing from {names}'
+          assert 'Noam Shazeer'   in names, f'Noam Shazeer missing from {names}'
+          "
+
+          kill $SERVER_PID
+          wait $SERVER_PID 2>/dev/null || true
