@@ -204,3 +204,7 @@ See [`docs/api-reference.md`](docs/api-reference.md) for complete API documentat
 uv sync --extra dev
 uv run pytest
 ```
+
+---
+
+See also: [design principles](docs/design-principles.md)
