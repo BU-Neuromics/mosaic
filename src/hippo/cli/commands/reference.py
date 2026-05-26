@@ -354,11 +354,11 @@ class _ListStrReplacingAppend(argparse.Action):
     """Append action that *replaces* the model default on first use.
 
     argparse's stock ``append`` extends whatever default was set, so a
-    field declared as ``gene_biotypes: list[str] = ["protein_coding"]``
-    plus a user passing ``--gene-biotypes miRNA`` would yield
-    ``["protein_coding", "miRNA"]`` — surprising and wrong for our
-    semantics. We want user-provided values to fully replace the
-    default, while an omitted flag still produces the model default.
+    field declared as ``tags: list[str] = ["primary"]`` plus a user
+    passing ``--tags secondary`` would yield ``["primary", "secondary"]``
+    — surprising and wrong for our semantics. We want user-provided
+    values to fully replace the default, while an omitted flag still
+    produces the model default.
     """
 
     def __init__(self, *args: Any, **kwargs: Any) -> None:
@@ -386,9 +386,9 @@ def _build_load_params_parser(
 ) -> argparse.ArgumentParser:
     """Build an argparse parser whose options mirror ``schema_cls`` fields.
 
-    Field naming: ``gene_biotypes`` becomes ``--gene-biotypes``. Required
-    fields stay required (argparse raises if omitted); optional fields
-    carry the model's default so Pydantic doesn't need to recompute it.
+    Field naming: ``my_field`` becomes ``--my-field``. Required fields
+    stay required (argparse raises if omitted); optional fields carry the
+    model's default so Pydantic doesn't need to recompute it.
     """
     parser = argparse.ArgumentParser(
         prog=f"<{schema_cls.__name__}>",

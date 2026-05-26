@@ -73,42 +73,42 @@ class TestParseLoadParams:
         params = parse_load_params(
             loader,
             [
-                "--organism",
-                "mus_musculus",
-                "--release",
-                "110",
+                "--name",
+                "alpha",
+                "--count",
+                "42",
                 "--cleanup",
-                "--gene-biotypes",
-                "protein_coding",
-                "--gene-biotypes",
-                "lncRNA",
+                "--tags",
+                "primary",
+                "--tags",
+                "secondary",
                 "--optional-tag",
-                "ensembl",
+                "note",
             ],
         )
         assert isinstance(params, RichParams)
-        assert params.organism == "mus_musculus"
-        assert params.release == 110
+        assert params.name == "alpha"
+        assert params.count == 42
         assert params.cleanup is True
-        assert params.gene_biotypes == ["protein_coding", "lncRNA"]
-        assert params.optional_tag == "ensembl"
+        assert params.tags == ["primary", "secondary"]
+        assert params.optional_tag == "note"
 
     def test_bool_no_flag_yields_false(self):
         loader = RichParamsLoader()
         params = parse_load_params(
-            loader, ["--organism", "homo_sapiens", "--no-cleanup"]
+            loader, ["--name", "alpha", "--no-cleanup"]
         )
         assert params.cleanup is False
 
     def test_defaults_preserved_when_flags_omitted(self):
         loader = RichParamsLoader()
-        params = parse_load_params(loader, ["--organism", "homo_sapiens"])
-        # release default
-        assert params.release == 110
+        params = parse_load_params(loader, ["--name", "alpha"])
+        # count default
+        assert params.count == 10
         # bool default
         assert params.cleanup is False
-        # list default preserved when no --gene-biotypes is passed
-        assert params.gene_biotypes == ["protein_coding"]
+        # list default preserved when no --tags is passed
+        assert params.tags == ["primary"]
         # Optional[str] default
         assert params.optional_tag is None
 
@@ -117,41 +117,41 @@ class TestParseLoadParams:
         params = parse_load_params(
             loader,
             [
-                "--organism",
-                "homo_sapiens",
-                "--gene-biotypes",
-                "miRNA",
+                "--name",
+                "alpha",
+                "--tags",
+                "secondary",
             ],
         )
-        # The model default is ["protein_coding"]; the user passed one
-        # explicit value. The result MUST be just ["miRNA"], not the
+        # The model default is ["primary"]; the user passed one
+        # explicit value. The result MUST be just ["secondary"], not the
         # default with the user's value appended.
-        assert params.gene_biotypes == ["miRNA"]
+        assert params.tags == ["secondary"]
 
     def test_missing_required_field_errors_with_field_name(self):
         loader = RichParamsLoader()
         with pytest.raises(ValueError, match=r"Invalid --flag.*rich"):
-            parse_load_params(loader, ["--release", "110"])
+            parse_load_params(loader, ["--count", "10"])
 
     def test_pydantic_constraint_violation_surfaces_field_path(self):
         loader = RichParamsLoader()
-        # release has Field(ge=1, le=1000) — 9999 violates le.
+        # count has Field(ge=1, le=1000) — 9999 violates le.
         with pytest.raises(ValueError) as exc_info:
             parse_load_params(
-                loader, ["--organism", "homo_sapiens", "--release", "9999"]
+                loader, ["--name", "alpha", "--count", "9999"]
             )
         # The Pydantic error message names the offending field so the
         # user can fix it without reading the source.
-        assert "release" in str(exc_info.value)
+        assert "count" in str(exc_info.value)
 
     def test_argparse_type_error_surfaces_cleanly(self):
         loader = RichParamsLoader()
         with pytest.raises(ValueError, match=r"Invalid --flag"):
-            # release expects an int — "abc" should be rejected by
+            # count expects an int — "abc" should be rejected by
             # argparse before Pydantic sees it.
             parse_load_params(
                 loader,
-                ["--organism", "homo_sapiens", "--release", "abc"],
+                ["--name", "alpha", "--count", "abc"],
             )
 
     def test_loader_without_schema_accepts_no_flags(self):
@@ -161,7 +161,7 @@ class TestParseLoadParams:
     def test_loader_without_schema_rejects_extra_flags(self):
         loader = BareReferenceLoader()
         with pytest.raises(ValueError, match=r"accepts no --flag"):
-            parse_load_params(loader, ["--organism", "human"])
+            parse_load_params(loader, ["--name", "alpha"])
 
 
 # ---------------------------------------------------------------------------
@@ -244,17 +244,17 @@ class TestCliRoundTrip:
                 str(hippo_workspace["db"]),
                 "--schema-dir",
                 str(hippo_workspace["schemas"]),
-                "--organism",
-                "mus_musculus",
-                "--release",
+                "--name",
+                "alpha",
+                "--count",
                 "112",
                 "--cleanup",
-                "--gene-biotypes",
-                "protein_coding",
-                "--gene-biotypes",
-                "lncRNA",
+                "--tags",
+                "primary",
+                "--tags",
+                "secondary",
                 "--optional-tag",
-                "ensembl",
+                "note",
             ],
         )
         assert result.exit_code == 0, result.output
@@ -262,18 +262,18 @@ class TestCliRoundTrip:
 
         params = RichParamsLoader.last_params
         assert params is not None
-        assert params.organism == "mus_musculus"
-        assert params.release == 112
+        assert params.name == "alpha"
+        assert params.count == 112
         assert params.cleanup is True
-        assert params.gene_biotypes == ["protein_coding", "lncRNA"]
-        assert params.optional_tag == "ensembl"
+        assert params.tags == ["primary", "secondary"]
+        assert params.optional_tag == "note"
 
     def test_install_loader_flags_interleaved_with_known_options(
         self, hippo_workspace
     ):
         # Click+Typer parse known options regardless of position when
         # ignore_unknown_options=True. Cover both orderings explicitly:
-        # the parser must not consume `--organism human` as a value for
+        # the parser must not consume `--name beta` as a value for
         # the preceding known option.
         runner = CliRunner()
         result = runner.invoke(
@@ -282,8 +282,8 @@ class TestCliRoundTrip:
                 "reference",
                 "install",
                 "rich",
-                "--organism",
-                "homo_sapiens",
+                "--name",
+                "beta",
                 "--version",
                 "v1",
                 "--db-path",
@@ -293,7 +293,7 @@ class TestCliRoundTrip:
             ],
         )
         assert result.exit_code == 0, result.output
-        assert RichParamsLoader.last_params.organism == "homo_sapiens"
+        assert RichParamsLoader.last_params.name == "beta"
 
     def test_install_missing_required_flag_fails_cleanly(self, hippo_workspace):
         runner = CliRunner()
@@ -312,9 +312,9 @@ class TestCliRoundTrip:
             ],
         )
         assert result.exit_code != 0
-        # The CLI must surface "organism" somewhere in the error output
+        # The CLI must surface "name" somewhere in the error output
         # so the user knows which flag they forgot.
-        assert "organism" in result.output
+        assert "name" in result.output
 
     def test_install_pydantic_constraint_violation(self, hippo_workspace):
         runner = CliRunner()
@@ -330,14 +330,14 @@ class TestCliRoundTrip:
                 str(hippo_workspace["db"]),
                 "--schema-dir",
                 str(hippo_workspace["schemas"]),
-                "--organism",
-                "homo_sapiens",
-                "--release",
+                "--name",
+                "alpha",
+                "--count",
                 "9999",
             ],
         )
         assert result.exit_code != 0
-        assert "release" in result.output
+        assert "count" in result.output
 
     def test_install_bare_loader_with_no_flags(self, hippo_workspace):
         runner = CliRunner()
@@ -372,8 +372,8 @@ class TestCliRoundTrip:
                 str(hippo_workspace["db"]),
                 "--schema-dir",
                 str(hippo_workspace["schemas"]),
-                "--organism",
-                "human",
+                "--name",
+                "alpha",
             ],
         )
         assert result.exit_code != 0
@@ -393,8 +393,8 @@ class TestCliRoundTrip:
                 str(hippo_workspace["db"]),
                 "--schema-dir",
                 str(hippo_workspace["schemas"]),
-                "--organism",
-                "homo_sapiens",
+                "--name",
+                "alpha",
             ],
         )
         RichParamsLoader.last_params = None  # reset between invocations
@@ -411,17 +411,17 @@ class TestCliRoundTrip:
                 str(hippo_workspace["db"]),
                 "--schema-dir",
                 str(hippo_workspace["schemas"]),
-                "--organism",
-                "mus_musculus",
-                "--release",
+                "--name",
+                "beta",
+                "--count",
                 "112",
             ],
         )
         assert result.exit_code == 0, result.output
         params = RichParamsLoader.last_params
         assert params is not None
-        assert params.organism == "mus_musculus"
-        assert params.release == 112
+        assert params.name == "beta"
+        assert params.count == 112
 
 
 # ---------------------------------------------------------------------------

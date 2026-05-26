@@ -150,13 +150,13 @@ class RichParams(BaseModel):
     """All-supported-type Pydantic schema for CLI-rendering tests."""
 
     # required scalar
-    organism: str
+    name: str
     # int with default + Pydantic constraint (drives the validation-error test)
-    release: int = Field(default=110, ge=1, le=1000)
+    count: int = Field(default=10, ge=1, le=1000)
     # bool with default False — exercises ``--<name>`` / ``--no-<name>``
     cleanup: bool = False
     # list[str] with non-empty default — exercises append-replaces-default
-    gene_biotypes: list[str] = Field(default_factory=lambda: ["protein_coding"])
+    tags: list[str] = Field(default_factory=lambda: ["primary"])
     # Optional[str] with default None — omitted flag yields None
     optional_tag: str | None = None
 
