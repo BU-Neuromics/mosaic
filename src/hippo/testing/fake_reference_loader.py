@@ -37,6 +37,16 @@ class FakeLoadParams(BaseModel):
     # CLI tests can simulate a partial-load failure without monkey-
     # patching the loader class.
     fail_after: int | None = None
+    # If True, ``load()`` writes rows via ``client.put()`` but returns
+    # an empty ``LoadResult.entities`` list — simulates a large-scale
+    # loader that leaves the prune substrate to the write log
+    # (sec2 §2.14.8 advisory contract).
+    omit_entity_refs: bool = False
+    # If True, the loader passes a stable ``id`` derived from the row's
+    # label into ``client.put()``, so shared labels across versions
+    # collide on the same entity row. Exercises the
+    # stable-id-upgrade-overlap prune behaviour (sec2 §2.14.9).
+    stable_ids: bool = False
 
 
 class FakeReferenceLoader(ReferenceLoader):
@@ -101,22 +111,31 @@ class FakeReferenceLoader(ReferenceLoader):
             )
 
         fail_after: int | None = None
+        omit_entity_refs = False
+        stable_ids = False
         if isinstance(params, FakeLoadParams):
             fail_after = params.fail_after
+            omit_entity_refs = params.omit_entity_refs
+            stable_ids = params.stable_ids
 
         entities: list[EntityRef] = []
+        created = 0
         for index, row in enumerate(rows):
             if fail_after is not None and index >= fail_after:
                 raise RuntimeError(
                     f"FakeReferenceLoader simulated failure after "
                     f"{fail_after} rows"
                 )
-            entities.append(
-                EntityRef.from_put_result(client.put("FakeTerm", dict(row)))
-            )
+            payload = dict(row)
+            if stable_ids:
+                payload["id"] = f"fake-{row['label']}"
+            ref = EntityRef.from_put_result(client.put("FakeTerm", payload))
+            created += 1
+            if not omit_entity_refs:
+                entities.append(ref)
 
         return LoadResult(
-            created=len(entities),
+            created=created,
             entities=entities,
         )
 

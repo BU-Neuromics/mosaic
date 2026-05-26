@@ -901,7 +901,7 @@ def reference_install(
 
     typer.echo(
         f"Installed {result['name']}@{result['version']}: "
-        f"{result['created']} {result['entity_type']} row(s) created."
+        f"{result['created']} row(s) created."
     )
 
 
@@ -967,8 +967,8 @@ def reference_upgrade(
     pruned = len(result.get("pruned", []))
     typer.echo(
         f"Upgraded {result['name']} {result['from_version']} → "
-        f"{result['to_version']}: {result['created']} new "
-        f"{result['entity_type']} row(s), {pruned} prior row(s) pruned."
+        f"{result['to_version']}: {result['created']} new row(s), "
+        f"{pruned} prior row(s) pruned."
     )
 
 

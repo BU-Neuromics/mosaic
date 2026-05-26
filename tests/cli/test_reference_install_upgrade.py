@@ -1,11 +1,19 @@
 """End-to-end tests for the reference loader install/upgrade lifecycle.
 
-Exercises every acceptance criterion from PTS-229:
+Exercises every acceptance criterion from PTS-229 and the v2 substrate
+swap from PTS-256:
 
-- ``install --version v1`` writes hippo_meta[reference_versions].
+- ``install --version v1`` writes ``hippo_meta[reference_versions]``
+  AND populates ``reference_write_log`` for every ``client.put()`` made
+  inside the ``load_context`` block (sec2 §2.14.9, D2.14.J).
 - Upgrade additive: both versions queryable, hippo_meta reflects target.
-- Upgrade ``--prune-old`` success: prior rows removed after new install.
+- Upgrade ``--prune-old`` success: prior rows removed (hard delete) and
+  matching ``reference_write_log`` rows deleted in the same transaction.
 - Upgrade ``--prune-old`` failure mid-load: prior rows intact.
+- ``--prune-old`` works when the loader returns an empty
+  ``LoadResult.entities`` list (write log is the authoritative substrate).
+- ``--prune-old`` removes the entity row on stable-id upgrade overlap
+  (documented v2 constraint, sec2 §2.14.9).
 - ``--version test`` install works against the fake loader's bundled
   fixture with no network.
 - Re-installing the same version is a clear, idempotent no-op.
@@ -24,13 +32,13 @@ import pytest
 from typer.testing import CliRunner
 
 from hippo.cli.commands.reference import (
-    META_KEY_ENTITY_IDS,
     META_KEY_VERSIONS,
     install_reference,
     list_reference_loaders,
     upgrade_reference,
 )
 from hippo.cli.main import app
+from hippo.core.loaders.reference import EntityRef
 from hippo.core.meta import get_meta
 from hippo.testing.fake_reference_loader import FakeLoadParams
 
@@ -56,9 +64,12 @@ def _open(db_path: Path) -> sqlite3.Connection:
 
 
 def _count_rows(db_path: Path, table: str) -> int:
-    """Count *available* rows. Hippo uses soft-delete (sec3) — every
-    delete flips is_available=0 instead of removing the row, so the
-    queryable surface is the available subset."""
+    """Count *available* rows. Hippo uses soft-delete (sec3) for the
+    standard user/REST path — every ``client.delete()`` flips
+    ``is_available=0`` instead of removing the row. ``--prune-old``
+    bypasses that path and hard-deletes from the entity tables, so a
+    post-prune count is also the total row count for the loader.
+    """
     conn = _open(db_path)
     try:
         cursor = conn.cursor()
@@ -71,14 +82,32 @@ def _count_rows(db_path: Path, table: str) -> int:
 
 
 def _count_all_rows(db_path: Path, table: str) -> int:
-    """Count every row, including soft-deleted. Used to assert the
-    prune path doesn't drop rows from disk before the new install
-    completes."""
+    """Count every row, including soft-deleted. Used to assert that
+    ``--prune-old`` actually drops rows from disk (D2.14.J hard delete).
+    """
     conn = _open(db_path)
     try:
         cursor = conn.cursor()
         cursor.execute(f'SELECT COUNT(*) AS n FROM "{table}"')
         return cursor.fetchone()["n"]
+    finally:
+        conn.close()
+
+
+def _select_write_log(
+    db_path: Path, loader: str, version: str
+) -> list[tuple[str, str]]:
+    """Return ``(entity_id, entity_type)`` rows from the write log."""
+    conn = _open(db_path)
+    try:
+        cursor = conn.cursor()
+        cursor.execute(
+            "SELECT entity_id, entity_type FROM reference_write_log "
+            "WHERE loader_name = ? AND version = ? "
+            "ORDER BY entity_id",
+            (loader, version),
+        )
+        return [(row["entity_id"], row["entity_type"]) for row in cursor.fetchall()]
     finally:
         conn.close()
 
@@ -95,8 +124,11 @@ class TestInstall:
         assert result["status"] == "installed"
         assert result["version"] == "v1"
         assert result["created"] == 3
-        assert result["entity_type"] == "FakeTerm"
-        assert len(result["entity_ids"]) == 3
+        # v2 LoadResult shape: result["entities"] is the advisory list of
+        # EntityRef handles populated by the loader.
+        assert len(result["entities"]) == 3
+        assert all(isinstance(e, EntityRef) for e in result["entities"])
+        assert all(e.type == "FakeTerm" for e in result["entities"])
 
         conn = _open(hippo_workspace["db"])
         try:
@@ -105,6 +137,14 @@ class TestInstall:
             conn.close()
         assert versions == {"fake": "v1"}
         assert _count_rows(hippo_workspace["db"], "FakeTerm") == 3
+
+        # Every put() inside ``load_context`` recorded a write-log row.
+        log = _select_write_log(hippo_workspace["db"], "fake", "v1")
+        assert len(log) == 3
+        assert {entity_type for _, entity_type in log} == {"FakeTerm"}
+        assert {entity_id for entity_id, _ in log} == {
+            e.id for e in result["entities"]
+        }
 
     def test_reinstall_same_version_is_noop(self, hippo_workspace):
         install_reference(
@@ -193,6 +233,10 @@ class TestUpgradeAdditive:
             conn.close()
         assert versions == {"fake": "v2"}
 
+        # Both versions appear in the write log (additive — no prune).
+        assert len(_select_write_log(hippo_workspace["db"], "fake", "v1")) == 3
+        assert len(_select_write_log(hippo_workspace["db"], "fake", "v2")) == 4
+
 
 class TestUpgradePruneOld:
     def test_prune_old_success_removes_prior_rows(self, hippo_workspace):
@@ -213,17 +257,98 @@ class TestUpgradePruneOld:
         )
         assert upgrade["status"] == "upgraded"
         assert len(upgrade["pruned"]) == 3
-        # Only the v2 rows (4) remain.
+        assert all(isinstance(p, EntityRef) for p in upgrade["pruned"])
+        assert all(p.type == "FakeTerm" for p in upgrade["pruned"])
+        # Hard delete — only v2 rows survive in the entity table.
         assert _count_rows(hippo_workspace["db"], "FakeTerm") == 4
+        assert _count_all_rows(hippo_workspace["db"], "FakeTerm") == 4
 
-        # Per-version IDs map should have dropped the pruned slot.
+        # The matching write-log rows for the pruned version went with
+        # the entity rows; the new version's log rows are intact.
+        assert _select_write_log(hippo_workspace["db"], "fake", "v1") == []
+        assert len(_select_write_log(hippo_workspace["db"], "fake", "v2")) == 4
+
+    def test_prune_old_uses_write_log_when_entities_empty(
+        self, hippo_workspace
+    ):
+        # Simulates a large-scale loader that leaves
+        # ``LoadResult.entities`` empty and relies on the write log
+        # (sec2 §2.14.8 advisory contract).
+        install_reference(
+            "fake",
+            "v1",
+            db_path=hippo_workspace["db"],
+            schema_dir=hippo_workspace["schemas"],
+            params=FakeLoadParams(omit_entity_refs=True),
+        )
+        # Loader returned an empty advisory list, but writes still
+        # happened — assert the substrate is decoupled.
+        installed_log = _select_write_log(hippo_workspace["db"], "fake", "v1")
+        assert len(installed_log) == 3
+
+        upgrade = upgrade_reference(
+            "fake",
+            "v2",
+            db_path=hippo_workspace["db"],
+            schema_dir=hippo_workspace["schemas"],
+            prune_old=True,
+            params=FakeLoadParams(omit_entity_refs=True),
+        )
+        assert upgrade["entities"] == []
+        # Prune still removed all 3 v1 rows — the write log was the
+        # source of truth, not ``LoadResult.entities``.
+        assert len(upgrade["pruned"]) == 3
+        assert _count_rows(hippo_workspace["db"], "FakeTerm") == 4
+        assert _select_write_log(hippo_workspace["db"], "fake", "v1") == []
+
+    def test_prune_old_removes_overlapping_stable_ids(self, hippo_workspace):
+        # Stable-id overlap (sec2 §2.14.9): v1 and v2 share IDs for
+        # "alpha"/"beta"/"gamma". The default ``upgrade()`` re-writes
+        # those rows under v2 so the entity table holds 4 rows
+        # (alpha/beta/gamma updated + delta new). Prune of v1 then
+        # removes the overlapping entity rows even though v2 still
+        # references the same IDs — documented v2 behavior; loaders
+        # that need overlap survival must override ``upgrade()``.
+        install_reference(
+            "fake",
+            "v1",
+            db_path=hippo_workspace["db"],
+            schema_dir=hippo_workspace["schemas"],
+            params=FakeLoadParams(stable_ids=True),
+        )
+        assert _count_rows(hippo_workspace["db"], "FakeTerm") == 3
+        v1_log = _select_write_log(hippo_workspace["db"], "fake", "v1")
+        v1_ids = {entity_id for entity_id, _ in v1_log}
+        assert v1_ids == {"fake-alpha", "fake-beta", "fake-gamma"}
+
+        upgrade = upgrade_reference(
+            "fake",
+            "v2",
+            db_path=hippo_workspace["db"],
+            schema_dir=hippo_workspace["schemas"],
+            prune_old=True,
+            params=FakeLoadParams(stable_ids=True),
+        )
+        assert upgrade["status"] == "upgraded"
+        assert len(upgrade["pruned"]) == 3
+
+        # All three overlapping entity rows are gone — the v2 "delta"
+        # row is the only thing left.
+        assert _count_all_rows(hippo_workspace["db"], "FakeTerm") == 1
         conn = _open(hippo_workspace["db"])
         try:
-            ids_map = get_meta(conn, META_KEY_ENTITY_IDS) or {}
+            cursor = conn.cursor()
+            cursor.execute('SELECT id FROM "FakeTerm"')
+            remaining = {row["id"] for row in cursor.fetchall()}
         finally:
             conn.close()
-        assert "v1" not in ids_map.get("fake", {})
-        assert "v2" in ids_map["fake"]
+        assert remaining == {"fake-delta"}
+
+        # v1 log rows are gone; v2 still has its 4 rows (3 overlapping
+        # ids + delta).
+        assert _select_write_log(hippo_workspace["db"], "fake", "v1") == []
+        v2_log = _select_write_log(hippo_workspace["db"], "fake", "v2")
+        assert len(v2_log) == 4
 
     def test_prune_old_failure_mid_load_keeps_prior_rows(self, hippo_workspace):
         install_reference(
@@ -249,26 +374,29 @@ class TestUpgradePruneOld:
 
         # The prior v1 rows MUST still be intact — prune runs only after
         # a clean LoadResult. The partial v2 writes are not rolled back
-        # (the loader contract isn't transactional; that's documented in
-        # the upgrade semantics for v1). The test only asserts on the v1
-        # invariant, which is the load-bearing one for this acceptance
-        # case.
+        # (the loader contract isn't transactional). The test asserts on
+        # the v1 invariant, which is the load-bearing one here.
         conn = _open(hippo_workspace["db"])
         try:
-            ids_map = get_meta(conn, META_KEY_ENTITY_IDS) or {}
             versions = get_meta(conn, META_KEY_VERSIONS) or {}
         finally:
             conn.close()
-        prior_ids = ids_map.get("fake", {}).get("v1", [])
-        assert len(prior_ids) == 3
         # hippo_meta still points at v1 — upgrade was aborted before
         # the version pointer rotated.
         assert versions == {"fake": "v1"}
 
-        # All three prior IDs are still present in FakeTerm rows AND
-        # remain queryable (is_available = 1). The acceptance criterion
-        # is that prune ran only after a clean LoadResult, so the prior
-        # rows MUST keep their availability.
+        # The write log still has all 3 v1 rows (the prune path never
+        # ran). The 2 committed v2 puts also appear — that mirrors the
+        # "log rows correspond exactly to committed entity writes"
+        # invariant from sec2 §2.14.9.
+        v1_log = _select_write_log(hippo_workspace["db"], "fake", "v1")
+        assert len(v1_log) == 3
+        v2_log = _select_write_log(hippo_workspace["db"], "fake", "v2")
+        assert len(v2_log) == 2
+
+        # All three prior IDs still queryable in FakeTerm with
+        # is_available=1.
+        prior_ids = [entity_id for entity_id, _ in v1_log]
         conn = _open(hippo_workspace["db"])
         try:
             cursor = conn.cursor()
@@ -310,34 +438,6 @@ class TestUpgradeGuards:
             schema_dir=hippo_workspace["schemas"],
         )
         assert result["status"] == "already_at_version"
-
-    def test_prune_old_without_recorded_ids_errors(self, hippo_workspace):
-        # Simulate an "installed but no entity_ids recorded" state — the
-        # legacy installed.json shape from before this PR landed.
-        install_reference(
-            "fake",
-            "v1",
-            db_path=hippo_workspace["db"],
-            schema_dir=hippo_workspace["schemas"],
-        )
-        # Manually wipe the entity_ids slot.
-        from hippo.core.meta import set_meta
-
-        conn = _open(hippo_workspace["db"])
-        try:
-            set_meta(conn, META_KEY_ENTITY_IDS, {})
-            conn.commit()
-        finally:
-            conn.close()
-
-        with pytest.raises(ValueError, match="no entity IDs were recorded"):
-            upgrade_reference(
-                "fake",
-                "v2",
-                db_path=hippo_workspace["db"],
-                schema_dir=hippo_workspace["schemas"],
-                prune_old=True,
-            )
 
 
 class TestListing:

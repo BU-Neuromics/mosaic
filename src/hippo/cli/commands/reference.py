@@ -9,13 +9,17 @@ Implements the loader-driven ``hippo reference install`` and
    via :func:`hippo.linkml_bridge.merge_loader_fragment` (PTS-226).
 3. Apply the resulting schema additively against the DB (the same
    migration pipeline ``hippo schema migrate`` drives).
-4. Hand a :class:`HippoClient` to ``loader.load()`` / ``loader.upgrade()``.
+4. Hand a :class:`HippoClient` to ``loader.load()`` / ``loader.upgrade()``
+   inside a :meth:`HippoClient.load_context` so every ``client.put()``
+   appends a row to ``reference_write_log`` (sec2 §2.14.9, D2.14.J).
 5. Record ``{loader_name: version}`` in ``hippo_meta.reference_versions``
-   plus the per-version entity IDs in
-   ``hippo_meta.reference_entity_ids`` (for ``--prune-old``).
+   so ``requires:`` and "already installed" checks have a fixed source
+   of truth. The v1 ``hippo_meta.reference_entity_ids`` JSON blob is
+   gone — ``--prune-old`` queries the write log instead.
 
-Decisions D2.14.F (additive upgrade, opt-in ``--prune-old``) and
-D2.14.I (``"test"`` reserved slug) are enforced here.
+Decisions D2.14.F (additive upgrade, opt-in ``--prune-old``),
+D2.14.I (``"test"`` reserved slug), and D2.14.J (write-log-driven
+prune) are enforced here.
 
 Also exposes :func:`reference_cache_root` and
 :func:`clean_reference_cache` (PTS-225) so the ``hippo reference
@@ -41,7 +45,7 @@ from typing import TYPE_CHECKING, Any, Union, get_args, get_origin
 from pydantic import BaseModel, ValidationError
 from pydantic_core import PydanticUndefined
 
-from hippo.core.loaders.reference import LoadResult, ReferenceLoader
+from hippo.core.loaders.reference import EntityRef, LoadResult, ReferenceLoader
 
 if TYPE_CHECKING:
     import typer
@@ -54,9 +58,10 @@ if TYPE_CHECKING:
 # tooling that synthesises version strings can refuse to emit it.
 RESERVED_TEST_SLUG = "test"
 
-# hippo_meta keys owned by the reference-loader lifecycle.
+# hippo_meta key owned by the reference-loader lifecycle. The v1
+# ``reference_entity_ids`` JSON blob was retired in v2 (D2.14.J); the
+# substrate for ``--prune-old`` is the ``reference_write_log`` table.
 META_KEY_VERSIONS = "reference_versions"
-META_KEY_ENTITY_IDS = "reference_entity_ids"
 
 
 class ReferenceLoaderRegistrationError(TypeError):
@@ -513,23 +518,18 @@ def install_reference(
     # This mirrors the non-interactive half of `hippo schema migrate`
     # (spec §2.14 install step 3) without the prompt branch.
     client = _build_client(merged_registry, db)
-    load_result = loader.load(client, resolved_version, params)
+    with client.load_context(loader_name=name, version=resolved_version):
+        load_result = loader.load(client, resolved_version, params)
     _abort_on_load_errors(name, resolved_version, load_result)
 
-    # v2 LoadResult drops scalar `entity_type` / `entity_ids` for an
-    # advisory `entities: list[EntityRef]`. The substrate switch to the
-    # reference write log is child issue #4 (PTS-252); until then the
-    # lifecycle still persists the per-version ID list, derived here.
-    entity_ids, entity_type = _ids_and_type_from(load_result)
-    _write_versions(db, name, resolved_version, entity_ids)
+    _write_versions(db, name, resolved_version)
 
     return {
         "name": name,
         "version": resolved_version,
         "status": "installed",
         "created": load_result.created,
-        "entity_type": entity_type,
-        "entity_ids": list(entity_ids),
+        "entities": list(load_result.entities),
     }
 
 
@@ -576,27 +576,15 @@ def upgrade_reference(
     merged_registry = _merge_fragment_into(deployed_registry, spec)
 
     client = _build_client(merged_registry, db)
-    load_result = loader.upgrade(client, from_version, resolved_to, params)
+    with client.load_context(loader_name=name, version=resolved_to):
+        load_result = loader.upgrade(client, from_version, resolved_to, params)
     _abort_on_load_errors(name, resolved_to, load_result)
 
-    # See note in install_reference(): v2 surfaces entities as
-    # EntityRef handles; lifecycle still persists the ID list.
-    entity_ids, entity_type = _ids_and_type_from(load_result)
-
-    pruned_ids: list[str] = []
+    pruned: list[EntityRef] = []
     if prune_old:
-        prior_ids = _read_entity_ids(db).get(name, {}).get(from_version, [])
-        if not prior_ids:
-            raise ValueError(
-                f"--prune-old requested but no entity IDs were recorded for "
-                f"{name}@{from_version} (loader did not populate "
-                f"LoadResult.entities at install time)."
-            )
-        pruned_ids = _delete_entities(client, entity_type, prior_ids)
+        pruned = _prune_via_write_log(db, name, from_version)
 
-    _write_versions(db, name, resolved_to, entity_ids)
-    if prune_old:
-        _forget_entity_ids(db, name, from_version)
+    _write_versions(db, name, resolved_to)
 
     return {
         "name": name,
@@ -604,9 +592,8 @@ def upgrade_reference(
         "to_version": resolved_to,
         "status": "upgraded",
         "created": load_result.created,
-        "entity_type": entity_type,
-        "entity_ids": list(entity_ids),
-        "pruned": pruned_ids,
+        "entities": list(load_result.entities),
+        "pruned": pruned,
     }
 
 
@@ -716,23 +703,6 @@ def _build_client(
     return HippoClient(storage=storage, registry=registry)
 
 
-def _ids_and_type_from(
-    load_result: LoadResult,
-) -> tuple[list[str], str | None]:
-    """Project the advisory ``LoadResult.entities`` list into the (ids,
-    type) pair the lifecycle currently persists.
-
-    Bridge for the v2 ``LoadResult`` shape (D2.14.K). The persistence
-    substrate is replaced by the reference write log in child issue #4
-    (PTS-252); until then we keep the JSON-stored per-version ID map and
-    derive the inputs from ``entities``. ``type`` falls back to ``None``
-    when the loader leaves ``entities`` empty.
-    """
-    ids = [e.id for e in load_result.entities]
-    entity_type = load_result.entities[0].type if load_result.entities else None
-    return ids, entity_type
-
-
 def _abort_on_load_errors(
     name: str, version: str, load_result: LoadResult
 ) -> None:
@@ -758,26 +728,15 @@ def _read_versions(db_path: Path) -> dict[str, str]:
         conn.close()
 
 
-def _read_entity_ids(db_path: Path) -> dict[str, dict[str, list[str]]]:
-    from hippo.core.meta import get_meta
+def _write_versions(db_path: Path, name: str, version: str) -> None:
+    """Record ``{loader_name → current_version}`` in
+    ``hippo_meta.reference_versions``.
 
-    if not db_path.exists():
-        return {}
-    conn = sqlite3.connect(str(db_path))
-    try:
-        if not _has_meta_table(conn):
-            return {}
-        return get_meta(conn, META_KEY_ENTITY_IDS) or {}
-    finally:
-        conn.close()
-
-
-def _write_versions(
-    db_path: Path,
-    name: str,
-    version: str,
-    entity_ids: list[str],
-) -> None:
+    Drives ``requires:`` resolution and "already installed" checks.
+    The per-version entity-ID JSON blob (``reference_entity_ids``) is no
+    longer written — ``--prune-old`` reads ``reference_write_log``
+    instead (D2.14.J).
+    """
     from hippo.core.meta import get_meta, set_meta
 
     conn = sqlite3.connect(str(db_path))
@@ -785,43 +744,67 @@ def _write_versions(
         versions = get_meta(conn, META_KEY_VERSIONS) or {}
         versions[name] = version
         set_meta(conn, META_KEY_VERSIONS, versions)
-
-        ids_map = get_meta(conn, META_KEY_ENTITY_IDS) or {}
-        ids_map.setdefault(name, {})[version] = list(entity_ids)
-        set_meta(conn, META_KEY_ENTITY_IDS, ids_map)
         conn.commit()
     finally:
         conn.close()
 
 
-def _forget_entity_ids(db_path: Path, name: str, version: str) -> None:
-    from hippo.core.meta import get_meta, set_meta
+def _prune_via_write_log(
+    db_path: Path, name: str, from_version: str
+) -> list[EntityRef]:
+    """Hard-delete the prior version's entity rows and write-log rows.
 
+    Driven by the ``reference_write_log`` substrate (sec2 §2.14.9 /
+    D2.14.J). Entity tables are deleted by ``id`` per ``entity_type``
+    group; the matching log rows for ``(name, from_version)`` are
+    removed in the same transaction. The returned list mirrors the
+    deleted log rows so callers can surface a per-type breakdown.
+
+    Stable-id upgrade overlap (sec2 §2.14.9): when the new version
+    re-wrote the same ``entity_id`` under ``to_version``, prune of
+    ``from_version`` removes the entity row even though the new version
+    still references it. Loaders that need overlap survival must
+    override ``upgrade()`` to skip unchanged writes; this code path
+    makes no attempt to spare them.
+    """
     conn = sqlite3.connect(str(db_path))
     try:
-        ids_map = get_meta(conn, META_KEY_ENTITY_IDS) or {}
-        per_loader = ids_map.get(name) or {}
-        per_loader.pop(version, None)
-        if per_loader:
-            ids_map[name] = per_loader
-        else:
-            ids_map.pop(name, None)
-        set_meta(conn, META_KEY_ENTITY_IDS, ids_map)
-        conn.commit()
+        cursor = conn.cursor()
+        cursor.execute(
+            "SELECT entity_id, entity_type FROM reference_write_log "
+            "WHERE loader_name = ? AND version = ?",
+            (name, from_version),
+        )
+        rows = cursor.fetchall()
+        if not rows:
+            return []
+
+        deleted: list[EntityRef] = []
+        by_type: dict[str, list[str]] = {}
+        for entity_id, entity_type in rows:
+            by_type.setdefault(entity_type, []).append(entity_id)
+            deleted.append(EntityRef(id=entity_id, type=entity_type))
+
+        try:
+            cursor.execute("BEGIN")
+            for entity_type, ids in by_type.items():
+                placeholders = ",".join("?" * len(ids))
+                cursor.execute(
+                    f'DELETE FROM "{entity_type}" WHERE id IN ({placeholders})',
+                    ids,
+                )
+            cursor.execute(
+                "DELETE FROM reference_write_log "
+                "WHERE loader_name = ? AND version = ?",
+                (name, from_version),
+            )
+            conn.commit()
+        except Exception:
+            conn.rollback()
+            raise
+        return deleted
     finally:
         conn.close()
-
-
-def _delete_entities(
-    client: "HippoClient", entity_type: str | None, entity_ids: list[str]
-) -> list[str]:
-    if entity_type is None or not entity_ids:
-        return []
-    deleted: list[str] = []
-    for entity_id in entity_ids:
-        client.delete(entity_type, entity_id, bypass_validation=True)
-        deleted.append(entity_id)
-    return deleted
 
 
 def _has_meta_table(conn: sqlite3.Connection) -> bool:
