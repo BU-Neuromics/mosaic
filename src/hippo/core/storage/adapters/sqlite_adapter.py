@@ -1382,7 +1382,10 @@ class SQLiteAdapter(EntityStore):
             return results[:limit]
 
     def create(
-        self, entity: SQLiteEntity, user_context: Optional[str] = None
+        self,
+        entity: SQLiteEntity,
+        user_context: Optional[str] = None,
+        loader_context: Optional[tuple[str, str]] = None,
     ) -> SQLiteEntity:
         """Create a new entity in the store.
 
@@ -1390,6 +1393,11 @@ class SQLiteAdapter(EntityStore):
         registers ``(uuid, class_name)`` in ``_entity_registry`` for fast
         cross-class lookup (sec9 §9.5), and records a ``create``
         ``ProvenanceRecord``.
+
+        When ``loader_context`` is a ``(loader_name, version)`` tuple
+        (set by ``HippoClient.load_context()``), a row is appended to
+        ``reference_write_log`` inside the same SQL transaction as the
+        entity write (sec2 §2.14.9 / Decision 2.14.J).
         """
         import uuid
 
@@ -1436,6 +1444,15 @@ class SQLiteAdapter(EntityStore):
                 actor_id=user_context,
                 patch=entity_data,
             )
+
+            if loader_context is not None:
+                loader_name, version = loader_context
+                cursor.execute(
+                    "INSERT OR IGNORE INTO reference_write_log "
+                    "(loader_name, version, entity_id, entity_type) "
+                    "VALUES (?, ?, ?, ?)",
+                    (loader_name, version, entity_id, entity_type),
+                )
 
         return entity
 
@@ -1695,6 +1712,7 @@ class SQLiteAdapter(EntityStore):
         new_version: int,
         actor: Optional[str] = None,
         operation: str = "update",
+        loader_context: Optional[tuple[str, str]] = None,
     ) -> None:
         """Update typed columns and record provenance.
 
@@ -1703,6 +1721,11 @@ class SQLiteAdapter(EntityStore):
         derived on read from ``ProvenanceRecord`` (see
         ``_compute_version``); the ``new_version`` argument is accepted
         for API stability but has no persistent effect.
+
+        When ``loader_context`` is a ``(loader_name, version)`` tuple
+        (set by ``HippoClient.load_context()``), a row is appended to
+        ``reference_write_log`` inside the same SQL transaction as the
+        entity write (sec2 §2.14.9 / Decision 2.14.J).
         """
         del new_version  # version is derived from ProvenanceRecord on read.
         with self._transaction() as conn:
@@ -1717,6 +1740,15 @@ class SQLiteAdapter(EntityStore):
                 actor_id=actor,
                 patch=data,
             )
+
+            if loader_context is not None:
+                loader_name, version = loader_context
+                cursor.execute(
+                    "INSERT OR IGNORE INTO reference_write_log "
+                    "(loader_name, version, entity_id, entity_type) "
+                    "VALUES (?, ?, ?, ?)",
+                    (loader_name, version, entity_id, entity_type),
+                )
 
     def set_availability(
         self,

@@ -3,8 +3,9 @@
 import hashlib
 import os
 import urllib.request
+from contextlib import contextmanager
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any, Iterator, Optional
 
 from hippo.core.ingestion_service import IngestionService
 from hippo.core.pipeline import ValidationPipeline
@@ -100,6 +101,14 @@ class HippoClient:
         self._bypass_validation = bypass_validation
         self._registry = registry
         self._fts_table_metadata = self._schema_manager.fts_table_metadata
+
+        # Reference loader context (sec2 §2.14.9 / Decision 2.14.J).
+        # Set by ``load_context()`` for the duration of a single
+        # ``loader.load()``/``loader.upgrade()`` invocation; ``None``
+        # outside that window. Held on the instance (not a ContextVar)
+        # so the boundary is visible at every call site. Nested entries
+        # raise: overlapping loads are intentionally unsupported in v2.
+        self._loader_context: Optional[tuple[str, str]] = None
 
         # sec9 §9.8 typed-client surface. Generated at load time when a
         # registry is available. Pydantic class generation is best-
@@ -368,7 +377,14 @@ class HippoClient:
         data: dict[str, Any],
         entity_id: Optional[str] = None,
     ) -> dict[str, Any]:
-        """Internal put implementation."""
+        """Internal put implementation.
+
+        Threads ``self._loader_context`` (set by ``load_context()``)
+        down to the storage adapter so the write-log row insert shares
+        the entity write's SQL transaction (sec2 §2.14.9). Outside an
+        active ``load_context()``, ``_loader_context`` is ``None`` and
+        the log is bypassed.
+        """
         import uuid
         from datetime import datetime, timezone
 
@@ -384,7 +400,12 @@ class HippoClient:
             }
 
         if hasattr(self._storage, "read"):
-            return self._ingestion_service._put_with_sqlite(entity_type, data, entity_id)
+            return self._ingestion_service._put_with_sqlite(
+                entity_type,
+                data,
+                entity_id,
+                loader_context=self._loader_context,
+            )
 
         if (
             entity_id
@@ -393,6 +414,50 @@ class HippoClient:
         ):
             return self._update_internal(entity_type, entity_id, data)
         return self._create_internal(entity_type, data)
+
+    @contextmanager
+    def load_context(
+        self, loader_name: str, version: str
+    ) -> Iterator[None]:
+        """Open a reference-loader write-log scope (sec2 §2.14.9, D2.14.J).
+
+        Inside the ``with`` block every successful :meth:`put` appends a
+        row to ``reference_write_log`` keyed by ``(loader_name, version,
+        entity_id, entity_type)``. The log insert shares the entity
+        write's SQL transaction so committed entity writes always have
+        a matching log row and a mid-write failure rolls back both.
+
+        Outside the block, :meth:`put` is a no-op for the log — user
+        data writes, REST handler writes, and ad-hoc ingestion calls
+        never appear in ``reference_write_log``.
+
+        Nested entries are intentionally unsupported in v2 and raise
+        :class:`RuntimeError` on the inner ``__enter__``. ``HippoClient``
+        instances are not designed for concurrent use across threads;
+        the context is plain instance state.
+
+        Args:
+            loader_name: ``ReferenceLoader.name`` for the loader running
+                the current install/upgrade.
+            version: Resolved version slug for the load (the same string
+                that flows into ``hippo_meta.reference_versions``).
+
+        Raises:
+            RuntimeError: If ``load_context`` is already active on this
+                client (overlapping loads are unsupported in v2).
+        """
+        if self._loader_context is not None:
+            active_loader, active_version = self._loader_context
+            raise RuntimeError(
+                f"load_context is already active for "
+                f"({active_loader!r}, {active_version!r}); nested "
+                f"load_context() calls are not supported"
+            )
+        self._loader_context = (loader_name, version)
+        try:
+            yield
+        finally:
+            self._loader_context = None
 
     def _create_internal(
         self, entity_type: str, data: dict[str, Any]
