@@ -1,6 +1,6 @@
 # Hippo — Metadata Tracking Service
 
-Hippo is an open-source, configurable metadata tracking service. It gives you a unified, queryable registry of entities, their fields, and the relationships between them — so that downstream systems, analysis pipelines, and data portals can reliably locate and filter metadata without manually managing spreadsheets or bespoke file manifests.
+Hippo is an open-source, configurable metadata tracking service. It gives you a unified, queryable registry of entities, their fields, and the relationships between them — so that downstream systems, analysis pipelines, and data portals can reliably locate and filter metadata without manually managing spreadsheets or bespoke file manifests. See the [Comparison Guide](comparison.md) to evaluate Hippo against alternatives.
 
 Hippo is domain-agnostic: the entity types, fields, and relationships it tracks are defined entirely by a schema config file authored for each deployment.
 
