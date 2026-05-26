@@ -26,6 +26,7 @@ The Typer surface is exercised in one smoke test via ``CliRunner``.
 from __future__ import annotations
 
 import sqlite3
+from collections import Counter
 from pathlib import Path
 
 import pytest
@@ -33,8 +34,10 @@ from typer.testing import CliRunner
 
 from hippo.cli.commands.reference import (
     META_KEY_VERSIONS,
+    _resolve_breakdown_counts,
     install_reference,
     list_reference_loaders,
+    render_breakdown,
     upgrade_reference,
 )
 from hippo.cli.main import app
@@ -489,3 +492,179 @@ class TestCliSmoke:
         assert ls.exit_code == 0, ls.output
         assert "fake" in ls.output
         assert "v2" in ls.output
+
+
+# ---------------------------------------------------------------------------
+# Per-entity_type breakdown — sec2 §2.14.8 advisory contract / D2.14.K.
+# ---------------------------------------------------------------------------
+
+
+class TestBreakdownRendering:
+    """Format-level checks for the rendering function itself."""
+
+    def test_render_orders_by_count_desc_then_type_asc(self):
+        # Mixed counts including a tie ensure deterministic ordering:
+        # higher counts first, alphabetical to break ties.
+        counts = Counter({"Gene": 78_334, "GeneVersion": 78_334, "GeneOrtholog": 77_909})
+        out = render_breakdown("Installed ensembl@v1", counts, total=234_577)
+        lines = out.splitlines()
+        assert lines[0] == "Installed ensembl@v1:"
+        # Tie-break by name: Gene before GeneVersion (both 78,334), then GeneOrtholog.
+        assert "Gene" in lines[1] and "78,334" in lines[1]
+        assert "GeneVersion" in lines[2] and "78,334" in lines[2]
+        assert "GeneOrtholog" in lines[3] and "77,909" in lines[3]
+        assert lines[-1].strip().startswith("total")
+        assert "234,577" in lines[-1]
+
+    def test_render_emits_total_when_counts_empty(self):
+        # Empty breakdown still shows a total line (e.g. zero-write install).
+        out = render_breakdown("Installed fake@v1", Counter(), total=0)
+        assert out.splitlines() == ["Installed fake@v1:", "  total  0"]
+
+    def test_render_preserves_load_result_created_total(self):
+        # The "total" line is sourced from the scalar, not summed from
+        # the breakdown — advisory drift must not change the bottom line.
+        counts = Counter({"FakeTerm": 2})
+        out = render_breakdown("Installed fake@v1", counts, total=999)
+        assert "999" in out.splitlines()[-1]
+
+
+class TestBreakdownSourceResolution:
+    """``_resolve_breakdown_counts`` picks the right source."""
+
+    def test_entities_path_uses_counter_when_populated(self, hippo_workspace):
+        # No db query needed — a populated advisory list short-circuits.
+        entities = [
+            EntityRef(id="a", type="FakeTerm"),
+            EntityRef(id="b", type="FakeTerm"),
+            EntityRef(id="c", type="Other"),
+        ]
+        counts = _resolve_breakdown_counts(
+            entities, hippo_workspace["db"], "fake", "v1"
+        )
+        assert counts == Counter({"FakeTerm": 2, "Other": 1})
+
+    def test_write_log_path_used_when_entities_empty(self, hippo_workspace):
+        # Run a real install so the write log gets populated, then ask
+        # the resolver to read from it (empty advisory list).
+        install_reference(
+            "fake",
+            "v1",
+            db_path=hippo_workspace["db"],
+            schema_dir=hippo_workspace["schemas"],
+            params=FakeLoadParams(omit_entity_refs=True),
+        )
+        counts = _resolve_breakdown_counts(
+            [], hippo_workspace["db"], "fake", "v1"
+        )
+        assert counts == Counter({"FakeTerm": 3})
+
+    def test_missing_db_yields_empty_counter(self, tmp_path):
+        # The CLI may render before a db is created (loader produced no
+        # writes). The fallback degrades to an empty Counter rather than
+        # crashing on a missing file.
+        counts = _resolve_breakdown_counts(
+            [], tmp_path / "does-not-exist.db", "fake", "v1"
+        )
+        assert counts == Counter()
+
+
+class TestCliBreakdownOutput:
+    """End-to-end CLI assertions on the rendered breakdown."""
+
+    def test_install_renders_breakdown_from_entities(self, hippo_workspace):
+        runner = CliRunner()
+        result = runner.invoke(
+            app,
+            [
+                "reference", "install", "fake", "--version", "v1",
+                "--db-path", str(hippo_workspace["db"]),
+                "--schema-dir", str(hippo_workspace["schemas"]),
+            ],
+        )
+        assert result.exit_code == 0, result.output
+        lines = [line for line in result.output.splitlines() if line.strip()]
+        assert lines[0] == "Installed fake@v1:"
+        assert any("FakeTerm" in line and "3" in line for line in lines[1:])
+        assert lines[-1].strip().startswith("total")
+        assert "3" in lines[-1]
+
+    def test_install_renders_breakdown_from_write_log(self, hippo_workspace):
+        # Same loader, same version, but the advisory list comes back
+        # empty — the write log MUST supply the same breakdown.
+        runner = CliRunner()
+        result = runner.invoke(
+            app,
+            [
+                "reference", "install", "fake", "--version", "v1",
+                "--db-path", str(hippo_workspace["db"]),
+                "--schema-dir", str(hippo_workspace["schemas"]),
+                "--omit-entity-refs",
+            ],
+        )
+        assert result.exit_code == 0, result.output
+        lines = [line for line in result.output.splitlines() if line.strip()]
+        assert lines[0] == "Installed fake@v1:"
+        assert any("FakeTerm" in line and "3" in line for line in lines[1:])
+        assert lines[-1].strip().startswith("total")
+        assert "3" in lines[-1]
+
+    def test_install_both_source_paths_produce_identical_output(
+        self, tmp_path
+    ):
+        # Acceptance criterion: "Both paths render the same totals /
+        # breakdown structure". Run the same install twice into two
+        # isolated workspaces — once via advisory entities, once via the
+        # write log — and assert byte-identical multi-line output.
+        runner = CliRunner()
+
+        def _install(workspace_root: Path, *extra: str) -> str:
+            db = workspace_root / "hippo.db"
+            schemas = workspace_root / "schemas"
+            schemas.mkdir(parents=True)
+            result = runner.invoke(
+                app,
+                [
+                    "reference", "install", "fake", "--version", "v1",
+                    "--db-path", str(db), "--schema-dir", str(schemas),
+                    *extra,
+                ],
+            )
+            assert result.exit_code == 0, result.output
+            return result.output
+
+        entities_output = _install(tmp_path / "ents")
+        write_log_output = _install(tmp_path / "wlog", "--omit-entity-refs")
+        assert entities_output == write_log_output
+
+    def test_upgrade_renders_breakdown_and_pruned_tail(self, hippo_workspace):
+        # Install v1 then upgrade --prune-old to v2. The new printer
+        # MUST keep the trailing "N prior row(s) pruned." line so the
+        # operator still sees prune impact alongside the breakdown.
+        runner = CliRunner()
+        install = runner.invoke(
+            app,
+            [
+                "reference", "install", "fake", "--version", "v1",
+                "--db-path", str(hippo_workspace["db"]),
+                "--schema-dir", str(hippo_workspace["schemas"]),
+            ],
+        )
+        assert install.exit_code == 0, install.output
+
+        upgrade = runner.invoke(
+            app,
+            [
+                "reference", "upgrade", "fake", "--version", "v2",
+                "--db-path", str(hippo_workspace["db"]),
+                "--schema-dir", str(hippo_workspace["schemas"]),
+                "--prune-old",
+            ],
+        )
+        assert upgrade.exit_code == 0, upgrade.output
+        lines = upgrade.output.splitlines()
+        assert lines[0] == "Upgraded fake v1 → v2:"
+        assert any("FakeTerm" in line and "4" in line for line in lines)
+        total_line = next(line for line in lines if line.lstrip().startswith("total"))
+        assert "4" in total_line
+        assert "3 prior row(s) pruned." in lines

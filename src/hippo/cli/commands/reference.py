@@ -32,6 +32,8 @@ from __future__ import annotations
 import os
 import shutil
 import sqlite3
+from collections import Counter
+from collections.abc import Sequence
 from importlib.metadata import (
     PackageNotFoundError,
     distributions,
@@ -712,6 +714,104 @@ def _abort_on_load_errors(
             f"Loader {name!r} reported {load_result.errors} error(s) while "
             f"loading version {version!r}: {messages}"
         )
+
+
+# ---------------------------------------------------------------------------
+# Per-entity_type breakdown rendering for the install/upgrade CLI surface
+# (sec2 §2.14.8 advisory contract, decisions D2.14.J / D2.14.K).
+# ---------------------------------------------------------------------------
+
+
+def _resolve_breakdown_counts(
+    entities: Sequence[EntityRef],
+    db_path: Path,
+    loader_name: str,
+    version: str,
+) -> Counter:
+    """Choose the source for the per-``entity_type`` count breakdown.
+
+    Honours the advisory contract: when the loader populated
+    ``LoadResult.entities`` we count those directly; when it left the
+    list empty (large-loader pattern) we fall back to a ``GROUP BY``
+    over ``reference_write_log`` scoped to ``(loader_name, version)``.
+    Both branches return a :class:`Counter` so the renderer is source-
+    agnostic.
+    """
+    if entities:
+        return Counter(e.type for e in entities)
+    return _query_write_log_counts(db_path, loader_name, version)
+
+
+def _query_write_log_counts(
+    db_path: Path, loader_name: str, version: str
+) -> Counter:
+    """Return ``Counter({entity_type: count})`` from ``reference_write_log``.
+
+    Used by the install/upgrade printers when ``LoadResult.entities``
+    came back empty — the write log is the authoritative substrate for
+    "what got written under ``(loader, version)``" per sec2 §2.14.9.
+    A missing db (e.g., a dry-run that never opened it) yields an empty
+    Counter so callers can render a stand-alone ``total`` line.
+    """
+    if not db_path.exists():
+        return Counter()
+    conn = sqlite3.connect(str(db_path))
+    try:
+        cursor = conn.cursor()
+        if not _has_write_log_table(cursor):
+            return Counter()
+        cursor.execute(
+            "SELECT entity_type, COUNT(*) FROM reference_write_log "
+            "WHERE loader_name = ? AND version = ? "
+            "GROUP BY entity_type",
+            (loader_name, version),
+        )
+        return Counter({row[0]: row[1] for row in cursor.fetchall()})
+    finally:
+        conn.close()
+
+
+def _has_write_log_table(cursor: sqlite3.Cursor) -> bool:
+    cursor.execute(
+        "SELECT name FROM sqlite_master "
+        "WHERE type='table' AND name='reference_write_log'"
+    )
+    return cursor.fetchone() is not None
+
+
+def render_breakdown(header: str, counts: Counter, total: int) -> str:
+    """Format a multi-line install/upgrade summary with per-type counts.
+
+    ``header`` is the leading status line (without trailing colon, e.g.
+    ``"Installed fake@v1"``); ``counts`` is a :class:`Counter` of
+    ``entity_type → row_count``; ``total`` is the scalar preserved from
+    ``LoadResult.created`` so the bottom line matches v1 output even
+    when the breakdown source disagrees (advisory drift).
+
+    Rows sort by ``(count desc, type asc)`` so the entities-path and the
+    write-log-path render byte-identically for the same dataset — the
+    acceptance criterion calls that parity out explicitly.
+    """
+    label_width = max(
+        (len(name) for name in counts),
+        default=0,
+    )
+    label_width = max(label_width, len("total"))
+    count_width = max(
+        (len(f"{count:,}") for count in counts.values()),
+        default=0,
+    )
+    count_width = max(count_width, len(f"{total:,}"))
+
+    lines = [f"{header}:"]
+    for entity_type, count in sorted(
+        counts.items(), key=lambda kv: (-kv[1], kv[0])
+    ):
+        lines.append(
+            f"  {entity_type:<{label_width}}  {count:>{count_width},}"
+        )
+    lines.append(f"  {'total':<{label_width}}  {total:>{count_width},}")
+    return "\n".join(lines)
 
 
 def _read_versions(db_path: Path) -> dict[str, str]:
