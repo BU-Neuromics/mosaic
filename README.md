@@ -1,9 +1,11 @@
-# Hippo — Metadata Tracking Service
+# Hippo — A LinkML runtime engine.
 
 [![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
 [![Tests](https://img.shields.io/badge/tests-634%20passing-green.svg)](https://github.com/anomalyco/hippo)
 
-SDK-first, infrastructure-agnostic metadata tracking service for bioinformatics research.
+Hippo is a runtime for LinkML schemas. Point it at a LinkML schema and you get a typed Python SDK, a REST API, a relational database with append-only PROV-O provenance, and CEL-based dynamic validation — without writing any of that infrastructure yourself. The schema defines the application; Hippo runs it.
+
+One natural application of a LinkML runtime is metadata tracking. Hippo's first reference deployment, at the VA National PTSD Brain Bank, uses it to track biospecimens, experimental data files, and the derivation chains between them. But Hippo doesn't know it's tracking biomedical metadata — it knows it's running a schema.
 
 ## Table of Contents
 
