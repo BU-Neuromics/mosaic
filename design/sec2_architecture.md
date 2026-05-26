@@ -632,6 +632,17 @@ Distributed as `hippo-reference-<name>` packages, discovered via two entry point
 `hippo.reference_loaders` (the ABC subclass) and `hippo.reference_loader_cli` (an optional
 `typer.Typer` app mounted under `hippo reference <name> ...`).
 
+**v2 status.** The contract documented in this section is the v2 ReferenceLoader contract.
+v1 (locked in [PTS-215](/PTS/issues/PTS-215) against GitHub #6) shipped with two follow-up
+gaps that the v1 design left undecided: opt-in `LoadResult.entity_ids` as the `--prune-old`
+substrate did not scale to production references (GitHub #15), and the
+`entity_type` + `entity_ids` sibling-field shape was ambiguous for multi-class loaders
+(GitHub #16). v2 closes both. The substrate moves to a Hippo-internal write log
+(§2.14.9). The `LoadResult` shape adopts `EntityRef` and drops the v1 sibling fields
+(§2.14.8). v2 is a clean break — the migration touches in-tree fixtures only because no
+downstream `hippo-reference-*` package has shipped against v1. Decisions are recorded in
+[sec9 §2.14.J, §2.14.K, §2.14.L](sec9_decisions.md).
+
 **`ReferenceLoader` ABC:**
 
 ```python
@@ -830,6 +841,11 @@ existing FK references in user data.
 the prior version's rows *after* the new install succeeds. Destructive; gated behind an
 explicit flag. Never the default.
 
+The prune substrate is the **reference write log** (§2.14.9), not `LoadResult`. Loader authors
+do not opt into prune support — `--prune-old` works for every loader because Hippo records every
+`client.put()` call made inside the lifecycle wrapper (§2.14.9). The v1 `LoadResult.entity_ids`
+opt-in is removed in v2 (see §2.14.8 transition).
+
 **`upgrade()` ABC method.** The default implementation calls `load(to_version, params)`. Loaders
 with efficient diff logic override it:
 
@@ -840,7 +856,7 @@ def upgrade(self, client, from_version, to_version, params=None):
 ```
 
 Migrate-with-deprecation semantics (marking old rows as superseded without deleting them) are
-deferred to v2 once entity write paths support row-superseded marking.
+deferred to v3 once entity write paths support row-superseded marking.
 
 ---
 
@@ -915,6 +931,191 @@ loaders that omit `"test"` will not break Hippo, but their downstream consumers 
 hermetic test path.
 
 `"test"` is a **reserved slug** — Hippo will never generate it as a real release version.
+
+---
+
+#### 2.14.8 `LoadResult` and `EntityRef` (v2 shape)
+
+The v1 `LoadResult` paired `entity_type: str | None` with `entity_ids: list[str]` as sibling
+fields whose invariant ("every id shares the declared type") was implicit and easy to violate
+in multi-class loaders. v2 replaces that pair with a typed list of `EntityRef` handles. Counter
+fields are unchanged — they answer "what happened," while `entities` answers "what was written."
+
+**`EntityRef` — public dataclass:**
+
+```python
+# hippo/core/loaders/reference.py
+from dataclasses import dataclass
+
+@dataclass(frozen=True)
+class EntityRef:
+    """Lightweight (id, type) handle to a written entity.
+
+    Returned by Hippo helpers that surface a written entity to a loader,
+    and accumulated into ``LoadResult.entities`` so multi-class loaders
+    can report heterogeneous writes without an iterable return type.
+    """
+    id: str
+    type: str
+
+    @classmethod
+    def from_put_result(cls, rec: dict) -> "EntityRef":
+        """Bridge from the dict returned by ``HippoClient.put`` to an
+        ``EntityRef``. Use inside ``load()`` when assembling
+        ``LoadResult.entities`` for the advisory inspection list."""
+        return cls(id=rec["id"], type=rec["entity_type"])
+```
+
+**`LoadResult` v2:**
+
+```python
+@dataclass
+class LoadResult:
+    # Counters — authoritative for "what happened" (D2.14.K-2).
+    created: int = 0
+    updated: int = 0
+    unchanged: int = 0
+    errors: int = 0
+    error_messages: list[str] = field(default_factory=list)
+
+    # Advisory inspection list — see "Advisory contract" below.
+    entities: list[EntityRef] = field(default_factory=list)
+```
+
+**Advisory contract for `entities`.** `LoadResult.entities` is **advisory only**. Loaders MAY
+populate it for inspection / CLI breakdown; consumers MUST NOT treat it as authoritative for
+any operation. In particular:
+
+- `--prune-old` is driven by the reference write log (§2.14.9), not by `entities`.
+- `entities` MAY be empty (large loaders are encouraged to leave it empty to avoid in-memory
+  growth) or partial (a loader may sample one EntityRef per type).
+- The CLI breakdown shown by `hippo reference install` derives counts from `entities` when
+  non-empty, otherwise it queries the write log scoped to `(loader_name, version)` to render
+  the same per-type counts. Loader authors do not have to choose between "ergonomic CLI" and
+  "scale" — both paths produce the same display.
+
+**Recommended loader patterns:**
+
+Small loaders (≤ ~10⁴ entities, single-class or few-class) populate `entities` directly:
+
+```python
+def load(self, client, version, params=None):
+    entities = []
+    for row in parse_fixture():
+        entities.append(EntityRef.from_put_result(client.put("FakeTerm", row)))
+    return LoadResult(created=len(entities), entities=entities)
+```
+
+Large loaders (~10⁵+ entities) skip the in-memory accumulation. The write log captures every
+write transparently:
+
+```python
+def load(self, client, version, params=None):
+    counts = Counter()  # only what the loader needs for its own reporting
+    for row in parse_gtf(...):
+        client.put("Gene", row)
+        counts["Gene"] += 1
+    # No EntityRef accumulation; write log is authoritative for prune.
+    return LoadResult(created=sum(counts.values()))
+```
+
+**Transition from v1 (D2.14.L).** Clean break. `LoadResult.entity_type` and
+`LoadResult.entity_ids` are removed in v2. The v1 → v2 migration is mechanical and limited to
+in-tree fixtures (`FakeReferenceLoader`, `RichParamsLoader`, `BareParamsLoader`) plus the
+lifecycle code in `hippo/cli/commands/reference.py`. Downstream loader count at the point of
+v2 cut-over is zero (the Ensembl prototype team held off shipping per the PTS-215 thread), so
+the deprecation-window cost would be unrecovered overhead.
+
+**`HippoClient.put()` return shape — deferred.** GitHub #16 proposes bundling `HippoClient.put()
+-> EntityRef` with this change. v2 declines the bundle: `HippoClient.put()` retains its
+`dict[str, Any]` return (`id`, `entity_type`, `data`, `version`, `created_at`, `updated_at`)
+because tests, `TypedClient`, and the ingestion pipeline all index those keys today. A future
+v3 decision may revisit `put()`'s return type with its own migration story. The
+`EntityRef.from_put_result()` classmethod bridges cleanly in the meantime.
+
+---
+
+#### 2.14.9 Reference Write Log
+
+The reference write log is Hippo's internal substrate for `--prune-old`. It records every
+`client.put()` call made while a loader's `load()` or `upgrade()` is active, so prune can
+discover the prior version's entity IDs and types without depending on loader-author
+diligence. Loader code does not interact with the log directly.
+
+**Schema:**
+
+```sql
+CREATE TABLE reference_write_log (
+    loader_name TEXT NOT NULL,
+    version     TEXT NOT NULL,
+    entity_id   TEXT NOT NULL,
+    entity_type TEXT NOT NULL,
+    written_at  TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (loader_name, version, entity_id)
+);
+
+CREATE INDEX idx_reference_write_log_lookup
+    ON reference_write_log (loader_name, version);
+```
+
+The composite PK collapses repeat writes to the same `(loader_name, version, entity_id)` to a
+single row (idempotent for re-runs and for `upgrade()` that re-writes a stable id). The
+`(loader_name, version)` index serves bulk prune queries grouped by `entity_type`.
+
+**Loader-context plumbing.** The lifecycle code in `hippo/cli/commands/reference.py` wraps
+each `loader.load()` / `loader.upgrade()` invocation in an explicit context manager:
+
+```python
+# In install_reference() and upgrade_reference()
+with client.load_context(loader_name=name, version=resolved_version):
+    load_result = loader.load(client, resolved_version, params)
+```
+
+`HippoClient.load_context()` is the **only** sanctioned way to enter logging mode. Inside the
+block, every successful `client.put()` records a row in `reference_write_log` keyed by
+`(loader_name, version, entity_id, entity_type)`. Outside the block, `client.put()` is a
+no-op for the log (user-data writes, ingestion CLI, REST handler writes, etc., never hit the
+log).
+
+Rationale for explicit `with` over ContextVar: lifecycle entry/exit is visible at the call
+site, the binding is one stack frame deep, and the scope of "what counts as a load" is
+auditable in code review. ContextVar would obscure the boundary; a wrapper-client would force
+`HippoClient` to be wrap-friendly for one caller's benefit.
+
+**Failure recovery.** Write-log inserts share the same SQL transaction as the entity write.
+If `loader.load()` raises midway, the in-flight transaction rolls back and no orphan log rows
+persist beyond committed entity writes. If a previously committed batch then a later batch
+raises (loader does its own batching with explicit commits), committed log rows correspond
+exactly to committed entity writes — `--prune-old` on a failed-then-retried install therefore
+cleans only what was actually written during the failed attempt. Loader authors who batch
+explicitly own that recovery story; Hippo does not retry on their behalf.
+
+**Garbage collection.**
+
+- `hippo reference upgrade --prune-old` deletes the prior version's entities AND the prior
+  version's log rows in the same transaction. After a successful prune, the only log rows
+  remaining for `loader_name` correspond to the current installed version.
+- `hippo reference uninstall <name>` (existing verb) deletes all log rows where
+  `loader_name = <name>`.
+- Log rows for a `loader_name` not currently registered in `hippo_meta.reference_versions`
+  (e.g., loader was force-removed without `uninstall`) are GC candidates. `hippo reference
+  doctor` (existing diagnostic command) reports such orphans; cleanup is manual until v3.
+
+**Upgrade overlap.** When `upgrade()` re-writes a stable `entity_id` under a new version slug,
+the log records a new `(loader_name, new_version, entity_id, entity_type)` row alongside the
+existing `(loader_name, old_version, entity_id, entity_type)` row. Both rows persist until
+prune. This is the intended behavior for the Ensembl `Gene.stable_id` pattern, where the same
+gene appears across releases — prune for `old_version` will then attempt to delete the entity
+even though the new version still references the same id. Loaders that rely on
+stable-id upgrade overlap MUST override `upgrade()` to skip writing rows that are unchanged
+across versions, OR accept that `--prune-old` on overlap removes the entity (the new install
+will re-create it). v3 may add a `keep_if_unchanged` policy; v2 documents the constraint.
+
+**Replaces `hippo_meta.reference_entity_ids`.** The v1 implementation persisted entity IDs
+as a JSON blob in `hippo_meta.reference_entity_ids`. v2 deletes that key and migrates to the
+write-log table. The migration runs once on first v2 startup: existing JSON entries are
+read, written into `reference_write_log` (with `entity_type` resolved by per-entity lookup),
+and the `hippo_meta` key is deleted. Migration is idempotent; subsequent startups are no-ops.
 
 ---
 
