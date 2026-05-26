@@ -1,0 +1,182 @@
+id: https://example.org/hippo/examples/bibliography
+name: bibliography
+description: >-
+  Citation-graph schema for the Hippo bibliography worked example.
+  Demonstrates: polymorphism (Publication hierarchy), full-text search,
+  B-tree indexes for FK-style lookups, and entity supersession
+  (preprint → journal article).
+
+prefixes:
+  linkml: https://w3id.org/linkml/
+
+imports:
+  - linkml:types
+  - hippo_core
+
+default_range: string
+
+classes:
+
+  # ------------------------------------------------------------------
+  # Authors
+  # ------------------------------------------------------------------
+
+  Author:
+    is_a: Entity
+    description: >-
+      A researcher who contributes to publications. ORCID is used as
+      the canonical stable identifier and indexed for fast lookup.
+    attributes:
+      name:
+        range: string
+        required: true
+        annotations:
+          hippo_search: fts5
+      orcid:
+        range: string
+        description: ORCID identifier (e.g. 0000-0002-1825-0097)
+        annotations:
+          hippo_index: true
+      email:
+        range: string
+
+  # ------------------------------------------------------------------
+  # Publication hierarchy (polymorphism demo)
+  # ------------------------------------------------------------------
+
+  Publication:
+    is_a: Entity
+    abstract: true
+    description: >-
+      Abstract base for all citable works. Concrete subtypes are
+      JournalArticle, Preprint, and ConferencePaper. Hippo stores each
+      in its own table; polymorphic queries must iterate subtypes and
+      merge results (see sdk_example.py).
+    attributes:
+      title:
+        range: string
+        required: true
+        annotations:
+          hippo_search: fts5
+      year:
+        range: integer
+      abstract_text:
+        range: string
+        annotations:
+          hippo_search: fts5
+      doi:
+        range: string
+        description: Digital Object Identifier (optional; journals and some preprints)
+        annotations:
+          hippo_index: true
+
+  JournalArticle:
+    is_a: Publication
+    description: Peer-reviewed article published in a journal.
+    attributes:
+      journal:
+        range: string
+        annotations:
+          hippo_search: fts5
+      volume:
+        range: string
+      issue:
+        range: string
+      pages:
+        range: string
+
+  Preprint:
+    is_a: Publication
+    description: >-
+      Pre-peer-review manuscript deposited on a preprint server.
+      A Preprint is typically superseded by a JournalArticle or
+      ConferencePaper once the work is published (see sdk_example.py).
+    attributes:
+      server:
+        range: string
+        description: Preprint server name (e.g. arXiv, bioRxiv, medRxiv)
+        annotations:
+          hippo_search: fts5
+      preprint_id:
+        range: string
+        description: Server-local identifier (e.g. arXiv:1706.03762)
+        annotations:
+          hippo_index: true
+
+  ConferencePaper:
+    is_a: Publication
+    description: Paper presented at and published in conference proceedings.
+    attributes:
+      conference_name:
+        range: string
+        annotations:
+          hippo_search: fts5
+      proceedings_url:
+        range: string
+
+  # ------------------------------------------------------------------
+  # Venue
+  # ------------------------------------------------------------------
+
+  Venue:
+    is_a: Entity
+    description: A journal, conference, or preprint server.
+    attributes:
+      name:
+        range: string
+        required: true
+        annotations:
+          hippo_search: fts5
+      issn:
+        range: string
+        annotations:
+          hippo_index: true
+      country:
+        range: string
+
+  # ------------------------------------------------------------------
+  # Relationships (join-table pattern)
+  # ------------------------------------------------------------------
+
+  Authorship:
+    is_a: Entity
+    description: >-
+      Many-to-many link between Author and Publication. The position
+      slot captures author order (1-based). Indexed on both FK slots
+      for efficient lookup in either direction.
+    attributes:
+      author_id:
+        range: Author
+        required: true
+        annotations:
+          hippo_index: true
+      publication_id:
+        range: string
+        required: true
+        description: UUID of the linked Publication (any concrete subtype)
+        annotations:
+          hippo_index: true
+      position:
+        range: integer
+        required: true
+        description: Author order (1 = first author)
+
+  Citation:
+    is_a: Entity
+    description: >-
+      A directed citation edge from one Publication to another.
+      Both endpoints are stored as UUID strings (not typed ranges)
+      because Publication is abstract and has no backing table.
+    attributes:
+      citing_id:
+        range: string
+        required: true
+        description: UUID of the citing Publication
+        annotations:
+          hippo_index: true
+      cited_id:
+        range: string
+        required: true
+        description: UUID of the cited Publication
+        annotations:
+          hippo_index: true
