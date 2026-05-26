@@ -27,25 +27,19 @@ from hippo.core.exceptions import EntityNotFoundError, ValidationFailure
 from hippo.core.storage.adapters.sqlite_adapter import SQLiteAdapter
 from hippo.core.pipeline import ValidationPipeline
 from hippo.core.validators.write_validator import CELWriteValidator
+from tests.conftest import _build_minimal_schema_registry
 
 
-def _make_client(tmp_path: Path, schema: dict | None = None, validators: dict | None = None) -> HippoClient:
-    storage = SQLiteAdapter(str(tmp_path / "hippo.db"))
-    if schema is None and validators is None:
-        return HippoClient(storage=storage)
-
-    schema_path = tmp_path / "schema.yaml"
-    if schema:
-        schema_path.write_text(yaml.dump(schema))
-
-    pipeline = ValidationPipeline()
+def _make_client(tmp_path: Path, validators: dict | None = None) -> HippoClient:
+    registry = _build_minimal_schema_registry()
+    storage = SQLiteAdapter(str(tmp_path / "hippo.db"), schema_registry=registry)
+    pipeline: ValidationPipeline | None = None
     if validators:
         validators_path = tmp_path / "validators.yaml"
         validators_path.write_text(yaml.dump(validators))
-        cel_validator = CELWriteValidator(validators_path=str(validators_path))
-        pipeline.add_validator(cel_validator)
-
-    return HippoClient(storage=storage, pipeline=pipeline)
+        pipeline = ValidationPipeline()
+        pipeline.add_validator(CELWriteValidator(validators_path=str(validators_path)))
+    return HippoClient(storage=storage, pipeline=pipeline, registry=registry)
 
 
 # ---------------------------------------------------------------------------
@@ -191,17 +185,6 @@ class TestDeleteInvariants:
 class TestCELValidationInvariants:
     """CEL validators must block creates/updates that violate rules."""
 
-    _SCHEMA = {
-        "entities": [{
-            "name": "Sample",
-            "version": "1.0",
-            "fields": [
-                {"name": "name", "type": "string", "required": True},
-                {"name": "tissue", "type": "string", "required": True},
-            ],
-        }]
-    }
-
     _VALIDATORS = {
         "validators": [{
             "name": "sample_name_format",
@@ -213,23 +196,23 @@ class TestCELValidationInvariants:
     }
 
     def test_valid_entity_passes_validation(self, tmp_path):
-        client = _make_client(tmp_path, self._SCHEMA, self._VALIDATORS)
+        client = _make_client(tmp_path, self._VALIDATORS)
         result = client.create("Sample", {"name": "S001", "tissue": "DLPFC"})
         assert result["data"]["name"] == "S001"
 
     def test_invalid_entity_raises_validation_failure(self, tmp_path):
-        client = _make_client(tmp_path, self._SCHEMA, self._VALIDATORS)
+        client = _make_client(tmp_path, self._VALIDATORS)
         with pytest.raises(ValidationFailure):
             client.create("Sample", {"name": "INVALID", "tissue": "DLPFC"})
 
     def test_update_also_validated(self, tmp_path):
-        client = _make_client(tmp_path, self._SCHEMA, self._VALIDATORS)
+        client = _make_client(tmp_path, self._VALIDATORS)
         r = client.create("Sample", {"name": "S001", "tissue": "DLPFC"})
         with pytest.raises(ValidationFailure):
             client.update("Sample", r["id"], {"name": "INVALID", "tissue": "HC"})
 
     def test_validation_error_does_not_persist_entity(self, tmp_path):
-        client = _make_client(tmp_path, self._SCHEMA, self._VALIDATORS)
+        client = _make_client(tmp_path, self._VALIDATORS)
         try:
             client.create("Sample", {"name": "BAD", "tissue": "DLPFC"})
         except (ValidationFailure, Exception):
