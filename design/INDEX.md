@@ -24,6 +24,7 @@
 | `sec8_auth_integration.md` | 8. Authentication & Authorization Integration | ✅ Draft v0.1 | Bridge-aware `AuthMiddleware` impl, actor propagation, audit trail split |
 | `sec9_linkml_redesign.md` | 9. LinkML-Centric Redesign | ✅ Approved 2026-04-18 | Three-layer schema stack, first-class `Process`, PROV-O-aligned `ProvenanceRecord`, UUID identity model, namespace-aware typed client |
 | `sec9_decisions.md` | 9. (Companion) Decisions Log | ✅ Approved 2026-04-18 | Drafting decisions with alternatives, rationale, revert paths |
+| `sec10_recipes.md` | 10. Recipe Subsystem | 📝 Draft v0.1 | RecipeService facade, install pipeline, lockfile reproducibility model, override/extension rules |
 | `appendix_a_example_schema_omics.md` | Appendix A. Example Schema (Omics) | ✅ Draft v0.1 | Complete LinkML schema with `search:`, polymorphic extension example |
 | `appendix_b_implementation_guide.md` | Appendix B. Implementation Guide | ✅ Draft v0.1 | Build order, module map, error hierarchy, invariants, test strategy, OpenSpec mapping |
 | `reference_hippo_core.md` | Reference: `hippo_core` Classes and Enums | ✅ Draft v0.1 | Entity + Status + Operation + placeholder Validator / ReferenceLoader; design invariants; what's deferred to later changes |
