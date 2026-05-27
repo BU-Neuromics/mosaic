@@ -11,7 +11,7 @@ from hippo.core.ingestion_service import IngestionService
 from hippo.core.pipeline import ValidationPipeline
 from hippo.core.provenance_service import ProvenanceService
 from hippo.core.query_service import QueryService
-from hippo.core.recipe import InstalledRecipe
+from hippo.core.recipe import InstalledRecipe, RecipeReport
 from hippo.core.recipe_service import RecipeService
 from hippo.core.relationship import RelationshipManager
 from hippo.core.schema_manager import SchemaManager
@@ -745,3 +745,18 @@ class HippoClient:
         ``[]`` on a clean instance.
         """
         return self._recipe_service.list_installed()
+
+    def recipe_inspect(
+        self,
+        source: str | Path,
+        *,
+        base_dir: Optional[Path] = None,
+    ) -> RecipeReport:
+        """Parse, validate, and digest a recipe — no state change (sec10 §10.2.3).
+
+        Thin delegator over :meth:`RecipeService.inspect`. Useful for
+        authoring (``hippo recipe inspect`` prints the canonical
+        content hash) and for callers that want a typed report before
+        committing to an import.
+        """
+        return self._recipe_service.inspect(source, base_dir=base_dir)

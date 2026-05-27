@@ -629,6 +629,10 @@ from hippo.cli.commands.reference import mount_reference_loader_subapps
 
 mount_reference_loader_subapps(reference_app)
 
+from hippo.cli.commands.recipe import recipe_app
+
+app.add_typer(recipe_app, name="recipe")
+
 schema_app = typer.Typer(name="schema", help="Schema management commands")
 app.add_typer(schema_app, name="schema")
 

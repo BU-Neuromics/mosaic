@@ -61,6 +61,7 @@ SDK_RESERVED_NAMES: frozenset[str] = frozenset(
         "pipeline",
         "put",
         "query",
+        "recipe_inspect",
         "recipe_list",
         "register_external_id",
         "relationships",

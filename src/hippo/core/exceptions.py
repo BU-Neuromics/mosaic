@@ -320,6 +320,39 @@ class CacheIntegrityError(HippoError):
         super().__init__(message, **context)
 
 
+class RecipeManifestError(HippoError):
+    """Raised when a recipe's ``recipe.yaml`` fails manifest validation.
+
+    Covers closed-schema LinkML validation of the manifest document
+    against ``src/hippo/schemas/recipe_manifest.yaml`` (sec10 §10.3.2):
+    missing required fields, unknown keys, type mismatches. Distinct
+    from :class:`RecipeSchemaError`, which fires on the embedded
+    ``schema.yaml`` fragment.
+
+    Every error must include the failing ``RecipeRef.source`` (the
+    path or URI Hippo loaded the manifest from), plus the manifest's
+    ``id``/``version`` when those parsed successfully (sec10 error model).
+    """
+
+    def __init__(
+        self,
+        message: str,
+        source: Optional[str] = None,
+        recipe_id: Optional[str] = None,
+        recipe_version: Optional[str] = None,
+        errors: Optional[list[str]] = None,
+        **context: Any,
+    ):
+        self.source = source
+        self.recipe_id = recipe_id
+        self.recipe_version = recipe_version
+        self.errors = errors or []
+        context["source"] = source
+        context["recipe_id"] = recipe_id
+        context["recipe_version"] = recipe_version
+        super().__init__(message, **context)
+
+
 class RecipeSchemaError(HippoError):
     """Raised when a recipe's embedded schema fragment violates a merge invariant.
 
