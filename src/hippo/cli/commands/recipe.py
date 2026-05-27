@@ -303,3 +303,60 @@ def recipe_export(
         "\nNote: replace `id`, `name`, `version`, and the schema "
         "`id`/`name`/`default_prefix` stubs before sharing."
     )
+
+
+@recipe_app.command(name="extend")
+def recipe_extend(
+    installed_id: str = typer.Argument(
+        ...,
+        help=(
+            "id of an installed recipe to extend (matches an entry from "
+            "`hippo recipe list`)."
+        ),
+    ),
+    out: str = typer.Option(
+        ...,
+        "--out",
+        help=(
+            "Output directory. recipe.yaml and schema.yaml are written "
+            "here; the directory must not already contain either file."
+        ),
+    ),
+    db_path: str = typer.Option(
+        None,
+        "--db-path",
+        help="SQLite database path (default: data/hippo.db).",
+    ),
+    schema_dir: str = typer.Option(
+        None,
+        "--schema-dir",
+        help="Schema directory (default: schemas/).",
+    ),
+) -> None:
+    """Scaffold a derivative recipe directory (sec10 §10.7.3).
+
+    Writes ``recipe.yaml`` whose ``parent`` is populated from the
+    matching ``installed_recipes`` entry, plus an empty ``schema.yaml``
+    ready for local additions. This is the ONLY operation that creates
+    a ``parent`` lineage pointer (invariant 5).
+    """
+    from hippo.cli.main import _get_client
+
+    try:
+        client = _get_client(db_path=db_path, schema_path=schema_dir)
+    except Exception as exc:
+        typer.echo(f"Error: failed to open Hippo instance: {exc}", err=True)
+        raise typer.Exit(1)
+
+    try:
+        out_dir = client.recipe_extend(installed_id, Path(out))
+    except ValueError as exc:
+        typer.echo(f"Error: {exc}", err=True)
+        raise typer.Exit(1)
+
+    typer.echo(f"Scaffolded {out_dir / 'recipe.yaml'}")
+    typer.echo(f"Scaffolded {out_dir / 'schema.yaml'}")
+    typer.echo(
+        "\nNote: replace `id`, `name`, `version`, and the schema "
+        "`id`/`name`/`default_prefix` stubs before importing."
+    )

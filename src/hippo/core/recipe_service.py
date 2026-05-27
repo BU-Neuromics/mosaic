@@ -784,6 +784,80 @@ class RecipeService:
             f"Run `hippo recipe list` to see what is installed."
         )
 
+    def extend(
+        self,
+        installed_id: str,
+        out_dir: Path,
+    ) -> Path:
+        """Scaffold a derivative recipe directory rooted at ``out_dir`` (sec10 §10.7.3).
+
+        Reads ``installed_recipes`` for the entry matching ``installed_id``
+        and writes:
+
+        - ``out_dir/recipe.yaml`` — manifest stub with ``parent:`` populated
+          from the installed entry (id, version, source, digest), and
+          author-fillable stubs for ``id``/``name``/``version``.
+        - ``out_dir/schema.yaml`` — an empty LinkML schema with stub
+          ``id``/``name``/``default_prefix`` ready for local additions.
+
+        This is the ONLY operation that creates a ``parent`` lineage
+        pointer (invariant 5 — no implicit lineage).
+
+        Args:
+            installed_id: ``RecipeManifest.id`` of the parent recipe. Must
+                match an entry in ``hippo_meta.installed_recipes``.
+            out_dir: Target directory. Created if missing. Must not
+                already contain a ``recipe.yaml`` or ``schema.yaml``.
+
+        Returns:
+            The resolved ``out_dir`` path.
+
+        Raises:
+            ValueError: ``installed_id`` is not in ``installed_recipes``,
+                or ``out_dir`` already contains a ``recipe.yaml`` /
+                ``schema.yaml``, or ``out_dir`` exists and is not a
+                directory.
+        """
+        installed = self.list_installed()
+        match = next((r for r in installed if r.id == installed_id), None)
+        if match is None:
+            raise ValueError(
+                f"installed_id {installed_id!r} not found in installed_recipes. "
+                f"Run `hippo recipe list` to see what is installed."
+            )
+
+        out_dir = Path(out_dir)
+        if out_dir.exists() and not out_dir.is_dir():
+            raise ValueError(
+                f"out_dir is not a directory: {out_dir}"
+            )
+        out_dir.mkdir(parents=True, exist_ok=True)
+
+        manifest_path = out_dir / "recipe.yaml"
+        schema_path = out_dir / "schema.yaml"
+        for p in (manifest_path, schema_path):
+            if p.exists():
+                raise ValueError(
+                    f"{p} already exists; refusing to overwrite."
+                )
+
+        parent_ref = RecipeRef(
+            id=match.id,
+            version=match.version,
+            source=match.source,
+            digest=(
+                f"sha256:{match.digest}"
+                if not match.digest.startswith("sha256:")
+                else match.digest
+            ),
+        )
+        manifest = _build_extend_manifest_stub(parent=parent_ref)
+        schema_fragment = _build_extend_schema_fragment_stub()
+
+        manifest_path.write_text(yaml.safe_dump(manifest, sort_keys=False))
+        schema_path.write_text(yaml.safe_dump(schema_fragment, sort_keys=False))
+        return out_dir
+
     def _select_resolver(self, source: str) -> RecipeResolver:
         for r in self._resolvers:
             if r.can_handle(source):
@@ -935,6 +1009,45 @@ def _build_export_manifest_stub(
             ]
         }
     return manifest
+
+
+def _build_extend_manifest_stub(*, parent: RecipeRef) -> dict:
+    """Return the ``recipe.yaml`` stub for ``hippo recipe extend`` (sec10 §10.7.3).
+
+    Populates ``parent`` from the installed-recipe entry so the lineage
+    pointer is real; ``id``/``name``/``version`` carry author-fillable
+    TODO stubs the user MUST replace before sharing.
+    """
+    from datetime import datetime, timezone
+
+    manifest: dict = {
+        "id": "TODO.set.this",
+        "name": "TODO-set-name",
+        "version": "0.0.0",
+        "created_at": datetime.now(timezone.utc).isoformat(),
+        "hippo_version": f">={_local_hippo_version()}",
+        "parent": {
+            "id": parent.id,
+            "version": parent.version,
+            "source": parent.source,
+        },
+    }
+    if parent.digest is not None:
+        manifest["parent"]["digest"] = parent.digest
+    return manifest
+
+
+def _build_extend_schema_fragment_stub() -> dict:
+    """Return the empty ``schema.yaml`` stub for ``hippo recipe extend``."""
+    return {
+        "id": "https://example.org/TODO-set-this",
+        "name": "TODO-set-name",
+        "default_prefix": "TODO-set-prefix",
+        "prefixes": {
+            "linkml": "https://w3id.org/linkml/",
+        },
+        "default_range": "string",
+    }
 
 
 def _local_hippo_version() -> str:

@@ -806,3 +806,17 @@ class HippoClient:
         caller that writes those documents to disk.
         """
         return self._recipe_service.export(scope=scope, parent=parent)
+
+    def recipe_extend(
+        self,
+        installed_id: str,
+        out_dir: Path,
+    ) -> Path:
+        """Scaffold a derivative recipe directory (sec10 §10.7.3).
+
+        Thin delegator over :meth:`RecipeService.extend`. Writes a
+        ``recipe.yaml`` whose ``parent`` block is populated from the
+        installed-recipe entry and an empty ``schema.yaml`` ready for
+        local additions. Returns the output directory.
+        """
+        return self._recipe_service.extend(installed_id, out_dir)
