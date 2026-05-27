@@ -209,3 +209,97 @@ def recipe_import(
         typer.echo(f"  classes added by top-level: {len(result.classes_added)}")
     if result.slots_added:
         typer.echo(f"  slots added by top-level: {len(result.slots_added)}")
+
+
+@recipe_app.command(name="export")
+def recipe_export(
+    out: str = typer.Option(
+        ...,
+        "--out",
+        help=(
+            "Output directory. recipe.yaml and schema.yaml are written "
+            "here; the directory must not already contain either file."
+        ),
+    ),
+    parent: Optional[str] = typer.Option(
+        None,
+        "--parent",
+        help=(
+            "id of an installed recipe to declare as the parent of the "
+            "exported recipe. Must match an entry from `hippo recipe list`."
+        ),
+    ),
+    db_path: str = typer.Option(
+        None,
+        "--db-path",
+        help="SQLite database path (default: data/hippo.db).",
+    ),
+    schema_dir: str = typer.Option(
+        None,
+        "--schema-dir",
+        help="Schema directory (default: schemas/).",
+    ),
+) -> None:
+    """Export locally-authored schema as a redistributable recipe (sec10 §10.5).
+
+    Selects classes/slots whose ``provided_by`` is absent or doesn't
+    start with ``recipe.``/``loader.``, AND whose ``from_schema`` is
+    not a bundled framework schema. Auto-populates ``requires.recipes``
+    from the ``provided_by`` of any upstream ``is_a:`` ancestor or
+    slot range. Writes ``recipe.yaml`` (with author-fillable stubs for
+    id/name/version — adjust before publishing) and ``schema.yaml``.
+    """
+    import yaml as _yaml
+    from hippo.cli.main import _get_client
+
+    out_dir = Path(out)
+    if out_dir.exists() and not out_dir.is_dir():
+        typer.echo(f"Error: --out path is not a directory: {out_dir}", err=True)
+        raise typer.Exit(1)
+    out_dir.mkdir(parents=True, exist_ok=True)
+
+    manifest_path = out_dir / "recipe.yaml"
+    schema_path = out_dir / "schema.yaml"
+    for p in (manifest_path, schema_path):
+        if p.exists():
+            typer.echo(
+                f"Error: {p} already exists; refusing to overwrite.", err=True
+            )
+            raise typer.Exit(1)
+
+    try:
+        client = _get_client(db_path=db_path, schema_path=schema_dir)
+    except Exception as exc:
+        typer.echo(f"Error: failed to open Hippo instance: {exc}", err=True)
+        raise typer.Exit(1)
+
+    try:
+        result = client.recipe_export(parent=parent)
+    except ValueError as exc:
+        typer.echo(f"Error: {exc}", err=True)
+        raise typer.Exit(1)
+
+    manifest_path.write_text(
+        _yaml.safe_dump(result.manifest, sort_keys=False)
+    )
+    schema_path.write_text(
+        _yaml.safe_dump(result.schema_fragment, sort_keys=False)
+    )
+
+    typer.echo(f"Wrote {manifest_path}")
+    typer.echo(f"Wrote {schema_path}")
+    classes = (result.schema_fragment.get("classes") or {})
+    slots = (result.schema_fragment.get("slots") or {})
+    typer.echo(f"  classes exported: {len(classes)}")
+    typer.echo(f"  slots exported:   {len(slots)}")
+    if result.auto_resolved_requires:
+        typer.echo(
+            f"  requires.recipes auto-populated: "
+            f"{len(result.auto_resolved_requires)}"
+        )
+        for ref in result.auto_resolved_requires:
+            typer.echo(f"    - {ref.id}@{ref.version}")
+    typer.echo(
+        "\nNote: replace `id`, `name`, `version`, and the schema "
+        "`id`/`name`/`default_prefix` stubs before sharing."
+    )

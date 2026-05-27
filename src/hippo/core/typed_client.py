@@ -61,6 +61,7 @@ SDK_RESERVED_NAMES: frozenset[str] = frozenset(
         "pipeline",
         "put",
         "query",
+        "recipe_export",
         "recipe_import",
         "recipe_inspect",
         "recipe_list",

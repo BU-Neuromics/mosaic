@@ -11,7 +11,12 @@ from hippo.core.ingestion_service import IngestionService
 from hippo.core.pipeline import ValidationPipeline
 from hippo.core.provenance_service import ProvenanceService
 from hippo.core.query_service import QueryService
-from hippo.core.recipe import ImportResult, InstalledRecipe, RecipeReport
+from hippo.core.recipe import (
+    ImportResult,
+    InstalledRecipe,
+    RecipeExport,
+    RecipeReport,
+)
 from hippo.core.recipe_service import RecipeService
 from hippo.core.relationship import RelationshipManager
 from hippo.core.schema_manager import SchemaManager
@@ -786,3 +791,18 @@ class HippoClient:
             base_dir=base_dir,
             expected_digest=expected_digest,
         )
+
+    def recipe_export(
+        self,
+        *,
+        scope: str = "schema",
+        parent: Optional[str] = None,
+    ) -> RecipeExport:
+        """Package locally-authored schema for redistribution (sec10 §10.5).
+
+        Thin delegator over :meth:`RecipeService.export`. Returns a
+        :class:`RecipeExport` (manifest dict + schema-fragment dict +
+        auto-resolved ``requires.recipes`` list); the CLI is the only
+        caller that writes those documents to disk.
+        """
+        return self._recipe_service.export(scope=scope, parent=parent)

@@ -42,6 +42,7 @@ from hippo.core.recipe import (
     ImportResult,
     InstalledRecipe,
     RecipeAuthor,
+    RecipeExport,
     RecipeManifest,
     RecipeRef,
     RecipeReport,
@@ -577,6 +578,212 @@ class RecipeService:
             },
         )
 
+    def export(
+        self,
+        *,
+        scope: str = "schema",
+        parent: Optional[str] = None,
+    ) -> RecipeExport:
+        """Package the locally-authored content of the live schema (sec10 §10.5).
+
+        Selectivity: a class/slot is included when its ``provided_by``
+        annotation is absent or does NOT start with ``recipe.`` or
+        ``loader.``, AND its ``from_schema`` is not a bundled framework
+        schema (``hippo_core``, ``recipe_manifest``). This prevents
+        accidental re-distribution of upstream content and protects
+        attribution.
+
+        ``parent`` is the ``id`` of an entry in ``installed_recipes``.
+        When supplied, the exported manifest's ``parent:`` is populated
+        from that entry; otherwise ``parent:`` is omitted.
+
+        ``requires.recipes`` is auto-populated by walking each exported
+        class's ``is_a:`` ancestor + slot ranges, looking up the
+        ``provided_by`` recipe attribution on the upstream element,
+        and matching it to an ``installed_recipes`` entry. Builtins
+        (``string``, ``integer``, ``datetime``, …) are skipped.
+
+        ``scope`` is reserved for the v2 ``scope="data"`` mode (sec10
+        §10.5). v1 ships ``scope="schema"`` only.
+
+        Returns:
+            A :class:`RecipeExport` carrying the manifest dict, the
+            schema fragment dict, and the auto-resolved
+            ``requires.recipes`` list. The caller (CLI) writes these
+            to disk.
+        """
+        if scope != "schema":
+            raise ValueError(
+                f"recipe export only supports scope='schema' in v1 (got {scope!r})."
+            )
+        if self._schema_manager is None or self._schema_manager.registry is None:
+            raise ValueError(
+                "Cannot export: RecipeService has no live SchemaManager registry."
+            )
+        sv = self._schema_manager.registry.schema_view
+
+        local_classes, local_slots = self._select_local_elements(sv)
+        auto_requires = self._auto_resolve_requires(sv, local_classes)
+        parent_ref = self._resolve_parent_for_export(parent)
+
+        manifest = _build_export_manifest_stub(
+            parent=parent_ref,
+            requires=auto_requires,
+        )
+        schema_fragment = _build_export_schema_fragment(
+            sv, local_classes, local_slots
+        )
+
+        return RecipeExport(
+            manifest=manifest,
+            schema_fragment=schema_fragment,
+            auto_resolved_requires=tuple(auto_requires),
+        )
+
+    def _select_local_elements(self, sv) -> tuple[list[str], list[str]]:
+        """Return ``(class_names, slot_names)`` that the export should ship.
+
+        Selectivity rule (sec10 §10.5): include when
+
+        - ``provided_by`` is absent OR does NOT start with ``recipe.``
+          or ``loader.`` (so author-written content stays in, imported
+          recipe/loader content stays out), AND
+        - the element's *containing schema* is not a framework schema
+          (``hippo_core``, ``recipe_manifest``, ``linkml:types``).
+
+        ``SchemaView.in_schema(name)`` resolves the containing schema
+        by element name; we look the resulting schema's ``id`` up in
+        ``_FRAMEWORK_SCHEMA_IDS``. This is more reliable than relying
+        on the element's ``from_schema`` attribute, which is ``None``
+        for elements defined directly in the active schema.
+        """
+        from hippo.linkml_bridge import PROVIDED_BY_ANNOTATION, annotation_value
+
+        def _is_framework(name: str) -> bool:
+            sch_name = sv.in_schema(name)
+            if sch_name is None:
+                return False
+            sch = sv.schema_map.get(sch_name) if hasattr(sv, "schema_map") else None
+            if sch is None:
+                return False
+            return _is_framework_origin(getattr(sch, "id", None))
+
+        class_names: list[str] = []
+        for name in sv.all_classes(imports=False):
+            cls = sv.get_class(name)
+            if cls is None:
+                continue
+            if _is_framework(name):
+                continue
+            pb = annotation_value(cls, PROVIDED_BY_ANNOTATION)
+            if pb is not None:
+                pb_str = str(pb)
+                if pb_str.startswith("recipe.") or pb_str.startswith("loader."):
+                    continue
+            class_names.append(name)
+
+        slot_names: list[str] = []
+        for name in sv.all_slots(imports=False):
+            slot = sv.get_slot(name)
+            if slot is None:
+                continue
+            if _is_framework(name):
+                continue
+            pb = annotation_value(slot, PROVIDED_BY_ANNOTATION)
+            if pb is not None:
+                pb_str = str(pb)
+                if pb_str.startswith("recipe.") or pb_str.startswith("loader."):
+                    continue
+            slot_names.append(name)
+
+        return sorted(class_names), sorted(slot_names)
+
+    def _auto_resolve_requires(
+        self, sv, local_class_names: list[str]
+    ) -> list[RecipeRef]:
+        """Walk each exported class's ``is_a:`` and slot ranges to find upstream recipes."""
+        from hippo.linkml_bridge import PROVIDED_BY_ANNOTATION, annotation_value
+
+        installed_by_id_version: dict[tuple[str, str], InstalledRecipe] = {}
+        for rec in self.list_installed():
+            installed_by_id_version[(rec.id, rec.version)] = rec
+
+        builtin_ranges = {
+            "string", "integer", "float", "double", "boolean",
+            "date", "datetime", "time", "uri", "uriorcurie",
+            "ncname", "objectidentifier", "nodeidentifier", "any",
+        }
+
+        upstream_refs: dict[tuple[str, str], RecipeRef] = {}
+
+        def _consider(element) -> None:
+            if element is None:
+                return
+            pb = annotation_value(element, PROVIDED_BY_ANNOTATION)
+            if not pb:
+                return
+            pb_str = str(pb)
+            if not pb_str.startswith("recipe."):
+                return
+            try:
+                rest = pb_str[len("recipe."):]
+                rid, _, rver = rest.partition("@")
+                if not rid or not rver:
+                    return
+            except Exception:
+                return
+            key = (rid, rver)
+            if key in upstream_refs:
+                return
+            rec = installed_by_id_version.get(key)
+            if rec is None:
+                return
+            upstream_refs[key] = RecipeRef(
+                id=rec.id,
+                version=rec.version,
+                source=rec.source,
+                digest=f"sha256:{rec.digest}" if not rec.digest.startswith("sha256:") else rec.digest,
+            )
+
+        for cls_name in local_class_names:
+            cls = sv.get_class(cls_name)
+            if cls is None:
+                continue
+            # is_a chain
+            if cls.is_a:
+                _consider(sv.get_class(cls.is_a))
+            # Slot ranges
+            for slot in sv.class_induced_slots(cls_name):
+                if not slot.range or slot.range in builtin_ranges:
+                    continue
+                target_cls = sv.get_class(slot.range)
+                if target_cls is not None:
+                    _consider(target_cls)
+
+        return [upstream_refs[k] for k in sorted(upstream_refs.keys())]
+
+    def _resolve_parent_for_export(
+        self, parent_id: Optional[str]
+    ) -> Optional[RecipeRef]:
+        if parent_id is None:
+            return None
+        for rec in self.list_installed():
+            if rec.id == parent_id:
+                return RecipeRef(
+                    id=rec.id,
+                    version=rec.version,
+                    source=rec.source,
+                    digest=(
+                        f"sha256:{rec.digest}"
+                        if not rec.digest.startswith("sha256:")
+                        else rec.digest
+                    ),
+                )
+        raise ValueError(
+            f"--parent {parent_id!r} not found in installed_recipes. "
+            f"Run `hippo recipe list` to see what is installed."
+        )
+
     def _select_resolver(self, source: str) -> RecipeResolver:
         for r in self._resolvers:
             if r.can_handle(source):
@@ -662,6 +869,166 @@ class RecipeService:
         classes = tuple(sorted((content.get("classes") or {}).keys()))
         slots = tuple(sorted((content.get("slots") or {}).keys()))
         return classes, slots
+
+
+_FRAMEWORK_SCHEMA_IDS = {
+    "https://w3id.org/hippo/hippo_core",
+    "https://w3id.org/hippo/recipe_manifest",
+    "https://w3id.org/linkml/types",
+    "https://w3id.org/linkml/meta",
+}
+
+
+def _is_framework_origin(from_schema: Optional[str]) -> bool:
+    """True when a LinkML element belongs to a bundled framework schema.
+
+    Hippo's own ``hippo_core`` (``Entity``, ``ProvenanceRecord``, …)
+    has no ``provided_by`` annotation but should never be re-exported
+    as user-authored content. The check is by ``from_schema`` URI;
+    URIs are matched against a small known set so that user schemas
+    sitting under unrelated URIs always pass through.
+    """
+    if not from_schema:
+        return False
+    return str(from_schema) in _FRAMEWORK_SCHEMA_IDS
+
+
+def _build_export_manifest_stub(
+    *,
+    parent: Optional[RecipeRef],
+    requires: list[RecipeRef],
+) -> dict:
+    """Return a ``recipe.yaml`` mapping with author-fillable stubs.
+
+    ``id``/``name``/``version`` are stubs the user MUST replace before
+    publishing. ``hippo_version``/``created_at`` are filled with
+    sensible defaults. ``parent``/``requires.recipes`` come from the
+    caller's inference.
+    """
+    from datetime import datetime, timezone
+
+    manifest: dict = {
+        "id": "TODO.set.this",
+        "name": "TODO-set-name",
+        "version": "0.0.0",
+        "created_at": datetime.now(timezone.utc).isoformat(),
+        "hippo_version": f">={_local_hippo_version()}",
+    }
+    if parent is not None:
+        manifest["parent"] = {
+            "id": parent.id,
+            "version": parent.version,
+            "source": parent.source,
+        }
+        if parent.digest is not None:
+            manifest["parent"]["digest"] = parent.digest
+    if requires:
+        manifest["requires"] = {
+            "recipes": [
+                {
+                    "id": r.id,
+                    "version": r.version,
+                    "source": r.source,
+                    **({"digest": r.digest} if r.digest else {}),
+                }
+                for r in requires
+            ]
+        }
+    return manifest
+
+
+def _local_hippo_version() -> str:
+    """Best-effort lookup of the currently-installed Hippo version."""
+    try:
+        from hippo import __version__
+
+        return str(__version__)
+    except Exception:
+        return "0.0.0"
+
+
+def _build_export_schema_fragment(
+    sv, class_names: list[str], slot_names: list[str]
+) -> dict:
+    """Build a ``schema.yaml`` mapping carrying the selected classes/slots.
+
+    The output is a minimal LinkML document the exporting user can
+    rename and publish: ``id`` and ``name`` carry stub values, the
+    class/slot bodies are the LinkML element definitions stripped of
+    ``provided_by`` annotations (those get re-injected on install).
+    """
+    import copy
+
+    fragment: dict = {
+        "id": "https://example.org/TODO-set-this",
+        "name": "TODO-set-name",
+        "default_prefix": "TODO-set-prefix",
+        "prefixes": {
+            "linkml": "https://w3id.org/linkml/",
+        },
+        "default_range": "string",
+    }
+
+    classes_out: dict = {}
+    for name in class_names:
+        cls = sv.get_class(name)
+        if cls is None:
+            continue
+        cls_body = _linkml_element_to_dict(cls)
+        _strip_provided_by_annotation(cls_body)
+        attrs = cls_body.get("attributes")
+        if isinstance(attrs, dict):
+            for _, attr_body in attrs.items():
+                if isinstance(attr_body, dict):
+                    _strip_provided_by_annotation(attr_body)
+        classes_out[name] = cls_body
+    if classes_out:
+        fragment["classes"] = classes_out
+
+    slots_out: dict = {}
+    for name in slot_names:
+        slot = sv.get_slot(name)
+        if slot is None:
+            continue
+        slot_body = _linkml_element_to_dict(slot)
+        _strip_provided_by_annotation(slot_body)
+        slots_out[name] = slot_body
+    if slots_out:
+        fragment["slots"] = slots_out
+
+    return fragment
+
+
+def _linkml_element_to_dict(element) -> dict:
+    """Serialise a LinkML class/slot to a dict suitable for emission as YAML.
+
+    Uses the LinkML yaml_dumper round-trip so the output is YAML-shaped
+    and round-trips through ``SchemaView``. Empty/null fields are
+    omitted at the caller's discretion.
+    """
+    from linkml_runtime.dumpers import yaml_dumper
+
+    return yaml.safe_load(yaml_dumper.dumps(element)) or {}
+
+
+def _strip_provided_by_annotation(body: dict) -> None:
+    """Remove the ``provided_by`` annotation from an element body in place.
+
+    Author exports MUST NOT carry a stale ``provided_by`` because the
+    merge layer re-injects the importing recipe's identity (invariant
+    7). Handles both dict-shape and list-shape annotation blocks.
+    """
+    ann = body.get("annotations")
+    if isinstance(ann, dict):
+        ann.pop("provided_by", None)
+        if not ann:
+            body.pop("annotations", None)
+    elif isinstance(ann, list):
+        body["annotations"] = [
+            e for e in ann if not (isinstance(e, dict) and e.get("tag") == "provided_by")
+        ]
+        if not body["annotations"]:
+            body.pop("annotations", None)
 
 
 from dataclasses import dataclass, field as _dc_field

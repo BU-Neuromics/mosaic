@@ -135,6 +135,31 @@ class ImportPlan:
 
 
 @dataclass(frozen=True)
+class RecipeExport:
+    """Output of :meth:`RecipeService.export` (sec10 §10.5).
+
+    Selective package of the locally-authored content of the live
+    schema: classes/slots whose ``provided_by`` annotation is absent
+    or doesn't start with ``recipe.`` or ``loader.``, AND whose
+    ``from_schema`` is not a bundled framework schema (Hippo core
+    classes do not get re-exported).
+
+    The export is a pair of YAML documents the CLI writes to disk:
+    ``manifest`` is the ``recipe.yaml`` contents (with author-fillable
+    stubs for ``id``/``name``/``version``), ``schema_fragment`` is the
+    ``schema.yaml`` body. ``auto_resolved_requires`` lists the
+    upstream recipes the exported content references via ``is_a:`` or
+    slot ranges — emitted into ``manifest.requires.recipes`` so the
+    export round-trips on a peer instance that has the same upstream
+    recipes installed.
+    """
+
+    manifest: dict
+    schema_fragment: dict
+    auto_resolved_requires: tuple[RecipeRef, ...] = ()
+
+
+@dataclass(frozen=True)
 class ImportResult:
     """Outcome of one top-level ``RecipeService.import_`` call (sec10 §10.2.3).
 
