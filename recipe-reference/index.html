@@ -1,0 +1,2236 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="A LinkML runtime engine — typed SDK, REST API, append-only provenance, and dynamic validation from a schema definition.">
+      
+      
+      
+        <link rel="canonical" href="https://bu-neuromics.github.io/hippo/recipe-reference/">
+      
+      
+        <link rel="prev" href="../installing-recipes/">
+      
+      
+        <link rel="next" href="../design-principles/">
+      
+      
+        
+      
+      
+      <link rel="icon" href="../assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.6">
+    
+    
+      
+        <title>Reference - Hippo</title>
+      
+    
+    
+      <link rel="stylesheet" href="../assets/stylesheets/main.484c7ddc.min.css">
+      
+        
+        <link rel="stylesheet" href="../assets/stylesheets/palette.ab4e12ef.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Inter:300,300i,400,400i,700,700i%7CJetBrains+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Inter";--md-code-font:"JetBrains Mono"}</style>
+      
+    
+    
+    <script>__md_scope=new URL("..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="teal" data-md-color-accent="cyan">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#recipe-reference" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+<header class="md-header" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href=".." title="Hippo" class="md-header__button md-logo" aria-label="Hippo" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            Hippo
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Reference
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: light)" data-md-color-scheme="default" data-md-color-primary="teal" data-md-color-accent="cyan"  aria-label="Switch to dark mode"  type="radio" name="__palette" id="__palette_0">
+    
+      <label class="md-header__button md-icon" title="Switch to dark mode" for="__palette_1" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a4 4 0 0 0-4 4 4 4 0 0 0 4 4 4 4 0 0 0 4-4 4 4 0 0 0-4-4m0 10a6 6 0 0 1-6-6 6 6 0 0 1 6-6 6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: dark)" data-md-color-scheme="slate" data-md-color-primary="teal" data-md-color-accent="cyan"  aria-label="Switch to light mode"  type="radio" name="__palette" id="__palette_1">
+    
+      <label class="md-header__button md-icon" title="Switch to light mode" for="__palette_0" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 18c-.89 0-1.74-.2-2.5-.55C11.56 16.5 13 14.42 13 12s-1.44-4.5-3.5-5.45C10.26 6.2 11.11 6 12 6a6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+        <div class="md-search__suggest" data-md-component="search-suggest"></div>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/BU-Neuromics/hippo" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    BU-Neuromics/hippo
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+            
+<nav class="md-tabs" aria-label="Tabs" data-md-component="tabs">
+  <div class="md-grid">
+    <ul class="md-tabs__list">
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href=".." class="md-tabs__link">
+        
+  
+  
+    
+  
+  Home
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../why-hippo/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  Why Hippo?
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../introduction/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  Introduction
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../installation/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  Installation
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../quickstart/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  Quick Start
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../schema-guide/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  Schema Guide
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../data-model/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  Data Model
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../configuration/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  Configuration
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../cli-reference/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  CLI Reference
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../api-reference/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  API Reference
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../reference-loaders/" class="md-tabs__link">
+          
+  
+  
+  Reference Loaders
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+    
+  
+  
+    
+    
+      <li class="md-tabs__item md-tabs__item--active">
+        <a href="../writing-a-recipe/" class="md-tabs__link">
+          
+  
+  
+  Recipes
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../design-principles/" class="md-tabs__link">
+          
+  
+  
+  About
+
+        </a>
+      </li>
+    
+  
+
+      
+    </ul>
+  </div>
+</nav>
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+  
+
+
+<nav class="md-nav md-nav--primary md-nav--lifted" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href=".." title="Hippo" class="md-nav__button md-logo" aria-label="Hippo" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    Hippo
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/BU-Neuromics/hippo" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    BU-Neuromics/hippo
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href=".." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Home
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../why-hippo/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Why Hippo?
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../introduction/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Introduction
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../installation/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Installation
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../quickstart/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Quick Start
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../schema-guide/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Schema Guide
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../data-model/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Data Model
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../configuration/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Configuration
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../cli-reference/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    CLI Reference
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../api-reference/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    API Reference
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_11" >
+        
+          
+          <label class="md-nav__link" for="__nav_11" id="__nav_11_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Reference Loaders
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_11_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_11">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Reference Loaders
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../reference-loaders/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Overview
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../writing-a-reference-loader/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Writing a Reference Loader
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_12" checked>
+        
+          
+          <label class="md-nav__link" for="__nav_12" id="__nav_12_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Recipes
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_12_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_12">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Recipes
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../writing-a-recipe/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Writing a Recipe
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../installing-recipes/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Installing Recipes
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Reference
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Reference
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#recipemanifest-fields" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        RecipeManifest fields
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="RecipeManifest fields">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#recipeauthor" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        RecipeAuthor
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#reciperequires" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        RecipeRequires
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#reciperef-fields" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        RecipeRef fields
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#installed-recipe-registry" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Installed recipe registry
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#digest-algorithm" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Digest algorithm
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#cli-commands" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        CLI commands
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="CLI commands">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#hippo-recipe-inspect" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        hippo recipe inspect
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#hippo-recipe-import" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        hippo recipe import
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#hippo-recipe-export" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        hippo recipe export
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#hippo-recipe-list-phase-4" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        hippo recipe list (Phase 4)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#hippo-recipe-extend-phase-4" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        hippo recipe extend (Phase 4)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#hippo-recipe-diff-phase-4" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        hippo recipe diff (Phase 4)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#hippo-recipe-export-lockfile-phase-4" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        hippo recipe export-lockfile (Phase 4)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#hippo-recipe-install-from-lockfile-phase-4" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        hippo recipe install-from-lockfile (Phase 4)
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#environment-variables" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Environment variables
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#error-reference" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Error reference
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_13" >
+        
+          
+          <label class="md-nav__link" for="__nav_13" id="__nav_13_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    About
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_13_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_13">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    About
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../design-principles/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Design Principles
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../comparison/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Comparison
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../reference_typed_client/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Typed Client Reference
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#recipemanifest-fields" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        RecipeManifest fields
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="RecipeManifest fields">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#recipeauthor" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        RecipeAuthor
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#reciperequires" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        RecipeRequires
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#reciperef-fields" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        RecipeRef fields
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#installed-recipe-registry" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Installed recipe registry
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#digest-algorithm" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Digest algorithm
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#cli-commands" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        CLI commands
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="CLI commands">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#hippo-recipe-inspect" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        hippo recipe inspect
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#hippo-recipe-import" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        hippo recipe import
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#hippo-recipe-export" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        hippo recipe export
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#hippo-recipe-list-phase-4" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        hippo recipe list (Phase 4)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#hippo-recipe-extend-phase-4" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        hippo recipe extend (Phase 4)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#hippo-recipe-diff-phase-4" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        hippo recipe diff (Phase 4)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#hippo-recipe-export-lockfile-phase-4" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        hippo recipe export-lockfile (Phase 4)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#hippo-recipe-install-from-lockfile-phase-4" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        hippo recipe install-from-lockfile (Phase 4)
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#environment-variables" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Environment variables
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#error-reference" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Error reference
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+  
+  
+
+
+<h1 id="recipe-reference">Recipe Reference<a class="headerlink" href="#recipe-reference" title="Permanent link">&para;</a></h1>
+<p>Complete field and command reference for the Hippo recipe system. For authoring walkthroughs see <a href="../writing-a-recipe/">Writing a Recipe</a>; for install and lockfile walkthroughs see <a href="../installing-recipes/">Installing Recipes</a>.</p>
+<hr />
+<h2 id="recipemanifest-fields"><code>RecipeManifest</code> fields<a class="headerlink" href="#recipemanifest-fields" title="Permanent link">&para;</a></h2>
+<p><code>recipe.yaml</code> at the recipe root. Validated against the bundled <code>recipe_manifest.yaml</code> LinkML schema at <code>inspect</code> and <code>import</code> time.</p>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Required</th>
+<th>Type</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>id</code></td>
+<td>yes</td>
+<td>string</td>
+<td>Reverse-DNS stable identifier (<code>org.broad.scrnaseq</code>). Globally unique; used as the <code>provided_by</code> namespace (<code>recipe.&lt;id&gt;@&lt;version&gt;</code>) injected on every class and slot at merge time.</td>
+</tr>
+<tr>
+<td><code>name</code></td>
+<td>yes</td>
+<td>string</td>
+<td>Short, filesystem-safe slug. Becomes the <code>default_prefix</code> of the schema fragment. Must not collide with any installed prefix.</td>
+</tr>
+<tr>
+<td><code>version</code></td>
+<td>yes</td>
+<td>string</td>
+<td>Opaque version slug. SemVer recommended, not enforced.</td>
+</tr>
+<tr>
+<td><code>created_at</code></td>
+<td>yes</td>
+<td>datetime</td>
+<td>ISO 8601 UTC instant (<code>"2026-05-27T14:00:00Z"</code>).</td>
+</tr>
+<tr>
+<td><code>hippo_version</code></td>
+<td>yes</td>
+<td>string</td>
+<td>PEP 440 version specifier (e.g. <code>"&gt;=0.3,&lt;1.0"</code>). Import fails with <code>RecipeVersionIncompatibleError</code> when the running Hippo version is excluded by this specifier.</td>
+</tr>
+<tr>
+<td><code>description</code></td>
+<td>no</td>
+<td>string</td>
+<td>Human-readable, one paragraph.</td>
+</tr>
+<tr>
+<td><code>license</code></td>
+<td>no</td>
+<td>string</td>
+<td>SPDX identifier (e.g. <code>CC-BY-4.0</code>).</td>
+</tr>
+<tr>
+<td><code>source</code></td>
+<td>no</td>
+<td>string</td>
+<td>Author-declared canonical origin URI (e.g. a Zenodo DOI URL). Metadata only — Hippo never fetches from this field.</td>
+</tr>
+<tr>
+<td><code>author</code></td>
+<td>no</td>
+<td><code>RecipeAuthor</code></td>
+<td>Contact metadata sub-object (see below).</td>
+</tr>
+<tr>
+<td><code>parent</code></td>
+<td>no</td>
+<td><code>RecipeRef</code></td>
+<td>Ancestor recipe for explicit lineage. Auto-resolved as a dependency at install time; does not need to be repeated in <code>requires.recipes</code>.</td>
+</tr>
+<tr>
+<td><code>requires</code></td>
+<td>no</td>
+<td><code>RecipeRequires</code></td>
+<td>Peer dependencies block (see below).</td>
+</tr>
+</tbody>
+</table>
+<h3 id="recipeauthor"><code>RecipeAuthor</code><a class="headerlink" href="#recipeauthor" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>name</code></td>
+<td>Author's full name.</td>
+</tr>
+<tr>
+<td><code>email</code></td>
+<td>Author's email address.</td>
+</tr>
+<tr>
+<td><code>organization</code></td>
+<td>Author's institution or organization.</td>
+</tr>
+</tbody>
+</table>
+<p>All fields are optional.</p>
+<h3 id="reciperequires"><code>RecipeRequires</code><a class="headerlink" href="#reciperequires" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>recipes</code></td>
+<td>List of <code>RecipeRef</code>. Peer recipe dependencies merged bottom-up before the depending recipe.</td>
+</tr>
+<tr>
+<td><code>reference_loaders</code></td>
+<td>List of <code>name==version</code> pin strings. Treated as preconditions only — Hippo checks each is installed at the declared version; it does not install them automatically (see §10.4.5).</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="reciperef-fields"><code>RecipeRef</code> fields<a class="headerlink" href="#reciperef-fields" title="Permanent link">&para;</a></h2>
+<p>Reused for <code>parent</code>, each <code>requires.recipes[i]</code> entry, and entries stored in <code>hippo_meta.installed_recipes</code>.</p>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Required</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>id</code></td>
+<td>yes</td>
+<td>Matches <code>RecipeManifest.id</code> of the referenced recipe.</td>
+</tr>
+<tr>
+<td><code>version</code></td>
+<td>yes</td>
+<td>Matches <code>RecipeManifest.version</code>.</td>
+</tr>
+<tr>
+<td><code>source</code></td>
+<td>yes</td>
+<td><code>file:</code> URI, bare path, or <code>https:</code> URI. Relative paths in a manifest resolve against the importing recipe's directory; relative paths in a lockfile resolve against the lockfile's directory.</td>
+</tr>
+<tr>
+<td><code>digest</code></td>
+<td>required for <code>https:</code>; optional for <code>file:</code></td>
+<td>sha256 canonical content hash (see <a href="#digest-algorithm">Digest algorithm</a>), lowercase hex, optionally prefixed <code>sha256:</code>. Always recorded in <code>installed_recipes</code> after install.</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="installed-recipe-registry">Installed recipe registry<a class="headerlink" href="#installed-recipe-registry" title="Permanent link">&para;</a></h2>
+<p><code>hippo_meta.installed_recipes</code> is a JSON object keyed by recipe <code>id</code>. Each entry extends <code>RecipeRef</code> with fields recorded at install time.</p>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>id</code></td>
+<td>Matches <code>RecipeManifest.id</code>.</td>
+</tr>
+<tr>
+<td><code>version</code></td>
+<td>Matches <code>RecipeManifest.version</code>.</td>
+</tr>
+<tr>
+<td><code>source</code></td>
+<td>The exact URI Hippo fetched from (post-resolution).</td>
+</tr>
+<tr>
+<td><code>digest</code></td>
+<td>Verified or computed sha256, always present.</td>
+</tr>
+<tr>
+<td><code>installed_at</code></td>
+<td>ISO 8601 UTC instant recorded at install time.</td>
+</tr>
+<tr>
+<td><code>parent</code></td>
+<td>Embedded <code>RecipeRef</code> sub-object (carried from the manifest), or null.</td>
+</tr>
+</tbody>
+</table>
+<p>This registry is the source of truth for <code>hippo recipe list</code> and the input to <code>hippo recipe export-lockfile</code>.</p>
+<hr />
+<h2 id="digest-algorithm">Digest algorithm<a class="headerlink" href="#digest-algorithm" title="Permanent link">&para;</a></h2>
+<p>The canonical content hash is computed over file contents, not tarball bytes, so directory and tarball forms of the same recipe produce identical digests.</p>
+<p>Algorithm:</p>
+<ol>
+<li>Enumerate all files in the recipe directory recursively, relative to the recipe root.</li>
+<li>Sort the file list lexicographically by relative path.</li>
+<li>For each file in order, concatenate: <code>&lt;relative-path&gt;\n&lt;lowercase-hex-sha256-of-file-bytes&gt;\n</code>.</li>
+<li>The recipe digest is <code>sha256(buffer)</code>, lowercase hex. No files are excluded.</li>
+</ol>
+<p><code>hippo recipe inspect</code> prints the computed digest so authors can verify it before publishing.</p>
+<hr />
+<h2 id="cli-commands">CLI commands<a class="headerlink" href="#cli-commands" title="Permanent link">&para;</a></h2>
+<h3 id="hippo-recipe-inspect"><code>hippo recipe inspect</code><a class="headerlink" href="#hippo-recipe-inspect" title="Permanent link">&para;</a></h3>
+<p>Parse, validate, and digest a recipe without writing any state.</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>hippo<span class="w"> </span>recipe<span class="w"> </span>inspect<span class="w"> </span>&lt;source&gt;<span class="w"> </span><span class="o">[</span>--show-elements<span class="o">]</span>
+</code></pre></div>
+<table>
+<thead>
+<tr>
+<th>Argument / Option</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>&lt;source&gt;</code></td>
+<td>Recipe source: directory path, tarball path, <code>file:</code> URI, or <code>https:</code> URI.</td>
+</tr>
+<tr>
+<td><code>--show-elements</code></td>
+<td>Also print every class and slot declared in the schema.</td>
+</tr>
+</tbody>
+</table>
+<p>Accepts both directory and tarball forms. No DB writes, no cache writes, no provenance records.</p>
+<hr />
+<h3 id="hippo-recipe-import"><code>hippo recipe import</code><a class="headerlink" href="#hippo-recipe-import" title="Permanent link">&para;</a></h3>
+<p>Install a recipe and all its dependencies into the current Hippo instance.</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>hippo<span class="w"> </span>recipe<span class="w"> </span>import<span class="w"> </span>&lt;source&gt;<span class="w"> </span><span class="o">[</span>--digest<span class="w"> </span>&lt;hash&gt;<span class="o">]</span><span class="w"> </span><span class="o">[</span>--dry-run<span class="o">]</span><span class="w"> </span><span class="o">[</span>--db-path<span class="w"> </span>PATH<span class="o">]</span><span class="w"> </span><span class="o">[</span>--schema-dir<span class="w"> </span>DIR<span class="o">]</span>
+</code></pre></div>
+<table>
+<thead>
+<tr>
+<th>Argument / Option</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>&lt;source&gt;</code></td>
+<td>Recipe source: directory path, tarball, <code>file:</code> URI, or <code>https:</code> URI.</td>
+</tr>
+<tr>
+<td><code>--digest &lt;hash&gt;</code></td>
+<td>Declared sha256 content hash (hex, optionally prefixed <code>sha256:</code>). Required for <code>https:</code> sources.</td>
+</tr>
+<tr>
+<td><code>--dry-run</code></td>
+<td>Resolve and validate all dependencies without writing any state.</td>
+</tr>
+<tr>
+<td><code>--db-path PATH</code></td>
+<td>SQLite database path (default: <code>data/hippo.db</code>).</td>
+</tr>
+<tr>
+<td><code>--schema-dir DIR</code></td>
+<td>Schema directory (default: <code>schemas/</code>).</td>
+</tr>
+</tbody>
+</table>
+<p>All writes (schema merge, <code>installed_recipes</code> entry, <code>recipe_imported</code> provenance event) execute in a single storage transaction. A failure at any step rolls back all writes.</p>
+<hr />
+<h3 id="hippo-recipe-export"><code>hippo recipe export</code><a class="headerlink" href="#hippo-recipe-export" title="Permanent link">&para;</a></h3>
+<p>Package the locally-authored schema content as a redistributable recipe.</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a>hippo<span class="w"> </span>recipe<span class="w"> </span><span class="nb">export</span><span class="w"> </span>--out<span class="w"> </span>PATH<span class="w"> </span><span class="o">[</span>--parent<span class="w"> </span>&lt;installed-id&gt;<span class="o">]</span><span class="w"> </span><span class="o">[</span>--db-path<span class="w"> </span>PATH<span class="o">]</span><span class="w"> </span><span class="o">[</span>--schema-dir<span class="w"> </span>DIR<span class="o">]</span>
+</code></pre></div>
+<table>
+<thead>
+<tr>
+<th>Option</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>--out PATH</code></td>
+<td>Output directory. Writes <code>recipe.yaml</code> and <code>schema.yaml</code> here; fails if either file already exists.</td>
+</tr>
+<tr>
+<td><code>--parent &lt;installed-id&gt;</code></td>
+<td><code>id</code> of an installed recipe to declare as the lineage parent. Until <code>hippo recipe list</code> ships (Phase 4), find installed ids in <code>hippo_meta.installed_recipes</code>.</td>
+</tr>
+<tr>
+<td><code>--db-path PATH</code></td>
+<td>SQLite database path (default: <code>data/hippo.db</code>).</td>
+</tr>
+<tr>
+<td><code>--schema-dir DIR</code></td>
+<td>Schema directory (default: <code>schemas/</code>).</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Selectivity:</strong> only classes and slots whose <code>provided_by</code> annotation is absent or does not start with <code>recipe.</code> or <code>loader.</code>, and whose containing schema is not a Hippo framework schema (<code>hippo_core</code>, <code>recipe_manifest</code>), are exported. Content contributed by installed recipes or Reference Loaders is excluded.</p>
+<p><code>requires.recipes</code> is auto-populated from <code>is_a:</code> and slot range references to installed recipe content.</p>
+<p>The exported <code>recipe.yaml</code> contains stubs (<code>TODO.set.this</code>, <code>TODO-set-name</code>, <code>0.0.0</code>) that the author must replace before publishing.</p>
+<hr />
+<h3 id="hippo-recipe-list-phase-4"><code>hippo recipe list</code> <em>(Phase 4)</em><a class="headerlink" href="#hippo-recipe-list-phase-4" title="Permanent link">&para;</a></h3>
+<div class="admonition note">
+<p class="admonition-title">Coming in Phase 4</p>
+<p>This command is not yet available.</p>
+</div>
+<p>List all installed recipes.</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a>hippo<span class="w"> </span>recipe<span class="w"> </span>list
+</code></pre></div>
+<p>Prints <code>id</code>, <code>version</code>, <code>source</code>, and <code>digest</code> for every entry in <code>hippo_meta.installed_recipes</code>.</p>
+<hr />
+<h3 id="hippo-recipe-extend-phase-4"><code>hippo recipe extend</code> <em>(Phase 4)</em><a class="headerlink" href="#hippo-recipe-extend-phase-4" title="Permanent link">&para;</a></h3>
+<div class="admonition note">
+<p class="admonition-title">Coming in Phase 4</p>
+<p>This command is not yet available.</p>
+</div>
+<p>Scaffold a new recipe directory that extends an already-installed recipe.</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a>hippo<span class="w"> </span>recipe<span class="w"> </span>extend<span class="w"> </span>&lt;installed-id&gt;<span class="w"> </span>--out<span class="w"> </span>PATH
+</code></pre></div>
+<table>
+<thead>
+<tr>
+<th>Argument / Option</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>&lt;installed-id&gt;</code></td>
+<td><code>id</code> of the installed recipe to extend (from <code>hippo recipe list</code>).</td>
+</tr>
+<tr>
+<td><code>--out PATH</code></td>
+<td>Output directory for the new recipe scaffold.</td>
+</tr>
+</tbody>
+</table>
+<p>Writes <code>recipe.yaml</code> with <code>parent</code> pre-populated from <code>installed_recipes</code>, and an empty <code>schema.yaml</code>.</p>
+<hr />
+<h3 id="hippo-recipe-diff-phase-4"><code>hippo recipe diff</code> <em>(Phase 4)</em><a class="headerlink" href="#hippo-recipe-diff-phase-4" title="Permanent link">&para;</a></h3>
+<div class="admonition note">
+<p class="admonition-title">Coming in Phase 4</p>
+<p>This command is not yet available.</p>
+</div>
+<p>Show the structural difference between two recipes.</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a>hippo<span class="w"> </span>recipe<span class="w"> </span>diff<span class="w"> </span>&lt;a&gt;<span class="w"> </span>&lt;b&gt;
+</code></pre></div>
+<table>
+<thead>
+<tr>
+<th>Argument</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>&lt;a&gt;</code></td>
+<td>First recipe source (directory path, tarball, or URI).</td>
+</tr>
+<tr>
+<td><code>&lt;b&gt;</code></td>
+<td>Second recipe source.</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h3 id="hippo-recipe-export-lockfile-phase-4"><code>hippo recipe export-lockfile</code> <em>(Phase 4)</em><a class="headerlink" href="#hippo-recipe-export-lockfile-phase-4" title="Permanent link">&para;</a></h3>
+<div class="admonition note">
+<p class="admonition-title">Coming in Phase 4</p>
+<p>This command is not yet available.</p>
+</div>
+<p>Serialize <code>hippo_meta.installed_recipes</code> as a portable lockfile.</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a>hippo<span class="w"> </span>recipe<span class="w"> </span>export-lockfile<span class="w"> </span><span class="o">[</span>--out<span class="w"> </span>PATH<span class="o">]</span><span class="w"> </span><span class="o">[</span>--db-path<span class="w"> </span>PATH<span class="o">]</span>
+</code></pre></div>
+<table>
+<thead>
+<tr>
+<th>Option</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>--out PATH</code></td>
+<td>Output path (default: <code>recipe.lock.yaml</code>).</td>
+</tr>
+<tr>
+<td><code>--db-path PATH</code></td>
+<td>SQLite database path (default: <code>data/hippo.db</code>).</td>
+</tr>
+</tbody>
+</table>
+<p>The lockfile carries <code>lockfile_version: 1</code> for forward-compatible parsing. See <a href="../installing-recipes/#reproducing-a-deployment-with-a-lockfile">Installing Recipes — lockfile flow</a>.</p>
+<hr />
+<h3 id="hippo-recipe-install-from-lockfile-phase-4"><code>hippo recipe install-from-lockfile</code> <em>(Phase 4)</em><a class="headerlink" href="#hippo-recipe-install-from-lockfile-phase-4" title="Permanent link">&para;</a></h3>
+<div class="admonition note">
+<p class="admonition-title">Coming in Phase 4</p>
+<p>This command is not yet available.</p>
+</div>
+<p>Reproduce a deployment from a lockfile.</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a>hippo<span class="w"> </span>recipe<span class="w"> </span>install-from-lockfile<span class="w"> </span>&lt;file&gt;<span class="w"> </span><span class="o">[</span>--db-path<span class="w"> </span>PATH<span class="o">]</span>
+</code></pre></div>
+<table>
+<thead>
+<tr>
+<th>Argument / Option</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>&lt;file&gt;</code></td>
+<td>Path to <code>recipe.lock.yaml</code>.</td>
+</tr>
+<tr>
+<td><code>--db-path PATH</code></td>
+<td>SQLite database path (default: <code>data/hippo.db</code>).</td>
+</tr>
+</tbody>
+</table>
+<p>Re-fetches each entry via its <code>source</code>, verifies each <code>digest</code>, and installs in dependency order. Round-trip guarantee: the restored instance will have identical <code>id</code>, <code>version</code>, and <code>digest</code> for every entry.</p>
+<hr />
+<h2 id="environment-variables">Environment variables<a class="headerlink" href="#environment-variables" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th>Variable</th>
+<th>Default</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>HIPPO_RECIPE_CACHE</code></td>
+<td><code>~/.hippo/recipe-cache/</code></td>
+<td>Override the cache directory used by <code>HttpsResolver</code> for fetched recipes. Useful for shared NFS mounts or CI cache volumes.</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="error-reference">Error reference<a class="headerlink" href="#error-reference" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th>Error</th>
+<th>Cause</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>RecipeManifestError</code></td>
+<td><code>recipe.yaml</code> fails validation against the <code>recipe_manifest.yaml</code> LinkML schema.</td>
+</tr>
+<tr>
+<td><code>RecipePrefixCollisionError</code></td>
+<td>The recipe's <code>name</code>/<code>default_prefix</code> collides with an already-installed prefix from any source (recipe, loader, or hand-authored).</td>
+</tr>
+<tr>
+<td><code>RecipeRequiresUnsatisfiedError</code></td>
+<td>A <code>requires.recipes</code> or <code>requires.reference_loaders</code> dependency cannot be satisfied. The error message includes the unresolved <code>RecipeRef.source</code>.</td>
+</tr>
+<tr>
+<td><code>RecipeVersionIncompatibleError</code></td>
+<td>The running Hippo version is excluded by the recipe's <code>hippo_version</code> specifier.</td>
+</tr>
+<tr>
+<td><code>RecipeLineageCycleError</code></td>
+<td>The <code>parent</code> / <code>requires.recipes</code> dependency graph contains a cycle.</td>
+</tr>
+<tr>
+<td><code>RecipeSchemaError</code></td>
+<td><code>schema.yaml</code> fails LinkML validation, or the merge layer rejects the fragment — including attempts to modify an upstream class in-place.</td>
+</tr>
+<tr>
+<td><code>RecipeFetchError</code></td>
+<td>Resolver could not retrieve the artifact (HTTP error, corrupt tarball, unsupported URI scheme).</td>
+</tr>
+<tr>
+<td><code>RecipeDigestMismatchError</code></td>
+<td>The fetched recipe's content hash does not match the declared digest.</td>
+</tr>
+</tbody>
+</table>
+<p>Every error includes the recipe <code>id</code>, <code>version</code>, and the failing <code>source</code> URI in its message where those are known.</p>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+          <button type="button" class="md-top md-icon" data-md-component="top" hidden>
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8z"/></svg>
+  Back to top
+</button>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": "..", "features": ["navigation.tabs", "navigation.sections", "navigation.top", "search.highlight", "search.suggest", "content.code.copy"], "search": "../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+    
+    
+      <script src="../assets/javascripts/bundle.79ae519e.min.js"></script>
+      
+    
+  </body>
+</html>
