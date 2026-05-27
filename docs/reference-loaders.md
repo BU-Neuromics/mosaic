@@ -174,3 +174,5 @@ Reference loaders:
 ```
 
 The recorded version is what Hippo uses as the `from_version` baseline when you later run `hippo reference upgrade`.
+
+Hippo's **recipe system** is a complementary, lower-level mechanism for sharing schema fragments — where Reference Loaders bring data into a deployment, recipes bring the schema that gives that data its shape. In v1, Reference Loaders and recipes coexist unchanged: loaders continue on their existing install path and are not yet recipe producers. Recipes can declare a loader as a precondition (via `requires.reference_loaders`) to ensure the loader is installed before schema import proceeds. For details, see [Installing Recipes](installing-recipes.md) and [Writing a Recipe](writing-a-recipe.md).
