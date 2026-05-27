@@ -1,0 +1,86 @@
+site_name: Hippo
+site_description: A LinkML runtime engine — typed SDK, REST API, append-only provenance, and dynamic validation from a schema definition.
+site_url: https://bu-neuromics.github.io/hippo/
+repo_url: https://github.com/BU-Neuromics/hippo
+repo_name: BU-Neuromics/hippo
+edit_uri: edit/main/docs/
+
+theme:
+  name: material
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: teal
+      accent: cyan
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: teal
+      accent: cyan
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+  font:
+    text: Inter
+    code: JetBrains Mono
+  features:
+    - navigation.tabs
+    - navigation.sections
+    - navigation.top
+    - search.highlight
+    - search.suggest
+    - content.code.copy
+
+plugins:
+  - search
+
+markdown_extensions:
+  - admonition
+  - pymdownx.details
+  - pymdownx.superfences
+  - pymdownx.tabbed:
+      alternate_style: true
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.inlinehilite
+  - attr_list
+  - md_in_html
+  - toc:
+      permalink: true
+
+# Existing source docs use relative links written for GitHub browsing that do
+# not all resolve within MkDocs. Downgrade to info; tracked for cleanup.
+validation:
+  links:
+    not_found: info
+    absolute_links: info
+    unrecognized_links: info
+  nav:
+    omitted_files: info
+    not_found: warn
+    absolute_links: info
+
+nav:
+  - Home: index.md
+  - Why Hippo?: why-hippo.md
+  - Introduction: introduction.md
+  - Installation: installation.md
+  - Quick Start: quickstart.md
+  - Schema Guide: schema-guide.md
+  - Data Model: data-model.md
+  - Configuration: configuration.md
+  - CLI Reference: cli-reference.md
+  - API Reference: api-reference.md
+  - Reference Loaders:
+      - Overview: reference-loaders.md
+      - Writing a Reference Loader: writing-a-reference-loader.md
+  - Recipes:
+      - Writing a Recipe: writing-a-recipe.md
+      - Installing Recipes: installing-recipes.md
+      - Reference: recipe-reference.md
+  - About:
+      - Design Principles: design-principles.md
+      - Comparison: comparison.md
+      - Typed Client Reference: reference_typed_client.md
