@@ -784,6 +784,103 @@ class RecipeService:
             f"Run `hippo recipe list` to see what is installed."
         )
 
+    def export_lockfile(self, out: Path) -> Path:
+        """Serialise ``installed_recipes`` as a portable ``recipe.lock.yaml`` (sec10 §10.6).
+
+        Dumps :meth:`list_installed` as a YAML document carrying
+        ``lockfile_version: 1`` at the top level for forward-compatible
+        parsing (sec10 §10.6.2). Each entry mirrors the
+        ``hippo_meta.installed_recipes`` shape: ``id``, ``version``,
+        ``source``, ``digest`` (sha256-prefixed for portability),
+        ``installed_at``, and ``parent`` (or ``null`` if absent).
+
+        Args:
+            out: Destination path for the lockfile. Parent directory must
+                exist; the file is overwritten if it already exists.
+
+        Returns:
+            The resolved ``out`` path.
+        """
+        out_path = Path(out)
+        installed = self.list_installed()
+        entries: dict[str, dict] = {}
+        for record in installed:
+            entries[record.id] = _installed_recipe_to_lockfile_entry(record)
+        document = {
+            "lockfile_version": 1,
+            "installed_recipes": entries,
+        }
+        out_path.write_text(yaml.safe_dump(document, sort_keys=False))
+        return out_path
+
+    def install_from_lockfile(self, lockfile: Path) -> list["ImportResult"]:
+        """Replay a ``recipe.lock.yaml`` on the current instance (sec10 §10.6).
+
+        Iterates entries in dependency order (parents before children),
+        fetching each via its ``source``, verifying its ``digest``, and
+        installing through :meth:`import_`. Relative ``source`` paths
+        resolve against the lockfile's directory (sec10 §10.3.3).
+
+        The same-version skip inside :meth:`import_` means recipes already
+        installed (e.g. a parent reached transitively before its child's
+        explicit lockfile entry) are no-ops on re-encounter — the
+        round-trip is idempotent.
+
+        Args:
+            lockfile: Path to a ``recipe.lock.yaml`` document.
+
+        Returns:
+            One :class:`ImportResult` per lockfile entry, in install
+            order.
+
+        Raises:
+            ValueError: ``lockfile_version`` is missing or unsupported,
+                or the lockfile is structurally invalid.
+            RecipeLineageCycleError: Lockfile entries' parent graph
+                contains a cycle.
+            RecipeDigestMismatchError: A fetched recipe's digest does
+                not match the lockfile entry's declared digest.
+            RecipeFetchError: A ``source`` could not be resolved.
+        """
+        lockfile_path = Path(lockfile)
+        try:
+            data = yaml.safe_load(lockfile_path.read_text(encoding="utf-8"))
+        except yaml.YAMLError as e:
+            raise ValueError(
+                f"Failed to parse lockfile {lockfile_path}: {e}"
+            ) from e
+        if not isinstance(data, dict):
+            raise ValueError(
+                f"Lockfile {lockfile_path} must be a YAML mapping at the top level."
+            )
+
+        version = data.get("lockfile_version")
+        if version != 1:
+            raise ValueError(
+                f"Unsupported lockfile_version: {version!r} "
+                f"(this Hippo build supports lockfile_version: 1)."
+            )
+
+        raw_entries = data.get("installed_recipes") or {}
+        if not isinstance(raw_entries, dict):
+            raise ValueError(
+                f"Lockfile {lockfile_path} 'installed_recipes' must be a "
+                f"mapping; got {type(raw_entries).__name__}."
+            )
+
+        ordered = _topo_sort_lockfile_entries(raw_entries)
+
+        base_dir = lockfile_path.parent
+        results: list[ImportResult] = []
+        for entry in ordered:
+            result = self.import_(
+                entry["source"],
+                expected_digest=entry["digest"],
+                base_dir=base_dir,
+            )
+            results.append(result)
+        return results
+
     def diff(
         self,
         a: str | Path,
@@ -1299,6 +1396,86 @@ def _installed_recipe_to_dict(record: InstalledRecipe) -> dict:
         "installed_at": record.installed_at,
         "parent": parent_payload,
     }
+
+
+def _installed_recipe_to_lockfile_entry(record: InstalledRecipe) -> dict:
+    """Render one ``InstalledRecipe`` as a lockfile entry (sec10 §10.6.2).
+
+    Mirrors the persisted ``installed_recipes`` JSON shape except that
+    ``digest`` is emitted with the ``sha256:`` prefix for portability —
+    a lockfile is the public, cross-instance artifact and downstream
+    consumers will expect the prefixed form.
+    """
+    digest = record.digest
+    if not digest.startswith("sha256:"):
+        digest = f"sha256:{digest}"
+    parent_payload = None
+    if record.parent is not None:
+        parent_payload = {
+            "id": record.parent.id,
+            "version": record.parent.version,
+            "source": record.parent.source,
+        }
+        if record.parent.digest is not None:
+            parent_payload["digest"] = record.parent.digest
+    return {
+        "id": record.id,
+        "version": record.version,
+        "source": record.source,
+        "digest": digest,
+        "installed_at": record.installed_at,
+        "parent": parent_payload,
+    }
+
+
+def _topo_sort_lockfile_entries(entries: dict[str, dict]) -> list[dict]:
+    """Return lockfile entries in install order (parents before children).
+
+    The lockfile's ``parent`` block carries an ``id`` reference back to
+    another entry; topo-sorting on that pointer ensures every parent is
+    installed before its child. Entries whose parent is not present in
+    the lockfile (because the parent was imported from somewhere
+    else, or there is no parent) sort to the front in lexicographic
+    id order for deterministic output.
+
+    Cycle detection: if the parent graph contains a cycle, raise
+    :class:`RecipeLineageCycleError` so the install path mirrors the
+    same error contract as :meth:`import_`.
+    """
+    in_lockfile = set(entries.keys())
+    sorted_ids = sorted(entries.keys())
+
+    result: list[dict] = []
+    visited: set[str] = set()
+    visiting: list[str] = []
+
+    def _visit(rid: str) -> None:
+        if rid in visited:
+            return
+        if rid in visiting:
+            cycle = visiting[visiting.index(rid):] + [rid]
+            raise RecipeLineageCycleError(
+                f"Lockfile lineage cycle detected: {' -> '.join(cycle)}",
+                source=entries[rid].get("source"),
+                recipe_id=rid,
+                recipe_version=entries[rid].get("version"),
+                cycle=cycle,
+            )
+        visiting.append(rid)
+        try:
+            parent = entries[rid].get("parent")
+            if parent is not None:
+                parent_id = parent.get("id")
+                if parent_id and parent_id in in_lockfile:
+                    _visit(parent_id)
+        finally:
+            visiting.pop()
+        visited.add(rid)
+        result.append(entries[rid])
+
+    for rid in sorted_ids:
+        _visit(rid)
+    return result
 
 
 def _installed_recipe_from_dict(entry: dict) -> InstalledRecipe:

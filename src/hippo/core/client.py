@@ -839,3 +839,22 @@ class HippoClient:
         return self._recipe_service.diff(
             a, b, base_dir_a=base_dir_a, base_dir_b=base_dir_b
         )
+
+    def recipe_export_lockfile(self, out: Path) -> Path:
+        """Dump ``installed_recipes`` as ``recipe.lock.yaml`` (sec10 §10.6).
+
+        Thin delegator over :meth:`RecipeService.export_lockfile`.
+        Writes a portable YAML document with ``lockfile_version: 1`` and
+        one entry per installed recipe (id, version, source,
+        sha256-prefixed digest, installed_at, parent).
+        """
+        return self._recipe_service.export_lockfile(out)
+
+    def recipe_install_from_lockfile(self, lockfile: Path) -> list[ImportResult]:
+        """Replay a lockfile on the current instance (sec10 §10.6).
+
+        Thin delegator over :meth:`RecipeService.install_from_lockfile`.
+        Installs every lockfile entry in dependency order, verifying
+        each digest against the freshly-fetched bytes.
+        """
+        return self._recipe_service.install_from_lockfile(lockfile)

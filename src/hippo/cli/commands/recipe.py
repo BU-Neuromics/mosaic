@@ -425,3 +425,106 @@ def recipe_diff(
     _section("slots added", diff.slots_added)
     _section("slots removed", diff.slots_removed)
     _section("slots changed", diff.slots_changed)
+
+
+@recipe_app.command(name="export-lockfile")
+def recipe_export_lockfile(
+    out: str = typer.Option(
+        "recipe.lock.yaml",
+        "--out",
+        help="Destination path for the lockfile (default: recipe.lock.yaml).",
+    ),
+    db_path: str = typer.Option(
+        None,
+        "--db-path",
+        help="SQLite database path (default: data/hippo.db).",
+    ),
+    schema_dir: str = typer.Option(
+        None,
+        "--schema-dir",
+        help="Schema directory (default: schemas/).",
+    ),
+) -> None:
+    """Dump ``installed_recipes`` as ``recipe.lock.yaml`` (sec10 §10.6).
+
+    Writes a portable YAML document with ``lockfile_version: 1`` and
+    one entry per installed recipe — the input artifact for
+    ``hippo recipe install-from-lockfile`` on a peer instance.
+    """
+    from hippo.cli.main import _get_client
+
+    try:
+        client = _get_client(db_path=db_path, schema_path=schema_dir)
+    except Exception as exc:
+        typer.echo(f"Error: failed to open Hippo instance: {exc}", err=True)
+        raise typer.Exit(1)
+
+    out_path = client.recipe_export_lockfile(Path(out))
+    installed = client.recipe_list()
+    typer.echo(f"Wrote {out_path}")
+    typer.echo(f"  installed_recipes entries: {len(installed)}")
+
+
+@recipe_app.command(name="install-from-lockfile")
+def recipe_install_from_lockfile(
+    lockfile: str = typer.Argument(
+        ...,
+        help="Path to a recipe.lock.yaml document.",
+    ),
+    db_path: str = typer.Option(
+        None,
+        "--db-path",
+        help="SQLite database path (default: data/hippo.db).",
+    ),
+    schema_dir: str = typer.Option(
+        None,
+        "--schema-dir",
+        help="Schema directory (default: schemas/).",
+    ),
+) -> None:
+    """Replay a ``recipe.lock.yaml`` on the current instance (sec10 §10.6).
+
+    Iterates entries in dependency order (parents before children),
+    fetching each via its ``source``, verifying its ``digest``, and
+    installing through ``import_``. Relative ``source`` paths resolve
+    against the lockfile's directory.
+    """
+    from hippo.cli.main import _get_client
+
+    try:
+        client = _get_client(db_path=db_path, schema_path=schema_dir)
+    except Exception as exc:
+        typer.echo(f"Error: failed to open Hippo instance: {exc}", err=True)
+        raise typer.Exit(1)
+
+    try:
+        results = client.recipe_install_from_lockfile(Path(lockfile))
+    except RecipeLineageCycleError as e:
+        typer.echo(f"Error: lineage cycle: {' -> '.join(e.cycle)}", err=True)
+        raise typer.Exit(1)
+    except RecipeRequiresUnsatisfiedError as e:
+        typer.echo(f"Error: unsatisfied requires: {e.message}", err=True)
+        raise typer.Exit(1)
+    except RecipeVersionIncompatibleError as e:
+        typer.echo(f"Error: incompatible hippo_version: {e.message}", err=True)
+        raise typer.Exit(1)
+    except RecipeDigestMismatchError as e:
+        typer.echo(f"Error: digest mismatch: {e.message}", err=True)
+        raise typer.Exit(1)
+    except RecipeFetchError as e:
+        typer.echo(f"Error: fetch failed: {e.message}", err=True)
+        raise typer.Exit(1)
+    except RecipeManifestError as e:
+        typer.echo(f"Error: invalid manifest at {e.source}: {e.message}", err=True)
+        raise typer.Exit(1)
+    except RecipeSchemaError as e:
+        typer.echo(f"Error: schema merge rejected: {e.message}", err=True)
+        raise typer.Exit(1)
+    except ValueError as e:
+        typer.echo(f"Error: {e}", err=True)
+        raise typer.Exit(1)
+
+    typer.echo(f"Installed {len(results)} lockfile entries:")
+    for result in results:
+        for rec in result.installed:
+            typer.echo(f"  - {rec.id}@{rec.version} (sha256:{rec.digest})")
