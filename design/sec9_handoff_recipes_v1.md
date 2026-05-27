@@ -82,7 +82,7 @@ These must remain true after every PR in this work. The implementing agent shoul
 
 Four phases, each PR-sized at the boundaries. Phases must land in order. Phase 1 produces the authoritative design spec; Phases 2–4 are implementation and may not begin until Phase 1 has merged.
 
-### Phase 1: Author the design spec
+### Phase 1: Author the design spec — COMPLETE
 
 **Goal:** produce `design/sec10_recipes.md`, the durable design section for the recipe subsystem. From this phase onward, `sec10` is the authoritative spec; this handoff is reduced to "how to execute it."
 
@@ -331,13 +331,13 @@ Place under `tests/recipe/`. Minimum surface:
 
 ---
 
-## Open questions to flag before implementation starts
+## Open questions — RESOLVED in sec10
 
-1. **`requires.reference_loaders` resolution** — today's pin syntax (`name==version`) is matched against installed RLs only; v1 does NOT install RLs as a side effect of recipe import. Confirm this stays a precondition rather than an install action.
-2. **Lockfile schema version** — should `recipe.lock.yaml` carry its own `lockfile_version: 1` for forward compatibility? Recommend yes.
-3. **Cache-dir override** — should `HIPPO_RECIPE_CACHE` env var override `~/.hippo/recipe-cache/`? Recommend yes, parallel to existing cache conventions.
+These were flagged for resolution before Phase 2 begins. All three are resolved in `design/sec10_recipes.md §10.12`. Summary:
 
-These are small enough to resolve in a kickoff thread; none should block PR 1.
+1. **`requires.reference_loaders` resolution** — **Precondition only.** v1 does NOT install RLs as a side effect of recipe import. Hippo checks that each pinned RL is installed at the declared version; failure raises `RecipeRequiresUnsatisfiedError`. See sec10 §10.4.5.
+2. **Lockfile schema version** — **Yes.** `recipe.lock.yaml` carries `lockfile_version: 1` at the top level for forward-compatible parsing. See sec10 §10.6.2.
+3. **Cache-dir override** — **Yes.** `HIPPO_RECIPE_CACHE` env var overrides `~/.hippo/recipe-cache/`, parallel to existing cache conventions. See sec10 §10.4.2 and §10.4.6.
 
 ---
 
