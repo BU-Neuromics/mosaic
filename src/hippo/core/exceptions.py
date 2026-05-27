@@ -353,6 +353,72 @@ class RecipeManifestError(HippoError):
         super().__init__(message, **context)
 
 
+class RecipeFetchError(HippoError):
+    """Raised when a recipe resolver cannot retrieve the source artifact.
+
+    Covers HTTP errors (4xx/5xx), network failures (DNS, refused
+    connection, timeout), and corrupt/unreadable tarballs returned by
+    a remote endpoint (sec10 §10.4.2). Distinct from
+    :class:`RecipeDigestMismatchError`, which fires after a successful
+    fetch when bytes don't match the declared digest.
+
+    Every error must include the failing ``RecipeRef.source`` URI
+    plus the recipe ``id``/``version`` when those are known.
+    """
+
+    def __init__(
+        self,
+        message: str,
+        source: Optional[str] = None,
+        status_code: Optional[int] = None,
+        recipe_id: Optional[str] = None,
+        recipe_version: Optional[str] = None,
+        **context: Any,
+    ):
+        self.source = source
+        self.status_code = status_code
+        self.recipe_id = recipe_id
+        self.recipe_version = recipe_version
+        context["source"] = source
+        context["status_code"] = status_code
+        context["recipe_id"] = recipe_id
+        context["recipe_version"] = recipe_version
+        super().__init__(message, **context)
+
+
+class RecipeDigestMismatchError(HippoError):
+    """Raised when fetched bytes do not match the declared canonical-content digest.
+
+    Triggered by the install path (and by the resolver when an
+    ``expected_digest`` is provided) when ``sha256`` of the canonical
+    content hash disagrees with what the ``RecipeRef`` declared
+    (sec10 §10.4.3 / invariant 4). Always raised before any state
+    change.
+    """
+
+    def __init__(
+        self,
+        message: str,
+        source: Optional[str] = None,
+        expected_digest: Optional[str] = None,
+        actual_digest: Optional[str] = None,
+        recipe_id: Optional[str] = None,
+        recipe_version: Optional[str] = None,
+        **context: Any,
+    ):
+        self.source = source
+        self.expected_digest = expected_digest
+        self.actual_digest = actual_digest
+        self.recipe_id = recipe_id
+        self.recipe_version = recipe_version
+        context["source"] = source
+        context["expected_digest"] = expected_digest
+        context["actual_digest"] = actual_digest
+        context["recipe_id"] = recipe_id
+        context["recipe_version"] = recipe_version
+        super().__init__(message, **context)
+
+
 class RecipeSchemaError(HippoError):
     """Raised when a recipe's embedded schema fragment violates a merge invariant.
 

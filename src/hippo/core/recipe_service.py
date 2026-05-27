@@ -31,6 +31,7 @@ from hippo.core.exceptions import RecipeManifestError
 from hippo.core.meta import get_meta
 from hippo.core.recipe import (
     FileResolver,
+    HttpsResolver,
     InstalledRecipe,
     RecipeAuthor,
     RecipeManifest,
@@ -96,17 +97,21 @@ class RecipeService:
     ) -> None:
         """Compose the service.
 
-        ``cache_dir`` is reserved for the HTTPS content-addressable
-        cache that lands in PR 6 (PTS-291). ``resolvers`` defaults to
-        ``[FileResolver()]`` when not supplied; the HTTPS resolver is
-        appended automatically once the cache argument is wired in PR 6.
+        ``cache_dir`` overrides :func:`default_recipe_cache_dir` for the
+        bundled :class:`HttpsResolver`. ``resolvers`` defaults to
+        ``[FileResolver(), HttpsResolver(cache_dir)]`` when not supplied;
+        passing an explicit list disables the default registration so
+        tests can wire isolated resolver chains.
         """
         self._storage = storage
         self._schema_manager = schema_manager
         self._provenance_service = provenance_service
         self._cache_dir = cache_dir
         if resolvers is None:
-            self._resolvers: tuple[RecipeResolver, ...] = (FileResolver(),)
+            self._resolvers: tuple[RecipeResolver, ...] = (
+                FileResolver(),
+                HttpsResolver(cache_dir=cache_dir),
+            )
         else:
             self._resolvers = tuple(resolvers)
 
@@ -130,6 +135,7 @@ class RecipeService:
         source: str | Path,
         *,
         base_dir: Optional[Path] = None,
+        expected_digest: Optional[str] = None,
     ) -> RecipeReport:
         """Parse, validate, and digest a recipe without any state change (sec10 §10.2.3).
 
@@ -147,15 +153,20 @@ class RecipeService:
                 ``source`` is a string and to ``source.parent`` when
                 ``source`` is an existing ``Path`` (so callers passing
                 a path-like get the natural local resolution behavior).
+            expected_digest: Optional declared digest. When supplied,
+                the resolver verifies the canonical content hash and
+                raises :class:`RecipeDigestMismatchError` on mismatch.
+                ``inspect`` is read-only, so the install-path rule
+                "``https:`` requires a digest" is NOT enforced here —
+                that lives in :meth:`import_` (PR 7).
 
         Raises:
-            RecipeManifestError: When the manifest fails closed-schema
-                validation against ``recipe_manifest.yaml``.
-
-        Notes:
-            HTTPS sources work once :class:`HttpsResolver` lands in
-            PR 6. Until then a ``ValueError`` from the resolver chain
-            surfaces verbatim.
+            RecipeManifestError: Manifest fails closed-schema validation.
+            RecipeFetchError: HTTPS fetch failed (network, HTTP error,
+                corrupt tarball).
+            RecipeDigestMismatchError: ``expected_digest`` did not
+                match the fetched/loaded recipe's canonical content
+                hash.
         """
         src_str = str(source)
         effective_base = base_dir
@@ -163,7 +174,11 @@ class RecipeService:
             effective_base = source.parent if source.is_file() else None
 
         resolver = self._select_resolver(src_str)
-        with resolver.resolve(src_str, base_dir=effective_base) as recipe_dir:
+        with resolver.resolve(
+            src_str,
+            base_dir=effective_base,
+            expected_digest=expected_digest,
+        ) as recipe_dir:
             manifest_dict = self._read_manifest_yaml(recipe_dir, source=src_str)
             self._validate_manifest(manifest_dict, source=src_str)
             manifest = _manifest_from_dict(manifest_dict)

@@ -23,10 +23,16 @@ from hippo.core.recipe.dataclasses import (
     RecipeRequires,
 )
 from hippo.core.recipe.digest import canonical_content_hash
-from hippo.core.recipe.resolver import FileResolver, RecipeResolver
+from hippo.core.recipe.resolver import (
+    FileResolver,
+    HttpsResolver,
+    RecipeResolver,
+    default_recipe_cache_dir,
+)
 
 __all__ = [
     "FileResolver",
+    "HttpsResolver",
     "ImportPlan",
     "ImportResult",
     "InstalledRecipe",
@@ -38,4 +44,5 @@ __all__ = [
     "RecipeRequires",
     "RecipeResolver",
     "canonical_content_hash",
+    "default_recipe_cache_dir",
 ]

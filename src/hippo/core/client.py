@@ -751,6 +751,7 @@ class HippoClient:
         source: str | Path,
         *,
         base_dir: Optional[Path] = None,
+        expected_digest: Optional[str] = None,
     ) -> RecipeReport:
         """Parse, validate, and digest a recipe — no state change (sec10 §10.2.3).
 
@@ -759,4 +760,6 @@ class HippoClient:
         content hash) and for callers that want a typed report before
         committing to an import.
         """
-        return self._recipe_service.inspect(source, base_dir=base_dir)
+        return self._recipe_service.inspect(
+            source, base_dir=base_dir, expected_digest=expected_digest
+        )
