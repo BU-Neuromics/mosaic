@@ -320,6 +320,39 @@ class CacheIntegrityError(HippoError):
         super().__init__(message, **context)
 
 
+class RecipeSchemaError(HippoError):
+    """Raised when a recipe's embedded schema fragment violates a merge invariant.
+
+    Covers both LinkML-shape failures of ``schema.yaml`` and the
+    no-in-place-override check (sec10 §10.7.2, invariant 6) — a recipe
+    must not redefine a class or slot whose ``provided_by`` annotation
+    names a different recipe or loader. Users override by subclassing
+    (``is_a:``) instead.
+    """
+
+    def __init__(
+        self,
+        message: str,
+        element_name: Optional[str] = None,
+        element_kind: Optional[str] = None,
+        provided_by: Optional[str] = None,
+        recipe_id: Optional[str] = None,
+        recipe_version: Optional[str] = None,
+        **context: Any,
+    ):
+        self.element_name = element_name
+        self.element_kind = element_kind
+        self.provided_by = provided_by
+        self.recipe_id = recipe_id
+        self.recipe_version = recipe_version
+        context["element_name"] = element_name
+        context["element_kind"] = element_kind
+        context["provided_by"] = provided_by
+        context["recipe_id"] = recipe_id
+        context["recipe_version"] = recipe_version
+        super().__init__(message, **context)
+
+
 class SearchCapabilityError(HippoError):
     """Exception raised when a search operation is attempted on a field
     that does not support full-text search.

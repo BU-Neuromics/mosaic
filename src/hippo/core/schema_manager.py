@@ -17,7 +17,11 @@ from hippo.core.validation.validators import (
     WriteOperation,
     WriteValidator,
 )
-from hippo.linkml_bridge import SchemaRegistry
+from hippo.linkml_bridge import (
+    PROVIDED_BY_ANNOTATION,
+    SchemaRegistry,
+    annotation_value,
+)
 
 
 class SchemaManager:
@@ -141,3 +145,77 @@ class SchemaManager:
         if self._bypass_validation or self._pipeline is None:
             return ValidationResult(is_valid=True, errors=[])
         return self._pipeline.execute(operation)
+
+    def check_no_inplace_override(
+        self,
+        fragment: dict,
+        *,
+        importing_provided_by: Optional[str] = None,
+    ) -> None:
+        """Reject recipe fragments that redefine upstream-provided content.
+
+        Implements sec10 §10.7.2 / invariant 6 — the merge seam Phase 3
+        will call before invoking ``merge_fragment``. A fragment may
+        introduce brand-new classes/slots, and may subclass upstream
+        content via ``is_a:`` (that creates a NEW class), but it must
+        NOT redefine an existing class/slot whose ``provided_by``
+        annotation names a different recipe or loader.
+
+        Args:
+            fragment: Parsed ``schema.yaml`` dict. Only the top-level
+                ``classes`` and ``slots`` sections are inspected; nested
+                ``attributes`` are not checked separately because a
+                fragment that touches them must already have redeclared
+                the owning class, which the class-level check catches.
+            importing_provided_by: The ``provided_by`` attribution the
+                merge layer will inject for THIS recipe (e.g.,
+                ``recipe.org.example.foo@1.0``). When supplied, an
+                existing element with the exact same attribution is
+                permitted — re-merging the same recipe identity is not
+                an in-place override. When ``None``, ANY existing
+                element with a ``recipe.`` or ``loader.`` attribution
+                triggers rejection.
+
+        Raises:
+            RecipeSchemaError: When the fragment redefines an upstream
+                class or slot.
+        """
+        from hippo.core.exceptions import RecipeSchemaError
+
+        if self._registry is None:
+            return
+        sv = self._registry.schema_view
+
+        def _check(name: str, existing: object, kind: str) -> None:
+            pb = annotation_value(existing, PROVIDED_BY_ANNOTATION)
+            if not pb:
+                return
+            pb_str = str(pb)
+            if not (
+                pb_str.startswith("recipe.") or pb_str.startswith("loader.")
+            ):
+                return
+            if (
+                importing_provided_by is not None
+                and pb_str == importing_provided_by
+            ):
+                return
+            raise RecipeSchemaError(
+                f"Cannot redefine {kind} {name!r}: it is provided by "
+                f"{pb_str!r}. In-place override of upstream classes/slots "
+                f"is rejected (sec10 §10.7.2, invariant 6). Subclass via "
+                f"`is_a:` to specialise instead.",
+                element_name=name,
+                element_kind=kind,
+                provided_by=pb_str,
+            )
+
+        for class_name in (fragment.get("classes") or {}):
+            cls = sv.get_class(class_name)
+            if cls is not None:
+                _check(class_name, cls, "class")
+
+        for slot_name in (fragment.get("slots") or {}):
+            slot = sv.get_slot(slot_name)
+            if slot is not None:
+                _check(slot_name, slot, "slot")
