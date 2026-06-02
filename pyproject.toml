@@ -56,6 +56,12 @@ postgres = "hippo.core.storage.adapters.postgres_adapter:PostgresAdapter"
 [project.entry-points."hippo.write_validators"]
 schema = "hippo.validators.schema_validator:SchemaValidator"
 
+# Genus group (Doc 2 §2A). ``hippo.reference_loaders`` below is a
+# subset/alias carrying the external-data species; discovery resolves both
+# and dedups by name. Pure-schema packages register here only.
+[project.entry-points."hippo.schema_packages"]
+fake_schema = "hippo.testing.fake_reference_loader:FakeSchemaPackage"
+
 [project.entry-points."hippo.reference_loaders"]
 fake = "hippo.testing.fake_reference_loader:FakeReferenceLoader"
 rich = "hippo.testing.fake_reference_loader:RichParamsLoader"

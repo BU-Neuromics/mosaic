@@ -1,23 +1,50 @@
-"""ReferenceLoader ABC and LoadResult dataclass.
+"""``ReferenceLoader`` species, ``LoadResult``, and ``EntityRef``.
 
-Surface for reference-data plugins (e.g. ``hippo-reference-fma``,
+``ReferenceLoader`` is the *external-data* species of the
+:class:`~hippo.core.loaders.schema_package.SchemaPackage` genus (Hippo
+Migration & Extension Design, Doc 2 §2A). It is the surface for
+reference-data plugins (e.g. ``hippo-reference-fma``,
 ``hippo-reference-ensembl``). The contract is fixed by Hippo design
 spec §2.14 (`hippo/design/sec2_architecture.md`) and decisions D2.14.A–I
 in `hippo/design/sec9_decisions.md`.
+
+The genus contributes the pinnable-fragment machinery (``versions()``,
+``schema_fragment()``, ``depends_on()``, ``validate()``, the
+``provision``/``evolve``/``deprovision`` lifecycle hooks). This module
+adds the external-data behaviour: ``load()`` / ``upgrade()`` keep their
+historical names so existing loaders are untouched, and the genus hooks
+are mapped onto them (``provision`` → ``load``, ``evolve`` → ``upgrade``)
+so the orchestrator can dispatch uniformly.
+
+:class:`SchemaPackage` (and the capability protocols) are re-exported
+here for convenience, since loaders already import from this module.
 """
 
 from __future__ import annotations
 
-from abc import ABC, abstractmethod
+from abc import abstractmethod
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
-import typer
 from pydantic import BaseModel
+
+from hippo.core.loaders.schema_package import (
+    ExternalData,
+    MigratableData,
+    SchemaPackage,
+)
 
 if TYPE_CHECKING:
     from hippo.core.client import HippoClient
-    from hippo.core.validation.validators import ValidationResult
+
+__all__ = [
+    "EntityRef",
+    "LoadResult",
+    "ReferenceLoader",
+    "SchemaPackage",
+    "ExternalData",
+    "MigratableData",
+]
 
 
 @dataclass(frozen=True)
@@ -65,58 +92,26 @@ class LoadResult:
     entities: list[EntityRef] = field(default_factory=list)
 
 
-class ReferenceLoader(ABC):
-    """Abstract base class for reference-data loader plugins.
+class ReferenceLoader(SchemaPackage):
+    """External-data species of :class:`SchemaPackage`.
 
     Concrete subclasses are distributed as ``hippo-reference-<name>``
     packages and registered via the ``hippo.reference_loaders`` entry
-    point group. See spec §2.14 for lifecycle, caching, schema-fragment
-    merge rules, and upgrade semantics.
+    point group (a subset/alias of ``hippo.schema_packages``). See spec
+    §2.14 for lifecycle, caching, schema-fragment merge rules, and
+    upgrade semantics.
+
+    Inherits ``name``, ``description``, ``versions()``,
+    ``schema_fragment()``, ``depends_on()``, ``validate()``,
+    ``load_params_schema`` and ``subcommands_app`` from the genus. Adds
+    the external-data behaviour: ``load()`` (abstract) and ``upgrade()``,
+    and maps the genus lifecycle hooks onto them.
     """
-
-    name: str
-    description: str
-
-    # D2.14.A — optional Typer sub-app mounted under
-    # ``hippo reference <name> ...``. Registered separately via the
-    # ``hippo.reference_loader_cli`` entry point group.
-    subcommands_app: typer.Typer | None = None
-
-    # D2.14.D — optional Pydantic v2 model describing ``load()``
-    # parameters. When declared, the CLI auto-renders ``--flag`` args
-    # and validates user input before invoking ``load()``.
-    load_params_schema: type[BaseModel] | None = None
-
-    @abstractmethod
-    def versions(self) -> list[str]:
-        """Return the available version slugs for this loader.
-
-        Slugs are opaque to Hippo (D2.14.C); format is loader-defined.
-        Loaders SHOULD include ``"test"`` as a pseudo-version (D2.14.I).
-        """
-
-    @abstractmethod
-    def entity_types(self) -> list[str]:
-        """Return the entity type names this loader populates.
-
-        Declarative only — for provenance and discoverability. Loader
-        code owns the runtime ingestion order across these classes
-        (Decision 9.5.F).
-        """
-
-    @abstractmethod
-    def schema_fragment(self) -> dict:
-        """Return a LinkML schema fragment defining this loader's
-        entity types and relationships.
-
-        Must declare ``default_prefix: <loader_name>:`` (D2.14.G,
-        Rule 1).
-        """
 
     @abstractmethod
     def load(
         self,
-        client: HippoClient,
+        client: "HippoClient",
         version: str,
         params: BaseModel | None = None,
     ) -> LoadResult:
@@ -128,7 +123,7 @@ class ReferenceLoader(ABC):
 
     def upgrade(
         self,
-        client: HippoClient,
+        client: "HippoClient",
         from_version: str,
         to_version: str,
         params: BaseModel | None = None,
@@ -141,12 +136,60 @@ class ReferenceLoader(ABC):
         """
         return self.load(client, to_version, params)
 
-    def validate(self, user_artifact: object) -> "ValidationResult":
-        """Validate a user-supplied artifact against this loader's
-        schema (D2.14.B).
+    def populates_types(self) -> list[str]:
+        """Return the entity-type names this loader fills with *data*.
 
-        Recommended, not required. Default raises ``NotImplementedError``
-        with the loader name in the message so CLI surfaces can render
-        a clear "this loader does not implement validate()" hint.
+        A *species* concern (Doc 2 §2A): distinct from the types a
+        package *defines* via :meth:`schema_fragment`. Declarative only —
+        for provenance and discoverability; loader code owns the runtime
+        ingestion order across these classes (Decision 9.5.F).
+
+        Renamed from ``entity_types()``. For back-compat the default
+        delegates to :meth:`entity_types`, so loaders written against the
+        pre-``SchemaPackage`` ABC (which override ``entity_types()``)
+        keep reporting their declared types unchanged. New loaders should
+        override this method directly.
         """
-        raise NotImplementedError(f"{self.name} does not implement validate()")
+        return self.entity_types()
+
+    def entity_types(self) -> list[str]:
+        """Deprecated alias for :meth:`populates_types`.
+
+        Retained so loaders written against the pre-``SchemaPackage`` ABC
+        — which declared ``entity_types()`` as an abstract method — keep
+        instantiating and reporting their declared types unchanged. New
+        loaders should override :meth:`populates_types` instead. Returns
+        an empty list by default.
+        """
+        return []
+
+    # ------------------------------------------------------------------
+    # Genus lifecycle hooks mapped onto the historical method names, so
+    # the orchestrator can dispatch provision/evolve/deprovision while
+    # loader authors keep load()/upgrade() (Doc 2 §2A back-compat).
+    # ------------------------------------------------------------------
+
+    def provision(
+        self,
+        client: "HippoClient",
+        version: str,
+        params: BaseModel | None = None,
+    ) -> LoadResult:
+        """Install-time population → :meth:`load`."""
+        return self.load(client, version, params)
+
+    def evolve(
+        self,
+        client: "HippoClient",
+        from_version: str,
+        to_version: str,
+        params: BaseModel | None = None,
+    ) -> LoadResult:
+        """Upgrade-time transition → :meth:`upgrade` (re-ingest / diff)."""
+        return self.upgrade(client, from_version, to_version, params)
+
+    # ``deprovision`` → prune is driven by the orchestrator off the
+    # ``reference_write_log`` substrate (D2.14.J), not by the loader
+    # instance (which has no handle to the write log). The genus no-op is
+    # inherited here so the orchestrator stays the single owner of the
+    # prune; reference loaders do not override it.

@@ -21,7 +21,12 @@ from typing import TYPE_CHECKING, Any
 import typer
 from pydantic import BaseModel, Field
 
-from hippo.core.loaders.reference import EntityRef, LoadResult, ReferenceLoader
+from hippo.core.loaders.reference import (
+    EntityRef,
+    LoadResult,
+    ReferenceLoader,
+    SchemaPackage,
+)
 
 if TYPE_CHECKING:
     from hippo.core.client import HippoClient
@@ -78,7 +83,7 @@ class FakeReferenceLoader(ReferenceLoader):
     def versions(self) -> list[str]:
         return list(self._DATASET.keys())
 
-    def entity_types(self) -> list[str]:
+    def populates_types(self) -> list[str]:
         return ["FakeTerm"]
 
     def schema_fragment(self) -> dict:
@@ -184,7 +189,7 @@ class RichParamsLoader(ReferenceLoader):
     def versions(self) -> list[str]:
         return list(self._DATASET.keys())
 
-    def entity_types(self) -> list[str]:
+    def populates_types(self) -> list[str]:
         return ["RichTerm"]
 
     def schema_fragment(self) -> dict:
@@ -253,7 +258,7 @@ class BareReferenceLoader(ReferenceLoader):
     def versions(self) -> list[str]:
         return list(self._DATASET.keys())
 
-    def entity_types(self) -> list[str]:
+    def populates_types(self) -> list[str]:
         return ["BareTerm"]
 
     def schema_fragment(self) -> dict:
@@ -288,6 +293,50 @@ class BareReferenceLoader(ReferenceLoader):
             created=len(entities),
             entities=entities,
         )
+
+
+# ---------------------------------------------------------------------------
+# Pure-schema ``SchemaPackage`` (genus, no data hooks) — Doc 2 §2A / S0.
+# Registered under the ``hippo.schema_packages`` entry-point group only,
+# so the test suite can prove the genus path: discovery resolves it, its
+# fragment merges, and it pins via ``requires:`` — all with **no**
+# hand-written ``load()`` / ``provision()`` (the lifecycle hooks stay the
+# genus no-op).
+# ---------------------------------------------------------------------------
+
+
+class FakeSchemaPackage(SchemaPackage):
+    """A pure-schema package: contributes a versioned fragment, no data.
+
+    Implements only the two abstract genus methods (:meth:`versions` and
+    :meth:`schema_fragment`); ``provision``/``evolve``/``deprovision``
+    inherit the genus no-op. Exercises the "hand-written no-op ``load()``
+    disappears" acceptance criterion (Doc 2 §2A / §9 S0).
+    """
+
+    name = "fake_schema"
+    description = "Pure-schema SchemaPackage with no data hooks (test fixture)"
+
+    def versions(self) -> list[str]:
+        return ["test", "v1"]
+
+    def schema_fragment(self) -> dict:
+        return {
+            "id": "https://example.org/hippo/fake_schema",
+            "name": "fake_schema",
+            "default_prefix": "fake_schema",
+            "prefixes": {
+                "fake_schema": "https://example.org/hippo/fake_schema/"
+            },
+            "classes": {
+                "FakeSchemaTerm": {
+                    "is_a": "Entity",
+                    "attributes": {
+                        "label": {"range": "string", "required": True},
+                    },
+                },
+            },
+        }
 
 
 # ---------------------------------------------------------------------------

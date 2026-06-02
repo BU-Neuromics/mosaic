@@ -47,7 +47,12 @@ from typing import TYPE_CHECKING, Any, Union, get_args, get_origin
 from pydantic import BaseModel, ValidationError
 from pydantic_core import PydanticUndefined
 
-from hippo.core.loaders.reference import EntityRef, LoadResult, ReferenceLoader
+from hippo.core.loaders.reference import (
+    EntityRef,
+    LoadResult,
+    ReferenceLoader,
+    SchemaPackage,
+)
 
 if TYPE_CHECKING:
     import typer
@@ -65,15 +70,31 @@ RESERVED_TEST_SLUG = "test"
 # substrate for ``--prune-old`` is the ``reference_write_log`` table.
 META_KEY_VERSIONS = "reference_versions"
 
+# Entry-point groups (Doc 2 §2A). ``hippo.schema_packages`` is the broad
+# genus group; ``hippo.reference_loaders`` is a subset/alias carrying the
+# external-data species. Discovery resolves both so a package registered
+# under either is found, and dedups by name (genus group canonical).
+SCHEMA_PACKAGES_GROUP = "hippo.schema_packages"
+REFERENCE_LOADERS_GROUP = "hippo.reference_loaders"
 
-class ReferenceLoaderRegistrationError(TypeError):
+
+class SchemaPackageRegistrationError(TypeError):
+    """Raised when a ``hippo.schema_packages`` entry point does not
+    resolve to a concrete :class:`SchemaPackage` subclass."""
+
+
+class ReferenceLoaderRegistrationError(SchemaPackageRegistrationError):
     """Raised when a ``hippo.reference_loaders`` entry point does not
-    resolve to a concrete :class:`ReferenceLoader` subclass."""
+    resolve to a concrete :class:`ReferenceLoader` subclass.
+
+    Subclasses :class:`SchemaPackageRegistrationError` so callers that
+    catch the genus error also catch the reference-loader variant.
+    """
 
 
 class ReferenceLoaderNotFoundError(KeyError):
-    """Raised when no ``hippo.reference_loaders`` entry point matches a
-    requested loader name."""
+    """Raised when no schema-package / reference-loader entry point
+    matches a requested package name."""
 
 
 def reference_cache_root() -> Path:
@@ -125,6 +146,66 @@ def get_references_dir() -> Path:
     return refs_dir
 
 
+def _resolve_group_eps(group: str) -> list[Any]:
+    """Return the entry points registered under ``group``.
+
+    Handles the ``select(group=...)`` API and the legacy ``eps[group]``
+    mapping access across ``importlib.metadata`` versions; an absent
+    group yields an empty list.
+    """
+    from importlib.metadata import entry_points
+
+    try:
+        eps = entry_points()
+        return list(eps.select(group=group))
+    except (TypeError, AttributeError):
+        try:
+            eps = entry_points()
+            return list(eps[group])
+        except (KeyError, TypeError):
+            return []
+
+
+def _build_package_info(
+    ep: Any,
+    *,
+    group: str,
+    base: type,
+    base_fqn: str,
+    error_cls: type[Exception],
+) -> dict[str, Any]:
+    """Validate, instantiate, and describe a single package entry point.
+
+    ``base`` is the required superclass (``ReferenceLoader`` or
+    :class:`SchemaPackage`); a mismatch raises ``error_cls`` with a
+    message naming the offending entry point and the expected base.
+    """
+    loaded = ep.load()
+    if not (isinstance(loaded, type) and issubclass(loaded, base)):
+        raise error_cls(
+            f"Entry point '{group}:{ep.name}' ({ep.value}) is not a "
+            f"subclass of {base_fqn}"
+        )
+    instance = loaded()
+    # D2.14.D — validate at registration that every field on the declared
+    # `load_params_schema` (if any) can be rendered as a `--flag` arg.
+    # Packages that ship an unsupported field type fail loud here, not at
+    # first CLI invocation.
+    if loaded.load_params_schema is not None:
+        _validate_load_params_schema(ep.name, loaded.load_params_schema)
+    package_name, package_version = _resolve_distribution(loaded.__module__)
+    return {
+        "name": ep.name,
+        "entry_point": ep.name,
+        "class": loaded.__name__,
+        "module": loaded.__module__,
+        "package_name": package_name,
+        "package_version": package_version,
+        "description": getattr(instance, "description", ""),
+        "instance": instance,
+    }
+
+
 def discover_reference_loaders() -> list[dict[str, Any]]:
     """Discover and instantiate reference loaders via entry points.
 
@@ -135,51 +216,47 @@ def discover_reference_loaders() -> list[dict[str, Any]]:
     :class:`ReferenceLoaderRegistrationError` with a message identifying
     the offending entry point.
     """
-    from importlib.metadata import entry_points
-
-    loaders: list[dict[str, Any]] = []
-
-    try:
-        eps = entry_points()
-        ref_eps = eps.select(group="hippo.reference_loaders")
-        eps_list = list(ref_eps)
-    except (TypeError, AttributeError):
-        try:
-            eps = entry_points()
-            eps_list = list(eps["hippo.reference_loaders"])
-        except (KeyError, TypeError):
-            eps_list = []
-
-    for ep in eps_list:
-        loaded = ep.load()
-        if not (isinstance(loaded, type) and issubclass(loaded, ReferenceLoader)):
-            raise ReferenceLoaderRegistrationError(
-                f"Entry point 'hippo.reference_loaders:{ep.name}' "
-                f"({ep.value}) is not a subclass of "
-                f"hippo.core.loaders.reference.ReferenceLoader"
-            )
-        instance = loaded()
-        # D2.14.D — validate at registration that every field on the
-        # declared `load_params_schema` (if any) can be rendered as a
-        # `--flag` arg. Loaders that ship an unsupported field type
-        # fail loud here, not at first CLI invocation.
-        if loaded.load_params_schema is not None:
-            _validate_load_params_schema(ep.name, loaded.load_params_schema)
-        package_name, package_version = _resolve_distribution(loaded.__module__)
-        loaders.append(
-            {
-                "name": ep.name,
-                "entry_point": ep.name,
-                "class": loaded.__name__,
-                "module": loaded.__module__,
-                "package_name": package_name,
-                "package_version": package_version,
-                "description": getattr(instance, "description", ""),
-                "instance": instance,
-            }
+    return [
+        _build_package_info(
+            ep,
+            group=REFERENCE_LOADERS_GROUP,
+            base=ReferenceLoader,
+            base_fqn="hippo.core.loaders.reference.ReferenceLoader",
+            error_cls=ReferenceLoaderRegistrationError,
         )
+        for ep in _resolve_group_eps(REFERENCE_LOADERS_GROUP)
+    ]
 
-    return loaders
+
+def discover_schema_packages() -> list[dict[str, Any]]:
+    """Discover and instantiate every :class:`SchemaPackage` via entry points.
+
+    Resolves the broad ``hippo.schema_packages`` group **and** the
+    ``hippo.reference_loaders`` subset/alias (Doc 2 §2A), so a package
+    registered under either group is found. Entries are deduplicated by
+    name with the genus group canonical: ``hippo.schema_packages`` is
+    scanned first, then ``hippo.reference_loaders`` contributes only the
+    names not already seen. Each entry point must resolve to a concrete
+    :class:`SchemaPackage` subclass; anything else raises
+    :class:`SchemaPackageRegistrationError`.
+    """
+    packages: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for group in (SCHEMA_PACKAGES_GROUP, REFERENCE_LOADERS_GROUP):
+        for ep in _resolve_group_eps(group):
+            if ep.name in seen:
+                continue
+            seen.add(ep.name)
+            packages.append(
+                _build_package_info(
+                    ep,
+                    group=group,
+                    base=SchemaPackage,
+                    base_fqn="hippo.core.loaders.schema_package.SchemaPackage",
+                    error_cls=SchemaPackageRegistrationError,
+                )
+            )
+    return packages
 
 
 def discover_reference_loader_subapps() -> list[tuple[str, "typer.Typer"]]:
@@ -234,18 +311,22 @@ def mount_reference_loader_subapps(reference_app: "typer.Typer") -> None:
 
 
 def find_loader(name: str) -> dict[str, Any]:
-    """Look up a single loader info dict by entry-point name.
+    """Look up a single schema-package info dict by entry-point name.
 
-    Raises :class:`ReferenceLoaderNotFoundError` with a clear message
-    when no loader is registered under ``name``.
+    Resolves both the ``hippo.schema_packages`` group and its
+    ``hippo.reference_loaders`` subset/alias, so reference loaders and
+    pure-schema packages are equally discoverable. Raises
+    :class:`ReferenceLoaderNotFoundError` with a clear message when no
+    package is registered under ``name``.
     """
-    for info in discover_reference_loaders():
+    for info in discover_schema_packages():
         if info["name"] == name:
             return info
     raise ReferenceLoaderNotFoundError(
-        f"No reference loader registered under name {name!r}. "
-        f"Install the corresponding hippo-reference-* package or check "
-        f"the ``hippo.reference_loaders`` entry point in its pyproject.toml."
+        f"No schema package registered under name {name!r}. "
+        f"Install the corresponding package or check the "
+        f"``hippo.schema_packages`` / ``hippo.reference_loaders`` entry "
+        f"point in its pyproject.toml."
     )
 
 
@@ -421,7 +502,7 @@ def _build_load_params_parser(
 
 
 def parse_load_params(
-    loader: ReferenceLoader, extra_args: list[str]
+    loader: SchemaPackage, extra_args: list[str]
 ) -> BaseModel | None:
     """Parse ``--<field>`` args against ``loader.load_params_schema``.
 
@@ -488,7 +569,7 @@ def install_reference(
     without re-running the loader.
     """
     info = find_loader(name)
-    loader: ReferenceLoader = info["instance"]
+    loader: SchemaPackage = info["instance"]
     resolved_version = _resolve_version(loader, version)
 
     if resolved_version == RESERVED_TEST_SLUG:
@@ -521,7 +602,12 @@ def install_reference(
     # (spec §2.14 install step 3) without the prompt branch.
     client = _build_client(merged_registry, db)
     with client.load_context(loader_name=name, version=resolved_version):
-        load_result = loader.load(client, resolved_version, params)
+        # Genus lifecycle hook (Doc 2 §2A): ReferenceLoader.provision maps
+        # to load(); a pure-schema SchemaPackage inherits the no-op (the
+        # fragment is already merged above) and returns None.
+        load_result = loader.provision(client, resolved_version, params)
+    if load_result is None:
+        load_result = LoadResult()
     _abort_on_load_errors(name, resolved_version, load_result)
 
     _write_versions(db, name, resolved_version)
@@ -554,7 +640,7 @@ def upgrade_reference(
     deletion is gated behind a clean LoadResult).
     """
     info = find_loader(name)
-    loader: ReferenceLoader = info["instance"]
+    loader: SchemaPackage = info["instance"]
     resolved_to = _resolve_version(loader, to_version)
 
     db = Path(db_path)
@@ -579,7 +665,12 @@ def upgrade_reference(
 
     client = _build_client(merged_registry, db)
     with client.load_context(loader_name=name, version=resolved_to):
-        load_result = loader.upgrade(client, from_version, resolved_to, params)
+        # Genus lifecycle hook (Doc 2 §2A): ReferenceLoader.evolve maps to
+        # upgrade() (re-ingest / diff); a pure-schema SchemaPackage
+        # inherits the no-op and returns None.
+        load_result = loader.evolve(client, from_version, resolved_to, params)
+    if load_result is None:
+        load_result = LoadResult()
     _abort_on_load_errors(name, resolved_to, load_result)
 
     pruned: list[EntityRef] = []
@@ -636,7 +727,7 @@ def list_reference_loaders(
 # ---------------------------------------------------------------------------
 
 
-def _resolve_version(loader: ReferenceLoader, requested: str | None) -> str:
+def _resolve_version(loader: SchemaPackage, requested: str | None) -> str:
     if requested is not None:
         return requested
     available = loader.versions()
@@ -674,7 +765,7 @@ def _load_deployed_registry(
     return SchemaRegistry(schema_view)
 
 
-def _build_fragment_spec(info: dict[str, Any], loader: ReferenceLoader):
+def _build_fragment_spec(info: dict[str, Any], loader: SchemaPackage):
     from hippo.linkml_bridge import LoaderFragmentSpec
 
     return LoaderFragmentSpec(
