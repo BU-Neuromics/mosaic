@@ -10,6 +10,11 @@ import pytest
 from pydantic import BaseModel
 
 from hippo.core.loaders.reference import EntityRef, LoadResult, ReferenceLoader
+from hippo.core.loaders.schema_package import (
+    ExternalData,
+    MigratableData,
+    SchemaPackage,
+)
 
 
 class _StubClient:
@@ -48,7 +53,7 @@ class TestReferenceLoaderABC:
             name = "x"
             description = ""
 
-            def entity_types(self) -> list[str]:
+            def populates_types(self) -> list[str]:
                 return []
 
             def schema_fragment(self) -> dict:
@@ -68,7 +73,7 @@ class TestReferenceLoaderABC:
             def versions(self) -> list[str]:
                 return []
 
-            def entity_types(self) -> list[str]:
+            def populates_types(self) -> list[str]:
                 return []
 
             def schema_fragment(self) -> dict:
@@ -85,7 +90,7 @@ class TestReferenceLoaderABC:
             def versions(self) -> list[str]:
                 return ["test"]
 
-            def entity_types(self) -> list[str]:
+            def populates_types(self) -> list[str]:
                 return ["Foo"]
 
             def schema_fragment(self) -> dict:
@@ -96,7 +101,7 @@ class TestReferenceLoaderABC:
 
         loader = Complete()
         assert loader.versions() == ["test"]
-        assert loader.entity_types() == ["Foo"]
+        assert loader.populates_types() == ["Foo"]
 
 
 # ---------------------------------------------------------------------------
@@ -114,7 +119,7 @@ class _MinimalLoader(ReferenceLoader):
     def versions(self) -> list[str]:
         return ["v1", "v2", "test"]
 
-    def entity_types(self) -> list[str]:
+    def populates_types(self) -> list[str]:
         return ["Thing"]
 
     def schema_fragment(self) -> dict:
@@ -237,7 +242,7 @@ class TestFakeReferenceLoader:
         assert isinstance(loader, ReferenceLoader)
         assert loader.name == "fake"
         assert "test" in loader.versions()
-        assert loader.entity_types() == ["FakeTerm"]
+        assert loader.populates_types() == ["FakeTerm"]
         assert loader.schema_fragment()["default_prefix"] == "fake"
 
     def test_fake_loader_load_returns_loadresult(self):
@@ -367,3 +372,431 @@ class TestDiscoverReferenceLoaders:
 
         with pytest.raises(ref_cmd.ReferenceLoaderRegistrationError):
             ref_cmd.discover_reference_loaders()
+
+
+# ---------------------------------------------------------------------------
+# SchemaPackage genus (Doc 2 §2A / PTS-335 S0)
+# ---------------------------------------------------------------------------
+
+
+class TestSchemaPackageGenus:
+    """The genus ABC: abstract ``versions``/``schema_fragment``; concrete
+    ``depends_on``/``validate`` + no-op lifecycle hooks."""
+
+    def test_cannot_instantiate_genus_directly(self):
+        with pytest.raises(TypeError):
+            SchemaPackage()  # type: ignore[abstract]
+
+    def test_missing_versions_fails(self):
+        class P(SchemaPackage):
+            name = "p"
+            description = ""
+
+            def schema_fragment(self) -> dict:
+                return {"default_prefix": "p"}
+
+        with pytest.raises(TypeError):
+            P()  # type: ignore[abstract]
+
+    def test_missing_schema_fragment_fails(self):
+        class P(SchemaPackage):
+            name = "p"
+            description = ""
+
+            def versions(self) -> list[str]:
+                return ["v1"]
+
+        with pytest.raises(TypeError):
+            P()  # type: ignore[abstract]
+
+    def test_minimal_pure_schema_instantiates_with_defaults(self):
+        class P(SchemaPackage):
+            name = "p"
+            description = ""
+
+            def versions(self) -> list[str]:
+                return ["v1"]
+
+            def schema_fragment(self) -> dict:
+                return {"default_prefix": "p"}
+
+        p = P()
+        # depends_on default: no dependencies.
+        assert p.depends_on() == []
+        # All three lifecycle hooks default to a no-op (return None).
+        assert p.provision(client=None, version="v1") is None
+        assert (
+            p.evolve(client=None, from_version="v1", to_version="v2") is None
+        )
+        assert p.deprovision(client=None, version="v1") is None
+        # validate() is optional; the default raises with the package name.
+        with pytest.raises(NotImplementedError) as exc:
+            p.validate(object())
+        assert "p" in str(exc.value)
+
+    def test_load_params_schema_defaults_none(self):
+        class P(SchemaPackage):
+            name = "p"
+            description = ""
+
+            def versions(self) -> list[str]:
+                return ["v1"]
+
+            def schema_fragment(self) -> dict:
+                return {"default_prefix": "p"}
+
+        assert P.load_params_schema is None
+
+
+class TestPureSchemaPackage:
+    """``FakeSchemaPackage`` — a pure-schema package with no data hooks."""
+
+    def test_is_schema_package_not_reference_loader(self):
+        from hippo.testing.fake_reference_loader import FakeSchemaPackage
+
+        pkg = FakeSchemaPackage()
+        assert isinstance(pkg, SchemaPackage)
+        assert not isinstance(pkg, ReferenceLoader)
+        assert pkg.name == "fake_schema"
+        assert pkg.schema_fragment()["default_prefix"] == "fake_schema"
+
+    def test_lifecycle_hooks_are_noop(self):
+        from hippo.testing.fake_reference_loader import FakeSchemaPackage
+
+        pkg = FakeSchemaPackage()
+        assert pkg.provision(client=None, version="v1") is None
+        assert (
+            pkg.evolve(client=None, from_version="v1", to_version="v2")
+            is None
+        )
+        assert pkg.deprovision(client=None, version="v1") is None
+
+    def test_omits_populates_types(self):
+        # ``populates_types`` is a *species* concern; a pure-schema package
+        # does not declare it (Doc 2 §2A).
+        from hippo.testing.fake_reference_loader import FakeSchemaPackage
+
+        assert not hasattr(FakeSchemaPackage(), "populates_types")
+
+    def test_fragment_merges_into_deployed_schema(self):
+        # Acceptance (§9 S0): a pure-schema SchemaPackage with no hooks
+        # *merges*. Prove it at the merge engine directly — no install,
+        # no entry-point reinstall dependency.
+        import importlib.resources
+
+        from linkml_runtime.utils.schemaview import SchemaView
+
+        from hippo.linkml_bridge import (
+            LoaderFragmentSpec,
+            merge_loader_fragment,
+        )
+        from hippo.testing.fake_reference_loader import FakeSchemaPackage
+
+        hippo_core = importlib.resources.files("hippo.schemas").joinpath(
+            "hippo_core.yaml"
+        )
+        deployed_sv = SchemaView(str(hippo_core))
+
+        pkg = FakeSchemaPackage()
+        spec = LoaderFragmentSpec(
+            loader_name=pkg.name,
+            package_name="hippo-schema-fake",
+            package_version="1.0.0",
+            fragment=pkg.schema_fragment(),
+        )
+        merged = merge_loader_fragment(deployed_sv, spec)
+        assert "FakeSchemaTerm" in merged.all_classes()
+
+
+class TestReferenceLoaderReparenting:
+    """``ReferenceLoader`` re-parented on ``SchemaPackage`` with hooks
+    mapped onto the historical method names."""
+
+    def test_reference_loader_is_schema_package(self):
+        from hippo.testing.fake_reference_loader import FakeReferenceLoader
+
+        assert issubclass(ReferenceLoader, SchemaPackage)
+        assert isinstance(FakeReferenceLoader(), SchemaPackage)
+
+    def test_provision_delegates_to_load(self):
+        loader = _MinimalLoader()
+        client = object()
+        result = loader.provision(client, "v1")  # type: ignore[arg-type]
+        assert isinstance(result, LoadResult)
+        assert loader.load_calls == [(client, "v1", None)]
+
+    def test_evolve_delegates_through_upgrade_to_load(self):
+        loader = _MinimalLoader()
+        client = object()
+        params = object()
+        result = loader.evolve(client, "v1", "v2", params)  # type: ignore[arg-type]
+        assert isinstance(result, LoadResult)
+        # evolve → upgrade (default) → load(to_version, params).
+        assert loader.load_calls == [(client, "v2", params)]
+
+
+class TestCapabilityProtocols:
+    """``ExternalData`` / ``MigratableData`` runtime-checkable dispatch."""
+
+    def test_reference_loader_satisfies_external_data(self):
+        from hippo.testing.fake_reference_loader import FakeReferenceLoader
+
+        assert isinstance(FakeReferenceLoader(), ExternalData)
+
+    def test_pure_schema_is_not_external_data(self):
+        from hippo.testing.fake_reference_loader import FakeSchemaPackage
+
+        assert not isinstance(FakeSchemaPackage(), ExternalData)
+
+    def test_no_package_is_migratable_in_s0(self):
+        # MigratableData keys on ``migration_steps()`` — which neither the
+        # genus nor ReferenceLoader define. Critically, the genus's no-op
+        # ``evolve`` must NOT make every package look Migratable.
+        from hippo.testing.fake_reference_loader import (
+            FakeReferenceLoader,
+            FakeSchemaPackage,
+        )
+
+        assert not isinstance(FakeReferenceLoader(), MigratableData)
+        assert not isinstance(FakeSchemaPackage(), MigratableData)
+
+    def test_migration_steps_shape_satisfies_migratable_data(self):
+        # A package exposing ``migration_steps`` (the shape DomainModule
+        # will provide in S2/S3) satisfies the protocol — the forward
+        # contract is real, not vacuous.
+        class _Migratable(SchemaPackage):
+            name = "m"
+            description = ""
+
+            def versions(self) -> list[str]:
+                return ["v1"]
+
+            def schema_fragment(self) -> dict:
+                return {"default_prefix": "m"}
+
+            def migration_steps(self) -> list:
+                return []
+
+        assert isinstance(_Migratable(), MigratableData)
+
+
+class TestEntityTypesBackCompat:
+    """``entity_types()`` lives on as a deprecated alias so loaders written
+    against the pre-SchemaPackage ABC install unchanged."""
+
+    def test_legacy_entity_types_flows_through_populates_types(self):
+        class LegacyLoader(ReferenceLoader):
+            name = "legacy"
+            description = ""
+
+            def versions(self) -> list[str]:
+                return ["v1"]
+
+            def entity_types(self) -> list[str]:
+                return ["LegacyTerm"]
+
+            def schema_fragment(self) -> dict:
+                return {"default_prefix": "legacy"}
+
+            def load(self, client, version, params=None) -> LoadResult:
+                return LoadResult()
+
+        loader = LegacyLoader()
+        assert loader.entity_types() == ["LegacyTerm"]
+        # The new name reports the legacy-declared types unchanged.
+        assert loader.populates_types() == ["LegacyTerm"]
+
+    def test_new_loader_overrides_populates_types_directly(self):
+        class NewLoader(ReferenceLoader):
+            name = "new"
+            description = ""
+
+            def versions(self) -> list[str]:
+                return ["v1"]
+
+            def populates_types(self) -> list[str]:
+                return ["NewTerm"]
+
+            def schema_fragment(self) -> dict:
+                return {"default_prefix": "new"}
+
+            def load(self, client, version, params=None) -> LoadResult:
+                return LoadResult()
+
+        loader = NewLoader()
+        assert loader.populates_types() == ["NewTerm"]
+        # The deprecated alias returns its empty default when unused.
+        assert loader.entity_types() == []
+
+
+# ---------------------------------------------------------------------------
+# discover_schema_packages — both groups resolve + dedup + error contract
+# ---------------------------------------------------------------------------
+
+
+class _GroupedFakeEntryPoints:
+    """Group-aware stand-in: returns only the EPs registered for the asked
+    group (unlike ``_FakeEntryPoints``, which ignores ``group``)."""
+
+    def __init__(self, by_group: dict[str, list[_FakeEntryPoint]]):
+        self._by_group = by_group
+
+    def select(self, *, group: str) -> list[_FakeEntryPoint]:
+        return list(self._by_group.get(group, []))
+
+
+class TestDiscoverSchemaPackages:
+    def _patch(self, monkeypatch, by_group: dict[str, list[_FakeEntryPoint]]) -> None:
+        import importlib.metadata as md
+
+        monkeypatch.setattr(
+            md, "entry_points", lambda: _GroupedFakeEntryPoints(by_group)
+        )
+
+    def test_resolves_both_groups_and_dedups_by_name(self, monkeypatch):
+        from hippo.cli.commands import reference as ref_cmd
+        from hippo.testing.fake_reference_loader import (
+            FakeReferenceLoader,
+            FakeSchemaPackage,
+        )
+
+        fake_ep = _FakeEntryPoint(
+            "fake",
+            "hippo.testing.fake_reference_loader:FakeReferenceLoader",
+            FakeReferenceLoader,
+        )
+        schema_ep = _FakeEntryPoint(
+            "fake_schema",
+            "hippo.testing.fake_reference_loader:FakeSchemaPackage",
+            FakeSchemaPackage,
+        )
+        # ``fake`` is registered under reference_loaders AND aliased into
+        # schema_packages — discovery must collapse it to one entry.
+        self._patch(
+            monkeypatch,
+            {
+                ref_cmd.SCHEMA_PACKAGES_GROUP: [schema_ep, fake_ep],
+                ref_cmd.REFERENCE_LOADERS_GROUP: [fake_ep],
+            },
+        )
+
+        pkgs = ref_cmd.discover_schema_packages()
+        names = [p["name"] for p in pkgs]
+        assert names.count("fake") == 1
+        assert set(names) == {"fake_schema", "fake"}
+
+    def test_reference_loaders_only_package_resolves(self, monkeypatch):
+        # A package present only in the reference_loaders subset/alias is
+        # still discovered by the genus-level discovery.
+        from hippo.cli.commands import reference as ref_cmd
+        from hippo.testing.fake_reference_loader import FakeReferenceLoader
+
+        fake_ep = _FakeEntryPoint(
+            "fake",
+            "hippo.testing.fake_reference_loader:FakeReferenceLoader",
+            FakeReferenceLoader,
+        )
+        self._patch(
+            monkeypatch,
+            {
+                ref_cmd.SCHEMA_PACKAGES_GROUP: [],
+                ref_cmd.REFERENCE_LOADERS_GROUP: [fake_ep],
+            },
+        )
+        names = [p["name"] for p in ref_cmd.discover_schema_packages()]
+        assert names == ["fake"]
+
+    def test_non_subclass_raises_schema_package_error(self, monkeypatch):
+        from hippo.cli.commands import reference as ref_cmd
+
+        class NotAPackage:
+            pass
+
+        self._patch(
+            monkeypatch,
+            {
+                ref_cmd.SCHEMA_PACKAGES_GROUP: [
+                    _FakeEntryPoint("bogus", "m:NotAPackage", NotAPackage)
+                ],
+                ref_cmd.REFERENCE_LOADERS_GROUP: [],
+            },
+        )
+        with pytest.raises(ref_cmd.SchemaPackageRegistrationError) as exc:
+            ref_cmd.discover_schema_packages()
+        msg = str(exc.value)
+        assert "bogus" in msg
+        assert "SchemaPackage" in msg
+
+    def test_reference_error_is_schema_package_error_subclass(self):
+        from hippo.cli.commands import reference as ref_cmd
+
+        assert issubclass(
+            ref_cmd.ReferenceLoaderRegistrationError,
+            ref_cmd.SchemaPackageRegistrationError,
+        )
+
+
+class TestPureSchemaPackageInstall:
+    """End-to-end acceptance (§9 S0): a pure-schema ``SchemaPackage`` with
+    **no hooks** installs through the same lifecycle as a reference loader —
+    its fragment merges (the class table is created) and its version is
+    recorded — without any hand-written ``load()``/``provision()``.
+
+    Entry points are monkeypatched so the test does not depend on a fresh
+    editable reinstall picking up the ``hippo.schema_packages`` group.
+    """
+
+    def test_install_pure_schema_package_merges_and_records_version(
+        self, monkeypatch, tmp_path
+    ):
+        import sqlite3
+
+        from hippo.cli.commands import reference as ref_cmd
+        from hippo.core.meta import get_meta
+        from hippo.testing.fake_reference_loader import FakeSchemaPackage
+
+        import importlib.metadata as md
+
+        monkeypatch.setattr(
+            md,
+            "entry_points",
+            lambda: _FakeEntryPoints(
+                [
+                    _FakeEntryPoint(
+                        "fake_schema",
+                        "hippo.testing.fake_reference_loader:FakeSchemaPackage",
+                        FakeSchemaPackage,
+                    )
+                ]
+            ),
+        )
+
+        db_path = tmp_path / "hippo.db"
+        schema_dir = tmp_path / "schemas"
+        schema_dir.mkdir()
+
+        result = ref_cmd.install_reference(
+            "fake_schema", "v1", db_path=db_path, schema_dir=schema_dir
+        )
+
+        # No data hooks ran: nothing created, advisory list empty.
+        assert result["status"] == "installed"
+        assert result["version"] == "v1"
+        assert result["created"] == 0
+        assert result["entities"] == []
+
+        # The fragment merged: the package's class table now exists.
+        conn = sqlite3.connect(str(db_path))
+        try:
+            cursor = conn.cursor()
+            cursor.execute(
+                "SELECT name FROM sqlite_master "
+                "WHERE type='table' AND name='FakeSchemaTerm'"
+            )
+            assert cursor.fetchone() is not None
+            versions = get_meta(conn, ref_cmd.META_KEY_VERSIONS)
+        finally:
+            conn.close()
+
+        # The version is pinned in hippo_meta (the requires: source of truth).
+        assert versions == {"fake_schema": "v1"}

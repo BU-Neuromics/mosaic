@@ -211,6 +211,29 @@ class TestCheckRequires:
         assert "but version 3.2 is installed" in msg
         assert "hippo reference install fma --version 3.3" in msg
 
+    def test_pure_schema_package_pins_like_any_other(
+        self, monkeypatch: pytest.MonkeyPatch
+    ):
+        # Acceptance (§9 S0): a pure-schema SchemaPackage *pins via
+        # requires:*. The version-pin gate is package-name agnostic — a
+        # schema package (no ``hippo-reference-`` prefix) resolves
+        # identically to a reference loader once installed.
+        monkeypatch.setattr("hippo.requires._dist_version", lambda name: "1.0")
+        ok = check_requires(
+            [RequirePin(package_name="hippo-schema-fake", version="1.0")]
+        )
+        assert ok == []
+
+        # A mismatch on the same pure-schema package still fails loud with
+        # an install hint, proving the gate is live for it.
+        monkeypatch.setattr("hippo.requires._dist_version", lambda name: "0.9")
+        errors = check_requires(
+            [RequirePin(package_name="hippo-schema-fake", version="1.0")]
+        )
+        assert len(errors) == 1
+        assert "hippo-schema-fake==1.0" in errors[0]
+        assert "but version 0.9 is installed" in errors[0]
+
     def test_mixed_results_collected(self, monkeypatch: pytest.MonkeyPatch):
         def _per_pkg(name: str) -> str:
             if name == "hippo-reference-fma":

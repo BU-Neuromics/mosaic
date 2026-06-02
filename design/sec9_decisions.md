@@ -547,3 +547,69 @@ Decisions J–L lock the v2 ReferenceLoader contract in response to [GitHub #15]
 - **Why:** Author's recommendation in GitHub #16 §"Breaking change story" was (ii) "unless the maintainers know the loader count is zero today; in that case (i) is fine." We verified loader count is zero and took the clean cut.
 - **Consequences:** Mechanical migration of fixtures (drop `entity_type`, swap `entity_ids` → `entities`). `cli/commands/reference.py` install/upgrade paths drop `_write_versions(..., entity_ids)` in favor of the write-log path (D2.14.J). Tests in `tests/cli/test_reference_install_upgrade.py` and `tests/core/test_reference_loader.py` update to assert on `entities` and on write-log contents instead of `entity_ids`. The `--prune-old` no-IDs error message (`"loader did not populate LoadResult.entity_ids at install time"`) is removed because prune now works for every loader.
 - **Revert:** Re-add `entity_type` and `entity_ids` to `LoadResult` and the lifecycle. Restore the v1 error path on `--prune-old` when `entity_ids` is empty. Mechanical; low blast radius today.
+
+---
+
+## 11. SchemaPackage Abstraction (sec11)
+
+Decisions for the SchemaPackage genus / species split and associated migration chain. Sprint mapping: S0 = genus + back-compat; S2 = DomainModule + single-hop; S3 = chain resolver + deprovision; S4 = orchestrator + gate + bundle.
+
+### Decision 11.A — SchemaPackage genus with ReferenceLoader + DomainModule as sibling species [COMMITTED]
+
+- **Finding:** `ReferenceLoader` conflates two concerns: (1) versioned schema contribution (general — any reusable module needs it) and (2) external-data ingestion (specific — only loaders that fetch external datasets need it). Pure-schema modules that `required` a no-op `load()` surfaced the smell.
+- **Alternatives considered:** (A) Keep a flat `ReferenceLoader` ABC, document that no-op `load()` is acceptable. (B) Add a separate `SchemaModule` ABC alongside `ReferenceLoader` with no data methods. (C) Abstract the common concern into a genus `SchemaPackage`; `ReferenceLoader` and a new `DomainModule` become sibling species.
+- **Chosen:** (C). The genus carries everything a versioned, pinnable schema contributor needs (`name`, `versions()`, `schema_fragment()`, `depends_on()`, three no-op lifecycle hooks). Species add data behaviors via capability protocols (`ExternalData`, `MigratableData`).
+- **Why (A) rejected:** Keeps the design smell permanent; no-op methods mislead future authors. **(B) rejected:** Separate ABC with no common lifecycle means the orchestrator needs two dispatch paths for what is logically one operation. (C) unifies dispatch while keeping the species independent.
+- **Back-compat:** `ReferenceLoader` remains the public API for external-data loader authors; `hippo.reference_loaders` entry point continues to work as a subset/alias of `hippo.schema_packages`. No existing loader needs to change.
+- **Revert:** Collapse back to a flat `ReferenceLoader` ABC with documented no-op `load()`; remove `DomainModule` (domain migration moves back to ad-hoc scripts). High blast radius on the S2–S5 sprint deliverables.
+
+### Decision 11.B — Three lifecycle hooks default to no-op; populates_types() is a species concern [COMMITTED]
+
+- **Finding:** Forcing pure-schema packages to implement `load()` was the original design smell. The genus needs a lifecycle surface that all species can share, but it must not require data-specific overrides.
+- **Alternatives considered:** (A) Abstract methods on the genus (all species must override). (B) No hooks on the genus; species define their own independently. (C) Hooks on the genus defaulting to no-op; species override as needed.
+- **Chosen:** (C). `provision`, `evolve`, `deprovision` are on `SchemaPackage` with default no-op implementations. `populates_types()` (formerly `entity_types()`) is removed from the genus and lives on species that carry data. Orchestrator can call `provision`/`evolve`/`deprovision` on any `SchemaPackage` without checking species type — the default no-op makes pure-schema packages safe to dispatch.
+- **Why:** (A) would force every pure-schema package to write three stub overrides — the same smell as the current no-op `load()`. (B) breaks unified orchestrator dispatch.
+- **Revert:** Promote all three hooks to abstract methods; add no-op stubs to every existing package. Low blast radius for existing packages; breaks the "pure-schema packages need no data methods" design principle.
+
+### Decision 11.C — ExternalData and MigratableData as capability protocols, not a deep inheritance chain [COMMITTED]
+
+- **Finding:** Placing data behaviors on `ReferenceLoader` and `DomainModule` via protocol mixin is the standard Python typing pattern and avoids forcing a class to inherit from multiple concrete base classes.
+- **Alternatives considered:** (A) `SchemaPackage → DataPackage → ReferenceLoader` and `SchemaPackage → DataPackage → DomainModule` (three-level chain). (B) `ReferenceLoader(SchemaPackage, ExternalData)` and `DomainModule(SchemaPackage, MigratableData)` — protocols at the leaf level (sibling position).
+- **Chosen:** (B). Protocols carry typing and orchestrator dispatch; the species hierarchy carries identity. `ExternalData` and `MigratableData` are siblings; neither implies the other.
+- **Why (A) rejected:** A `DataPackage` intermediate class implies that all data packages share behavior beyond the three hooks — currently untrue. Adds complexity without a present use case.
+- **Revert:** Introduce `DataPackage` as an intermediate or merge protocols into the genus. Low blast radius today; higher if the S2–S4 sprint builds against the protocol interface.
+
+### Decision 11.D — Migration DAG with explicit edges, shortcut edges, and a floor; not sorted version slugs [COMMITTED]
+
+- **Finding:** Version slugs are opaque strings per sec2 §2.14.C (Decision 2.14.C). Sorting them to derive a migration path is undefined behavior. Multi-hop upgrades (1.2.0 → 2.0.0 across intermediate versions) must be expressed as explicit edges in a DAG where the resolver finds the optimal path.
+- **Alternatives considered:** (A) Sort version slugs and run each consecutive transition. (B) Require authors to ship a single `evolve(from, to)` that handles arbitrary version pairs (no DAG). (C) Alembic-style DAG of discrete `(from → to)` steps, all shipped with the current package version, with optional shortcut edges.
+- **Chosen:** (C). All steps covering the package's supported range ship with the package at its current version. A **floor** marks the oldest supported migration source; below-floor fails loud with an actionable message. Shortcut edges let authors provide an efficient direct transform when one exists (e.g., a bulk SQL rewrite that is faster than running N intermediate steps).
+- **Why (A) rejected:** Opaque-slug sorting is undefined. **(B) rejected:** An `evolve(1.2.0, 2.0.0)` that handles arbitrary ranges is impossible to test exhaustively; authors end up re-deriving the DAG implicitly.
+- **Consequences:** S3 implements the path-resolver reading step metadata from the package; the resolver is not a separate service. Below-floor failure message must be actionable: name the floor version and the package.
+- **Revert:** Revert to (B) with a single `evolve(from, to)` and document that authors must handle arbitrary ranges. High blast radius for S3.
+
+### Decision 11.E — DomainModule.deprovision refuses by default; ReferenceLoader.deprovision prunes [COMMITTED]
+
+- **Finding:** `ReferenceLoader` data is externally sourced and reconstructible; soft-deleting it on uninstall is safe. `DomainModule` data is the deployment's own operational records; silent soft-deletion on uninstall is a data loss event inconsistent with no-hard-deletes policy (sec3).
+- **Alternatives considered:** (A) Both species prune on deprovision. (B) Both species refuse on deprovision. (C) Species-specific: `ReferenceLoader` prunes (safe, reconstructible); `DomainModule` refuses by default (live domain data must not be lost without explicit acknowledgement).
+- **Chosen:** (C). `DomainModule.deprovision` raises a descriptive error unless `--force` is passed (and export is recommended). `ReferenceLoader.deprovision` soft-deletes rows by `provided_by` stamp.
+- **Why (A) rejected:** Loses domain data without warning — violates the no-hard-deletes and no-silent-loss principles. **(B) rejected:** Prevents legitimate reference-data cleanup that `--prune-old` already supports.
+- **Additional guard:** The orchestrator refuses to deprovision any package that other installed packages declare in their `depends_on()`, regardless of species. Avoids stranding dependents.
+- **Revert:** Normalize both species to prune (A) or refuse (B). Either requires revisiting the design principle about data ownership and reconstructibility.
+
+### Decision 11.F — hippo.schema_packages entry-point group; hippo.reference_loaders becomes a subset/alias [COMMITTED]
+
+- **Finding:** The `hippo.reference_loaders` entry-point group is the current discovery mechanism. Widening the abstraction to `SchemaPackage` requires a new group name, but renaming the old group would break every existing loader's `pyproject.toml`.
+- **Alternatives considered:** (A) Rename `hippo.reference_loaders` to `hippo.schema_packages`. (B) Keep `hippo.reference_loaders` only; pure-schema packages must also use it (confusing name). (C) Add `hippo.schema_packages`; the discovery runtime queries both, deduplicates by name, and treats `hippo.reference_loaders` entries as `ReferenceLoader` instances.
+- **Chosen:** (C). Existing loaders need no entry-point change. New packages (pure-schema `SchemaPackage`, `DomainModule`) register under `hippo.schema_packages`. The discovery runtime merges both groups.
+- **Why:** Preserves zero-change back-compat for all existing loader authors.
+- **Revert:** Remove `hippo.schema_packages`; require all packages to register under `hippo.reference_loaders` with a documented naming convention. Forces breaking change on future `DomainModule` authors.
+
+### Decision 11.G — Dependency-ordered orchestrator: topological sort per hop, not global install-order [COMMITTED]
+
+- **Finding:** `loader_depends_on` is documentation-only at runtime today (sec2 §2.14.H). The S4 orchestrator is the first runtime consumer. The dependency graph must be resolved once per operation (not per-package), and ordering must apply within each version hop, not just globally.
+- **Alternatives considered:** (A) Global install order (topological sort once, run all packages). (B) Per-hop ordering: at each version hop, run affected packages in topological order. (C) Leave ordering to the author (document but don't enforce at runtime).
+- **Chosen:** (B). Per-hop ordering ensures an extension's `evolve` always sees the base at that hop's shape, not at the final shape. A coordinated multi-package upgrade over N hops runs `N × (packages in topo order)` evolves.
+- **Why (A) rejected:** A global sort runs extension packages against a base that may not yet be at the intermediate shape — extension migration steps would operate against wrong-version base data. **(C) rejected:** Contradicts the goal of making the orchestrator the safe, dependency-aware upgrade path.
+- **Open (§8 / [VERIFY]):** Whether any existing runtime path already orders by `loader_depends_on`. If so, S4 can delegate to it; if not, S4 must implement topological sort. Resolve before S4.
+- **Revert:** Remove per-hop ordering; run packages in registration order. High blast radius on deployments where extension steps depend on base shape at intermediate versions.

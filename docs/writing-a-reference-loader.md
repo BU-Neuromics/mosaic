@@ -4,6 +4,11 @@ This guide walks through building a `hippo-reference-<name>` package from scratc
 
 > **Who this is for:** Python developers building or maintaining a `hippo-reference-*` package. Users who only want to *use* reference data should read [Reference Loaders](reference-loaders.md) instead.
 
+> **`ReferenceLoader` is one kind of `SchemaPackage`.** Every reference loader is a *species* of a broader genus, `SchemaPackage` (`hippo.core.loaders.schema_package`), which captures the reusable part — *"contribute a versioned, pinnable schema fragment"*. The genus provides `name`, `description`, `versions()`, `schema_fragment()`, `depends_on()`, an optional `validate()`, an optional `load_params_schema`, and three lifecycle hooks (`provision`/`evolve`/`deprovision`) that **default to a no-op**.
+>
+> - A **pure-schema package** (one that only contributes types — no shipped data) subclasses `SchemaPackage` directly, implements just `versions()` + `schema_fragment()`, and merges + pins via `requires:` with no hand-written code.
+> - A **reference loader** is the *external-data* species: `ReferenceLoader(SchemaPackage)`. It keeps the familiar `load()` / `upgrade()` method names, and the genus maps `provision → load()` and `evolve → upgrade()` so the orchestrator can drive any package uniformly. Everything below describes this species — but the method names are unchanged from earlier Hippo versions, so existing loaders need no edits.
+
 ---
 
 ## Project layout
@@ -26,7 +31,9 @@ Use `hippo_reference_<name>` as the Python package name and `hippo-reference-<na
 
 ## 1. The loader class
 
-Subclass `ReferenceLoader` from `hippo.core.loaders.reference`. At minimum you must implement four abstract methods: `versions()`, `entity_types()`, `schema_fragment()`, and `load()`.
+Subclass `ReferenceLoader` from `hippo.core.loaders.reference`. At minimum you must implement three abstract methods: `versions()`, `schema_fragment()`, and `load()`. Declaring `populates_types()` — the classes your loader fills with *data* — is recommended for provenance/discoverability but optional.
+
+> **`entity_types()` was renamed to `populates_types()`.** The name better separates the classes a package *defines* (via `schema_fragment()`) from the classes it *fills with data*. The old `entity_types()` lives on as a deprecated alias — loaders that still override it keep reporting their declared types unchanged — but new loaders should override `populates_types()`.
 
 ```python
 # src/hippo_reference_myontology/loader.py
@@ -42,8 +49,8 @@ class MyOntologyLoader(ReferenceLoader):
         # Return opaque slugs in any order. Include "test" for CI.
         return ["test", "2023-01", "2024-01"]
 
-    def entity_types(self) -> list[str]:
-        # Declarative — tells Hippo what classes this loader writes.
+    def populates_types(self) -> list[str]:
+        # Declarative — tells Hippo what classes this loader fills with data.
         # Does NOT control ingestion order; your load() code does that.
         return ["MyTerm"]
 
@@ -127,6 +134,33 @@ myontology = "hippo_reference_myontology.cli:app"
 ```
 
 The entry point key (`myontology`) must match `ReferenceLoader.name`. Hippo validates this at registration and raises `ReferenceLoaderRegistrationError` if the entry point does not resolve to a concrete `ReferenceLoader` subclass.
+
+### Entry-point groups: `hippo.schema_packages` and `hippo.reference_loaders`
+
+Discovery resolves **two** groups and deduplicates by name: the broad genus group `hippo.schema_packages` and its subset/alias `hippo.reference_loaders`. Register a reference loader under `hippo.reference_loaders` as shown above — it remains the conventional home for external-data loaders and is found by both `hippo reference` and the package-level discovery.
+
+A **pure-schema package** (no shipped data) registers under the genus group instead, and needs no `load()`:
+
+```toml
+[project.entry-points."hippo.schema_packages"]
+mycore = "hippo_mycore.package:MyCorePackage"
+```
+
+```python
+from hippo.core.loaders.schema_package import SchemaPackage
+
+class MyCorePackage(SchemaPackage):
+    name = "mycore"
+    description = "Abstract base associations + mixins (no shipped data)"
+
+    def versions(self) -> list[str]:
+        return ["1.0.0"]
+
+    def schema_fragment(self) -> dict:
+        return {"id": "...", "name": "mycore", "default_prefix": "mycore", ...}
+```
+
+Its fragment merges and pins via `requires:` exactly like a reference loader; the `provision`/`evolve`/`deprovision` lifecycle hooks default to a no-op, so there is nothing else to write.
 
 ---
 
@@ -310,7 +344,7 @@ class FakeReferenceLoader(ReferenceLoader):
     def versions(self):
         return list(self._DATASET.keys())
 
-    def entity_types(self):
+    def populates_types(self):
         return ["FakeTerm"]
 
     def schema_fragment(self):
