@@ -1,9 +1,59 @@
 # Changelog
 
-## Unreleased
+## v0.8.0 — 2026-06-03 (SchemaPackage extension model + Recipe system v1)
 
-### New Features
+This release introduces the **SchemaPackage** genus/species extension model and
+its full migration + bundle-orchestration machinery (Doc 2 §2A / `sec11`), the
+**Recipe v1** subsystem for sharing schema fragments between deployments
+(`sec10`), and a documentation pass repositioning Hippo as a LinkML *runtime
+engine*. No hard breaking changes: the `ReferenceLoader` ABC is re-parented
+under `SchemaPackage` with method names intact and a deprecated alias for the
+one rename.
 
+### New Features — SchemaPackage (Doc 2 §2A / sec11)
+
+- **`SchemaPackage` genus ABC + back-compat re-parenting (PTS-335).** Abstracts
+  "contribute a versioned, pinnable schema fragment" into a base genus with
+  abstract `versions()`/`schema_fragment()`, concrete `depends_on()`/`validate()`,
+  and three no-op-default lifecycle hooks (`provision`/`evolve`/`deprovision`)
+  so a pure-schema package needs no hand-written code. Capability protocols
+  `ExternalData` and `MigratableData` keep external-data and migratable
+  packages distinct. `ReferenceLoader(SchemaPackage)` is re-parented with method
+  names intact (`provision → load()`, `evolve → upgrade()`); `entity_types()` is
+  renamed to `populates_types()` with `entity_types()` kept as a **deprecated
+  alias**. New `hippo.schema_packages` entry-point group (`hippo.reference_loaders`
+  is a subset/alias); `discover_schema_packages()` resolves both and dedups by
+  name. Existing loaders install unchanged.
+- **`DomainModule` species + single-hop `evolve()` with staged gate (PTS-338).**
+  First-party mutable-data species satisfying `MigratableData` via
+  `migration_steps()` + `evolve()`. A `MigrationStep` is a `(from→to)` DAG edge
+  whose transform stages new-shape records onto a `MigrationPlan`; `evolve()`
+  runs a staged dry-run validation gate before any committed write (commit only
+  on green, else `MigrationGateError` with the DB untouched) and emits supersede
+  provenance + `superseded_by` lineage. Adds the read-only `HippoClient.registry`
+  property and `MigrationStepNotFoundError`.
+- **Real reference-data species + diff-based evolve (PTS-337).** `OboDemoLoader`
+  exercises the full external-data path end to end: content-addressed,
+  sha256-pinned `cached_fetch` (hermetic via a bundled `file://` manifest), a
+  diff-based `upgrade()` that re-reads the cached prior release plus a JSON
+  delta, and a `test` pseudo-version reading a bundled `.obo` fixture for
+  network-free CI.
+- **Multi-hop migration-chain resolver + `deprovision` (PTS-339).** `evolve()`
+  BFS-resolves the fewest-hop path through the declared migration DAG (a
+  shortcut edge wins automatically); below-floor raises `MigrationFloorError`,
+  unreachable target raises `MigrationStepNotFoundError`. `deprovision` refuses
+  by default when it owns live domain data (`DeprovisionRefusedError`), with
+  `--force` soft-deleting via the availability transition; new
+  `hippo reference deprovision` CLI with a dependents guard.
+- **S4 dependency-ordered bundle orchestrator + commit-or-rollback gate
+  (PTS-340).** `SQLiteAdapter.staged_transaction()` / `HippoClient.staged_transaction()`
+  give a re-entrant scope so a whole multi-package / multi-hop migration commits
+  or rolls back as one unit. The orchestrator adds `topological_sort()` (Kahn,
+  cycle → `OrchestrationError`), `migrate_to_bundle()` driving a deployment
+  through a target `Bundle`'s coordinate sequence in dependency order, and
+  `run_end_to_end_gate()` validating the full post-migration state (staged base
+  writes + existing extension rows) so a stranded extension field forces a
+  rollback. Bundle meta-coordinate manifest per sec11 §11.6.2.
 - **`hippo reference bundle-requires <manifest>` (PTS-346).** Surfaces the
   previously-unwired `Bundle.to_requires()` to a user-facing command:
   generates a deployment's `requires:` block from a bundle manifest's pinned
@@ -11,23 +61,67 @@
   comment naming the bundle and its version. The block is *generated, not
   hand-maintained* (sec11 §11.6.2), so pins always match a known-coherent
   combination.
+- **End-to-end proof — brain bank extension integration test (PTS-341).** A
+  19-test suite proves a brain bank `DomainModule` extension upgrades across a
+  base major through the full S2–S4 machinery: two-hop BFS chain
+  (`v1.0→v1.1→v2.0`), dependency-ordered orchestration with bundle intermediate
+  coordinates, the end-to-end gate blocking a stranded field, and per-class
+  table type-exactness (`query("Subject")` never sweeps `BrainDonor` rows).
 
-### Bug Fixes / Hardening (PTS-346 — S4 pre-merge review follow-ups)
+### New Features — Recipe system v1 (sec10)
 
-- **Bundle manifest optional-field validation.** `Bundle.from_manifest()` now
-  validates that the optional `version` and `ontology_snapshot` fields are
-  strings when present (a YAML `version: 1.0` previously parsed to a float and
-  was stored silently); absent fields still pass through as `None`.
-- **Exposure heuristic documented + fragment-level `slots` collected.**
-  `extension_referenced_elements()` documents the `isupper()` CamelCase
-  assumption and its false-negative direction (a lowercase-named class range
-  reads as a primitive), and now also collects a non-standard fragment-level
-  `slots` *list* (mirroring the class-level handling; the standard top-level
-  `slots:` mapping of own definitions is deliberately skipped).
-- **Rollback no longer masks the original error.** `SQLiteAdapter._transaction`
-  / `staged_transaction` route their rollback through `_safe_rollback()`, so a
-  rollback that itself raises can't replace the in-flight exception that
-  triggered it.
+- **Declarative recipe bundles + `hippo recipe` CLI (PTS-289, PTS-293).** A
+  *recipe* packages a LinkML schema fragment for sharing between Hippo
+  deployments: a reverse-DNS stable `id`, sha256 content digest, atomic install,
+  lockfile reproducibility, and a PEP 440 `hippo_version` compatibility gate
+  (`RecipeVersionIncompatibleError`). New `hippo recipe`
+  `inspect`/`import`/`export`/`extend`/`diff`/`export-lockfile`/`install-from-lockfile`
+  commands. Spec in `design/sec10_recipes.md`; author/install/reference guides in
+  `docs/`.
+
+### Documentation & Positioning
+
+- **Repositioned as a LinkML runtime engine (PTS-268, PTS-269, PTS-270).**
+  README/`pyproject`, `introduction.md`, CLI help, and REST OpenAPI descriptions
+  reframed runtime-first.
+- **New onboarding docs (PTS-271–PTS-274).** Comparison guide,
+  `design-principles.md` (six architectural commitments), `why-hippo.md` (three
+  moats), and a bibliography citation-graph worked example.
+- **Bibliography is now the default `hippo init` template (PTS-275, PTS-276).**
+  Plus a bibliography quickstart.
+- **Omics preface + `examples/omics/` reference app (PTS-277).** Shipped fixtures
+  also neutralized of biomedical-specific defaults (PTS-278).
+- Removed a stale "metadata tracking service" paragraph from `introduction.md`
+  (PTS-261).
+
+### Bug Fixes / Hardening
+
+- **`hippo migrate` repaired against the LinkML-backed DDLGenerator (PTS-281).**
+- **`recipe_*` method names added to `SDK_RESERVED_NAMES` (PTS-307).** User
+  schemas can no longer define `recipe_*` members that would collide with the
+  generated recipe SDK surface.
+- **`hippo_unique` index made partial (`WHERE is_available=1`); migration
+  predecessors retired before writing replacements (PTS-348).**
+- **SQLite `0`/`1` booleans reversed to `bool` on read (PTS-349).**
+- **S4 pre-merge review follow-ups (PTS-346).** `Bundle.from_manifest()` now
+  validates that optional `version`/`ontology_snapshot` fields are strings when
+  present (a YAML `version: 1.0` previously parsed to a float silently);
+  `extension_referenced_elements()` documents its `isupper()` CamelCase
+  assumption and collects a non-standard fragment-level `slots` list; and
+  `SQLiteAdapter._transaction`/`staged_transaction` route rollback through
+  `_safe_rollback()` so a failing rollback can't mask the in-flight exception.
+
+### CI / Internal
+
+- Quickstart end-to-end smoke workflow (PTS-279); restored GitHub Pages docs
+  site (PTS-294); explicit read-only permissions on `tests.yml` (PTS-299);
+  merged-closure integrity check job (PTS-345); repaired CI test regressions
+  after the repo split (PTS-282); Dependabot bumps — idna, urllib3, pytest,
+  pygments (PTS-284); added a top-level `.gitignore`.
+
+Closes PTS-351.
+
+---
 
 ## v0.7.0 — 2026-05-25 (ReferenceLoader v2 — write-log substrate + EntityRef)
 
