@@ -627,7 +627,13 @@ class TestMultiHopUpgradeHappyPath:
         assert samples[0]["data"].get("brain_region") == "prefrontal cortex"
 
     def test_provenance_supersession_lineage(self, client: HippoClient) -> None:
-        """Migrated records carry supersession events with package actor + reason (§7.8)."""
+        """Migrated records carry supersession events with package actor + reason (§7.8).
+
+        Subject goes through 2 hops: s1 → s1' (hop1, actor=subject) → s1'' (hop2, actor=subject).
+        BrainDonor goes through 1 hop: bd1 → bd1' (hop2, actor=brainbank).
+        Each original entity's history must contain a ``supersede`` event tagged
+        with the migration package's name and the hop label.
+        """
         packages, _, _ = self._packages([])
 
         _seed_subject(client, "s1", external_id="VA-001", age=70.0)
@@ -642,15 +648,22 @@ class TestMultiHopUpgradeHappyPath:
 
         assert result.committed is True
 
-        # Subject: 2 hops → 2 new records created; only 1 live.
-        subj_result = next(
-            m for m in result.migrations if m.package == "subject" and m.to_version == "2.0.0"
-        )
-        assert subj_result.created == 1  # one Subject migrated in this hop
+        # Subject "s1" history: superseded in hop 1 by actor="subject",
+        # reason names the 1.0.0→1.1.0 carry-forward.
+        s1_history = client.history("s1")
+        s1_supersede_events = [e for e in s1_history if e["operation_type"] == "supersede"]
+        assert len(s1_supersede_events) == 1
+        s1_sup = s1_supersede_events[0]
+        assert s1_sup["user_id"] == "subject"
+        assert "1.0.0→1.1.0" in (s1_sup["state_snapshot"] or {}).get("reason", "")
 
-        # BrainDonor: 1 hop → 1 new record created; only 1 live.
-        bb_result = next(m for m in result.migrations if m.package == "brainbank")
-        assert bb_result.created == 1
+        # BrainDonor "bd1" history: superseded in hop 2 by actor="brainbank".
+        bd1_history = client.history("bd1")
+        bd1_supersede_events = [e for e in bd1_history if e["operation_type"] == "supersede"]
+        assert len(bd1_supersede_events) == 1
+        bd1_sup = bd1_supersede_events[0]
+        assert bd1_sup["user_id"] == "brainbank"
+        assert "age_at_collection" in (bd1_sup["state_snapshot"] or {}).get("reason", "")
 
         # Only the final live records remain queryable.
         assert len(client.query("Subject").items) == 1
