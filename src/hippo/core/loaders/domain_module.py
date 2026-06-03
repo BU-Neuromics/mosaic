@@ -339,9 +339,11 @@ class DomainModule(SchemaPackage):
            every intermediate shape is an additive subset of the target
            schema; validating each hop against its *own* historical merged
            schema is the S4 orchestrator's job, sec11 §11.5.2.)
-        3. **Commit (green only):** writes the new records, then supersedes
-           the old ones — order matters so both endpoints exist when
-           :meth:`HippoClient.supersede_entity` runs. Each supersession is
+        3. **Commit (green only):** retires the superseded predecessors
+           (so a ``hippo_unique`` partial index never sees the old and new
+           record live at once, PTS-348), writes the new records, then
+           records the supersede edges via
+           :meth:`HippoClient.supersede_entity`. Each supersession is
            tagged ``actor=<module name>`` / ``reason=<from→to>`` so the
            provenance reads as a migration.
 
@@ -583,11 +585,34 @@ class DomainModule(SchemaPackage):
         # Hard validation gate — BEFORE any committed write.
         self._run_gate(client, step.from_version, step.to_version, plan)
 
-        # Commit. New records first so supersede_entity's replacement exists.
+        # Commit (green only). A hippo_unique slot is enforced by a *partial*
+        # UNIQUE INDEX (``... WHERE is_available = 1``), which rejects two live
+        # rows that share a business key. A 1:1 migration carries the key
+        # forward, so the new record and its predecessor would momentarily both
+        # be live and collide on INSERT (PTS-348). So retire each predecessor
+        # *before* writing the new records, freeing its key; supersede_entity
+        # then records the lineage edge (it reads the source via ``read_any``
+        # and is idempotent on ``is_available``, so the already-offline
+        # predecessor still resolves). The retire emits an ``availability_change``
+        # event ahead of the ``supersede`` event — accepted to keep the change
+        # off the core supersede contract.
         result = LoadResult()
         default_reason = (
             f"{self.name} migration {step.from_version}→{step.to_version}"
         )
+        # 1. Take superseded predecessors offline so their business key frees up.
+        for old_id in dict.fromkeys(sup.old_id for sup in plan.supersessions):
+            old_type = client.resolve_type(old_id)
+            if old_type is None:
+                continue
+            client.set_availability_bulk(
+                old_type,
+                [old_id],
+                is_available=False,
+                reason=default_reason,
+                actor=self.name,
+            )
+        # 2. Write the new (live) records — no live-key collision now.
         for write in plan.writes:
             rec = client.put(
                 write.entity_type, write.data, entity_id=write.data.get("id")
@@ -599,6 +624,7 @@ class DomainModule(SchemaPackage):
                     type=write.entity_type,
                 )
             )
+        # 3. Record the supersede edges + provenance (actor/reason = migration).
         for sup in plan.supersessions:
             client.supersede_entity(
                 sup.old_id,
