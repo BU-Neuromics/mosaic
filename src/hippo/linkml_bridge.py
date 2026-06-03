@@ -917,6 +917,21 @@ class SchemaRegistry:
             if annotation_value(s, HIPPO_UNIQUE)
         ]
 
+    def boolean_slot_names(self, class_name: str) -> set[str]:
+        """Names of scalar slots whose range is ``boolean``.
+
+        Storage adapters coerce Python ``bool`` to ``0``/``1`` on write;
+        this set tells the read side which columns to reverse back to
+        ``bool`` (see the SQLite adapter's ``_decode_column_value``).
+        Multivalued boolean slots are excluded — they are JSON-encoded as
+        lists and round-trip their native ``true``/``false`` already.
+        """
+        return {
+            s.name
+            for s in self.induced_slots(class_name)
+            if s.range == "boolean" and not s.multivalued
+        }
+
     def reference_loaders(self) -> list[str]:
         """Names of concrete classes that are subclasses of ``ReferenceLoader``.
 

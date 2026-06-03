@@ -1701,8 +1701,14 @@ class SQLiteAdapter(EntityStore):
                 return None
             version = self._compute_version(cursor, entity_id)
 
+        boolean_cols = (
+            self.schema_registry.boolean_slot_names(entity_type)
+            if self.schema_registry is not None
+            else set()
+        )
         data = {
-            c: self._decode_column_value(row[c]) for c in slot_columns
+            c: self._decode_column_value(row[c], is_boolean=c in boolean_cols)
+            for c in slot_columns
             if row[c] is not None
         }
         return SQLiteEntity(
@@ -1985,9 +1991,15 @@ class SQLiteAdapter(EntityStore):
                     r["entity_id"]: int(r["c"]) for r in cursor.fetchall()
                 }
 
+        boolean_cols = (
+            self.schema_registry.boolean_slot_names(entity_type)
+            if self.schema_registry is not None
+            else set()
+        )
         for row in rows:
             data = {
-                c: self._decode_column_value(row[c]) for c in slot_columns
+                c: self._decode_column_value(row[c], is_boolean=c in boolean_cols)
+                for c in slot_columns
                 if row[c] is not None
             }
             yield SQLiteEntity(
@@ -2000,14 +2012,24 @@ class SQLiteAdapter(EntityStore):
             )
 
     @staticmethod
-    def _decode_column_value(value: Any) -> Any:
+    def _decode_column_value(value: Any, is_boolean: bool = False) -> Any:
         """Best-effort reverse of ``_coerce_for_column`` for query results.
 
         SQLite stores JSON-encoded containers and 0/1 booleans as text /
         integers; downstream consumers expect dict-shaped payloads with
         Python-native values. Strings that parse as JSON arrays/objects
         are decoded; other values pass through unchanged.
+
+        ``is_boolean`` must be set for columns backing a ``range: boolean``
+        slot: ``_coerce_for_column`` stored the ``bool`` as integer ``0``/
+        ``1``, and only the schema knows the column is boolean — without
+        this reversal, LinkML validation (migration gate, end-to-end gate)
+        rejects the raw integer for a boolean slot (PTS-349). The integer
+        guard leaves multivalued booleans untouched: they arrive as JSON
+        strings and fall through to the JSON branch with native ``bool``s.
         """
+        if is_boolean and isinstance(value, int) and not isinstance(value, bool):
+            return bool(value)
         if isinstance(value, str) and value and value[0] in "[{":
             try:
                 return json.loads(value)

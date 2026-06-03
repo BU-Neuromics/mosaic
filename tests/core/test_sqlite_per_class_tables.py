@@ -318,3 +318,74 @@ class TestCrossClassUuidLookup:
         assert adapter.resolve_type("not-a-real-uuid") is None
         assert adapter.read("not-a-real-uuid") is None
         assert adapter.resolve_types(["not-a-real-uuid"]) == {}
+
+
+def _boolean_registry() -> SchemaRegistry:
+    return build_registry(
+        {
+            "Flagged": {
+                "attributes": {
+                    "id": {"identifier": True, "required": True},
+                    "name": {"range": "string", "required": True},
+                    "confirmed": {"range": "boolean"},
+                }
+            }
+        }
+    )
+
+
+class TestBooleanRoundTrip:
+    """``range: boolean`` slots round-trip as Python ``bool`` (PTS-349).
+
+    ``_coerce_for_column`` stores ``bool`` as SQLite integer ``0``/``1``;
+    ``_decode_column_value`` must reverse that for boolean slots on both
+    hydration paths (``read`` → ``_read_per_class`` and ``find`` →
+    ``_find_per_class``), or downstream LinkML validation rejects the raw
+    integer for a ``range: boolean`` slot.
+    """
+
+    @pytest.fixture
+    def bool_db_path(self) -> Iterator[str]:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            yield os.path.join(tmpdir, "boolean.db")
+
+    @pytest.fixture
+    def bool_client(self, bool_db_path: str) -> HippoClient:
+        adapter = SQLiteAdapter(bool_db_path, schema_registry=_boolean_registry())
+        return HippoClient(
+            storage=adapter,
+            registry=adapter.schema_registry,
+            bypass_validation=True,
+        )
+
+    @pytest.mark.parametrize("value", [True, False])
+    def test_stored_as_integer_read_back_as_bool(
+        self, bool_client: HippoClient, bool_db_path: str, value: bool
+    ) -> None:
+        result = bool_client.put("Flagged", {"name": "f1", "confirmed": value})
+        entity_id = result["id"]
+
+        # Storage layer keeps the SQLite-native 0/1 integer.
+        row = _per_class_row(bool_db_path, "Flagged", entity_id)
+        assert row["confirmed"] == (1 if value else 0)
+        assert isinstance(row["confirmed"], int)
+
+        # read()/get() path (_read_per_class) reverses to a Python bool.
+        got = bool_client.get("Flagged", entity_id)
+        assert got["data"]["confirmed"] is value
+
+        # find()/query() path (_find_per_class) reverses to a Python bool.
+        items = bool_client.query("Flagged").items
+        assert len(items) == 1
+        assert items[0]["data"]["confirmed"] is value
+
+    def test_decode_column_value_boolean_flag(self) -> None:
+        decode = SQLiteAdapter._decode_column_value
+        # With the boolean flag, 0/1 integers reverse to bool.
+        assert decode(1, is_boolean=True) is True
+        assert decode(0, is_boolean=True) is False
+        # Without the flag, integers pass through unchanged (non-boolean slot).
+        assert decode(1, is_boolean=False) == 1
+        assert decode(1) == 1
+        # The flag does not disturb JSON-container decoding.
+        assert decode('[1, 2]', is_boolean=True) == [1, 2]

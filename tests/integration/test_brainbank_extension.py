@@ -149,11 +149,13 @@ def _build_merged_registry() -> SchemaRegistry:
                         "annotations": {"hippo_unique": True},
                     },
                     "post_mortem_interval_hours": {"range": "float"},
-                    # neuropathology_confirmed: boolean intentionally omitted —
-                    # SQLite stores booleans as 0/1 integers; _decode_column_value
-                    # does not reverse this, so the gate's LinkML validator rejects
-                    # integer 1 for range: boolean. A separate fix is needed for
-                    # boolean round-trip in the gateway + migration path.
+                    # neuropathology_confirmed: range: boolean — re-enabled by
+                    # PTS-349. _coerce_for_column stores bool as 0/1; the read-side
+                    # _decode_column_value now reverses 0/1 → bool for boolean slots,
+                    # so the value survives the migration transform read and passes
+                    # the per-hop + end-to-end LinkML gate (previously rejected as
+                    # integer 1 for a range: boolean slot).
+                    "neuropathology_confirmed": {"range": "boolean"},
                     "rin": {"range": "float"},
                 },
             },
@@ -312,6 +314,10 @@ def _brainbank_v1_to_v2(ctx: MigrationContext) -> None:
             # BrainDonor-specific slots (unchanged):
             "brain_bank_id":              old.get("brain_bank_id"),
             "post_mortem_interval_hours": old.get("post_mortem_interval_hours"),
+            # range: boolean — carried forward as a Python bool (PTS-349); the
+            # source read must have decoded the stored 0/1 back to bool, else the
+            # per-hop gate would reject the int for this boolean slot.
+            "neuropathology_confirmed":   old.get("neuropathology_confirmed"),
             "rin":                        old.get("rin"),
             # Inherited Subject slots (v2 shape):
             "external_id":                old.get("external_id"),
@@ -414,6 +420,7 @@ def _seed_brain_donor(
     rin: float = 7.5,
     pmi: float = 18.0,
     age_unit: str | None = None,
+    neuropathology_confirmed: bool | None = None,
 ) -> None:
     """Seed a BrainDonor at v1 shape; ``age_unit=None`` by default (un-migrated)."""
     client.put(
@@ -426,6 +433,7 @@ def _seed_brain_donor(
             "brain_bank_id": brain_bank_id,
             "age_at_collection": age,
             "post_mortem_interval_hours": pmi,
+            "neuropathology_confirmed": neuropathology_confirmed,
             "rin": rin,
             "age_unit": age_unit,  # None → valid (optional); "INVALID" → enum error at gate
             "is_available": True,
@@ -603,7 +611,8 @@ class TestMultiHopUpgradeHappyPath:
         packages, _, _ = self._packages([])
 
         _seed_brain_donor(client, "bd1", external_id="VA-DON-001",
-                          brain_bank_id="BB-001", age=72.5, rin=7.8, pmi=18.5)
+                          brain_bank_id="BB-001", age=72.5, rin=7.8, pmi=18.5,
+                          neuropathology_confirmed=True)
 
         bundle = _standard_bundle()
         migrate_to_bundle(
@@ -618,6 +627,10 @@ class TestMultiHopUpgradeHappyPath:
         assert data.get("brain_bank_id") == "BB-001"
         assert data.get("rin") == pytest.approx(7.8)
         assert data.get("post_mortem_interval_hours") == pytest.approx(18.5)
+        # range: boolean survives the full migration + end-to-end gate as a
+        # native Python bool, not the stored integer 1 (PTS-349). `is True`
+        # is intentional: an un-decoded `1` would pass `== True` but fail this.
+        assert data.get("neuropathology_confirmed") is True
 
     def test_brain_sample_intact_no_migration(self, client: HippoClient) -> None:
         """BrainSample is unchanged — no version bump, data survives end-to-end gate."""
