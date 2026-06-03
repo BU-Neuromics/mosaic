@@ -73,9 +73,10 @@ nav:
   - Configuration: configuration.md
   - CLI Reference: cli-reference.md
   - API Reference: api-reference.md
-  - Reference Loaders:
+  - Schema Packages:
       - Overview: reference-loaders.md
       - Writing a Reference Loader: writing-a-reference-loader.md
+      - Writing a Domain Module: writing-a-domain-module.md
   - Recipes:
       - Writing a Recipe: writing-a-recipe.md
       - Installing Recipes: installing-recipes.md

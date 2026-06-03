@@ -574,3 +574,64 @@ class SearchCapabilityError(HippoError):
         if self.field_name and self.entity_type:
             return f"To enable full-text search, add 'search: fts' to the '{self.field_name}' field definition in the {self.entity_type} entity schema."
         return "To enable full-text search, add 'search: fts' to the field definition in your schema."
+
+
+class MigrationStepNotFoundError(HippoError):
+    """Raised when no declared migration step covers a requested hop.
+
+    S2 resolves a single declared ``(from_version, to_version)`` edge by
+    exact match (Doc 2 §2A / sec11 §11.3.4). Multi-hop path-finding over
+    the migration DAG (composing intermediate steps, shortcut edges, the
+    below-floor fail-loud) lands in S3; until then a hop with no directly
+    declared step fails loud here rather than silently doing nothing.
+    """
+
+    def __init__(
+        self,
+        message: str,
+        package: Optional[str] = None,
+        from_version: Optional[str] = None,
+        to_version: Optional[str] = None,
+        available_steps: Optional[list[tuple[str, str]]] = None,
+        **context: Any,
+    ):
+        self.package = package
+        self.from_version = from_version
+        self.to_version = to_version
+        self.available_steps = available_steps or []
+        context["package"] = package
+        context["from_version"] = from_version
+        context["to_version"] = to_version
+        context["available_steps"] = self.available_steps
+        super().__init__(message, **context)
+
+
+class MigrationGateError(HippoError):
+    """Raised when a ``DomainModule.evolve`` staged dry-run gate fails.
+
+    The migration's transform output is staged and validated against the
+    fully merged schema *before* any committed write (sec11 §11.5.2 hard
+    validation gate). When the staged new-shape records do not validate,
+    this is raised and **nothing is committed** — the deployment's domain
+    data is left exactly as it was. Carries the underlying LinkML
+    validation messages in :attr:`errors`.
+    """
+
+    def __init__(
+        self,
+        message: str,
+        package: Optional[str] = None,
+        from_version: Optional[str] = None,
+        to_version: Optional[str] = None,
+        errors: Optional[list[str]] = None,
+        **context: Any,
+    ):
+        self.package = package
+        self.from_version = from_version
+        self.to_version = to_version
+        self.errors = errors or []
+        context["package"] = package
+        context["from_version"] = from_version
+        context["to_version"] = to_version
+        context["errors"] = self.errors
+        super().__init__(message, **context)

@@ -8,6 +8,7 @@ This guide walks through building a `hippo-reference-<name>` package from scratc
 >
 > - A **pure-schema package** (one that only contributes types — no shipped data) subclasses `SchemaPackage` directly, implements just `versions()` + `schema_fragment()`, and merges + pins via `requires:` with no hand-written code.
 > - A **reference loader** is the *external-data* species: `ReferenceLoader(SchemaPackage)`. It keeps the familiar `load()` / `upgrade()` method names, and the genus maps `provision → load()` and `evolve → upgrade()` so the orchestrator can drive any package uniformly. Everything below describes this species — but the method names are unchanged from earlier Hippo versions, so existing loaders need no edits.
+> - A **domain module** is the *first-party mutable-data* species: `DomainModule(SchemaPackage)`. It owns the deployment's locally authored records and migrates them in place via declared `(from_version → to_version)` steps. See [Writing a Domain Module](writing-a-domain-module.md).
 
 ---
 

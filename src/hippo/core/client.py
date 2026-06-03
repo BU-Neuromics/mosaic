@@ -278,6 +278,19 @@ class HippoClient:
         self._storage = value
 
     @property
+    def registry(self) -> Optional[SchemaRegistry]:
+        """The merged LinkML schema registry backing this client (read-only).
+
+        Exposes the in-memory merged schema (user schema + reference
+        loaders + ``hippo_core``/``hippo_ext``) so lifecycle hooks can
+        validate staged records against it in-process — notably
+        :meth:`DomainModule.evolve`'s staged dry-run gate, the SDK
+        equivalent of ``hippo ingest --validate-schema <merged-dir>
+        --dry-run``. ``None`` on a schemaless client.
+        """
+        return self._registry
+
+    @property
     def pipeline(self) -> Optional[ValidationPipeline]:
         """Get the validation pipeline."""
         return self._schema_manager.pipeline
