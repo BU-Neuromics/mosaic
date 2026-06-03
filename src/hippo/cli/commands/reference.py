@@ -783,6 +783,41 @@ def migrate_bundle(
     }
 
 
+def compute_exposure(
+    old_schema: str | Path,
+    new_schema: str | Path,
+    extension_name: str,
+    *,
+    extension_fragment: dict[str, Any] | None = None,
+):
+    """Exposure report for a proposed base migration vs. an installed extension.
+
+    The *pre-migration warning* half of S4 (sec11 §11.6.1): intersect the
+    structural write-set of a base migration (``old_schema`` → ``new_schema``,
+    two merged-schema YAML files) with the elements an installed extension
+    references. Empty ⇒ the base migration is safe to apply without an
+    extension step; non-empty ⇒ the lab must supply a complementary step (or
+    the end-to-end gate will block it at migration time).
+
+    The extension's fragment defaults to the installed package's
+    :meth:`SchemaPackage.schema_fragment`; pass ``extension_fragment`` to
+    report against a fragment that is not (yet) installed.
+    """
+    import yaml as _yaml
+
+    from hippo.core.loaders.exposure import compute_write_set, exposure_report
+
+    old = _yaml.safe_load(Path(old_schema).read_text(encoding="utf-8")) or {}
+    new = _yaml.safe_load(Path(new_schema).read_text(encoding="utf-8")) or {}
+    if extension_fragment is None:
+        info = find_loader(extension_name)
+        extension_fragment = info["instance"].schema_fragment()
+    write_set = compute_write_set(old, new)
+    return exposure_report(
+        write_set, extension_fragment, extension_name=extension_name
+    )
+
+
 def deprovision_reference(
     name: str,
     *,

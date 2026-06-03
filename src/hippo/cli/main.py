@@ -1045,6 +1045,44 @@ def reference_migrate_bundle(
     typer.echo("Validated end-to-end against the merged schema (incl. extensions); committed.")
 
 
+@reference_app.command(name="exposure")
+def reference_exposure(
+    old_schema: str = typer.Argument(
+        ..., help="Old merged-schema YAML (before the base migration)."
+    ),
+    new_schema: str = typer.Argument(
+        ..., help="New merged-schema YAML (after the base migration)."
+    ),
+    extension: str = typer.Option(
+        ..., "--extension", help="Installed extension package name to report against."
+    ),
+    strict: bool = typer.Option(
+        False,
+        "--strict",
+        help="Exit non-zero when the extension is exposed (for CI gating).",
+    ),
+) -> None:
+    """Flag, pre-migration, which extension elements a base migration touches.
+
+    The *warning* half of S4 (sec11 §11.6.1): intersects the base migration's
+    structural write-set (``old_schema`` → ``new_schema``) with the installed
+    extension's referenced elements. Empty ⇒ safe to apply without an
+    extension step; non-empty ⇒ supply a complementary ``evolve`` step or the
+    end-to-end gate (``hippo reference migrate-bundle``) will block it.
+    """
+    from hippo.cli.commands.reference import compute_exposure
+
+    try:
+        report = compute_exposure(old_schema, new_schema, extension)
+    except Exception as exc:
+        typer.echo(f"Error: {exc}", err=True)
+        raise typer.Exit(1)
+
+    typer.echo(report.render())
+    if strict and not report.is_safe:
+        raise typer.Exit(2)
+
+
 @reference_app.command(name="deprovision")
 def reference_deprovision(
     name: str = typer.Argument(..., help="Schema-package name (entry-point key)"),

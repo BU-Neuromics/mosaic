@@ -189,3 +189,49 @@ class TestBundle:
     def test_non_string_version_rejected(self) -> None:
         with pytest.raises(ConfigError):
             Bundle.from_manifest({"name": "x", "packages": {"core": 1.0}})
+
+
+# ---------------------------------------------------------------------------
+# compute_exposure SDK entrypoint (backs `hippo reference exposure`)
+# ---------------------------------------------------------------------------
+
+
+class TestComputeExposureEntrypoint:
+    def _write(self, tmp_path, name, schema) -> str:
+        import yaml as _yaml
+
+        p = tmp_path / name
+        p.write_text(_yaml.safe_dump(schema), encoding="utf-8")
+        return str(p)
+
+    def test_reports_exposure_from_schema_files(self, tmp_path) -> None:
+        from hippo.cli.commands.reference import compute_exposure
+
+        old = self._write(
+            tmp_path,
+            "old.yaml",
+            {"classes": {"Diagnosis": {"attributes": {"code": {"range": "string"}}}}},
+        )
+        new = self._write(
+            tmp_path,
+            "new.yaml",
+            {
+                "classes": {
+                    "Diagnosis": {"attributes": {"code_primary": {"range": "string"}}}
+                }
+            },
+        )
+        # Explicit fragment → no entry-point discovery needed.
+        ext_fragment = {
+            "classes": {
+                "LabDiagnosis": {
+                    "is_a": "Diagnosis",
+                    "slot_usage": {"code": {"required": True}},
+                }
+            }
+        }
+        report = compute_exposure(
+            old, new, "labdiagnosis", extension_fragment=ext_fragment
+        )
+        assert not report.is_safe
+        assert "code" in report.exposed_slots
