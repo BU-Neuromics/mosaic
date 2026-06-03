@@ -260,6 +260,8 @@ These hippo capabilities underpin the SchemaPackage abstraction but require no n
 | Migration-chain resolver (DAG, shortcut edges, floor, below-floor fail-loud); multi-hop `evolve`; `deprovision` with asymmetry + dependents guard | S3 |
 | Dependency-ordered lifecycle orchestrator; staged commit-or-rollback wrapping end-to-end gate (incl. extensions); `brainbank-bundle` + generated `requires:`; exposure-report tool; CI merged-closure integrity check | S4 |
 
+**S4 status (PTS-340):** shipped except the CI merged-closure integrity check (§11.6.3), which is DevOps-owned workflow wiring (`.github/workflows/`) delegated as a follow-up. Implemented: `SQLiteAdapter.staged_transaction()` (§11.8.1); `orchestrator.topological_sort` / `migrate_to_bundle` / `run_end_to_end_gate` (§11.5); `Bundle` manifest + generated `requires:` (§11.6.2); `exposure_report` (§11.6.1); the `hippo reference migrate-bundle` command. `[VERIFY]` `loader_depends_on` resolved (§11.8.2).
+
 ---
 
 ### 11.8 Open / [VERIFY] Items
@@ -267,7 +269,7 @@ These hippo capabilities underpin the SchemaPackage abstraction but require no n
 | Item | What to verify | Sprint | Status |
 |---|---|---|---|
 | Whole-`evolve`/`upgrade()` multi-entity transaction atomicity | Does `client.load_context()` / the per-write transaction guarantee rollback across multiple entity types if `evolve`/`upgrade()` fails mid-way? Is there a full-upgrade rollback? | S3 | **Resolved (§11.8.1)** |
-| Runtime `loader_depends_on` ordering | Does any runtime path (e.g., `hippo reference upgrade`) order loader invocations by `loader_depends_on`? Or is the annotation strictly documentation today? | S3/S4 | Open (§11.8.2) |
+| Runtime `loader_depends_on` ordering | Does any runtime path (e.g., `hippo reference upgrade`) order loader invocations by `loader_depends_on`? Or is the annotation strictly documentation today? | S3/S4 | **Resolved (§11.8.2)** |
 
 #### 11.8.1 Multi-entity transaction atomicity — RESOLVED (S3)
 
@@ -283,8 +285,10 @@ Consequence: a fault *between* committed writes — e.g. `evolve` raises on the 
 
 Mitigation already shipped (S2/S3): `DomainModule.evolve` runs a **pre-commit staged dry-run gate** (`_run_gate`) that validates the transform output against the merged schema *before any write*, so the most common failure mode — schema-invalid output — never reaches the commit loop and nothing is written. The gate cannot, however, undo a runtime fault that occurs *during* the commit loop.
 
-Designed home for true atomicity: the **S4 orchestrator's staged commit-or-rollback** (§11.5.2), which wraps the full chain (all hops, all packages, extensions included) in one staged transaction and rolls everything back if the end-to-end gate fails. End-to-end multi-entity rollback is explicitly deferred there; S3 documents the limitation rather than papering over it.
+Designed home for true atomicity: the **S4 orchestrator's staged commit-or-rollback** (§11.5.2). **Shipped (S4):** `SQLiteAdapter.staged_transaction()` is a re-entrant outer scope within which every inner `_transaction()` defers its commit, so a whole multi-package / multi-hop chain commits or rolls back as one unit. Because all writes (entity rows, provenance, relationships, FTS) ride the one thread-local connection, the rollback is total; because same-connection reads see the staged (uncommitted) write-set, later hops read earlier hops' output and the end-to-end gate validates the staged base writes alongside the lab's existing extension rows. `migrate_to_bundle()` wraps the chain in this scope and rolls everything back if the end-to-end gate (or any step) raises.
 
-#### 11.8.2 Runtime `loader_depends_on` ordering — partially addressed (S3), full ordering S4
+#### 11.8.2 Runtime `loader_depends_on` ordering — RESOLVED (S4)
 
-As of S3, `depends_on()` has its **first runtime consumer**: the `deprovision` *dependents guard* (§11.4.4) refuses to tear down a package that any installed package still depends on. Dependency-*ordered* lifecycle dispatch on the install/upgrade path (base before dependents, per hop) remains the S4 orchestrator's job (§11.5.1); today `hippo reference upgrade` still operates per-package without a topological sort.
+**Finding: no runtime path orders loaders by `loader_depends_on`; the annotation is documentation-only. Verified against the hippo source.** `loader_depends_on` appears solely in `src/hippo/linkml_bridge.py` (`LOADER_DEPENDS_ON_ANNOTATION`, `_emit_loader_depends_on_warnings`), where merging a fragment only **warns** when a declared dependency is absent from the installed set (sec2 §2.14.6). It never sorts or sequences loader invocations. Separately, `SchemaPackage.depends_on()` has exactly two runtime consumers: the S3 `deprovision` *dependents guard* (§11.4.4, refuses teardown of a depended-on package) and — new in S4 — the orchestrator's **explicit** topological sort.
+
+Consequence (the design's standing assumption confirmed): the S4 orchestrator must — and does — sequence base→dependents itself. `orchestrator.topological_sort()` (Kahn, deterministic) resolves the `depends_on` graph across the participating packages and `migrate_to_bundle()` dispatches `evolve` in that order per hop. It relies on **no** implicit loader ordering; the old `hippo reference upgrade` operated per-package without a topological sort, and `hippo reference migrate-bundle` now subsumes that path with explicit dependency ordering.

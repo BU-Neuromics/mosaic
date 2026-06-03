@@ -808,14 +808,63 @@ class SQLiteAdapter(EntityStore):
     def _transaction(
         self,
     ) -> Generator[sqlite3.Connection, None, None]:
-        """Context manager for database transactions."""
+        """Context manager for database transactions.
+
+        When a :meth:`staged_transaction` scope is active on this thread
+        (sec11 §11.5.2 — the orchestrator's single commit-or-rollback
+        wrapper), inner writes **defer** their commit to that outer scope:
+        this yields the shared thread-local connection without committing,
+        so a whole multi-package / multi-hop migration chain commits or
+        rolls back as one unit. Reads on the same connection still observe
+        the staged (uncommitted) writes, so later hops see earlier hops'
+        output and the end-to-end gate sees the staged write-set.
+        """
         conn = self._get_connection()
+        if getattr(self._local, "staging_depth", 0) > 0:
+            # Inside an outer staged scope: defer commit/rollback to it. On
+            # error, propagate so the staged scope rolls everything back.
+            yield conn
+            return
         try:
             yield conn
             conn.commit()
         except Exception:
             conn.rollback()
             raise
+
+    @contextmanager
+    def staged_transaction(
+        self,
+    ) -> Generator[sqlite3.Connection, None, None]:
+        """Outer commit-or-rollback scope for the lifecycle orchestrator.
+
+        Within this scope every inner :meth:`_transaction` defers its commit
+        (sec11 §11.5.2). All writes across the staged chain — entity rows,
+        provenance, relationships, FTS (all on the one thread-local
+        connection) — commit together on clean exit, or roll back together
+        if any exception escapes the scope (e.g. the end-to-end validation
+        gate raising :class:`~hippo.core.exceptions.MigrationGateError`).
+        Nesting is reference-counted: only the outermost scope commits.
+        """
+        conn = self._get_connection()
+        depth = getattr(self._local, "staging_depth", 0)
+        if depth > 0:
+            # Already staging on this thread — join the existing scope.
+            self._local.staging_depth = depth + 1
+            try:
+                yield conn
+            finally:
+                self._local.staging_depth -= 1
+            return
+        self._local.staging_depth = 1
+        try:
+            yield conn
+            conn.commit()
+        except Exception:
+            conn.rollback()
+            raise
+        finally:
+            self._local.staging_depth = 0
 
     def _init_database(self) -> None:
         """Initialize database schema."""

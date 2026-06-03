@@ -290,6 +290,26 @@ class HippoClient:
         """
         return self._registry
 
+    @contextmanager
+    def staged_transaction(self) -> Iterator[None]:
+        """Single commit-or-rollback scope spanning a whole migration chain.
+
+        The S4 lifecycle orchestrator (sec11 §11.5.2) wraps a multi-package,
+        multi-hop migration in this scope: every inner write defers its
+        commit, reads still observe the staged (uncommitted) write-set, and
+        the entire chain commits on clean exit or rolls back together if the
+        end-to-end validation gate (or anything else) raises. Delegates to
+        the storage adapter's :meth:`staged_transaction`; on a backend that
+        does not support staging it is a transparent no-op (each inner write
+        commits as before).
+        """
+        storage = self._storage
+        if storage is not None and hasattr(storage, "staged_transaction"):
+            with storage.staged_transaction():
+                yield
+        else:
+            yield
+
     @property
     def pipeline(self) -> Optional[ValidationPipeline]:
         """Get the validation pipeline."""

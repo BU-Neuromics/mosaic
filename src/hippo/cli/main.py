@@ -1003,6 +1003,86 @@ def reference_upgrade(
     typer.echo(f"{pruned} prior row(s) pruned.")
 
 
+@reference_app.command(name="migrate-bundle")
+def reference_migrate_bundle(
+    manifest: str = typer.Argument(
+        ..., help="Path to a bundle manifest (YAML) pinning the target coordinate."
+    ),
+    db_path: str = typer.Option(
+        None, "--db-path", help="SQLite database path (default: data/hippo.db)"
+    ),
+    schema_dir: str = typer.Option(
+        None, "--schema-dir", help="Schema directory (default: schemas/)"
+    ),
+) -> None:
+    """Migrate a multi-package deployment to a target bundle (sec11 §11.5).
+
+    The S4 *one command*: resolves the ``depends_on`` graph across all
+    installed packages, drives every pinned package through the bundle's
+    coordinate sequence base→dependents inside a single commit-or-rollback
+    scope, and validates the full post-migration state (incl. lab
+    extensions) end-to-end before the one commit. Any failure rolls the
+    whole chain back, leaving the deployment exactly as it was.
+    """
+    from hippo.cli.commands.reference import migrate_bundle
+
+    db = db_path or "data/hippo.db"
+    sd = schema_dir or "schemas"
+    try:
+        result = migrate_bundle(manifest, db_path=db, schema_dir=sd)
+    except Exception as exc:
+        typer.echo(f"Error: {exc}", err=True)
+        raise typer.Exit(1)
+
+    typer.echo(f"Migrated deployment to bundle {result['bundle']!r}:")
+    for m in result["migrations"]:
+        typer.echo(
+            f"  {m['package']}: {m['from_version']} → {m['to_version']} "
+            f"({m['created']} record(s))"
+        )
+    if not result["migrations"]:
+        typer.echo("  (already at the target bundle; validated, nothing to migrate)")
+    typer.echo("Validated end-to-end against the merged schema (incl. extensions); committed.")
+
+
+@reference_app.command(name="exposure")
+def reference_exposure(
+    old_schema: str = typer.Argument(
+        ..., help="Old merged-schema YAML (before the base migration)."
+    ),
+    new_schema: str = typer.Argument(
+        ..., help="New merged-schema YAML (after the base migration)."
+    ),
+    extension: str = typer.Option(
+        ..., "--extension", help="Installed extension package name to report against."
+    ),
+    strict: bool = typer.Option(
+        False,
+        "--strict",
+        help="Exit non-zero when the extension is exposed (for CI gating).",
+    ),
+) -> None:
+    """Flag, pre-migration, which extension elements a base migration touches.
+
+    The *warning* half of S4 (sec11 §11.6.1): intersects the base migration's
+    structural write-set (``old_schema`` → ``new_schema``) with the installed
+    extension's referenced elements. Empty ⇒ safe to apply without an
+    extension step; non-empty ⇒ supply a complementary ``evolve`` step or the
+    end-to-end gate (``hippo reference migrate-bundle``) will block it.
+    """
+    from hippo.cli.commands.reference import compute_exposure
+
+    try:
+        report = compute_exposure(old_schema, new_schema, extension)
+    except Exception as exc:
+        typer.echo(f"Error: {exc}", err=True)
+        raise typer.Exit(1)
+
+    typer.echo(report.render())
+    if strict and not report.is_safe:
+        raise typer.Exit(2)
+
+
 @reference_app.command(name="deprovision")
 def reference_deprovision(
     name: str = typer.Argument(..., help="Schema-package name (entry-point key)"),
