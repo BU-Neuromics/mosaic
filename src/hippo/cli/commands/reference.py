@@ -47,8 +47,10 @@ from typing import TYPE_CHECKING, Any, Union, get_args, get_origin
 from pydantic import BaseModel, ValidationError
 from pydantic_core import PydanticUndefined
 
+from hippo.core.exceptions import DeprovisionRefusedError
 from hippo.core.loaders.reference import (
     EntityRef,
+    ExternalData,
     LoadResult,
     ReferenceLoader,
     SchemaPackage,
@@ -688,6 +690,196 @@ def upgrade_reference(
         "entities": list(load_result.entities),
         "pruned": pruned,
     }
+
+
+def deprovision_reference(
+    name: str,
+    *,
+    db_path: str | Path,
+    schema_dir: str | Path | None = None,
+    force: bool = False,
+) -> dict[str, Any]:
+    """Tear down an installed schema package (sec11 §11.4).
+
+    The dependency-ordered teardown:
+
+    1. **Dependents guard (§11.4.4, all species).** Refuse if any *other
+       installed* package declares ``name`` in its ``depends_on()`` — the
+       error names them. This precedes everything else so a guarded
+       package is never partially torn down.
+    2. **Species data-retirement hook.** Call
+       ``loader.deprovision(client, version, force=force)``:
+
+       * ``DomainModule`` refuses by default when it owns live domain data
+         (raises :class:`DeprovisionRefusedError` unless ``force=True``,
+         then soft-deletes — §11.4.3);
+       * ``ReferenceLoader`` and pure-schema packages inherit the genus
+         no-op (a ``ReferenceLoader`` has no write-log handle, so the
+         orchestrator prunes its rows — step 3).
+    3. **Prune (``ExternalData`` only).** Hard-delete every
+       ``reference_write_log``-tracked row for ``name`` across all
+       versions. Safe because the source is external and reconstructible
+       (D2.14.J substrate; see the wording note below).
+    4. **Remove the version record** from ``hippo_meta.reference_versions``
+       so the package reads as uninstalled.
+
+    Note on §11.4.2 wording: the spec says ``ReferenceLoader`` deprovision
+    *soft-deletes*, but the authoritative ``--prune-old`` / write-log
+    substrate (D2.14.J) **hard-deletes**. This orchestrator follows the
+    implemented hard-delete for consistency, mirroring ``--prune-old``;
+    the ``DomainModule`` path soft-deletes (its data is authoritative, not
+    reconstructible). DDL table teardown is out of scope (no destructive
+    schema ops in v1; that is the S4 orchestrator's concern).
+
+    Raises ``ValueError`` when ``name`` is not installed.
+    """
+    info = find_loader(name)
+    loader: SchemaPackage = info["instance"]
+
+    db = Path(db_path)
+    existing = _read_versions(db)
+    version = existing.get(name)
+    if version is None:
+        raise ValueError(
+            f"Loader {name!r} is not installed; nothing to deprovision."
+        )
+
+    # 1) Dependents guard — refuse if any installed package depends on this.
+    dependents = _find_installed_dependents(name, db)
+    if dependents:
+        raise DeprovisionRefusedError(
+            message=(
+                f"Cannot deprovision {name!r}: installed package(s) "
+                f"{dependents} depend on it. Deprovision the dependent(s) "
+                f"first."
+            ),
+            package=name,
+            reason="has_dependents",
+            dependents=dependents,
+        )
+
+    deployed_registry = _load_deployed_registry(schema_dir)
+    spec = _build_fragment_spec(info, loader)
+    merged_registry = _merge_fragment_into(deployed_registry, spec)
+    client = _build_client(merged_registry, db)
+
+    # 2) Species hook retires its own data. DomainModule raises
+    # DeprovisionRefusedError on live data unless force=True; the genus /
+    # ReferenceLoader no-op leaves the prune (step 3) to the orchestrator.
+    loader.deprovision(client, version, force=force)
+
+    # 3) Prune external-data rows off the write log (the loader has no
+    # write-log handle, so this can't live on the species hook).
+    pruned: list[EntityRef] = []
+    if isinstance(loader, ExternalData):
+        pruned = _prune_all_via_write_log(db, name)
+
+    # 4) Drop the installed-version record so the package reads as gone.
+    _remove_version(db, name)
+
+    return {
+        "name": name,
+        "version": version,
+        "status": "deprovisioned",
+        "pruned": pruned,
+        "forced": force,
+    }
+
+
+def _find_installed_dependents(name: str, db_path: Path) -> list[str]:
+    """Return the names of *installed* packages that ``depends_on`` ``name``.
+
+    Cross-references ``hippo_meta.reference_versions`` (the installed set,
+    §11.4.4) against each installed package's declared ``depends_on()``
+    (a ``list[str]`` of package names — schema_package.py is authoritative
+    over the §11.2.2 table). Installed-but-no-longer-discoverable packages
+    are skipped rather than crashing the guard.
+    """
+    installed = _read_versions(db_path)
+    dependents: list[str] = []
+    for other in installed:
+        if other == name:
+            continue
+        try:
+            instance = find_loader(other)["instance"]
+        except ReferenceLoaderNotFoundError:
+            continue
+        if name in instance.depends_on():
+            dependents.append(other)
+    return sorted(dependents)
+
+
+def _prune_all_via_write_log(db_path: Path, name: str) -> list[EntityRef]:
+    """Hard-delete every ``reference_write_log`` row for ``name`` (all versions).
+
+    The teardown counterpart of :func:`_prune_via_write_log`, which is
+    scoped to a single ``from_version`` for ``--prune-old``. Deprovision
+    removes the whole package, so it prunes across every version the
+    loader ever wrote. Entity rows are deleted per ``entity_type`` group
+    and the matching log rows are removed in the same transaction.
+    """
+    conn = sqlite3.connect(str(db_path))
+    try:
+        cursor = conn.cursor()
+        if not _has_write_log_table(cursor):
+            return []
+        cursor.execute(
+            "SELECT entity_id, entity_type FROM reference_write_log "
+            "WHERE loader_name = ?",
+            (name,),
+        )
+        rows = cursor.fetchall()
+        if not rows:
+            return []
+
+        deleted: list[EntityRef] = []
+        by_type: dict[str, list[str]] = {}
+        for entity_id, entity_type in rows:
+            by_type.setdefault(entity_type, []).append(entity_id)
+            deleted.append(EntityRef(id=entity_id, type=entity_type))
+
+        try:
+            cursor.execute("BEGIN")
+            for entity_type, ids in by_type.items():
+                placeholders = ",".join("?" * len(ids))
+                cursor.execute(
+                    f'DELETE FROM "{entity_type}" WHERE id IN ({placeholders})',
+                    ids,
+                )
+            cursor.execute(
+                "DELETE FROM reference_write_log WHERE loader_name = ?",
+                (name,),
+            )
+            conn.commit()
+        except Exception:
+            conn.rollback()
+            raise
+        return deleted
+    finally:
+        conn.close()
+
+
+def _remove_version(db_path: Path, name: str) -> None:
+    """Drop ``name`` from ``hippo_meta.reference_versions`` (uninstall mark).
+
+    The inverse of :func:`_write_versions`. A no-op when the key is
+    already absent so the teardown stays idempotent.
+    """
+    from hippo.core.meta import get_meta, set_meta
+
+    if not db_path.exists():
+        return
+    conn = sqlite3.connect(str(db_path))
+    try:
+        if not _has_meta_table(conn):
+            return
+        versions = get_meta(conn, META_KEY_VERSIONS) or {}
+        if name in versions:
+            del versions[name]
+            set_meta(conn, META_KEY_VERSIONS, versions)
+            conn.commit()
+    finally:
+        conn.close()
 
 
 # ---------------------------------------------------------------------------

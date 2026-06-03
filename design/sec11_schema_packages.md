@@ -264,9 +264,27 @@ These hippo capabilities underpin the SchemaPackage abstraction but require no n
 
 ### 11.8 Open / [VERIFY] Items
 
-These items from the source design document remain unconfirmed against the hippo source and are recorded as open questions pending S3/S4 implementation:
+| Item | What to verify | Sprint | Status |
+|---|---|---|---|
+| Whole-`evolve`/`upgrade()` multi-entity transaction atomicity | Does `client.load_context()` / the per-write transaction guarantee rollback across multiple entity types if `evolve`/`upgrade()` fails mid-way? Is there a full-upgrade rollback? | S3 | **Resolved (§11.8.1)** |
+| Runtime `loader_depends_on` ordering | Does any runtime path (e.g., `hippo reference upgrade`) order loader invocations by `loader_depends_on`? Or is the annotation strictly documentation today? | S3/S4 | Open (§11.8.2) |
 
-| Item | What to verify | Sprint |
-|---|---|---|
-| Whole-`upgrade()` multi-entity transaction atomicity | Does `client.load_context()` / the per-write transaction guarantee rollback across multiple entity types if `upgrade()` fails mid-way? Is there a full-upgrade rollback? | S3 |
-| Runtime `loader_depends_on` ordering | Does any runtime path (e.g., `hippo reference upgrade`) order loader invocations by `loader_depends_on`? Or is the annotation strictly documentation today? | S3/S4 |
+#### 11.8.1 Multi-entity transaction atomicity — RESOLVED (S3)
+
+**Finding: there is no whole-`evolve` / whole-`upgrade()` multi-entity transaction. Verified against the hippo source.**
+
+The transaction boundary is **per single write**, not per upgrade:
+
+- `HippoClient.put()` → `IngestionService._put_with_sqlite()` → `SQLiteAdapter.create()` / `update_data()`, each of which wraps its body in exactly one `with self._storage._transaction() as conn:` and commits on exit.
+- `HippoClient.supersede_entity()` → `ProvenanceService.supersede_entity()`, likewise its own single `_storage._transaction()`.
+- `client.load_context()` only threads the `(loader_name, version)` write-log tag so the `reference_write_log` row insert shares **that one** entity write's transaction (so a committed entity row always has a matching log row, and a mid-write fault rolls back *that* write). It does **not** open an enclosing transaction across the whole load/upgrade.
+
+Consequence: a fault *between* committed writes — e.g. `evolve` raises on the 3rd `put`, or `supersede_entity` fails after some `put`s committed, or any hop of a multi-hop chain fails after earlier hops committed — leaves **partial state with no automatic rollback** across the operation. `--prune-old` does not corrupt the prior version on failure (it is gated behind a clean `LoadResult`, so the prune is simply skipped), but the *new*-version partial writes persist.
+
+Mitigation already shipped (S2/S3): `DomainModule.evolve` runs a **pre-commit staged dry-run gate** (`_run_gate`) that validates the transform output against the merged schema *before any write*, so the most common failure mode — schema-invalid output — never reaches the commit loop and nothing is written. The gate cannot, however, undo a runtime fault that occurs *during* the commit loop.
+
+Designed home for true atomicity: the **S4 orchestrator's staged commit-or-rollback** (§11.5.2), which wraps the full chain (all hops, all packages, extensions included) in one staged transaction and rolls everything back if the end-to-end gate fails. End-to-end multi-entity rollback is explicitly deferred there; S3 documents the limitation rather than papering over it.
+
+#### 11.8.2 Runtime `loader_depends_on` ordering — partially addressed (S3), full ordering S4
+
+As of S3, `depends_on()` has its **first runtime consumer**: the `deprovision` *dependents guard* (§11.4.4) refuses to tear down a package that any installed package still depends on. Dependency-*ordered* lifecycle dispatch on the install/upgrade path (base before dependents, per hop) remains the S4 orchestrator's job (§11.5.1); today `hippo reference upgrade` still operates per-package without a topological sort.

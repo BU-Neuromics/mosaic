@@ -43,15 +43,54 @@ client already operates on (:attr:`HippoClient.registry`). Only the
 *new* records are validated; the old superseded rows are v1-shape and
 are never re-validated.
 
-Scope note (S2)
----------------
-This module implements the **single-hop** evolve: one declared edge,
-resolved by exact ``(from_version, to_version)`` match. Multi-hop
-path-finding over the DAG (intermediate-step composition, shortcut
-edges, the below-floor fail-loud), ``deprovision`` refuse-by-default +
-dependents guard, and mid-commit rollback atomicity are explicitly S3/S4
-(sec11 §11.7.2). :class:`MigrationStep` is deliberately a bare DAG edge
-so the S3 resolver composes it without a rewrite.
+Migration chain (S3, sec11 §11.3)
+---------------------------------
+``evolve`` resolves a path through the declared migration **DAG**, not a
+single edge. :meth:`migration_steps` is read as a directed graph whose
+nodes are version slugs and whose edges are the declared
+``(from_version → to_version)`` transforms. :meth:`_resolve_path`
+breadth-first-searches that graph from the deployment's current version
+to the target, so the **fewest-hop** path wins — which means a declared
+*shortcut* edge (e.g. a direct ``1.2.0 → 2.0.0`` bulk transform) is
+preferred over the equivalent multi-step chain automatically, with no
+special-casing. A single-hop upgrade is just a one-edge path through the
+same resolver. Each hop is staged → gated → committed in turn (§11.3.3),
+so a 3-hop upgrade composes its intermediate steps in order.
+
+Two fail-loud boundaries (no silent fallback, sec11 §11.3.2):
+
+* **Below the floor.** If the current version is not a node anywhere in
+  the DAG, it predates the oldest shipped step; the resolver raises
+  :class:`~hippo.core.exceptions.MigrationFloorError` (*upgrade to
+  ≥<floor> first*). The chain ships every step back to that floor, like
+  an Alembic ``versions/`` directory — old package code is never fetched.
+* **No path to target.** If the target is unreachable from a known
+  current node, :class:`~hippo.core.exceptions.MigrationStepNotFoundError`
+  is raised.
+
+``deprovision`` (S3, sec11 §11.4)
+---------------------------------
+A :class:`DomainModule` **refuses to deprovision by default when it owns
+live domain data** (§11.4.3): its records are the lab's authoritative
+operational data, so a silent soft-delete on uninstall would be a
+data-loss event. The operator must pass ``force=True`` (ideally after an
+export), which soft-deletes the populated rows via the standard
+availability transition. The complementary *dependents guard* (§11.4.4 —
+refuse to deprovision a package others ``depends_on``) lives in the CLI
+orchestrator, which alone holds the installed-package graph.
+
+Atomicity note (sec11 §11.8 [VERIFY], resolved S3)
+--------------------------------------------------
+There is **no** whole-``evolve`` (or whole-``upgrade()``) multi-entity
+transaction. Each ``client.put`` and each ``client.supersede_entity``
+opens its own SQL transaction (``SQLiteAdapter.create`` /
+``update_data`` / ``ProvenanceService.supersede_entity`` — every one
+wraps a single ``_storage._transaction()``), so a failure *between*
+committed writes leaves partial state with no rollback across the chain.
+The pre-commit staged gate (:meth:`_run_gate`) is the mitigation — it
+catches schema-invalid output before *any* write — but it cannot undo a
+runtime fault during the commit loop. True end-to-end commit-or-rollback
+is the S4 orchestrator's job (sec11 §11.5.2).
 """
 
 from __future__ import annotations
@@ -59,6 +98,7 @@ from __future__ import annotations
 import tempfile
 import uuid
 from abc import abstractmethod
+from collections import deque
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Callable
@@ -66,7 +106,12 @@ from typing import TYPE_CHECKING, Callable
 import yaml
 from pydantic import BaseModel
 
-from hippo.core.exceptions import MigrationGateError, MigrationStepNotFoundError
+from hippo.core.exceptions import (
+    DeprovisionRefusedError,
+    MigrationFloorError,
+    MigrationGateError,
+    MigrationStepNotFoundError,
+)
 from hippo.core.loaders.reference import EntityRef, LoadResult
 from hippo.core.loaders.schema_package import SchemaPackage
 
@@ -261,10 +306,8 @@ class DomainModule(SchemaPackage):
         return []
 
     # ------------------------------------------------------------------
-    # MigratableData: single-hop evolve (S2). provision/deprovision are
-    # inherited genus no-ops. NOTE: deprovision refuse-by-default + the
-    # dependents guard (sec11 §11.4.3) are explicitly S3 — left as the
-    # genus no-op here so S2 does not pre-empt that design.
+    # MigratableData: multi-hop evolve (S3). provision is the inherited
+    # genus no-op; deprovision is overridden below (refuse-by-default).
     # ------------------------------------------------------------------
 
     def evolve(
@@ -274,43 +317,277 @@ class DomainModule(SchemaPackage):
         to_version: str,
         params: BaseModel | None = None,
     ) -> LoadResult:
-        """Run the declared ``(from_version → to_version)`` migration step.
+        """Migrate ``from_version`` → ``to_version`` along the declared DAG.
 
-        1. Resolve the single declared step by exact match (single-hop;
-           S3 generalizes to multi-hop path-finding).
-        2. Run its transform → stage new-shape records + supersessions
-           onto a :class:`MigrationPlan` (no writes yet).
-        3. **Gate:** stage the new records and dry-run-validate them
-           against the merged schema (:meth:`_run_gate`). On failure raise
-           :class:`MigrationGateError` and commit nothing.
-        4. **Commit (green only):** write the new records, then supersede
+        Resolves an ordered path through the migration DAG
+        (:meth:`_resolve_path` — fewest hops, so a declared shortcut edge
+        wins) and runs each hop in turn. A single-hop upgrade is a
+        one-edge path; a 3-hop upgrade composes its three intermediate
+        steps in order. Each hop independently:
+
+        1. Runs its transform → stages new-shape records + supersessions
+           onto a fresh :class:`MigrationPlan` (no writes yet). The
+           transform reads the *current live* records via ``client.query``
+           — after the previous hop these are that hop's committed output,
+           never the superseded predecessors (``query`` excludes
+           unavailable rows), so hops never double-process.
+        2. **Gate:** stages the new records and dry-run-validates them
+           against the client's merged schema (:meth:`_run_gate`); on
+           failure raises :class:`MigrationGateError` and commits nothing
+           further. (Per-hop validation is against the client's *current*
+           merged registry, which is correct for the common case where
+           every intermediate shape is an additive subset of the target
+           schema; validating each hop against its *own* historical merged
+           schema is the S4 orchestrator's job, sec11 §11.5.2.)
+        3. **Commit (green only):** writes the new records, then supersedes
            the old ones — order matters so both endpoints exist when
-           :meth:`HippoClient.supersede_entity` runs. Each supersession
-           is tagged ``actor=<module name>`` / ``reason=<from→to>`` so the
-           provenance reads as a migration, not a hand edit.
+           :meth:`HippoClient.supersede_entity` runs. Each supersession is
+           tagged ``actor=<module name>`` / ``reason=<from→to>`` so the
+           provenance reads as a migration.
 
-        Returns a :class:`LoadResult` where ``created`` counts the
-        new-shape records written; the matching old records are
-        superseded (1:1 for :meth:`MigrationPlan.migrate`).
+        Returns an aggregate :class:`LoadResult` summed across hops:
+        ``created`` counts every new-shape record written along the path.
+        A no-op (``from_version == to_version``) returns an empty result.
+
+        Raises :class:`~hippo.core.exceptions.MigrationFloorError` when
+        the current version is below the migration floor, and
+        :class:`MigrationStepNotFoundError` when the target is unreachable.
         """
-        step = self._resolve_step(from_version, to_version)
+        path = self._resolve_path(from_version, to_version)
 
+        aggregate = LoadResult()
+        for step in path:
+            hop = self._run_hop(client, step, params)
+            aggregate.created += hop.created
+            aggregate.updated += hop.updated
+            aggregate.unchanged += hop.unchanged
+            aggregate.entities.extend(hop.entities)
+        return aggregate
+
+    # ------------------------------------------------------------------
+    # MigratableData: deprovision — refuse-by-default on live data (S3).
+    # ------------------------------------------------------------------
+
+    def deprovision(
+        self,
+        client: "HippoClient",
+        version: str,
+        *,
+        force: bool = False,
+    ) -> None:
+        """Retire this module's domain data — refusing by default (§11.4.3).
+
+        Unlike :class:`ReferenceLoader` (whose external source is
+        reconstructible, so the orchestrator prunes its rows willingly),
+        a ``DomainModule`` owns the deployment's authoritative,
+        first-party records. Tearing them down on uninstall is a data-loss
+        event, so this **refuses** when any live row exists in a
+        :meth:`populates_types` class:
+
+        * ``force=False`` (default) + live data ⇒ raise
+          :class:`~hippo.core.exceptions.DeprovisionRefusedError`
+          (``reason="live_domain_data"``), naming the populated types.
+          Export first, then re-run with ``force=True``.
+        * ``force=True`` ⇒ soft-delete every live row in those classes
+          (the standard ``is_available`` availability transition — no hard
+          delete, sec3), leaving the provenance trail intact.
+        * No live data ⇒ nothing to retire; returns quietly.
+
+        The dependents guard (§11.4.4) is enforced ahead of this call by
+        the CLI orchestrator, which holds the installed-package graph.
+        """
+        live = self._live_data_types(client)
+        if live and not force:
+            raise DeprovisionRefusedError(
+                message=(
+                    f"{self.name}: refusing to deprovision — it owns live "
+                    f"domain data in {live!r}. Domain records are "
+                    f"authoritative; export them first, then re-run with "
+                    f"force=True to soft-delete."
+                ),
+                package=self.name,
+                reason="live_domain_data",
+                live_types=live,
+            )
+        if not live:
+            return
+        # force=True: soft-delete every live row via the availability
+        # transition (no hard delete). The provenance log retains the
+        # lineage so a re-provision/restore stays auditable.
+        for entity_type in live:
+            for item in client.query(entity_type).items:
+                client.delete(entity_type, item["id"])
+
+    def _live_data_types(self, client: "HippoClient") -> list[str]:
+        """Return the :meth:`populates_types` classes that hold live rows.
+
+        A class is "live" when ``client.query`` (which excludes
+        unavailable / superseded rows) returns at least one item. The
+        result drives the refuse-by-default decision and names the
+        offending types in the error.
+        """
+        live: list[str] = []
+        for entity_type in self.populates_types():
+            try:
+                if client.query(entity_type).items:
+                    live.append(entity_type)
+            except Exception:
+                # A type the client's schema doesn't know (or an empty
+                # store) is not live data; never block teardown on it.
+                continue
+        return live
+
+    # ------------------------------------------------------------------
+    # Internals
+    # ------------------------------------------------------------------
+
+    def _resolve_path(
+        self, from_version: str, to_version: str
+    ) -> list[MigrationStep]:
+        """Resolve the ordered list of steps from ``from_version`` to target.
+
+        Reads :meth:`migration_steps` as a directed graph and BFS-searches
+        for the **fewest-hop** path, so a declared shortcut edge (a direct
+        ``from → to``) is preferred over the longer chain automatically.
+        Ties between equal-length paths break on declaration order
+        (deterministic). Returns ``[]`` for a no-op
+        (``from_version == to_version``).
+
+        Fails loud (sec11 §11.3.2 — no silent fallback):
+
+        * a duplicate ``(from, to)`` edge ⇒ :class:`MigrationStepNotFoundError`
+          (a hop must be unique);
+        * ``from_version`` not a node in the DAG ⇒
+          :class:`~hippo.core.exceptions.MigrationFloorError`
+          (below the floor — upgrade to ≥<floor> first);
+        * target unreachable from a known node ⇒
+          :class:`MigrationStepNotFoundError`.
+        """
+        steps = self.migration_steps()
+        available = [(s.from_version, s.to_version) for s in steps]
+
+        # A duplicate (from, to) edge is an authoring error — the hop is
+        # ambiguous. Reject it loudly rather than silently picking one.
+        seen_edges: set[tuple[str, str]] = set()
+        for s in steps:
+            edge = (s.from_version, s.to_version)
+            if edge in seen_edges:
+                raise MigrationStepNotFoundError(
+                    message=(
+                        f"{self.name}: duplicate migration step declared for "
+                        f"{s.from_version}→{s.to_version}; a hop must be unique."
+                    ),
+                    package=self.name,
+                    from_version=from_version,
+                    to_version=to_version,
+                    available_steps=available,
+                )
+            seen_edges.add(edge)
+
+        if from_version == to_version:
+            return []
+
+        adjacency: dict[str, list[MigrationStep]] = {}
+        nodes: set[str] = set()
+        targets: set[str] = set()
+        for s in steps:
+            adjacency.setdefault(s.from_version, []).append(s)
+            nodes.add(s.from_version)
+            nodes.add(s.to_version)
+            targets.add(s.to_version)
+
+        # Below the floor: the current version predates every shipped
+        # step (it is not a node anywhere in the DAG). The floor is the
+        # DAG's entry node(s) — versions that are never a step's target.
+        if from_version not in nodes:
+            roots = sorted(nodes - targets)
+            floor = roots[0] if len(roots) == 1 else None
+            floor_hint = (
+                f"upgrade to ≥{floor} first" if floor
+                else f"upgrade to one of {roots} first"
+            )
+            raise MigrationFloorError(
+                message=(
+                    f"{self.name}: current version {from_version!r} is below "
+                    f"the migration floor; the package ships no step from it. "
+                    f"{floor_hint} via package {self.name!r}."
+                ),
+                package=self.name,
+                from_version=from_version,
+                to_version=to_version,
+                floor=floor,
+            )
+
+        # BFS for the fewest-hop path (shortcut edges win for free).
+        queue: deque[str] = deque([from_version])
+        came_from: dict[str, MigrationStep] = {}
+        visited: set[str] = {from_version}
+        while queue:
+            current = queue.popleft()
+            if current == to_version:
+                break
+            for step in adjacency.get(current, []):
+                nxt = step.to_version
+                if nxt not in visited:
+                    visited.add(nxt)
+                    came_from[nxt] = step
+                    queue.append(nxt)
+
+        if to_version not in came_from and to_version != from_version:
+            raise MigrationStepNotFoundError(
+                message=(
+                    f"{self.name}: no migration path from {from_version} to "
+                    f"{to_version}. The target is unreachable through the "
+                    f"declared migration DAG."
+                ),
+                package=self.name,
+                from_version=from_version,
+                to_version=to_version,
+                available_steps=available,
+            )
+
+        # Walk the predecessor chain back to the source, then reverse.
+        path: list[MigrationStep] = []
+        cursor = to_version
+        while cursor != from_version:
+            step = came_from[cursor]
+            path.append(step)
+            cursor = step.from_version
+        path.reverse()
+        return path
+
+    def _run_hop(
+        self,
+        client: "HippoClient",
+        step: MigrationStep,
+        params: BaseModel | None,
+    ) -> LoadResult:
+        """Stage → gate → commit a single migration hop (one DAG edge).
+
+        Runs ``step.transform`` against a fresh :class:`MigrationPlan`,
+        passes it through the hard validation gate, and — only on green —
+        commits the new records then the supersessions. The same routine
+        S2 used for the single declared step; S3 calls it once per edge of
+        the resolved path.
+        """
         plan = MigrationPlan()
         context = MigrationContext(
             client=client,
-            from_version=from_version,
-            to_version=to_version,
+            from_version=step.from_version,
+            to_version=step.to_version,
             plan=plan,
             params=params,
         )
         step.transform(context)
 
         # Hard validation gate — BEFORE any committed write.
-        self._run_gate(client, from_version, to_version, plan)
+        self._run_gate(client, step.from_version, step.to_version, plan)
 
         # Commit. New records first so supersede_entity's replacement exists.
         result = LoadResult()
-        default_reason = f"{self.name} migration {from_version}→{to_version}"
+        default_reason = (
+            f"{self.name} migration {step.from_version}→{step.to_version}"
+        )
         for write in plan.writes:
             rec = client.put(
                 write.entity_type, write.data, entity_id=write.data.get("id")
@@ -330,51 +607,6 @@ class DomainModule(SchemaPackage):
                 actor=self.name,
             )
         return result
-
-    # ------------------------------------------------------------------
-    # Internals
-    # ------------------------------------------------------------------
-
-    def _resolve_step(
-        self, from_version: str, to_version: str
-    ) -> MigrationStep:
-        """Find the single declared step for ``(from_version, to_version)``.
-
-        Exact-match, single-hop (S2). Fails loud via
-        :class:`MigrationStepNotFoundError` when zero or more than one
-        step matches — no silent no-op, no guessing a path.
-        """
-        steps = self.migration_steps()
-        matches = [
-            s
-            for s in steps
-            if s.from_version == from_version and s.to_version == to_version
-        ]
-        available = [(s.from_version, s.to_version) for s in steps]
-        if not matches:
-            raise MigrationStepNotFoundError(
-                message=(
-                    f"{self.name}: no migration step declared for "
-                    f"{from_version}→{to_version}. Multi-hop chaining "
-                    f"is S3; declare a direct step or upgrade one hop at a time."
-                ),
-                package=self.name,
-                from_version=from_version,
-                to_version=to_version,
-                available_steps=available,
-            )
-        if len(matches) > 1:
-            raise MigrationStepNotFoundError(
-                message=(
-                    f"{self.name}: {len(matches)} migration steps declared for "
-                    f"{from_version}→{to_version}; a hop must be unique."
-                ),
-                package=self.name,
-                from_version=from_version,
-                to_version=to_version,
-                available_steps=available,
-            )
-        return matches[0]
 
     def _run_gate(
         self,
