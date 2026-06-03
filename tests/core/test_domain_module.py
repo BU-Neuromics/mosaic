@@ -16,7 +16,9 @@ from linkml_runtime.utils.schemaview import SchemaView
 
 from hippo.core.client import HippoClient
 from hippo.core.exceptions import (
+    DeprovisionRefusedError,
     EntityNotFoundError,
+    MigrationFloorError,
     MigrationGateError,
     MigrationStepNotFoundError,
 )
@@ -191,9 +193,10 @@ class TestContract:
         module = _WidgetModule(_v1_to_v2_set_kind)
         assert module.provision(client, "v2") is None
 
-    def test_deprovision_is_genus_noop(self, client: HippoClient) -> None:
-        # S2 leaves deprovision as the inherited genus no-op; refuse-by-
-        # default + dependents guard are S3 (sec11 §11.4.3 / §11.7.2).
+    def test_deprovision_noop_when_no_live_data(self, client: HippoClient) -> None:
+        # With no live rows in any populates_types class there is nothing
+        # to retire, so deprovision returns quietly (S3 refuse-by-default
+        # only fires when the module owns live data — see TestDeprovision).
         module = _WidgetModule(_v1_to_v2_set_kind)
         assert module.deprovision(client, "v2") is None
 
@@ -415,3 +418,227 @@ class TestStepResolution:
         module = _WidgetModule(_v1_to_v2_set_kind, duplicate=True)
         with pytest.raises(MigrationStepNotFoundError):
             module.evolve(client, "v1", "v2")
+
+
+# ---------------------------------------------------------------------------
+# Multi-hop migration chain (S3) — the verbatim §9 S3 acceptance:
+# "a 3-hop upgrade composes intermediate steps correctly".
+# ---------------------------------------------------------------------------
+
+
+def _make_set_kind(kind: str, reads: dict[str, int]):
+    """Build a transform that migrates each live Widget, stamping ``kind``.
+
+    Records how many records it *read* under ``reads[kind]`` so a test can
+    prove a hop ran exactly once over the previous hop's live output (and
+    never re-processed superseded predecessors — the double-processing
+    failure the resolver must avoid).
+    """
+
+    def _transform(ctx: MigrationContext) -> None:
+        items = ctx.client.query("Widget").items
+        reads[kind] = reads.get(kind, 0) + len(items)
+        for old in items:
+            ctx.plan.migrate(
+                "Widget",
+                old["id"],
+                {"label": old["data"].get("label"), "kind": kind},
+            )
+
+    return _transform
+
+
+class _ChainModule(DomainModule):
+    """DomainModule whose migration DAG is injected at construction.
+
+    ``edges`` is a list of ``(from, to)`` pairs; each becomes a step whose
+    transform stamps ``kind=<to>``. ``reads`` accumulates per-``to`` read
+    counts so tests can assert each hop processed exactly the live set.
+    """
+
+    name = "chain"
+    description = "Test multi-hop domain module (PTS-339)"
+
+    def __init__(self, edges: list[tuple[str, str]], reads: dict[str, int]) -> None:
+        self._edges = edges
+        self._reads = reads
+
+    def versions(self) -> list[str]:
+        return ["v1", "v2", "v3", "v4", "test"]
+
+    def schema_fragment(self) -> dict:
+        return {"default_prefix": "chain", "classes": {}}
+
+    def populates_types(self) -> list[str]:
+        return ["Widget"]
+
+    def migration_steps(self) -> list[MigrationStep]:
+        return [
+            MigrationStep(
+                from_version=fr,
+                to_version=to,
+                transform=_make_set_kind(to, self._reads),
+                description=f"{fr}->{to}",
+            )
+            for fr, to in self._edges
+        ]
+
+
+class TestMultiHopChain:
+    def test_three_hop_composes_intermediate_steps(
+        self, client: HippoClient
+    ) -> None:
+        # v1 ─► v2 ─► v3 ─► v4, evolved in one call. Each hop must run
+        # exactly once over the 3 live records — never re-touching the
+        # superseded predecessors (query() excludes them).
+        old_ids = _seed_v1(client, 3)
+        reads: dict[str, int] = {}
+        module = _ChainModule(
+            [("v1", "v2"), ("v2", "v3"), ("v3", "v4")], reads
+        )
+
+        result = module.evolve(client, "v1", "v4")
+
+        # Three hops × 3 records each = 9 new records written.
+        assert result.created == 9
+        # Each hop read EXACTLY the 3 live records (no double-processing).
+        assert reads == {"v2": 3, "v3": 3, "v4": 3}
+
+        # Final live set: exactly 3 records, all at the terminal v4 shape.
+        live = client.query("Widget").items
+        assert len(live) == 3
+        assert {w["data"]["kind"] for w in live} == {"v4"}
+
+        # Each original record sits at the head of a depth-3 supersession
+        # chain ending in an available v4 record.
+        for old_id in old_ids:
+            chain_len = 0
+            cursor = old_id
+            seen_available = False
+            for _ in range(10):  # generous bound; real depth is 3
+                entity = client.get(
+                    "Widget", cursor, include_unavailable=True
+                )
+                nxt = entity["superseded_by"]
+                if nxt is None:
+                    # Terminal node must be the live v4 record.
+                    assert entity["data"]["kind"] == "v4"
+                    seen_available = True
+                    break
+                chain_len += 1
+                cursor = nxt
+            assert seen_available
+            assert chain_len == 3
+
+    def test_single_hop_is_a_one_edge_path(self, client: HippoClient) -> None:
+        # The resolver has no special-case for single-hop: v1→v2 on the
+        # same chain runs exactly one hop.
+        _seed_v1(client, 2)
+        reads: dict[str, int] = {}
+        module = _ChainModule(
+            [("v1", "v2"), ("v2", "v3"), ("v3", "v4")], reads
+        )
+
+        result = module.evolve(client, "v1", "v2")
+
+        assert result.created == 2
+        assert reads == {"v2": 2}  # only the first hop ran
+        assert {w["data"]["kind"] for w in client.query("Widget").items} == {"v2"}
+
+    def test_shortcut_edge_is_preferred_over_chain(
+        self, client: HippoClient
+    ) -> None:
+        # A direct v1→v4 shortcut alongside the step chain: the BFS path
+        # finder picks the one-edge shortcut, so only its transform runs.
+        _seed_v1(client, 2)
+        reads: dict[str, int] = {}
+        module = _ChainModule(
+            [("v1", "v2"), ("v2", "v3"), ("v3", "v4"), ("v1", "v4")], reads
+        )
+
+        result = module.evolve(client, "v1", "v4")
+
+        assert result.created == 2  # one hop, not three
+        # Only the shortcut (to=v4) ran; the intermediate hops did not.
+        assert reads == {"v4": 2}
+        assert {w["data"]["kind"] for w in client.query("Widget").items} == {"v4"}
+
+    def test_no_op_when_already_at_target(self, client: HippoClient) -> None:
+        _seed_v1(client, 2)
+        reads: dict[str, int] = {}
+        module = _ChainModule([("v1", "v2"), ("v2", "v3")], reads)
+
+        result = module.evolve(client, "v2", "v2")
+
+        assert result.created == 0
+        assert reads == {}  # no transform ran
+
+    def test_below_floor_fails_loud(self, client: HippoClient) -> None:
+        # Current version is older than the oldest shipped step (not a node
+        # anywhere in the DAG) ⇒ MigrationFloorError naming the floor.
+        reads: dict[str, int] = {}
+        module = _ChainModule(
+            [("v1", "v2"), ("v2", "v3"), ("v3", "v4")], reads
+        )
+
+        with pytest.raises(MigrationFloorError) as exc_info:
+            module.evolve(client, "v0", "v4")
+        err = exc_info.value
+        assert err.floor == "v1"
+        assert err.package == "chain"
+        assert "v1" in str(err)
+
+    def test_unreachable_target_fails_loud(self, client: HippoClient) -> None:
+        # Target is not reachable from a known current node ⇒ not-found,
+        # carrying the declared edges for diagnosis.
+        reads: dict[str, int] = {}
+        module = _ChainModule([("v1", "v2"), ("v2", "v3")], reads)
+
+        with pytest.raises(MigrationStepNotFoundError) as exc_info:
+            module.evolve(client, "v1", "v9")
+        assert ("v1", "v2") in exc_info.value.available_steps
+
+
+# ---------------------------------------------------------------------------
+# deprovision — refuse-by-default on live domain data (S3, sec11 §11.4.3)
+# ---------------------------------------------------------------------------
+
+
+class TestDeprovision:
+    def test_refuses_when_module_owns_live_data(
+        self, client: HippoClient
+    ) -> None:
+        _seed_v1(client, 3)
+        module = _WidgetModule(_v1_to_v2_set_kind)
+
+        with pytest.raises(DeprovisionRefusedError) as exc_info:
+            module.deprovision(client, "v2")
+        err = exc_info.value
+        assert err.reason == "live_domain_data"
+        assert err.live_types == ["Widget"]
+        assert err.package == "widget"
+
+        # Refused ⇒ nothing retired: the live rows are untouched.
+        assert len(client.query("Widget").items) == 3
+
+    def test_force_soft_deletes_live_rows(self, client: HippoClient) -> None:
+        ids = _seed_v1(client, 3)
+        module = _WidgetModule(_v1_to_v2_set_kind)
+
+        module.deprovision(client, "v2", force=True)
+
+        # Soft delete: no longer live, but the rows (and provenance) remain
+        # — this is the availability transition, not a hard delete (sec3).
+        assert client.query("Widget").items == []
+        for wid in ids:
+            with pytest.raises(EntityNotFoundError):
+                client.get("Widget", wid)
+            archived = client.get("Widget", wid, include_unavailable=True)
+            assert archived is not None
+
+    def test_noop_when_no_live_data_even_without_force(
+        self, client: HippoClient
+    ) -> None:
+        module = _WidgetModule(_v1_to_v2_set_kind)
+        # No rows seeded ⇒ nothing to refuse, returns quietly.
+        assert module.deprovision(client, "v2") is None

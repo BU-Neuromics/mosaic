@@ -1003,6 +1003,51 @@ def reference_upgrade(
     typer.echo(f"{pruned} prior row(s) pruned.")
 
 
+@reference_app.command(name="deprovision")
+def reference_deprovision(
+    name: str = typer.Argument(..., help="Schema-package name (entry-point key)"),
+    db_path: str = typer.Option(
+        None, "--db-path", help="SQLite database path (default: data/hippo.db)"
+    ),
+    schema_dir: str = typer.Option(
+        None, "--schema-dir", help="Schema directory (default: schemas/)"
+    ),
+    force: bool = typer.Option(
+        False,
+        "--force",
+        help=(
+            "Acknowledge teardown of a DomainModule that owns live domain "
+            "data (soft-deletes its rows). Ignored by reference loaders."
+        ),
+    ),
+) -> None:
+    """Tear down (uninstall) a schema package (sec11 §11.4).
+
+    Refuses when another installed package depends on this one, and — for
+    a ``DomainModule`` with live first-party data — refuses unless
+    ``--force`` is given (export first). Reference loaders prune their
+    reconstructible rows willingly.
+    """
+    from hippo.cli.commands.reference import deprovision_reference
+
+    db = db_path or "data/hippo.db"
+    sd = schema_dir or "schemas"
+    try:
+        result = deprovision_reference(
+            name, db_path=db, schema_dir=sd, force=force
+        )
+    except Exception as exc:
+        typer.echo(f"Error: {exc}", err=True)
+        raise typer.Exit(1)
+
+    pruned = len(result.get("pruned", []))
+    forced = " (forced)" if result.get("forced") else ""
+    typer.echo(
+        f"Deprovisioned {result['name']}@{result['version']}{forced}; "
+        f"{pruned} reference row(s) pruned."
+    )
+
+
 @reference_app.command(name="list")
 def reference_list(
     db_path: str = typer.Option(

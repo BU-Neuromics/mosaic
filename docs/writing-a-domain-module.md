@@ -38,7 +38,7 @@ hippo-domain-mylab/
 
 ## 1. The module class
 
-Subclass `DomainModule` from `hippo.core.loaders.domain_module`. Implement the two genus abstract methods (`versions()`, `schema_fragment()`) plus `migration_steps()`. `provision`/`deprovision` are inherited genus no-ops — domain data arrives via `hippo ingest`, not at schema-install time.
+Subclass `DomainModule` from `hippo.core.loaders.domain_module`. Implement the two genus abstract methods (`versions()`, `schema_fragment()`) plus `migration_steps()`. `provision` is an inherited genus no-op — domain data arrives via `hippo ingest`, not at schema-install time. `deprovision` is overridden to **refuse by default** when the module owns live data (see §7).
 
 ```python
 # src/hippo_domain_mylab/module.py
@@ -176,11 +176,36 @@ The entry-point key must match `DomainModule.name`.
 
 ---
 
-## 6. Scope: single-hop today, multi-hop next
+## 6. Multi-hop migration chains
 
-This release runs **single-hop** migrations: `evolve(client, from_version, to_version)` resolves the one declared step whose `(from_version, to_version)` matches exactly. A hop with no directly declared step fails loud (`MigrationStepNotFoundError`) rather than silently doing nothing.
+`evolve(client, from_version, to_version)` resolves a **path** through your declared migration DAG, not a single edge. Declare one `MigrationStep` per consecutive hop and Hippo composes them:
 
-Multi-hop chaining — composing intermediate steps across a migration DAG, shortcut edges, and the below-floor fail-loud — is the next increment (sec11 §11.3). `MigrationStep` is already a bare DAG edge, so declaring several consecutive steps today is forward-compatible: each one is small and independently testable, and the resolver will compose them.
+```python
+def migration_steps(self) -> list[MigrationStep]:
+    return [
+        MigrationStep("1.0.0", "1.1.0", self._add_kind),
+        MigrationStep("1.1.0", "2.0.0", self._split_name),
+        # optional bulk shortcut — preferred when present:
+        MigrationStep("1.0.0", "2.0.0", self._fast_path),
+    ]
+```
+
+How the resolver behaves:
+
+- **Fewest hops win.** The path finder does a breadth-first search over the edges, so a declared **shortcut edge** (a direct `1.0.0 → 2.0.0`) is preferred over the equivalent multi-step chain automatically. A single-hop upgrade is just a one-edge path — no special case.
+- **Each hop is staged → gated → committed in turn.** A hop reads the *current live* records via `ctx.client.query(...)` (which excludes superseded rows), so it sees the previous hop's output, never its retired predecessors — hops never double-process.
+- **Below-floor fails loud.** If the deployment's current version predates your oldest step (it is not a node anywhere in the DAG), `evolve` raises `MigrationFloorError` (*upgrade to ≥<floor> first*). Ship every step back to your supported floor, Alembic-`versions/`-style.
+- **Unreachable target fails loud.** If the target can't be reached from a known node, `evolve` raises `MigrationStepNotFoundError` carrying the declared edges.
+
+> **Per-hop validation gate.** Each hop's output is validated against the client's *current* merged schema. That is correct when every intermediate shape is an additive subset of the target schema (the common case). Validating each hop against its own historical merged schema, and wrapping the whole chain in one commit-or-rollback, is the lifecycle orchestrator's job (sec11 §11.5.2) — until then, **a fault partway through a chain leaves the already-committed hops in place** (no whole-`evolve` rollback; sec11 §11.8.1).
+
+---
+
+## 7. Deprovisioning: refuse by default
+
+`hippo reference deprovision <name>` tears a package down. A `DomainModule` owns the deployment's **authoritative** records, so `DomainModule.deprovision` **refuses by default** when any `populates_types()` class still holds live rows — silently soft-deleting them on uninstall would be a data-loss event. Export first, then re-run with `--force` to soft-delete (the standard availability transition; the provenance trail is kept). With no live data it is a quiet no-op.
+
+The orchestrator also **refuses to deprovision a package that any installed package still `depends_on`** (it names the dependents — deprovision those first). Both guards are the asymmetry with reference loaders, whose external, reconstructible rows are pruned willingly.
 
 ---
 
@@ -188,7 +213,7 @@ Multi-hop chaining — composing intermediate steps across a migration DAG, shor
 
 - [ ] `DomainModule.name` matches the `hippo.schema_packages` entry-point key
 - [ ] `schema_fragment()` declares `default_prefix: <name>`
-- [ ] Each `MigrationStep` covers one consecutive `(from_version → to_version)` hop
+- [ ] Each `MigrationStep` covers one consecutive `(from_version → to_version)` hop; ship every step back to your supported floor
 - [ ] The transform reads via `ctx.client` and stages via `ctx.plan` — it never writes to the client directly
 - [ ] New-shape records validate against the merged schema (the gate enforces this; test it with both a valid and a deliberately invalid transform)
-- [ ] `populates_types()` declares the classes the module owns
+- [ ] `populates_types()` declares the classes the module owns (this is what `deprovision` checks for live data)

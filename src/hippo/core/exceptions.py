@@ -635,3 +635,76 @@ class MigrationGateError(HippoError):
         context["to_version"] = to_version
         context["errors"] = self.errors
         super().__init__(message, **context)
+
+
+class MigrationFloorError(HippoError):
+    """Raised when the current version is below a package's migration floor.
+
+    The migration DAG ships every step covering the package's supported
+    range back to a declared **floor** (sec11 §11.3.2, Alembic
+    ``versions/`` style). When the deployment's current version is older
+    than the floor — i.e. it is not a node anywhere in the declared DAG —
+    the resolver cannot compose a path and fails loud rather than guessing
+    (there is no silent fallback; this is the squashed-migration
+    boundary). The message instructs the operator to *upgrade to ≥<floor>
+    first via package <name>*. :attr:`floor` names the oldest version the
+    shipped chain can start from.
+    """
+
+    def __init__(
+        self,
+        message: str,
+        package: Optional[str] = None,
+        from_version: Optional[str] = None,
+        to_version: Optional[str] = None,
+        floor: Optional[str] = None,
+        **context: Any,
+    ):
+        self.package = package
+        self.from_version = from_version
+        self.to_version = to_version
+        self.floor = floor
+        context["package"] = package
+        context["from_version"] = from_version
+        context["to_version"] = to_version
+        context["floor"] = floor
+        super().__init__(message, **context)
+
+
+class DeprovisionRefusedError(HippoError):
+    """Raised when a ``deprovision`` teardown is refused (sec11 §11.4).
+
+    Two distinct refusals share this type so a single ``except`` covers
+    the lifecycle's guard rails (the ``reason`` discriminates):
+
+    * ``"has_dependents"`` — another *installed* package declares this
+      one in its ``depends_on()`` (§11.4.4). :attr:`dependents` names
+      them. Applies to every species.
+    * ``"live_domain_data"`` — a :class:`DomainModule` still owns live,
+      first-party records (§11.4.3). Silent soft-deletion on uninstall
+      would be a data-loss event, so the operator must pass ``force=True``
+      (ideally after exporting). :attr:`live_types` names the populated
+      entity types.
+
+    ``ReferenceLoader`` never raises this on its own data — its source is
+    external and reconstructible, so it prunes willingly.
+    """
+
+    def __init__(
+        self,
+        message: str,
+        package: Optional[str] = None,
+        reason: Optional[str] = None,
+        dependents: Optional[list[str]] = None,
+        live_types: Optional[list[str]] = None,
+        **context: Any,
+    ):
+        self.package = package
+        self.reason = reason
+        self.dependents = dependents or []
+        self.live_types = live_types or []
+        context["package"] = package
+        context["reason"] = reason
+        context["dependents"] = self.dependents
+        context["live_types"] = self.live_types
+        super().__init__(message, **context)

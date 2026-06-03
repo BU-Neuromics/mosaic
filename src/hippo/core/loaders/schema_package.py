@@ -157,12 +157,22 @@ class SchemaPackage(ABC):
         """
         return None
 
-    def deprovision(self, client: "HippoClient", version: str) -> None:
+    def deprovision(
+        self,
+        client: "HippoClient",
+        version: str,
+        *,
+        force: bool = False,
+    ) -> None:
         """Teardown. Default no-op (returns ``None``).
 
-        Reference data prunes its ``provided_by``-stamped rows;
-        first-party domain data refuses by default when it owns live
-        records. The orchestrator owns the actual data retirement.
+        A pure-schema package has no data rows, so the default ignores
+        ``force`` and does nothing. Reference data leaves this no-op too —
+        the orchestrator prunes its ``provided_by``-stamped rows off the
+        ``reference_write_log`` substrate (the loader instance has no
+        write-log handle). A :class:`~hippo.core.loaders.domain_module.DomainModule`
+        overrides this to **refuse by default** when it owns live records
+        (sec11 §11.4.3); ``force=True`` acknowledges the soft-delete.
         """
         return None
 
