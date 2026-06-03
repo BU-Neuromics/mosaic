@@ -61,11 +61,16 @@ def table_foreign_keys(conn: sqlite3.Connection, table: str) -> list[dict]:
 
 
 def table_indexes(conn: sqlite3.Connection, table: str) -> list[dict]:
-    """Return PRAGMA index_list for a table."""
+    """Return PRAGMA index_list for a table.
+
+    ``partial`` is column 4 of ``index_list`` — 1 for a partial index (one
+    with a ``WHERE`` clause), 0 otherwise.
+    """
     cursor = conn.cursor()
     cursor.execute(f"PRAGMA index_list({table})")
     return [
-        {"name": row[1], "unique": bool(row[2])} for row in cursor.fetchall()
+        {"name": row[1], "unique": bool(row[2]), "partial": bool(row[4])}
+        for row in cursor.fetchall()
     ]
 
 
@@ -208,26 +213,86 @@ class TestForeignKey:
         )
 
 
-class TestUniqueConstraint:
-    def test_hippo_unique_annotation_emits_unique(self):
-        reg = build_registry(
-            {
-                "test_entity": {
-                    "attributes": {
-                        "id": {"identifier": True},
-                        "email": {
-                            "range": "string",
-                            "annotations": {"hippo_unique": True},
-                        },
-                    }
+def _hippo_unique_registry() -> SchemaRegistry:
+    """Registry with a single ``hippo_unique`` slot on ``test_entity.email``."""
+    return build_registry(
+        {
+            "test_entity": {
+                "attributes": {
+                    "id": {"identifier": True},
+                    "email": {
+                        "range": "string",
+                        "annotations": {"hippo_unique": True},
+                    },
                 }
             }
-        )
-        ddl = DDLGenerator().generate(reg)
+        }
+    )
+
+
+class TestUniqueConstraint:
+    def test_hippo_unique_annotation_emits_unique(self):
+        ddl = DDLGenerator().generate(_hippo_unique_registry())
         conn = execute_ddl(ddl)
         indexes = table_indexes(conn, "test_entity")
         # hippo_unique should produce a UNIQUE index
         assert any(idx["unique"] for idx in indexes)
+
+    def test_hippo_unique_index_is_partial(self):
+        """hippo_unique emits a *partial* index (``WHERE is_available = 1``).
+
+        A non-partial index would treat a superseded predecessor as a
+        permanent collision and block migration on the slot forever
+        (PTS-348). The partial predicate scopes uniqueness to live rows.
+        """
+        ddl = DDLGenerator().generate(_hippo_unique_registry())
+        conn = execute_ddl(ddl)
+        # The hippo_unique index is named idx_<class>_<slot>_unique. (The PK on a
+        # TEXT identifier yields its own non-partial sqlite_autoindex — correct,
+        # and excluded here.)
+        hippo_idx = [
+            idx
+            for idx in table_indexes(conn, "test_entity")
+            if idx["name"] == "idx_test_entity_email_unique"
+        ]
+        assert hippo_idx, "expected idx_test_entity_email_unique from hippo_unique"
+        assert hippo_idx[0]["unique"]
+        assert hippo_idx[0]["partial"], (
+            "hippo_unique index must be partial (WHERE is_available = 1)"
+        )
+
+    def test_hippo_unique_still_enforced_among_live_rows(self):
+        """Two *live* rows sharing the key still violate the constraint."""
+        conn = execute_ddl(DDLGenerator().generate(_hippo_unique_registry()))
+        conn.execute(
+            "INSERT INTO test_entity (id, email, is_available) "
+            "VALUES ('a', 'x@example.org', 1)"
+        )
+        with pytest.raises(sqlite3.IntegrityError):
+            conn.execute(
+                "INSERT INTO test_entity (id, email, is_available) "
+                "VALUES ('b', 'x@example.org', 1)"
+            )
+
+    def test_hippo_unique_allows_superseded_plus_live_same_key(self):
+        """A superseded predecessor (is_available=0) coexists with a live
+        replacement (is_available=1) sharing the key — the migration window
+        the partial index exists to permit (PTS-348)."""
+        conn = execute_ddl(DDLGenerator().generate(_hippo_unique_registry()))
+        conn.execute(
+            "INSERT INTO test_entity (id, email, is_available) "
+            "VALUES ('old', 'x@example.org', 0)"
+        )
+        # Must NOT raise: the retired predecessor is out of the live scope.
+        conn.execute(
+            "INSERT INTO test_entity (id, email, is_available) "
+            "VALUES ('new', 'x@example.org', 1)"
+        )
+        rows = conn.execute(
+            "SELECT id FROM test_entity WHERE email = 'x@example.org' "
+            "ORDER BY id"
+        ).fetchall()
+        assert [r[0] for r in rows] == ["new", "old"]
 
     def test_linkml_unique_keys_emit_composite_unique(self):
         reg = build_registry(

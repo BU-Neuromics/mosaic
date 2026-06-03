@@ -265,11 +265,21 @@ class DDLGenerator:
                     idx_sql += ";"
                     statements.append(idx_sql)
 
-                # hippo_unique: emit CREATE UNIQUE INDEX
+                # hippo_unique: emit a *partial* CREATE UNIQUE INDEX scoped to
+                # live rows (``WHERE is_available = 1``). hippo_unique means
+                # "unique among live records", not across every historical
+                # revision: a superseded predecessor (is_available = 0) keeps
+                # its business key, and a migration replacement re-uses that key
+                # on a fresh row. A non-partial index would treat the retired
+                # predecessor as a permanent collision and block migration on
+                # any hippo_unique slot forever (PTS-348). The live-only
+                # predicate preserves the constraint among available rows while
+                # leaving superseded revisions out of scope.
                 if annotation_value(slot, HIPPO_UNIQUE):
                     idx_name = f"idx_{class_name}_{slot.name}_unique"
                     statements.append(
-                        f'CREATE UNIQUE INDEX "{idx_name}" ON "{class_name}" ("{slot.name}");'
+                        f'CREATE UNIQUE INDEX "{idx_name}" ON "{class_name}" '
+                        f'("{slot.name}") WHERE {self.IS_AVAILABLE_PREDICATE};'
                     )
 
             # hippo_append_only: emit trigger rejecting UPDATE/DELETE
