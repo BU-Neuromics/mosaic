@@ -3,6 +3,7 @@ entry-point discovery in cli.commands.reference."""
 
 from __future__ import annotations
 
+import json
 from importlib.metadata import EntryPoint
 from typing import Any
 
@@ -15,6 +16,7 @@ from hippo.core.loaders.schema_package import (
     MigratableData,
     SchemaPackage,
 )
+from hippo.testing.example_ontology_loader import OboDemoLoader, OboDemoParams
 
 
 class _StubClient:
@@ -800,3 +802,168 @@ class TestPureSchemaPackageInstall:
 
         # The version is pinned in hippo_meta (the requires: source of truth).
         assert versions == {"fake_schema": "v1"}
+
+
+# ---------------------------------------------------------------------------
+# OboDemoLoader — a realistic (non-Fake) reference-data species exercising the
+# full external-data path: cached_fetch + sha256, diff-based upgrade, the
+# network-free "test" fixture (Doc 2 §1/§2A/§4, sec2 §2.14; PTS-337 S1).
+# The full install/dry-run/upgrade/prune acceptance lives in
+# tests/cli/test_reference_install_upgrade.py (needs a merged client); these
+# are the SDK-level unit checks that need no storage.
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture()
+def isolated_cache(tmp_path, monkeypatch):
+    """Pin ``$HIPPO_CACHE_DIR`` to a tmp path so ``cached_fetch`` never
+    touches the developer's real ``~/.cache/hippo``."""
+    cache_root = tmp_path / "cache"
+    monkeypatch.setenv("HIPPO_CACHE_DIR", str(cache_root))
+    return cache_root
+
+
+class _FetchForbiddenStubClient(_StubClient):
+    """Stub client whose ``cached_fetch`` fails loudly.
+
+    Proves the ``"test"`` pseudo-version is genuinely network-free: if its
+    code path ever reaches ``cached_fetch`` this raises instead of hanging
+    on (or silently mocking) a download.
+    """
+
+    def cached_fetch(self, *args: Any, **kwargs: Any):  # noqa: D401
+        raise AssertionError(
+            "cached_fetch must not be called for the 'test' pseudo-version"
+        )
+
+
+class TestOboDemoLoaderSurface:
+    """Identity, ABC conformance, and declared schema surface."""
+
+    def test_is_reference_loader_with_expected_surface(self):
+        loader = OboDemoLoader()
+        assert isinstance(loader, ReferenceLoader)
+        assert isinstance(loader, SchemaPackage)
+        assert loader.name == "obodemo"
+        # "test" is the reserved network-free pseudo-version (sec2 §2.14.7).
+        assert "test" in loader.versions()
+        assert loader.populates_types() == ["OntologyTerm"]
+        frag = loader.schema_fragment()
+        # default_prefix MUST equal name (sec2 §2.14.5 Rule 1).
+        assert frag["default_prefix"] == "obodemo"
+        attrs = frag["classes"]["OntologyTerm"]["attributes"]
+        assert set(attrs) == {"curie", "label", "definition"}
+        # The source CURIE and label are required; definition is optional.
+        assert attrs["curie"]["required"] is True
+        assert attrs["label"]["required"] is True
+        assert "required" not in attrs["definition"]
+
+    def test_declares_pydantic_params_schema(self):
+        assert OboDemoLoader.load_params_schema is OboDemoParams
+        assert issubclass(OboDemoParams, BaseModel)
+        # Both fields must be CLI-renderable (str | None and bool are
+        # supported); discovery validates this in CI, asserted here too.
+        from hippo.cli.commands.reference import _validate_load_params_schema
+
+        _validate_load_params_schema("obodemo", OboDemoParams)
+
+    def test_external_data_but_not_migratable(self):
+        # A ReferenceLoader is external/reconstructible (ExternalData); it is
+        # NOT a MigratableData package — that capability belongs to
+        # DomainModule (Doc 2 §2A capability protocols).
+        loader = OboDemoLoader()
+        assert isinstance(loader, ExternalData)
+        assert not isinstance(loader, MigratableData)
+
+
+class TestOboDemoParsing:
+    """Pure parse / diff units — no client, no network."""
+
+    def test_parse_obo_extracts_curie_label_definition(self):
+        loader = OboDemoLoader()
+        terms = loader._parse_obo(loader._fixtures_dir() / "obodemo-v1.obo")
+        assert [t["curie"] for t in terms] == [
+            "OBO:0000001",
+            "OBO:0000002",
+            "OBO:0000003",
+            "OBO:0000004",
+        ]
+        assert all("label" in t and "definition" in t for t in terms)
+        # def: "text" [xrefs] — only the quoted text survives.
+        assert "[" not in terms[0]["definition"]
+
+    def test_apply_diff_adds_changes_and_obsoletes(self):
+        loader = OboDemoLoader()
+        base = loader._parse_obo(loader._fixtures_dir() / "obodemo-v1.obo")
+        diff = json.loads(
+            (loader._fixtures_dir() / "obodemo-v2.diff.json").read_text()
+        )
+        v2 = loader._apply_diff(base, diff)
+        curies = [t["curie"] for t in v2]
+        assert "OBO:0000005" in curies  # added
+        assert "OBO:0000003" not in curies  # obsoleted
+        changed = next(t for t in v2 if t["curie"] == "OBO:0000002")
+        assert "revised" in changed["definition"]  # changed
+        # Carried-forward terms keep their v1 content untouched.
+        carried = next(t for t in v2 if t["curie"] == "OBO:0000001")
+        assert carried["label"] == "cellular process"
+
+
+class TestOboDemoFetch:
+    """``cached_fetch`` integration: content-addressing + sha256 gate."""
+
+    def test_fetch_is_content_addressed_and_cache_hits(self, isolated_cache):
+        from hippo.core.client import HippoClient
+
+        loader = OboDemoLoader()
+        client = HippoClient()
+        first = loader._fetch(client, OboDemoParams(), "v1")
+        second = loader._fetch(client, OboDemoParams(), "v1")
+        # Stable, content-addressed path; bytes match the bundled release.
+        assert first == second
+        assert (
+            first.read_bytes()
+            == (loader._fixtures_dir() / "obodemo-v1.obo").read_bytes()
+        )
+
+    def test_fetch_sha256_mismatch_raises_cache_integrity_error(
+        self, isolated_cache, tmp_path
+    ):
+        from hippo.core.client import HippoClient
+        from hippo.core.exceptions import CacheIntegrityError
+
+        loader = OboDemoLoader()
+        # A tampered origin whose bytes do not match the pinned manifest
+        # sha256 — the integrity gate must fire (sec2 §2.14.3).
+        bad_origin = tmp_path / "origin"
+        bad_origin.mkdir()
+        (bad_origin / "obodemo-v1.obo").write_text("tampered\n", encoding="utf-8")
+
+        client = HippoClient()
+        with pytest.raises(CacheIntegrityError):
+            loader._fetch(
+                client, OboDemoParams(base_url=bad_origin.as_uri()), "v1"
+            )
+
+
+class TestOboDemoLoadUnit:
+    """``load()`` behaviour exercised with a put-recording stub client."""
+
+    def test_load_test_version_is_network_free(self):
+        loader = OboDemoLoader()
+        client = _FetchForbiddenStubClient()
+        result = loader.load(client, "test")
+        assert result.errors == 0
+        assert result.created == 2
+        assert all(e.type == "OntologyTerm" for e in result.entities)
+        # Two terms persisted; cached_fetch was never reached.
+        assert len(client.puts) == 2
+        assert {data["curie"] for _, data in client.puts} == {
+            "OBO:0000001",
+            "OBO:0000002",
+        }
+
+    def test_load_unknown_version_returns_error(self):
+        result = OboDemoLoader().load(_StubClient(), "v99")
+        assert result.errors == 1
+        assert "unknown version" in result.error_messages[0]

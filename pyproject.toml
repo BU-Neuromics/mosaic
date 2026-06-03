@@ -61,11 +61,13 @@ schema = "hippo.validators.schema_validator:SchemaValidator"
 # and dedups by name. Pure-schema packages register here only.
 [project.entry-points."hippo.schema_packages"]
 fake_schema = "hippo.testing.fake_reference_loader:FakeSchemaPackage"
+obodemo = "hippo.testing.example_ontology_loader:OboDemoLoader"
 
 [project.entry-points."hippo.reference_loaders"]
 fake = "hippo.testing.fake_reference_loader:FakeReferenceLoader"
 rich = "hippo.testing.fake_reference_loader:RichParamsLoader"
 bare = "hippo.testing.fake_reference_loader:BareReferenceLoader"
+obodemo = "hippo.testing.example_ontology_loader:OboDemoLoader"
 
 [project.entry-points."hippo.reference_loader_cli"]
 fake = "hippo.testing.fake_reference_loader:fake_cli_app"

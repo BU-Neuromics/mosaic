@@ -1,0 +1,13 @@
+{
+  "_comment": "Content-addressed release manifest for the obodemo example loader. Each fetchable artifact pins its filename and the sha256 of its bytes, so cached_fetch can verify integrity (sec2 \u00a72.14.3) and the install is reproducible (Doc 2 \u00a74). Regenerate with scripts: see module docstring.",
+  "v1": {
+    "file": "obodemo-v1.obo",
+    "sha256": "76743839d4743296815374f5e4c494b28f14324b8f347e6c45ff76dc91f242e9"
+  },
+  "v2": {
+    "file": "obodemo-v2.diff.json",
+    "sha256": "faf69940a5b07bf88b97df58c6cb01b1d15007eea988d57ffc3e9b3761806223",
+    "base": "v1",
+    "kind": "diff"
+  }
+}

@@ -32,6 +32,7 @@ from pathlib import Path
 import pytest
 from typer.testing import CliRunner
 
+from hippo.cli.commands import reference as ref_cmd
 from hippo.cli.commands.reference import (
     META_KEY_VERSIONS,
     _resolve_breakdown_counts,
@@ -43,6 +44,7 @@ from hippo.cli.commands.reference import (
 from hippo.cli.main import app
 from hippo.core.loaders.reference import EntityRef
 from hippo.core.meta import get_meta
+from hippo.testing.example_ontology_loader import OboDemoLoader, OboDemoParams
 from hippo.testing.fake_reference_loader import FakeLoadParams
 
 
@@ -668,3 +670,242 @@ class TestCliBreakdownOutput:
         total_line = next(line for line in lines if line.lstrip().startswith("total"))
         assert "4" in total_line
         assert "3 prior row(s) pruned." in lines
+
+
+# ---------------------------------------------------------------------------
+# OboDemoLoader — realistic ontology species, full external-data path.
+# PTS-337 S1 acceptance (verbatim §9 S1): "an ontology release upgrade
+# re-ingests via diff with prune and a clean dry-run." Unlike the in-memory
+# fake, this loader drives cached_fetch (sha256-verified) against bundled
+# fixtures and overrides upgrade() with a diff-based reconstruction.
+# ---------------------------------------------------------------------------
+
+
+class _GroupedEP:
+    """Minimal group-aware entry point stand-in for the obodemo tests."""
+
+    def __init__(self, name: str, value: str, target: object):
+        self.name = name
+        self.value = value
+        self._target = target
+
+    def load(self) -> object:
+        return self._target
+
+
+class _GroupedEPs:
+    def __init__(self, by_group: dict[str, list["_GroupedEP"]]):
+        self._by_group = by_group
+
+    def select(self, *, group: str) -> list["_GroupedEP"]:
+        return list(self._by_group.get(group, []))
+
+
+@pytest.fixture
+def obodemo_workspace(tmp_path: Path, monkeypatch) -> dict[str, Path]:
+    """Workspace with ``obodemo`` registered via entry points and an
+    isolated reference cache.
+
+    Locally the editable install's ``.dist-info`` predates ``obodemo``, so
+    discovery is monkeypatched (mirrors the S0 schema-package tests); CI's
+    clean install carries the real entry point. ``HIPPO_CACHE_DIR`` is
+    pinned to ``tmp_path`` so ``cached_fetch`` is hermetic and never
+    touches ``~/.cache/hippo``.
+    """
+    import importlib.metadata as md
+
+    ep = _GroupedEP(
+        "obodemo",
+        "hippo.testing.example_ontology_loader:OboDemoLoader",
+        OboDemoLoader,
+    )
+    monkeypatch.setattr(
+        md,
+        "entry_points",
+        lambda: _GroupedEPs(
+            {
+                ref_cmd.SCHEMA_PACKAGES_GROUP: [ep],
+                ref_cmd.REFERENCE_LOADERS_GROUP: [ep],
+            }
+        ),
+    )
+    monkeypatch.setenv("HIPPO_CACHE_DIR", str(tmp_path / "cache"))
+    db_path = tmp_path / "hippo.db"
+    schema_dir = tmp_path / "schemas"
+    schema_dir.mkdir()
+    return {"db": db_path, "schemas": schema_dir, "root": tmp_path}
+
+
+def _build_merged_client(ws: dict[str, Path]) -> tuple[OboDemoLoader, object]:
+    """Build a schema-backed client over ``ws`` (merged obodemo fragment).
+
+    Reuses the same private helpers the install/upgrade lifecycle uses, so
+    the resulting client exposes the merged ``registry`` the dry-run gate
+    validates against — the SDK equivalent of ``hippo ingest
+    --validate-schema --dry-run`` (sec11 §11.5.2).
+    """
+    info = ref_cmd.find_loader("obodemo")
+    loader = info["instance"]
+    deployed = ref_cmd._load_deployed_registry(ws["schemas"])
+    spec = ref_cmd._build_fragment_spec(info, loader)
+    merged = ref_cmd._merge_fragment_into(deployed, spec)
+    client = ref_cmd._build_client(merged, ws["db"])
+    return loader, client
+
+
+def _curies(db_path: Path) -> set[str]:
+    conn = _open(db_path)
+    try:
+        cursor = conn.cursor()
+        cursor.execute('SELECT curie FROM "OntologyTerm" WHERE is_available = 1')
+        return {row["curie"] for row in cursor.fetchall()}
+    finally:
+        conn.close()
+
+
+class TestOboDemoInstall:
+    def test_install_v1_full_release_via_cached_fetch(self, obodemo_workspace):
+        result = install_reference(
+            "obodemo",
+            "v1",
+            db_path=obodemo_workspace["db"],
+            schema_dir=obodemo_workspace["schemas"],
+        )
+        assert result["status"] == "installed"
+        assert result["created"] == 4
+        assert _count_rows(obodemo_workspace["db"], "OntologyTerm") == 4
+        assert _curies(obodemo_workspace["db"]) == {
+            "OBO:0000001",
+            "OBO:0000002",
+            "OBO:0000003",
+            "OBO:0000004",
+        }
+        # Every put landed in the write log — the prune substrate.
+        assert (
+            len(_select_write_log(obodemo_workspace["db"], "obodemo", "v1")) == 4
+        )
+
+    def test_install_test_version_is_network_free(self, obodemo_workspace):
+        # No HTTP server, no cache priming: the "test" slug reads the tiny
+        # bundled fixture directly. Any network reach would fail here.
+        result = install_reference(
+            "obodemo",
+            "test",
+            db_path=obodemo_workspace["db"],
+            schema_dir=obodemo_workspace["schemas"],
+        )
+        assert result["version"] == "test"
+        assert result["created"] == 2
+        assert _count_rows(obodemo_workspace["db"], "OntologyTerm") == 2
+
+
+class TestOboDemoDryRun:
+    def test_clean_dry_run_validates_without_writing(self, obodemo_workspace):
+        install_reference(
+            "obodemo",
+            "v1",
+            db_path=obodemo_workspace["db"],
+            schema_dir=obodemo_workspace["schemas"],
+        )
+        before = _count_rows(obodemo_workspace["db"], "OntologyTerm")
+
+        loader, client = _build_merged_client(obodemo_workspace)
+        result = loader.upgrade(
+            client, "v1", "v2", params=OboDemoParams(dry_run=True)
+        )
+
+        # A clean dry-run: zero errors, reports what it WOULD write, and
+        # leaves both the entity table and the write log untouched.
+        assert result.errors == 0
+        assert result.created == 4
+        assert result.entities == []
+        assert _count_rows(obodemo_workspace["db"], "OntologyTerm") == before
+        assert _select_write_log(obodemo_workspace["db"], "obodemo", "v2") == []
+
+    def test_dry_run_gate_catches_schema_violation(self, obodemo_workspace):
+        # The gate is real, not vacuous: a term missing the required
+        # ``label`` slot fails validation against the merged schema.
+        install_reference(
+            "obodemo",
+            "v1",
+            db_path=obodemo_workspace["db"],
+            schema_dir=obodemo_workspace["schemas"],
+        )
+        loader, client = _build_merged_client(obodemo_workspace)
+        errors = loader._dry_run_validate(client, [{"curie": "OBO:0000099"}])
+        assert errors  # non-empty → the missing required slot was caught
+
+
+class TestOboDemoDiffUpgradeAcceptance:
+    """The verbatim §9 S1 acceptance, end to end."""
+
+    def test_release_upgrade_reingests_via_diff_with_prune_and_clean_dry_run(
+        self, obodemo_workspace
+    ):
+        db = obodemo_workspace["db"]
+        schemas = obodemo_workspace["schemas"]
+
+        # Install the v1 release (full load through cached_fetch).
+        install_reference("obodemo", "v1", db_path=db, schema_dir=schemas)
+        assert _count_rows(db, "OntologyTerm") == 4
+
+        # 1) A clean dry-run gate BEFORE committing anything.
+        loader, client = _build_merged_client(obodemo_workspace)
+        dry = loader.upgrade(client, "v1", "v2", params=OboDemoParams(dry_run=True))
+        assert dry.errors == 0
+        assert _count_rows(db, "OntologyTerm") == 4  # still untouched
+
+        # 2) The live diff-based upgrade with --prune-old.
+        upgrade = upgrade_reference(
+            "obodemo", "v2", db_path=db, schema_dir=schemas, prune_old=True
+        )
+        assert upgrade["status"] == "upgraded"
+        assert upgrade["from_version"] == "v1"
+        assert upgrade["to_version"] == "v2"
+        assert upgrade["created"] == 4
+        assert len(upgrade["pruned"]) == 4
+
+        # The prior release is gone (fresh ids ⇒ disjoint ⇒ a clean prune);
+        # only the reconstructed v2 term set survives. The obsoleted term
+        # (OBO:0000003) is absent; the added term (OBO:0000005) is present.
+        assert _count_all_rows(db, "OntologyTerm") == 4
+        assert _curies(db) == {
+            "OBO:0000001",
+            "OBO:0000002",
+            "OBO:0000004",
+            "OBO:0000005",
+        }
+
+        # The write log rotated: v1 pruned, v2 now authoritative.
+        assert _select_write_log(db, "obodemo", "v1") == []
+        assert len(_select_write_log(db, "obodemo", "v2")) == 4
+
+        # hippo_meta now pins v2.
+        conn = _open(db)
+        try:
+            versions = get_meta(conn, META_KEY_VERSIONS)
+        finally:
+            conn.close()
+        assert versions == {"obodemo": "v2"}
+
+    def test_diff_upgrade_via_typer_smoke(self, obodemo_workspace):
+        runner = CliRunner()
+        db = str(obodemo_workspace["db"])
+        sd = str(obodemo_workspace["schemas"])
+
+        install = runner.invoke(
+            app,
+            ["reference", "install", "obodemo", "--version", "v1",
+             "--db-path", db, "--schema-dir", sd],
+        )
+        assert install.exit_code == 0, install.output
+        assert "Installed obodemo@v1" in install.output
+
+        upgrade = runner.invoke(
+            app,
+            ["reference", "upgrade", "obodemo", "--version", "v2",
+             "--db-path", db, "--schema-dir", sd, "--prune-old"],
+        )
+        assert upgrade.exit_code == 0, upgrade.output
+        assert "Upgraded obodemo v1 → v2" in upgrade.output
+        assert "4 prior row(s) pruned." in upgrade.output

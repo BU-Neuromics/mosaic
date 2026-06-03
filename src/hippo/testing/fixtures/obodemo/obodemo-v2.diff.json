@@ -1,0 +1,21 @@
+{
+  "from_version": "v1",
+  "to_version": "v2",
+  "added": [
+    {
+      "id": "OBO:0000005",
+      "name": "apoptotic process",
+      "def": "A programmed cell death process."
+    }
+  ],
+  "changed": [
+    {
+      "id": "OBO:0000002",
+      "name": "metabolic process",
+      "def": "The set of chemical reactions occurring within a cell (revised)."
+    }
+  ],
+  "obsoleted": [
+    "OBO:0000003"
+  ]
+}

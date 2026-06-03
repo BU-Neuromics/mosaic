@@ -1,0 +1,22 @@
+format-version: 1.2
+data-version: obodemo/v1
+
+[Term]
+id: OBO:0000001
+name: cellular process
+def: "A biological process at the cellular level." []
+
+[Term]
+id: OBO:0000002
+name: metabolic process
+def: "The chemical reactions occurring within a cell." []
+
+[Term]
+id: OBO:0000003
+name: cell-cell signaling
+def: "Transfer of information from one cell to another." []
+
+[Term]
+id: OBO:0000004
+name: transport
+def: "The directed movement of substances into, out of or within a cell." []

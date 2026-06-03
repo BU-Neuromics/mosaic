@@ -1,0 +1,12 @@
+format-version: 1.2
+data-version: obodemo/test
+
+[Term]
+id: OBO:0000001
+name: cellular process
+def: "A biological process at the cellular level." []
+
+[Term]
+id: OBO:0000002
+name: metabolic process
+def: "The chemical reactions occurring within a cell." []
