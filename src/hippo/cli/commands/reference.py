@@ -692,6 +692,97 @@ def upgrade_reference(
     }
 
 
+def _build_merged_registry(schema_dir, installed_infos: list[dict[str, Any]]):
+    """Fold every installed package's fragment into the deployed registry.
+
+    The S4 orchestrator validates the post-migration state against the
+    *fully merged* schema — user schema + every installed package's
+    fragment, **including lab extensions** (sec11 §11.5.2 / §6.3). Unlike
+    install/upgrade (which merge one fragment for one operation), the
+    orchestrator needs the whole merged closure, so this folds all of them.
+    """
+    registry = _load_deployed_registry(schema_dir)
+    for info in installed_infos:
+        spec = _build_fragment_spec(info, info["instance"])
+        registry = _merge_fragment_into(registry, spec)
+    return registry
+
+
+def migrate_bundle(
+    bundle_source: str | Path | dict[str, Any],
+    *,
+    db_path: str | Path,
+    schema_dir: str | Path | None = None,
+    params_by_pkg: dict[str, "BaseModel"] | None = None,
+) -> dict[str, Any]:
+    """Migrate a multi-package deployment to a target bundle (sec11 §11.5).
+
+    The *one command* of the S4 acceptance criterion: resolves the
+    ``depends_on`` graph across all installed packages, drives every pinned
+    package through the bundle's coordinate sequence in base→dependent order
+    inside a single staged commit-or-rollback scope, and validates the full
+    post-migration state (incl. lab extensions) before the one commit. On a
+    gate failure the whole chain rolls back and version pointers are left
+    untouched.
+
+    ``bundle_source`` is a manifest path (or parsed dict). Returns a result
+    dict with the per-package transitions and the committed target versions.
+    """
+    from hippo.core.loaders.bundle import Bundle
+    from hippo.core.loaders.orchestrator import migrate_to_bundle
+
+    db = Path(db_path)
+    bundle = Bundle.from_manifest(bundle_source)
+
+    # Current installed versions (read on a separate connection BEFORE the
+    # staged write-lock opens — must not run inside the scope).
+    current = _read_versions(db)
+
+    discovered = {info["name"]: info for info in discover_schema_packages()}
+    installed_infos = [discovered[n] for n in current if n in discovered]
+    packages = [info["instance"] for info in installed_infos]
+
+    # A pinned target must be a discoverable, installed package — otherwise
+    # its evolve would be silently skipped. Fail loud instead.
+    unknown = [
+        n for n in bundle.packages if n not in {info["name"] for info in installed_infos}
+    ]
+    if unknown:
+        raise ValueError(
+            f"bundle {bundle.name!r} pins package(s) {unknown!r} that are not "
+            f"installed/discoverable; install them before migrating."
+        )
+
+    registry = _build_merged_registry(schema_dir, installed_infos)
+    client = _build_client(registry, db)
+
+    result = migrate_to_bundle(
+        client, packages, bundle, current, params_by_pkg=params_by_pkg
+    )
+
+    # Persist version pointers only after the staged data commit returned
+    # clean (the data migration is the atomic unit; mirrors the existing
+    # evolve-then-record pattern). On a gate failure migrate_to_bundle
+    # raised and we never reach here, so pointers stay at the old versions.
+    for pkg_name, version in result.target_versions.items():
+        _write_versions(db, pkg_name, version)
+
+    return {
+        "bundle": result.bundle,
+        "committed": result.committed,
+        "migrations": [
+            {
+                "package": m.package,
+                "from_version": m.from_version,
+                "to_version": m.to_version,
+                "created": m.created,
+            }
+            for m in result.migrations
+        ],
+        "target_versions": result.target_versions,
+    }
+
+
 def deprovision_reference(
     name: str,
     *,
