@@ -708,3 +708,32 @@ class DeprovisionRefusedError(HippoError):
         context["dependents"] = self.dependents
         context["live_types"] = self.live_types
         super().__init__(message, **context)
+
+
+class OrchestrationError(HippoError):
+    """Raised when the dependency-ordered lifecycle orchestrator cannot
+    sequence a multi-package operation (sec11 §11.5).
+
+    The orchestrator resolves the ``depends_on`` graph across the affected
+    packages once and topologically sorts it (base before dependents) so
+    each hop dispatches in dependency order. This is raised when that
+    resolution is impossible — a dependency **cycle** (:attr:`cycle` names
+    the packages on it), or a package depending on one absent from the
+    operation set (:attr:`missing`). It is distinct from
+    :class:`MigrationGateError` (a *validation* failure of an otherwise
+    well-ordered chain): this is a *structural* failure of the graph
+    itself, surfaced before any migration step runs.
+    """
+
+    def __init__(
+        self,
+        message: str,
+        cycle: Optional[list[str]] = None,
+        missing: Optional[list[str]] = None,
+        **context: Any,
+    ):
+        self.cycle = cycle or []
+        self.missing = missing or []
+        context["cycle"] = self.cycle
+        context["missing"] = self.missing
+        super().__init__(message, **context)
