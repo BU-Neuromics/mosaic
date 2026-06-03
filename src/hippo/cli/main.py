@@ -1045,6 +1045,35 @@ def reference_migrate_bundle(
     typer.echo("Validated end-to-end against the merged schema (incl. extensions); committed.")
 
 
+@reference_app.command(name="bundle-requires")
+def reference_bundle_requires(
+    manifest: str = typer.Argument(
+        ..., help="Path to a bundle manifest (YAML) pinning the target coordinate."
+    ),
+) -> None:
+    """Generate the deployment's requires: block from a bundle manifest (sec11 §11.6.2).
+
+    The bundle's ``requires:`` block is *generated* from its pinned packages
+    (each an exact ``==`` pin), not hand-maintained, so the deployment's pins
+    always correspond to a known-coherent combination. Emits a YAML snippet —
+    a leading comment names the bundle and its version — ready to paste into
+    the deployment's user schema.
+    """
+    from hippo.core.loaders.bundle import Bundle
+
+    try:
+        bundle = Bundle.from_manifest(manifest)
+    except Exception as exc:
+        typer.echo(f"Error: {exc}", err=True)
+        raise typer.Exit(1)
+
+    header = f"# requires: generated from bundle {bundle.name!r}"
+    if bundle.version is not None:
+        header += f" (version {bundle.version})"
+    typer.echo(header)
+    typer.echo(bundle.requires_yaml(), nl=False)
+
+
 @reference_app.command(name="exposure")
 def reference_exposure(
     old_schema: str = typer.Argument(

@@ -804,6 +804,21 @@ class SQLiteAdapter(EntityStore):
 
         conn.commit()
 
+    @staticmethod
+    def _safe_rollback(conn: sqlite3.Connection) -> None:
+        """Roll back without masking the in-flight exception.
+
+        A ``rollback()`` that itself raises (rare — e.g. the connection
+        died) must not replace the original error that triggered it; that
+        error is the actionable one. We swallow a failed rollback so the
+        caller's bare ``raise`` re-raises the original with its traceback
+        intact (PTS-346 item 4).
+        """
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+
     @contextmanager
     def _transaction(
         self,
@@ -829,7 +844,7 @@ class SQLiteAdapter(EntityStore):
             yield conn
             conn.commit()
         except Exception:
-            conn.rollback()
+            self._safe_rollback(conn)
             raise
 
     @contextmanager
@@ -861,7 +876,7 @@ class SQLiteAdapter(EntityStore):
             yield conn
             conn.commit()
         except Exception:
-            conn.rollback()
+            self._safe_rollback(conn)
             raise
         finally:
             self._local.staging_depth = 0

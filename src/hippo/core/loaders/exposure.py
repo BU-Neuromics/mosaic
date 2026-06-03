@@ -119,12 +119,25 @@ def extension_referenced_elements(
 
     * ``is_a`` (and ``mixins``) targets → referenced *classes*.
     * ``slot_usage`` keys and ``slots`` list entries → referenced *slots*
-      (the base slots the extension refines or pulls in).
+      (the base slots the extension refines or pulls in), collected at both
+      the class and (non-standard) fragment level.
     * an added slot's ``range`` pointing at a class → referenced *class*
       (the added-slot dependency).
 
     The extension's *own* newly-introduced classes/slots are not references
     to the base, so they are excluded from the dependency set.
+
+    Known limitation (added-slot ``range`` discrimination)
+    ------------------------------------------------------
+    Distinguishing a class-valued ``range`` from a primitive one relies on
+    the LinkML CamelCase convention (``rng[0].isupper()``): ``Sample`` reads
+    as a class, ``string`` / ``integer`` as primitives. A **lowercase-named
+    class** therefore slips through as a non-reference — a *false negative*,
+    the dangerous direction for a safety flag (the exposure report would
+    under-report a real dependency). This matches the convention LinkML
+    schemas follow in practice; a future tightening could resolve ranges
+    against the merged schema's declared types/classes instead of inferring
+    from the name. See the inline note at the ``range`` check.
     """
     refs: set[SchemaElement] = set()
     classes = _classes(extension_fragment)
@@ -146,11 +159,27 @@ def extension_referenced_elements(
             if rng and rng not in own_classes:
                 # An added slot whose range is a (base) class is a dependency
                 # on that class; primitive ranges (string/integer/…) are not.
-                if rng and rng[0].isupper():
+                # Heuristic: LinkML classes are CamelCase, primitives are
+                # lowercase. A lowercase-named class is a FALSE NEGATIVE here
+                # (it reads as a primitive and is dropped) — the unsafe
+                # direction for an exposure flag. See the docstring's
+                # "Known limitation" note; tighten by resolving against the
+                # merged schema's declared types/classes when that is wired.
+                if rng[0].isupper():
                     refs.add(SchemaElement("class", rng))
 
+    # Fragment-level refinements (non-standard placement at the schema-doc
+    # level, mirrored from the class-level handling above). ``slot_usage`` is
+    # a name→refinement mapping; ``slots`` is a list of base slot names. The
+    # ``list`` guard is deliberate: a *standard* top-level ``slots:`` is a
+    # mapping of the extension's OWN slot definitions, not base references —
+    # collecting those would be a false positive.
     for slot_name in extension_fragment.get("slot_usage") or {}:
         refs.add(SchemaElement("slot", slot_name))
+    fragment_slots = extension_fragment.get("slots")
+    if isinstance(fragment_slots, list):
+        for slot_name in fragment_slots:
+            refs.add(SchemaElement("slot", slot_name))
 
     return refs
 

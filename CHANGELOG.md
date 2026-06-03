@@ -1,5 +1,34 @@
 # Changelog
 
+## Unreleased
+
+### New Features
+
+- **`hippo reference bundle-requires <manifest>` (PTS-346).** Surfaces the
+  previously-unwired `Bundle.to_requires()` to a user-facing command:
+  generates a deployment's `requires:` block from a bundle manifest's pinned
+  packages (each an exact `==` pin) as paste-ready YAML, with a leading
+  comment naming the bundle and its version. The block is *generated, not
+  hand-maintained* (sec11 §11.6.2), so pins always match a known-coherent
+  combination.
+
+### Bug Fixes / Hardening (PTS-346 — S4 pre-merge review follow-ups)
+
+- **Bundle manifest optional-field validation.** `Bundle.from_manifest()` now
+  validates that the optional `version` and `ontology_snapshot` fields are
+  strings when present (a YAML `version: 1.0` previously parsed to a float and
+  was stored silently); absent fields still pass through as `None`.
+- **Exposure heuristic documented + fragment-level `slots` collected.**
+  `extension_referenced_elements()` documents the `isupper()` CamelCase
+  assumption and its false-negative direction (a lowercase-named class range
+  reads as a primitive), and now also collects a non-standard fragment-level
+  `slots` *list* (mirroring the class-level handling; the standard top-level
+  `slots:` mapping of own definitions is deliberately skipped).
+- **Rollback no longer masks the original error.** `SQLiteAdapter._transaction`
+  / `staged_transaction` route their rollback through `_safe_rollback()`, so a
+  rollback that itself raises can't replace the in-flight exception that
+  triggered it.
+
 ## v0.7.0 — 2026-05-25 (ReferenceLoader v2 — write-log substrate + EntityRef)
 
 ### Breaking Changes

@@ -93,6 +93,72 @@ class TestReferencedElements:
         refs = extension_referenced_elements(fragment)
         assert SchemaElement("class", "A") not in refs
 
+    def test_mixins_collected(self) -> None:
+        # A class-level `mixins` list references base classes (alongside is_a).
+        fragment = {
+            "classes": {
+                "LabSample": {
+                    "is_a": "Sample",
+                    "mixins": ["Timestamped", "Auditable"],
+                }
+            }
+        }
+        refs = extension_referenced_elements(fragment)
+        assert SchemaElement("class", "Sample") in refs
+        assert SchemaElement("class", "Timestamped") in refs
+        assert SchemaElement("class", "Auditable") in refs
+
+    def test_class_level_slots_list_collected(self) -> None:
+        # A class-level `slots` list names base slots the extension pulls in.
+        fragment = {
+            "classes": {
+                "LabSample": {
+                    "is_a": "Sample",
+                    "slots": ["collected_at", "operator"],
+                }
+            }
+        }
+        refs = extension_referenced_elements(fragment)
+        assert SchemaElement("slot", "collected_at") in refs
+        assert SchemaElement("slot", "operator") in refs
+
+    def test_fragment_level_slots_list_collected(self) -> None:
+        # A (non-standard) fragment-level `slots` *list* is collected the same
+        # way as fragment-level `slot_usage`.
+        fragment = {
+            "slots": ["external_id", "label"],
+            "classes": {"LabSample": {"is_a": "Sample"}},
+        }
+        refs = extension_referenced_elements(fragment)
+        assert SchemaElement("slot", "external_id") in refs
+        assert SchemaElement("slot", "label") in refs
+
+    def test_fragment_level_slots_mapping_not_collected(self) -> None:
+        # A *standard* top-level `slots:` mapping defines the extension's OWN
+        # slots, not base references — collecting them would be a false
+        # positive, so the list-only guard must skip the mapping form.
+        fragment = {
+            "slots": {"my_own_slot": {"range": "string"}},
+            "classes": {"LabSample": {"is_a": "Sample"}},
+        }
+        refs = extension_referenced_elements(fragment)
+        assert SchemaElement("slot", "my_own_slot") not in refs
+
+    def test_lowercase_class_range_is_false_negative(self) -> None:
+        # Documents the known isupper() limitation (PTS-346 item 2): a slot
+        # whose range is a *lowercase-named* class is dropped as if primitive.
+        # This is the dangerous false-negative direction; pinning it keeps the
+        # behaviour visible should the heuristic ever be tightened.
+        fragment = {
+            "classes": {
+                "LabSample": {
+                    "attributes": {"ref": {"range": "lowercaseclass"}},
+                }
+            }
+        }
+        refs = extension_referenced_elements(fragment)
+        assert SchemaElement("class", "lowercaseclass") not in refs
+
 
 # ---------------------------------------------------------------------------
 # Exposure intersection
@@ -187,8 +253,35 @@ class TestBundle:
             Bundle.from_manifest({"packages": {"core": "1.0.0"}})
 
     def test_non_string_version_rejected(self) -> None:
+        # A non-string *package* version pin.
         with pytest.raises(ConfigError):
             Bundle.from_manifest({"name": "x", "packages": {"core": 1.0}})
+
+    def test_non_string_bundle_version_rejected(self) -> None:
+        # The optional top-level `version` field: `version: 1.0` parses to a
+        # float and must be rejected, not stored silently (PTS-346 item 1).
+        with pytest.raises(ConfigError, match="version"):
+            Bundle.from_manifest(
+                {"name": "x", "packages": {"core": "1.0.0"}, "version": 1.0}
+            )
+
+    def test_non_string_ontology_snapshot_rejected(self) -> None:
+        with pytest.raises(ConfigError, match="ontology_snapshot"):
+            Bundle.from_manifest(
+                {
+                    "name": "x",
+                    "packages": {"core": "1.0.0"},
+                    "ontology_snapshot": 202401,
+                }
+            )
+
+    def test_optional_metadata_absent_is_ok(self) -> None:
+        # Both optional fields may be omitted (None) — that is the common case.
+        bundle = Bundle.from_manifest(
+            {"name": "x", "packages": {"core": "1.0.0"}}
+        )
+        assert bundle.version is None
+        assert bundle.ontology_snapshot is None
 
 
 # ---------------------------------------------------------------------------

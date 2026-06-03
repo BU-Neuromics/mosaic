@@ -32,7 +32,7 @@ Manifest shape (YAML)::
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -106,10 +106,33 @@ class Bundle:
         return cls(
             name=name,
             packages=pinned,
-            ontology_snapshot=data.get("ontology_snapshot"),
-            version=data.get("version"),
+            ontology_snapshot=cls._coerce_optional_str(
+                name, "ontology_snapshot", data.get("ontology_snapshot")
+            ),
+            version=cls._coerce_optional_str(name, "version", data.get("version")),
             coordinates=coordinates,
         )
+
+    @staticmethod
+    def _coerce_optional_str(
+        bundle: str, field_name: str, value: Any
+    ) -> str | None:
+        """Validate an optional metadata field is a string when present.
+
+        ``ontology_snapshot`` and ``version`` are optional, so ``None`` (the
+        absent case) passes through. Anything else must be a string — a YAML
+        ``version: 1.0`` parses to a float and would otherwise be stored
+        silently, so we reject it the same way ``name`` is validated.
+        """
+        if value is None:
+            return None
+        if not isinstance(value, str):
+            raise ConfigError(
+                f"bundle {bundle!r}: optional {field_name!r} must be a string "
+                f"when present (got {value!r})",
+                bundle=bundle,
+            )
+        return value
 
     @staticmethod
     def _coerce_coordinate(
