@@ -45,11 +45,16 @@ DDL scope note:
     ``age_at_collection`` as an optional slot so v1-shape records are
     readable; the migration transforms read it and produce the v2 shape.
 
-hippo_unique note:
-    The DDL generator emits a non-partial unique index for ``hippo_unique``
-    slots. Migration creates a new record before superseding the old, so both
-    live briefly with the same business key — violating a non-partial unique
-    index. ``hippo_index`` (non-unique) is used instead.
+hippo_unique note (resolved, PTS-348):
+    ``Subject.external_id`` and ``BrainDonor.brain_bank_id`` carry
+    ``hippo_unique`` (Document 1 / PTS-347). Two defects once blocked this on
+    the migration path: the DDL generator emitted a *non-partial* unique index
+    (a superseded predecessor permanently held the key), and ``_run_hop``
+    created the new record while the old was still live (two live rows, same
+    key). Both are fixed — the index is now partial (``WHERE is_available = 1``)
+    and ``_run_hop`` retires each predecessor before writing its replacement.
+    These tests exercise that path end-to-end: every migrated, business-keyed
+    record proves the create-before-supersede window no longer collides.
 """
 
 from __future__ import annotations
@@ -113,7 +118,10 @@ def _build_merged_registry() -> SchemaRegistry:
                     "external_id": {
                         "range": "string",
                         "required": True,
-                        "annotations": {"hippo_index": True},
+                        # hippo_unique (Document 1 / PTS-347): a migration
+                        # target — proves the create-before-supersede window
+                        # no longer collides on the partial unique index.
+                        "annotations": {"hippo_unique": True},
                     },
                     "species": {"range": "string", "required": True},
                     "biological_sex": {"range": "string"},
@@ -135,7 +143,10 @@ def _build_merged_registry() -> SchemaRegistry:
                     "brain_bank_id": {
                         "range": "string",
                         "required": True,
-                        "annotations": {"hippo_index": True},
+                        # hippo_unique (Document 1 / PTS-347): a migration
+                        # target — proves the create-before-supersede window
+                        # no longer collides on the partial unique index.
+                        "annotations": {"hippo_unique": True},
                     },
                     "post_mortem_interval_hours": {"range": "float"},
                     # neuropathology_confirmed: boolean intentionally omitted —
