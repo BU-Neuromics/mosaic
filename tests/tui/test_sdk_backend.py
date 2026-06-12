@@ -122,3 +122,225 @@ def test_get_schema_uses_to_thread(monkeypatch):
 
     asyncio.run(run())
     assert "_get_schema_sync" in calls
+
+
+# ---------------------------------------------------------------------------
+# Integration tests: SDKBackend against a real temp SQLite instance
+# ---------------------------------------------------------------------------
+
+_FIXTURE_SCHEMA = (
+    Path(__file__).parents[1] / "fixtures" / "schemas" / "sample_schema.yaml"
+)
+
+
+@pytest.fixture
+def sdk_backend(tmp_path):
+    """SDKBackend over a fresh SQLite db with the sample fixture schema."""
+    return SDKBackend(db_path=tmp_path / "tui.db", schema_path=_FIXTURE_SCHEMA)
+
+
+@pytest.fixture
+def seeded_backend(sdk_backend):
+    """Backend with one Project and three Samples created through the SDK."""
+
+    async def seed():
+        project_id = await sdk_backend.create_entity(
+            "Project", {"name": "Alpha", "description": "first project"}
+        )
+        sample_ids = []
+        for i in range(3):
+            sample_ids.append(
+                await sdk_backend.create_entity(
+                    "Sample",
+                    {
+                        "name": f"S{i}",
+                        "project_id": project_id,
+                        "status": "active",
+                        "volume_ml": 1.0 + i,
+                    },
+                )
+            )
+        return project_id, sample_ids
+
+    project_id, sample_ids = asyncio.run(seed())
+    return sdk_backend, project_id, sample_ids
+
+
+def test_sdk_connection_info_ok(sdk_backend):
+    info = asyncio.run(sdk_backend.connection_info())
+    assert info.mode == "sdk"
+    assert info.ok is True
+    assert "2 entity types" in info.detail
+
+
+def test_sdk_connection_info_bad_schema(tmp_path):
+    backend = SDKBackend(
+        db_path=tmp_path / "x.db", schema_path=tmp_path / "missing.yaml"
+    )
+    info = asyncio.run(backend.connection_info())
+    assert info.ok is False
+
+
+def test_sdk_capabilities(sdk_backend):
+    caps = sdk_backend.capabilities()
+    assert caps.supports_filters is True
+    assert caps.supports_fts is True
+
+
+def test_sdk_list_entity_types_with_counts(seeded_backend):
+    backend, _project_id, _sample_ids = seeded_backend
+    summaries = asyncio.run(backend.list_entity_types())
+    by_name = {s.name: s.count for s in summaries}
+    assert by_name == {"Project": 1, "Sample": 3}
+
+
+def test_sdk_list_entities_pagination(seeded_backend):
+    backend, _project_id, sample_ids = seeded_backend
+    result = asyncio.run(backend.list_entities("Sample"))
+    assert result.total_items == 3
+    assert result.total_pages == 1
+    assert {item["id"] for item in result.items} == set(sample_ids)
+    # System + temporal fields present on listed records
+    first = result.items[0]
+    assert first["is_available"] is True
+    assert first["created_at"]
+
+
+def test_sdk_list_entities_field_filter(seeded_backend):
+    backend, _project_id, _sample_ids = seeded_backend
+    result = asyncio.run(backend.list_entities("Sample", filter_text="name=S1"))
+    assert result.total_items == 1
+    assert result.items[0]["data"]["name"] == "S1"
+
+
+def test_sdk_list_entities_substring_filter(seeded_backend):
+    backend, _project_id, _sample_ids = seeded_backend
+    result = asyncio.run(backend.list_entities("Sample", filter_text="s2"))
+    assert result.total_items == 1
+    assert result.items[0]["data"]["name"] == "S2"
+
+
+def test_sdk_query_entities_or_mode(seeded_backend):
+    backend, _project_id, _sample_ids = seeded_backend
+    result = asyncio.run(
+        backend.query_entities(
+            "Sample",
+            filters=[
+                {"field": "name", "value": "S0"},
+                {"field": "name", "value": "S2"},
+            ],
+            filter_mode="or",
+        )
+    )
+    assert result.total_items == 2
+
+
+def test_sdk_search_entities_fts(seeded_backend):
+    backend, _project_id, _sample_ids = seeded_backend
+    results = asyncio.run(backend.search_entities("Sample", "S1"))
+    assert len(results) == 1
+    assert results[0]["data"]["name"] == "S1"
+
+
+def test_sdk_get_entity_detail(seeded_backend):
+    backend, project_id, sample_ids = seeded_backend
+    detail = asyncio.run(backend.get_entity("Sample", sample_ids[0]))
+    assert detail.id == sample_ids[0]
+    assert detail.entity_type == "Sample"
+    # System fields first, then user data
+    assert detail.fields["is_available"] is True
+    assert detail.fields["version"] == 1
+    assert detail.fields["created_at"]
+    assert detail.fields["updated_at"]
+    assert detail.fields["schema_version"]
+    assert detail.fields["name"] == "S0"
+    assert detail.data["name"] == "S0"
+    # Relationship derived from the class-ranged project_id slot
+    assert len(detail.relationships) == 1
+    rel = detail.relationships[0]
+    assert rel.relationship_name == "project_id"
+    assert rel.target_type == "Project"
+    assert rel.target_id == project_id
+
+
+def test_sdk_get_entity_not_found(sdk_backend):
+    from hippo.tui.backend.protocol import BackendError
+
+    with pytest.raises(BackendError):
+        asyncio.run(sdk_backend.get_entity("Sample", "nonexistent-id"))
+
+
+def test_sdk_get_schema_fields(sdk_backend):
+    schema = asyncio.run(sdk_backend.get_schema())
+    names = [et.name for et in schema.entity_types]
+    assert names == ["Project", "Sample"]
+
+    sample = schema.get_entity_type("Sample")
+    fields = {f.name: f for f in sample.fields}
+    assert fields["name"].required is True
+    assert fields["project_id"].ref_target == "Project"
+    assert fields["project_id"].indexed is True
+    assert fields["status"].enum_values == ["active", "archived", "distributed"]
+    assert fields["volume_ml"].field_type == "float"
+    # Inherited hippo_core Entity system slots are present
+    assert "id" in fields
+    assert "is_available" in fields
+
+    assert len(schema.relationships) == 1
+    assert schema.relationships[0].target_type == "Project"
+
+
+def test_sdk_provenance_newest_first(seeded_backend):
+    backend, project_id, sample_ids = seeded_backend
+    sid = sample_ids[0]
+
+    async def mutate_and_fetch():
+        await backend.update_entity(
+            "Sample", sid, {"name": "S0-renamed", "project_id": project_id}
+        )
+        return await backend.get_provenance("Sample", sid)
+
+    events = asyncio.run(mutate_and_fetch())
+    assert len(events) == 2
+    assert events[0].event_type == "update"
+    assert events[-1].event_type == "create"
+    assert events[0].timestamp >= events[-1].timestamp
+
+
+def test_sdk_create_validation_failure(sdk_backend):
+    from hippo.tui.backend.protocol import BackendError
+
+    with pytest.raises(BackendError):
+        # 'name' is required on Sample
+        asyncio.run(sdk_backend.create_entity("Sample", {"volume_ml": 2.0}))
+
+
+def test_sdk_set_availability_round_trip(seeded_backend):
+    backend, _project_id, sample_ids = seeded_backend
+    sid = sample_ids[0]
+
+    async def transition():
+        await backend.set_availability("Sample", sid, False, reason="archived")
+        detail = await backend.get_entity("Sample", sid)
+        listing = await backend.list_entities("Sample")
+        return detail, listing
+
+    detail, listing = asyncio.run(transition())
+    assert detail.fields["is_available"] is False
+    # Unavailable entities drop out of the default listing
+    assert listing.total_items == 2
+
+    async def restore():
+        await backend.set_availability("Sample", sid, True, reason="restored")
+        return await backend.get_entity("Sample", sid)
+
+    detail = asyncio.run(restore())
+    assert detail.fields["is_available"] is True
+
+
+def test_sdk_set_availability_unknown_entity(seeded_backend):
+    from hippo.tui.backend.protocol import BackendError
+
+    backend, _project_id, _sample_ids = seeded_backend
+    with pytest.raises(BackendError):
+        asyncio.run(backend.set_availability("Sample", "no-such-id", False))

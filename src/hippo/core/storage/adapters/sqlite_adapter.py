@@ -1330,10 +1330,17 @@ class SQLiteAdapter(EntityStore):
         return self._relationship_store
 
     def _get_fts_store(self, conn: Optional[sqlite3.Connection] = None) -> FTSStore:
-        """Get or create an FTSStore."""
+        """Get or create an FTSStore for the given connection.
+
+        Re-binds when *conn* differs from the cached store's connection —
+        connections are thread-local, so a store cached by one thread must
+        not be reused from another. Writing FTS rows through a foreign
+        thread's connection leaves that connection in a never-committed
+        write transaction, permanently write-locking the database.
+        """
         if conn is None:
             conn = self._get_connection()
-        if self._fts_store is None:
+        if self._fts_store is None or self._fts_store._conn is not conn:
             self._fts_store = FTSStore(conn)
         return self._fts_store
 
