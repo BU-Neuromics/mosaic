@@ -102,20 +102,30 @@ class HippoTUIApp(App):
     # Error reporting
     # ------------------------------------------------------------------
 
+    def _status_bar(self) -> StatusBar | None:
+        """The StatusBar on the base screen, or None when not mounted yet.
+
+        The status bar lives on the app's default screen; ``self.query_one``
+        only searches the *active* screen, which would miss it whenever a
+        detail/provenance/modal screen is pushed on top.
+        """
+        try:
+            return self.screen_stack[0].query_one(StatusBar)
+        except Exception:  # noqa: BLE001 — not mounted yet
+            return None
+
     def report_error(self, message: str) -> None:
         """Show *message* as an error toast and in the status bar."""
-        try:
-            self.query_one(StatusBar).set_error(message)
-        except Exception:  # noqa: BLE001 — status bar may not be mounted yet
-            pass
+        status_bar = self._status_bar()
+        if status_bar is not None:
+            status_bar.set_error(message)
         self.notify(message, title="Error", severity="error", timeout=8)
 
     def report_success(self, message: str) -> None:
         """Show *message* as a success toast and clear status-bar errors."""
-        try:
-            self.query_one(StatusBar).clear_error()
-        except Exception:  # noqa: BLE001
-            pass
+        status_bar = self._status_bar()
+        if status_bar is not None:
+            status_bar.clear_error()
         self.notify(message, timeout=4)
 
     # ------------------------------------------------------------------
