@@ -10,13 +10,13 @@
       
       
       
-        <link rel="canonical" href="https://bu-neuromics.github.io/hippo/reference-loaders/">
+        <link rel="canonical" href="https://bu-neuromics.github.io/hippo/tui/">
       
       
-        <link rel="prev" href="../api-reference/">
+        <link rel="prev" href="../cli-reference/">
       
       
-        <link rel="next" href="../writing-a-reference-loader/">
+        <link rel="next" href="../api-reference/">
       
       
         
@@ -27,7 +27,7 @@
     
     
       
-        <title>Overview - Hippo</title>
+        <title>TUI - Hippo</title>
       
     
     
@@ -78,7 +78,7 @@
     <div data-md-component="skip">
       
         
-        <a href="#reference-loaders" class="md-skip">
+        <a href="#tui-terminal-user-interface" class="md-skip">
           Skip to content
         </a>
       
@@ -112,7 +112,7 @@
         <div class="md-header__topic" data-md-component="header-topic">
           <span class="md-ellipsis">
             
-              Overview
+              TUI
             
           </span>
         </div>
@@ -394,9 +394,11 @@
   
   
   
+    
   
-    <li class="md-tabs__item">
-      <a href="../tui/" class="md-tabs__link">
+  
+    <li class="md-tabs__item md-tabs__item--active">
+      <a href="./" class="md-tabs__link">
         
   
   
@@ -432,13 +434,11 @@
   
   
   
-    
-  
   
     
     
-      <li class="md-tabs__item md-tabs__item--active">
-        <a href="./" class="md-tabs__link">
+      <li class="md-tabs__item">
+        <a href="../reference-loaders/" class="md-tabs__link">
           
   
   
@@ -782,10 +782,37 @@
       
   
   
+    
   
   
-    <li class="md-nav__item">
-      <a href="../tui/" class="md-nav__link">
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    TUI
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
         
   
   
@@ -801,6 +828,203 @@
   
 
       </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#try-it-now-with-the-example-dataset" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Try it now with the example dataset
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#launching" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Launching
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Launching">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#sdk-mode-local-database-default" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        SDK mode (local database, default)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#rest-mode-remote-hippo-serve" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        REST mode (remote hippo serve)
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#screens" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Screens
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Screens">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#sidebar" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Sidebar
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#entity-browser" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Entity browser
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#entity-detail" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Entity detail
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#create-edit-forms" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Create / edit forms
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#availability-transitions" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Availability transitions
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#provenance-history" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Provenance history
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#schema-explorer" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Schema explorer
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#query-screen" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Query screen
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#keyboard-shortcuts" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Keyboard shortcuts
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#architecture-notes" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Architecture notes
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
     </li>
   
 
@@ -836,31 +1060,26 @@
       
   
   
-    
   
   
-  
     
     
     
     
-      
-        
-        
       
       
         
       
     
     
-    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
+    <li class="md-nav__item md-nav__item--nested">
       
         
         
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_12" checked>
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_12" >
         
           
-          <label class="md-nav__link" for="__nav_12" id="__nav_12_label" tabindex="">
+          <label class="md-nav__link" for="__nav_12" id="__nav_12_label" tabindex="0">
             
   
   
@@ -878,7 +1097,7 @@
             <span class="md-nav__icon md-icon"></span>
           </label>
         
-        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_12_label" aria-expanded="true">
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_12_label" aria-expanded="false">
           <label class="md-nav__title" for="__nav_12">
             <span class="md-nav__icon md-icon"></span>
             
@@ -893,37 +1112,10 @@
                 
   
   
-    
   
   
-  
-    <li class="md-nav__item md-nav__item--active">
-      
-      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
-      
-      
-        
-      
-      
-        <label class="md-nav__link md-nav__link--active" for="__toc">
-          
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    Overview
-  
-
-    
-  </span>
-  
-  
-
-          <span class="md-nav__icon md-icon"></span>
-        </label>
-      
-      <a href="./" class="md-nav__link md-nav__link--active">
+    <li class="md-nav__item">
+      <a href="../reference-loaders/" class="md-nav__link">
         
   
   
@@ -939,159 +1131,6 @@
   
 
       </a>
-      
-        
-
-<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
-  
-  
-  
-    
-  
-  
-    <label class="md-nav__title" for="__toc">
-      <span class="md-nav__icon md-icon"></span>
-      Table of contents
-    </label>
-    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
-      
-        <li class="md-nav__item">
-  <a href="#installing-a-loader-package" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Installing a loader package
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#commands" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Commands
-      
-    </span>
-  </a>
-  
-    <nav class="md-nav" aria-label="Commands">
-      <ul class="md-nav__list">
-        
-          <li class="md-nav__item">
-  <a href="#hippo-reference-list" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        hippo reference list
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#hippo-reference-install" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        hippo reference install
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#hippo-reference-upgrade" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        hippo reference upgrade
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#hippo-reference-clean-cache" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        hippo reference clean-cache
-      
-    </span>
-  </a>
-  
-</li>
-        
-      </ul>
-    </nav>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#environment-variables" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Environment variables
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#declaring-required-loaders-in-your-schema" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Declaring required loaders in your schema
-      
-    </span>
-  </a>
-  
-    <nav class="md-nav" aria-label="Declaring required loaders in your schema">
-      <ul class="md-nav__list">
-        
-          <li class="md-nav__item">
-  <a href="#referencing-loader-provided-entity-types" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Referencing loader-provided entity types
-      
-    </span>
-  </a>
-  
-</li>
-        
-      </ul>
-    </nav>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#the-test-version-slug" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        The "test" version slug
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#tracking-installed-loaders" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Tracking installed loaders
-      
-    </span>
-  </a>
-  
-</li>
-      
-    </ul>
-  
-</nav>
-      
     </li>
   
 
@@ -1473,10 +1512,10 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#installing-a-loader-package" class="md-nav__link">
+  <a href="#try-it-now-with-the-example-dataset" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Installing a loader package
+        Try it now with the example dataset
       
     </span>
   </a>
@@ -1484,22 +1523,22 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#commands" class="md-nav__link">
+  <a href="#launching" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Commands
+        Launching
       
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="Commands">
+    <nav class="md-nav" aria-label="Launching">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
-  <a href="#hippo-reference-list" class="md-nav__link">
+  <a href="#sdk-mode-local-database-default" class="md-nav__link">
     <span class="md-ellipsis">
       
-        hippo reference list
+        SDK mode (local database, default)
       
     </span>
   </a>
@@ -1507,32 +1546,10 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#hippo-reference-install" class="md-nav__link">
+  <a href="#rest-mode-remote-hippo-serve" class="md-nav__link">
     <span class="md-ellipsis">
       
-        hippo reference install
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#hippo-reference-upgrade" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        hippo reference upgrade
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#hippo-reference-clean-cache" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        hippo reference clean-cache
+        REST mode (remote hippo serve)
       
     </span>
   </a>
@@ -1545,33 +1562,99 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#environment-variables" class="md-nav__link">
+  <a href="#screens" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Environment variables
+        Screens
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Screens">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#sidebar" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Sidebar
       
     </span>
   </a>
   
 </li>
-      
-        <li class="md-nav__item">
-  <a href="#declaring-required-loaders-in-your-schema" class="md-nav__link">
+        
+          <li class="md-nav__item">
+  <a href="#entity-browser" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Declaring required loaders in your schema
+        Entity browser
       
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="Declaring required loaders in your schema">
-      <ul class="md-nav__list">
+</li>
         
           <li class="md-nav__item">
-  <a href="#referencing-loader-provided-entity-types" class="md-nav__link">
+  <a href="#entity-detail" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Referencing loader-provided entity types
+        Entity detail
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#create-edit-forms" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Create / edit forms
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#availability-transitions" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Availability transitions
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#provenance-history" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Provenance history
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#schema-explorer" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Schema explorer
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#query-screen" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Query screen
       
     </span>
   </a>
@@ -1584,10 +1667,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#the-test-version-slug" class="md-nav__link">
+  <a href="#keyboard-shortcuts" class="md-nav__link">
     <span class="md-ellipsis">
       
-        The "test" version slug
+        Keyboard shortcuts
       
     </span>
   </a>
@@ -1595,10 +1678,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#tracking-installed-loaders" class="md-nav__link">
+  <a href="#architecture-notes" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Tracking installed loaders
+        Architecture notes
       
     </span>
   </a>
@@ -1625,165 +1708,250 @@
   
 
 
-<h1 id="reference-loaders">Reference Loaders<a class="headerlink" href="#reference-loaders" title="Permanent link">&para;</a></h1>
-<p>Reference loaders install community-standard ontology and annotation data (Ensembl genes, FMA anatomy terms, Gene Ontology, etc.) as regular Hippo entities. Once installed, your schema can reference loader-provided entity types directly — no manual ETL required.</p>
-<p>Reference loaders are distributed as <code>hippo-reference-&lt;name&gt;</code> packages on PyPI, discovered automatically when installed alongside Hippo.</p>
-<h2 id="installing-a-loader-package">Installing a loader package<a class="headerlink" href="#installing-a-loader-package" title="Permanent link">&para;</a></h2>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>pip<span class="w"> </span>install<span class="w"> </span>hippo-reference-ensembl<span class="w">   </span><span class="c1"># example: Ensembl gene annotations</span>
+<h1 id="tui-terminal-user-interface">TUI — Terminal User Interface<a class="headerlink" href="#tui-terminal-user-interface" title="Permanent link">&para;</a></h1>
+<p><code>hippo tui</code> launches an interactive, keyboard-driven terminal browser for a
+Hippo instance. It can drive the <strong>Python SDK in-process against a local
+database</strong>, or call a <strong>remote <code>hippo serve</code> instance over the REST API</strong> —
+the interface is identical in both modes. In SDK mode the TUI is a pure
+consumer of the public <code>HippoClient</code> API (queries, writes, provenance, and
+validation all go through the SDK); it never touches the storage backend
+directly.</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>pip<span class="w"> </span>install<span class="w"> </span><span class="s1">&#39;hippo[tui]&#39;</span>
+<a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>hippo<span class="w"> </span>tui
 </code></pre></div>
-<p>After installation, the loader appears in <code>hippo reference list</code>. No further registration steps are needed.</p>
-<h2 id="commands">Commands<a class="headerlink" href="#commands" title="Permanent link">&para;</a></h2>
-<h3 id="hippo-reference-list"><code>hippo reference list</code><a class="headerlink" href="#hippo-reference-list" title="Permanent link">&para;</a></h3>
-<p>List all discoverable loaders and show which version (if any) is installed in the current Hippo database.</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>hippo<span class="w"> </span>reference<span class="w"> </span>list
+<h2 id="try-it-now-with-the-example-dataset">Try it now with the example dataset<a class="headerlink" href="#try-it-now-with-the-example-dataset" title="Permanent link">&para;</a></h2>
+<p>The repository ships a complete worked deployment under
+<a href="https://github.com/BU-Neuromics/hippo/tree/main/examples/bibliography"><code>examples/bibliography/</code></a> —
+a citation-graph schema (Author, the Publication hierarchy, Venue, Authorship,
+Citation) plus a seed script. Two commands give you something to browse:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="nb">cd</span><span class="w"> </span>examples/bibliography
+<a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a>python<span class="w"> </span>sdk_example.py<span class="w">     </span><span class="c1"># seeds ./data/hippo.db with the demo citation graph</span>
+<a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a>hippo<span class="w"> </span>tui<span class="w">                 </span><span class="c1"># auto-detects config.json — no flags needed</span>
 </code></pre></div>
-<p>Example output:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a>NAME       PACKAGE                   PKG VERSION  INSTALLED VERSION
-<a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a>ensembl    hippo-reference-ensembl   0.3.1        homo_sapiens.GRCh38.110
-<a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a>fma        hippo-reference-fma       1.0.0        —
-<a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a>go         hippo-reference-go        2.1.0        2024-01-15
-</code></pre></div>
-<hr />
-<h3 id="hippo-reference-install"><code>hippo reference install</code><a class="headerlink" href="#hippo-reference-install" title="Permanent link">&para;</a></h3>
-<p>Install a reference dataset. This merges the loader's schema fragment, runs a schema migration, and ingests the data.</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a>hippo<span class="w"> </span>reference<span class="w"> </span>install<span class="w"> </span>&lt;name&gt;<span class="w"> </span><span class="o">[</span>--version<span class="w"> </span>&lt;v&gt;<span class="o">]</span><span class="w"> </span><span class="o">[</span>--flag<span class="w"> </span>...<span class="o">]</span>
-</code></pre></div>
-<table>
-<thead>
-<tr>
-<th>Argument / Option</th>
-<th>Description</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><code>&lt;name&gt;</code></td>
-<td>Loader name (matches the entry point key, e.g. <code>ensembl</code>)</td>
-</tr>
-<tr>
-<td><code>--version &lt;v&gt;</code></td>
-<td>Version slug to install. Defaults to the latest non-test version the loader reports.</td>
-</tr>
-<tr>
-<td><code>--&lt;param&gt; &lt;val&gt;</code></td>
-<td>Loader-specific flags auto-rendered from the loader's parameter schema (see below).</td>
-</tr>
-</tbody>
-</table>
-<p><strong>Examples:</strong></p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="c1"># Install the latest Ensembl version</span>
-<a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a>hippo<span class="w"> </span>reference<span class="w"> </span>install<span class="w"> </span>ensembl
-<a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a>
-<a id="__codelineno-4-4" name="__codelineno-4-4" href="#__codelineno-4-4"></a><span class="c1"># Install a specific organism + release</span>
-<a id="__codelineno-4-5" name="__codelineno-4-5" href="#__codelineno-4-5"></a>hippo<span class="w"> </span>reference<span class="w"> </span>install<span class="w"> </span>ensembl<span class="w"> </span>--version<span class="w"> </span>mus_musculus.GRCm39.115
-<a id="__codelineno-4-6" name="__codelineno-4-6" href="#__codelineno-4-6"></a>
-<a id="__codelineno-4-7" name="__codelineno-4-7" href="#__codelineno-4-7"></a><span class="c1"># Pass loader-specific parameters</span>
-<a id="__codelineno-4-8" name="__codelineno-4-8" href="#__codelineno-4-8"></a>hippo<span class="w"> </span>reference<span class="w"> </span>install<span class="w"> </span>ensembl<span class="w"> </span>--organism<span class="w"> </span>homo_sapiens<span class="w"> </span>--gene-biotypes<span class="w"> </span>protein_coding,lncRNA
-</code></pre></div>
-<p>Re-installing the same name + version is a silent no-op (<code>status: already_installed</code>).</p>
-<hr />
-<h3 id="hippo-reference-upgrade"><code>hippo reference upgrade</code><a class="headerlink" href="#hippo-reference-upgrade" title="Permanent link">&para;</a></h3>
-<p>Upgrade an already-installed loader to a newer version.</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a>hippo<span class="w"> </span>reference<span class="w"> </span>upgrade<span class="w"> </span>&lt;name&gt;<span class="w"> </span><span class="o">[</span>--version<span class="w"> </span>&lt;v&gt;<span class="o">]</span><span class="w"> </span><span class="o">[</span>--prune-old<span class="o">]</span><span class="w"> </span><span class="o">[</span>--flag<span class="w"> </span>...<span class="o">]</span>
+<p><code>hippo tui</code> reads <code>config.json</code> in the current directory, so it picks up the
+example's database and schema automatically. You land in the entity browser
+with three Authors, a JournalArticle and Preprint of <em>"Attention Is All You
+Need"</em>, and a Citation between them. From there you can follow the Authorship
+relationships, inspect the preprint's supersession in its provenance history,
+and run a full-text search for <code>transformer</code> on the Query screen.</p>
+<h2 id="launching">Launching<a class="headerlink" href="#launching" title="Permanent link">&para;</a></h2>
+<h3 id="sdk-mode-local-database-default">SDK mode (local database, default)<a class="headerlink" href="#sdk-mode-local-database-default" title="Permanent link">&para;</a></h3>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="c1"># Use config.json / data/hippo.db / hippo.db from the current directory</span>
+<a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a>hippo<span class="w"> </span>tui
+<a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a>
+<a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a><span class="c1"># Point at an explicit database and schema</span>
+<a id="__codelineno-2-5" name="__codelineno-2-5" href="#__codelineno-2-5"></a>hippo<span class="w"> </span>tui<span class="w"> </span>--db<span class="w"> </span>data/hippo.db<span class="w"> </span>--schema<span class="w"> </span>schemas/
 </code></pre></div>
 <table>
 <thead>
 <tr>
 <th>Option</th>
-<th>Description</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><code>--version &lt;v&gt;</code></td>
-<td>Target version slug. Defaults to the latest non-test version.</td>
-</tr>
-<tr>
-<td><code>--prune-old</code></td>
-<td>Deactivates the prior version's rows (sets <code>is_available = false</code>) so they no longer appear in default queries. The rows remain in the database and are recoverable via the provenance log. <strong>Opt-in — changes the default queryable surface.</strong> Without this flag the old rows remain queryable alongside the new ones.</td>
-</tr>
-<tr>
-<td><code>--&lt;param&gt; &lt;val&gt;</code></td>
-<td>Loader-specific flags (same as <code>install</code>).</td>
-</tr>
-</tbody>
-</table>
-<p><strong>Default (additive) behavior:</strong> new entities are ingested alongside existing ones. Prior-version rows remain queryable — foreign-key references in your data that point at the old version continue to resolve. Use <code>--prune-old</code> only when you are certain no user data references the prior version's entities; it deactivates those rows (marks them unavailable and writes an <code>availability_change</code> provenance record) rather than removing them, so they remain auditable and recoverable.</p>
-<div class="admonition note">
-<p class="admonition-title">Atomic gating guarantee</p>
-<p><code>--prune-old</code> only runs after a fully clean load completes. If the new version fails mid-ingestion, the prior rows stay queryable — no deactivation occurs. This makes the flag safe to use: partial upgrades cannot leave you with both the old and new versions partially deactivated.</p>
-</div>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a><span class="c1"># Additive upgrade — old rows stay</span>
-<a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a>hippo<span class="w"> </span>reference<span class="w"> </span>upgrade<span class="w"> </span>ensembl<span class="w"> </span>--version<span class="w"> </span>homo_sapiens.GRCh38.111
-<a id="__codelineno-6-3" name="__codelineno-6-3" href="#__codelineno-6-3"></a>
-<a id="__codelineno-6-4" name="__codelineno-6-4" href="#__codelineno-6-4"></a><span class="c1"># Opt-in: deactivate prior version&#39;s entities after successful install</span>
-<a id="__codelineno-6-5" name="__codelineno-6-5" href="#__codelineno-6-5"></a>hippo<span class="w"> </span>reference<span class="w"> </span>upgrade<span class="w"> </span>ensembl<span class="w"> </span>--version<span class="w"> </span>homo_sapiens.GRCh38.111<span class="w"> </span>--prune-old
-</code></pre></div>
-<hr />
-<h3 id="hippo-reference-clean-cache"><code>hippo reference clean-cache</code><a class="headerlink" href="#hippo-reference-clean-cache" title="Permanent link">&para;</a></h3>
-<p>Remove locally cached download files used by reference loaders.</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a><span class="c1"># Clear cache for a single loader</span>
-<a id="__codelineno-7-2" name="__codelineno-7-2" href="#__codelineno-7-2"></a>hippo<span class="w"> </span>reference<span class="w"> </span>clean-cache<span class="w"> </span>ensembl
-<a id="__codelineno-7-3" name="__codelineno-7-3" href="#__codelineno-7-3"></a>
-<a id="__codelineno-7-4" name="__codelineno-7-4" href="#__codelineno-7-4"></a><span class="c1"># Clear the entire reference cache</span>
-<a id="__codelineno-7-5" name="__codelineno-7-5" href="#__codelineno-7-5"></a>hippo<span class="w"> </span>reference<span class="w"> </span>clean-cache
-</code></pre></div>
-<p>Clearing the cache does not uninstall any data from the Hippo database — it only removes the on-disk download cache so the next <code>install</code> or <code>upgrade</code> will re-fetch source files.</p>
-<hr />
-<h2 id="environment-variables">Environment variables<a class="headerlink" href="#environment-variables" title="Permanent link">&para;</a></h2>
-<table>
-<thead>
-<tr>
-<th>Variable</th>
 <th>Default</th>
 <th>Description</th>
 </tr>
 </thead>
 <tbody>
 <tr>
-<td><code>HIPPO_CACHE_DIR</code></td>
-<td><code>~/.cache/hippo/references/</code></td>
-<td>Root directory for all reference loader download caches. Set this to a shared path (e.g., an NFS mount or CI cache volume) to avoid redundant downloads across machines.</td>
+<td><code>--backend</code>, <code>-b</code></td>
+<td><code>sdk</code></td>
+<td>Backend mode: <code>sdk</code> or <code>rest</code></td>
+</tr>
+<tr>
+<td><code>--db</code></td>
+<td>resolved</td>
+<td>SQLite database path. Falls back to <code>config.json</code> in the cwd, then <code>data/hippo.db</code>, then <code>hippo.db</code></td>
+</tr>
+<tr>
+<td><code>--schema</code></td>
+<td>resolved</td>
+<td>LinkML schema file or directory. Falls back to <code>schemas/</code> in the cwd, then the bundled <code>hippo_core</code> schema</td>
 </tr>
 </tbody>
 </table>
-<p>Each loader gets its own subdirectory under the cache root: <code>$HIPPO_CACHE_DIR/&lt;loader_name&gt;/</code>.</p>
-<hr />
-<h2 id="declaring-required-loaders-in-your-schema">Declaring required loaders in your schema<a class="headerlink" href="#declaring-required-loaders-in-your-schema" title="Permanent link">&para;</a></h2>
-<p>Add a <code>requires:</code> block to <code>schema.yaml</code> to declare which reference loaders your schema depends on:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a><span class="c1"># schema.yaml</span>
-<a id="__codelineno-8-2" name="__codelineno-8-2" href="#__codelineno-8-2"></a><span class="nt">requires</span><span class="p">:</span>
-<a id="__codelineno-8-3" name="__codelineno-8-3" href="#__codelineno-8-3"></a><span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">hippo-reference-fma==3.3</span>
-<a id="__codelineno-8-4" name="__codelineno-8-4" href="#__codelineno-8-4"></a><span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">hippo-reference-ensembl==mus_musculus.GRCm39.115</span>
+<h3 id="rest-mode-remote-hippo-serve">REST mode (remote <code>hippo serve</code>)<a class="headerlink" href="#rest-mode-remote-hippo-serve" title="Permanent link">&para;</a></h3>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a>hippo<span class="w"> </span>serve<span class="w"> </span><span class="p">&amp;</span><span class="w">                       </span><span class="c1"># on the host</span>
+<a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a>hippo<span class="w"> </span>tui<span class="w"> </span>-b<span class="w"> </span>rest<span class="w"> </span>--url<span class="w"> </span>http://localhost:8000<span class="w"> </span>--token<span class="w"> </span><span class="nv">$TOKEN</span>
 </code></pre></div>
-<p>Only exact-match pins (<code>==</code>) are supported in v1. If you need a minimum version, pin the lowest acceptable release and upgrade explicitly with <code>hippo reference upgrade</code>.</p>
-<p><code>hippo validate</code> fails fast with a clear install suggestion if a required loader is missing. <code>hippo migrate</code> also checks <code>requires:</code> before applying any schema changes.</p>
-<h3 id="referencing-loader-provided-entity-types">Referencing loader-provided entity types<a class="headerlink" href="#referencing-loader-provided-entity-types" title="Permanent link">&para;</a></h3>
-<p>Loader-provided types are namespaced by loader name. Reference them in your schema using <code>&lt;loader_name&gt;:&lt;TypeName&gt;</code>:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a><span class="c1"># schema.yaml</span>
-<a id="__codelineno-9-2" name="__codelineno-9-2" href="#__codelineno-9-2"></a><span class="nt">classes</span><span class="p">:</span>
-<a id="__codelineno-9-3" name="__codelineno-9-3" href="#__codelineno-9-3"></a><span class="w">  </span><span class="nt">SampleAnnotation</span><span class="p">:</span>
-<a id="__codelineno-9-4" name="__codelineno-9-4" href="#__codelineno-9-4"></a><span class="w">    </span><span class="nt">attributes</span><span class="p">:</span>
-<a id="__codelineno-9-5" name="__codelineno-9-5" href="#__codelineno-9-5"></a><span class="w">      </span><span class="nt">ensembl_gene_id</span><span class="p">:</span>
-<a id="__codelineno-9-6" name="__codelineno-9-6" href="#__codelineno-9-6"></a><span class="w">        </span><span class="nt">range</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">ensembl:Gene</span><span class="w">     </span><span class="c1"># entity type provided by hippo-reference-ensembl</span>
-</code></pre></div>
-<hr />
-<h2 id="the-test-version-slug">The <code>"test"</code> version slug<a class="headerlink" href="#the-test-version-slug" title="Permanent link">&para;</a></h2>
-<p>Well-behaved loaders expose a <code>"test"</code> pseudo-version that installs a small, deterministic, network-free fixture dataset bundled with the package:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-10-1" name="__codelineno-10-1" href="#__codelineno-10-1"></a>hippo<span class="w"> </span>reference<span class="w"> </span>install<span class="w"> </span>ensembl<span class="w"> </span>--version<span class="w"> </span><span class="nb">test</span>
-</code></pre></div>
-<p>Use <code>--version test</code> in CI pipelines to avoid network dependencies and keep test runs hermetic and fast. The <code>"test"</code> slug is reserved — Hippo will never use it for a real release version.</p>
-<hr />
-<h2 id="tracking-installed-loaders">Tracking installed loaders<a class="headerlink" href="#tracking-installed-loaders" title="Permanent link">&para;</a></h2>
-<p>Hippo records installed loader versions in <code>hippo_meta</code> under the key <code>reference_versions</code>. <code>hippo status</code> surfaces this alongside other system information:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-11-1" name="__codelineno-11-1" href="#__codelineno-11-1"></a>$ hippo status
-<a id="__codelineno-11-2" name="__codelineno-11-2" href="#__codelineno-11-2"></a>...
-<a id="__codelineno-11-3" name="__codelineno-11-3" href="#__codelineno-11-3"></a>Reference loaders:
-<a id="__codelineno-11-4" name="__codelineno-11-4" href="#__codelineno-11-4"></a>  ensembl    homo_sapiens.GRCh38.110
-<a id="__codelineno-11-5" name="__codelineno-11-5" href="#__codelineno-11-5"></a>  go         2024-01-15
-</code></pre></div>
-<p>The recorded version is what Hippo uses as the <code>from_version</code> baseline when you later run <code>hippo reference upgrade</code>.</p>
-<p>Hippo's <strong>recipe system</strong> is a complementary, lower-level mechanism for sharing schema fragments — where Reference Loaders bring data into a deployment, recipes bring the schema that gives that data its shape. In v1, Reference Loaders and recipes coexist unchanged: loaders continue on their existing install path and are not yet recipe producers. Recipes can declare a loader as a precondition (via <code>requires.reference_loaders</code>) to ensure the loader is installed before schema import proceeds. For details, see <a href="../installing-recipes/">Installing Recipes</a> and <a href="../writing-a-recipe/">Writing a Recipe</a>.</p>
+<table>
+<thead>
+<tr>
+<th>Option</th>
+<th>Default</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>--url</code></td>
+<td><code>http://127.0.0.1:8000</code></td>
+<td>Base URL of the <code>hippo serve</code> instance</td>
+</tr>
+<tr>
+<td><code>--token</code></td>
+<td>env / <code>dev-token</code></td>
+<td>Bearer token. Falls back to the <code>HIPPO_TUI_TOKEN</code> environment variable, then <code>dev-token</code></td>
+</tr>
+</tbody>
+</table>
+<p>The status bar at the bottom always shows the backend mode, the connection
+target, and a live connection indicator (green <code>●</code> when the backend is
+reachable). Connection failures surface as error toasts and in the status bar.</p>
+<h2 id="screens">Screens<a class="headerlink" href="#screens" title="Permanent link">&para;</a></h2>
+<h3 id="sidebar">Sidebar<a class="headerlink" href="#sidebar" title="Permanent link">&para;</a></h3>
+<p>Lists every entity type in the schema with live entity counts, plus entries
+for the <strong>Schema</strong> explorer and the <strong>Query</strong> screen. <code>Enter</code> opens the
+selection in the main panel.</p>
+<h3 id="entity-browser">Entity browser<a class="headerlink" href="#entity-browser" title="Permanent link">&para;</a></h3>
+<p>The main listing for one entity type:</p>
+<ul>
+<li><strong>Filter</strong> (<code>f</code>): incremental text filter over the visible columns.</li>
+<li><strong>Pagination</strong> (<code>←</code> / <code>→</code>): 20 entities per page.</li>
+<li><strong><code>Enter</code></strong>: open the entity detail screen.</li>
+<li><strong><code>n</code></strong> new entity, <strong><code>e</code></strong> edit, <strong><code>a</code></strong> availability, <strong><code>p</code></strong> provenance.</li>
+</ul>
+<h3 id="entity-detail">Entity detail<a class="headerlink" href="#entity-detail" title="Permanent link">&para;</a></h3>
+<p>Shows every field of one entity — system fields (<code>id</code>, <code>is_available</code>,
+<code>version</code>) and computed temporal fields (<code>created_at</code>, <code>updated_at</code>,
+<code>schema_version</code>, derived from the provenance log at read time) are rendered
+dimmed above the user slots. The right panel lists outbound relationships
+(<code>Enter</code> follows a link and chains detail screens; <code>Esc</code> unwinds) and a
+preview of the most recent provenance events.</p>
+<h3 id="create-edit-forms">Create / edit forms<a class="headerlink" href="#create-edit-forms" title="Permanent link">&para;</a></h3>
+<p><code>n</code> (create) and <code>e</code> (edit) open a modal form generated from the entity
+type's LinkML schema:</p>
+<ul>
+<li>Enums and booleans render as dropdowns; everything else as typed inputs.</li>
+<li>Values are coerced to the slot's range (<code>integer</code>, <code>float</code>, <code>boolean</code>,
+  comma-separated lists for multivalued slots) with inline error messages.</li>
+<li>Required slots are marked <code>*</code> and block saving when empty.</li>
+<li>Server-side validation failures are shown inline with the backend's detail
+  message.</li>
+<li><code>Ctrl+S</code> saves, <code>Esc</code> cancels.</li>
+</ul>
+<h3 id="availability-transitions">Availability transitions<a class="headerlink" href="#availability-transitions" title="Permanent link">&para;</a></h3>
+<p>Hippo has <strong>no hard deletes</strong>. <code>a</code> opens the availability dialog, which maps
+the entity lifecycle statuses onto the <code>is_available</code> flag:</p>
+<table>
+<thead>
+<tr>
+<th>Status</th>
+<th><code>is_available</code></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>active</code></td>
+<td><code>true</code></td>
+</tr>
+<tr>
+<td><code>archived</code>, <code>superseded</code>, <code>deleted</code>, <code>distributed</code>, <code>removed</code></td>
+<td><code>false</code></td>
+</tr>
+</tbody>
+</table>
+<p>The chosen status (plus an optional free-text note) is recorded as the reason
+in the provenance log.</p>
+<h3 id="provenance-history">Provenance history<a class="headerlink" href="#provenance-history" title="Permanent link">&para;</a></h3>
+<p><code>p</code> opens the full append-only history for an entity, newest first, with a
+payload inspector showing the diff recorded for the highlighted event.</p>
+<h3 id="schema-explorer">Schema explorer<a class="headerlink" href="#schema-explorer" title="Permanent link">&para;</a></h3>
+<p>Browses the LinkML schema: entity types, slot ranges, required/multivalued
+flags, enum values, and relationships. <code>Enter</code> on a relationship jumps to the
+target type.</p>
+<h3 id="query-screen">Query screen<a class="headerlink" href="#query-screen" title="Permanent link">&para;</a></h3>
+<p><code>Ctrl+Q</code> opens the query screen:</p>
+<ul>
+<li><strong>Field filters</strong> — <code>field=value, field2=value2</code> with AND/OR composition,
+  backed by the SDK <code>QueryEngine</code>. Shown only when the backend supports
+  structured filters (SDK mode); the REST API points you at full-text search
+  instead.</li>
+<li><strong>Full-text search</strong> — backed by the FTS index in both modes.</li>
+</ul>
+<p>Results land in a table; <code>Enter</code> opens the detail screen.</p>
+<h2 id="keyboard-shortcuts">Keyboard shortcuts<a class="headerlink" href="#keyboard-shortcuts" title="Permanent link">&para;</a></h2>
+<p>Press <code>?</code> inside the TUI for this list.</p>
+<table>
+<thead>
+<tr>
+<th>Key</th>
+<th>Action</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>q</code> / <code>Ctrl+C</code></td>
+<td>Quit</td>
+</tr>
+<tr>
+<td><code>?</code></td>
+<td>Help overlay</td>
+</tr>
+<tr>
+<td><code>/</code> or <code>Ctrl+P</code></td>
+<td>Command palette (jump to any entity type or command)</td>
+</tr>
+<tr>
+<td><code>Ctrl+Q</code></td>
+<td>Query screen</td>
+</tr>
+<tr>
+<td><code>Ctrl+T</code></td>
+<td>Toggle dark/light theme</td>
+</tr>
+<tr>
+<td><code>Tab</code></td>
+<td>Cycle focus between panels</td>
+</tr>
+<tr>
+<td><code>↑</code> / <code>↓</code></td>
+<td>Navigate lists</td>
+</tr>
+<tr>
+<td><code>Enter</code></td>
+<td>Select / drill in</td>
+</tr>
+<tr>
+<td><code>Esc</code></td>
+<td>Go back / dismiss</td>
+</tr>
+<tr>
+<td><code>r</code></td>
+<td>Refresh current view (also invalidates the schema cache)</td>
+</tr>
+<tr>
+<td><code>f</code></td>
+<td>Focus filter bar (entity browser)</td>
+</tr>
+<tr>
+<td><code>←</code> / <code>→</code></td>
+<td>Previous / next page</td>
+</tr>
+<tr>
+<td><code>n</code></td>
+<td>New entity</td>
+</tr>
+<tr>
+<td><code>e</code></td>
+<td>Edit entity</td>
+</tr>
+<tr>
+<td><code>a</code></td>
+<td>Availability transition</td>
+</tr>
+<tr>
+<td><code>p</code></td>
+<td>Provenance history</td>
+</tr>
+</tbody>
+</table>
+<h2 id="architecture-notes">Architecture notes<a class="headerlink" href="#architecture-notes" title="Permanent link">&para;</a></h2>
+<p>The TUI is a pure consumer of the SDK (<a href="../design-principles/">design principles</a>):
+all views talk to a small <code>TUIBackend</code> protocol with two implementations —
+<code>SDKBackend</code> (wraps <code>HippoClient</code>, dispatching sync calls off the event loop)
+and <code>RESTBackend</code> (an <code>httpx</code> async client for <code>hippo serve</code>). Backends
+declare capabilities (structured filters, FTS) and the UI gates features
+accordingly, so both modes stay first-class. All data loading runs in
+Textual workers; the UI never blocks.</p>
 
 
 
