@@ -10,13 +10,13 @@
       
       
       
-        <link rel="canonical" href="https://bu-neuromics.github.io/hippo/installing-recipes/">
+        <link rel="canonical" href="https://bu-neuromics.github.io/hippo/graphql/">
       
       
-        <link rel="prev" href="../writing-a-recipe/">
+        <link rel="prev" href="../typed-openapi/">
       
       
-        <link rel="next" href="../recipe-reference/">
+        <link rel="next" href="../reference-loaders/">
       
       
         
@@ -27,7 +27,7 @@
     
     
       
-        <title>Installing Recipes - Hippo</title>
+        <title>GraphQL API - Hippo</title>
       
     
     
@@ -78,7 +78,7 @@
     <div data-md-component="skip">
       
         
-        <a href="#installing-recipes" class="md-skip">
+        <a href="#graphql-api" class="md-skip">
           Skip to content
         </a>
       
@@ -112,7 +112,7 @@
         <div class="md-header__topic" data-md-component="header-topic">
           <span class="md-ellipsis">
             
-              Installing Recipes
+              GraphQL API
             
           </span>
         </div>
@@ -451,9 +451,11 @@
   
   
   
+    
   
-    <li class="md-tabs__item">
-      <a href="../graphql/" class="md-tabs__link">
+  
+    <li class="md-tabs__item md-tabs__item--active">
+      <a href="./" class="md-tabs__link">
         
   
   
@@ -490,12 +492,10 @@
   
   
   
-    
-  
   
     
     
-      <li class="md-tabs__item md-tabs__item--active">
+      <li class="md-tabs__item">
         <a href="../writing-a-recipe/" class="md-tabs__link">
           
   
@@ -901,10 +901,37 @@
       
   
   
+    
   
   
-    <li class="md-nav__item">
-      <a href="../graphql/" class="md-nav__link">
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    GraphQL API
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
         
   
   
@@ -920,6 +947,170 @@
   
 
       </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#installation" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Installation
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#serving" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Serving
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Serving">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#embedding" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Embedding
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#what-gets-generated" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        What gets generated
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="What gets generated">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#relationships-traverse-the-graph" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Relationships traverse the graph
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#system-and-temporal-fields" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        System and temporal fields
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#lifecycle-not-deletion" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Lifecycle, not deletion
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#full-text-search" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Full-text search
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#schema-introspection-the-hippo-kind" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Schema introspection (the Hippo kind)
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#errors" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Errors
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#hardening" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Hardening
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#known-limitations" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Known limitations
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
     </li>
   
 
@@ -1071,31 +1262,26 @@
       
   
   
-    
   
   
-  
     
     
     
     
-      
-        
-        
       
       
         
       
     
     
-    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
+    <li class="md-nav__item md-nav__item--nested">
       
         
         
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_15" checked>
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_15" >
         
           
-          <label class="md-nav__link" for="__nav_15" id="__nav_15_label" tabindex="">
+          <label class="md-nav__link" for="__nav_15" id="__nav_15_label" tabindex="0">
             
   
   
@@ -1113,7 +1299,7 @@
             <span class="md-nav__icon md-icon"></span>
           </label>
         
-        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_15_label" aria-expanded="true">
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_15_label" aria-expanded="false">
           <label class="md-nav__title" for="__nav_15">
             <span class="md-nav__icon md-icon"></span>
             
@@ -1156,37 +1342,10 @@
                 
   
   
-    
   
   
-  
-    <li class="md-nav__item md-nav__item--active">
-      
-      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
-      
-      
-        
-      
-      
-        <label class="md-nav__link md-nav__link--active" for="__toc">
-          
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    Installing Recipes
-  
-
-    
-  </span>
-  
-  
-
-          <span class="md-nav__icon md-icon"></span>
-        </label>
-      
-      <a href="./" class="md-nav__link md-nav__link--active">
+    <li class="md-nav__item">
+      <a href="../installing-recipes/" class="md-nav__link">
         
   
   
@@ -1202,131 +1361,6 @@
   
 
       </a>
-      
-        
-
-<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
-  
-  
-  
-    
-  
-  
-    <label class="md-nav__title" for="__toc">
-      <span class="md-nav__icon md-icon"></span>
-      Table of contents
-    </label>
-    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
-      
-        <li class="md-nav__item">
-  <a href="#recipe-sources" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Recipe sources
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#inspecting-a-recipe" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Inspecting a recipe
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#installing-a-recipe" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Installing a recipe
-      
-    </span>
-  </a>
-  
-    <nav class="md-nav" aria-label="Installing a recipe">
-      <ul class="md-nav__list">
-        
-          <li class="md-nav__item">
-  <a href="#what-happens-during-import" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        What happens during import
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#prefix-collision" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Prefix collision
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#digest-mismatch" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Digest mismatch
-      
-    </span>
-  </a>
-  
-</li>
-        
-      </ul>
-    </nav>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#content-addressable-cache" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Content-addressable cache
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#reproducing-a-deployment-with-a-lockfile" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Reproducing a deployment with a lockfile
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#v1-limitations" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        v1 limitations
-      
-    </span>
-  </a>
-  
-</li>
-      
-    </ul>
-  
-</nav>
-      
     </li>
   
 
@@ -1537,10 +1571,10 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#recipe-sources" class="md-nav__link">
+  <a href="#installation" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Recipe sources
+        Installation
       
     </span>
   </a>
@@ -1548,55 +1582,22 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#inspecting-a-recipe" class="md-nav__link">
+  <a href="#serving" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Inspecting a recipe
+        Serving
       
     </span>
   </a>
   
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#installing-a-recipe" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Installing a recipe
-      
-    </span>
-  </a>
-  
-    <nav class="md-nav" aria-label="Installing a recipe">
+    <nav class="md-nav" aria-label="Serving">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
-  <a href="#what-happens-during-import" class="md-nav__link">
+  <a href="#embedding" class="md-nav__link">
     <span class="md-ellipsis">
       
-        What happens during import
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#prefix-collision" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Prefix collision
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#digest-mismatch" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Digest mismatch
+        Embedding
       
     </span>
   </a>
@@ -1609,10 +1610,82 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#content-addressable-cache" class="md-nav__link">
+  <a href="#what-gets-generated" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Content-addressable cache
+        What gets generated
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="What gets generated">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#relationships-traverse-the-graph" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Relationships traverse the graph
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#system-and-temporal-fields" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        System and temporal fields
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#lifecycle-not-deletion" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Lifecycle, not deletion
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#full-text-search" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Full-text search
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#schema-introspection-the-hippo-kind" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Schema introspection (the Hippo kind)
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#errors" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Errors
       
     </span>
   </a>
@@ -1620,10 +1693,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#reproducing-a-deployment-with-a-lockfile" class="md-nav__link">
+  <a href="#hardening" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Reproducing a deployment with a lockfile
+        Hardening
       
     </span>
   </a>
@@ -1631,10 +1704,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#v1-limitations" class="md-nav__link">
+  <a href="#known-limitations" class="md-nav__link">
     <span class="md-ellipsis">
       
-        v1 limitations
+        Known limitations
       
     </span>
   </a>
@@ -1661,134 +1734,163 @@
   
 
 
-<h1 id="installing-recipes">Installing Recipes<a class="headerlink" href="#installing-recipes" title="Permanent link">&para;</a></h1>
-<p>Recipes are declarative LinkML schema bundles that extend a Hippo deployment's schema. This guide covers how to inspect, install, and reproduce recipe deployments.</p>
-<hr />
-<h2 id="recipe-sources">Recipe sources<a class="headerlink" href="#recipe-sources" title="Permanent link">&para;</a></h2>
-<p>A recipe author distributes their recipe as one of:</p>
-<ul>
-<li>A directory containing <code>recipe.yaml</code> and <code>schema.yaml</code></li>
-<li>A tarball (<code>*.tar.gz</code>) with that directory as its root</li>
-<li>An <code>https:</code> URL pointing at a tarball, with a published sha256 digest</li>
-</ul>
-<hr />
-<h2 id="inspecting-a-recipe">Inspecting a recipe<a class="headerlink" href="#inspecting-a-recipe" title="Permanent link">&para;</a></h2>
-<p>Before installing, use <code>hippo recipe inspect</code> to examine what a recipe declares — without writing any state:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>hippo<span class="w"> </span>recipe<span class="w"> </span>inspect<span class="w"> </span>./scrnaseq-1.2.0.tar.gz
+<h1 id="graphql-api">GraphQL API<a class="headerlink" href="#graphql-api" title="Permanent link">&para;</a></h1>
+<p>Hippo can serve an autogenerated GraphQL API alongside the REST API. The GraphQL
+schema — object types, enums, relationship fields, queries, and mutations — is
+generated at startup from your deployment's LinkML schema, so it always matches
+your data model. No per-entity GraphQL code is ever written.</p>
+<p>Like the REST API, the GraphQL transport is a thin wrapper: every resolver
+delegates to the same <code>HippoClient</code> the SDK, REST, and TUI use, against the same
+storage.</p>
+<h2 id="installation">Installation<a class="headerlink" href="#installation" title="Permanent link">&para;</a></h2>
+<p>GraphQL support ships in the optional <code>graphql</code> extra:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>pip<span class="w"> </span>install<span class="w"> </span><span class="s1">&#39;hippo[graphql]&#39;</span>
 </code></pre></div>
-<p>Example output:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>id:           org.broad.scrnaseq
-<a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a>name:         scrnaseq
-<a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a>version:      1.2.0
-<a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a>hippo:        &gt;=0.3,&lt;1.0
-<a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a>created_at:   2026-05-27T14:00:00Z
-<a id="__codelineno-1-6" name="__codelineno-1-6" href="#__codelineno-1-6"></a>description:  Single-cell RNA-seq metadata schema fragment
-<a id="__codelineno-1-7" name="__codelineno-1-7" href="#__codelineno-1-7"></a>license:      CC-BY-4.0
-<a id="__codelineno-1-8" name="__codelineno-1-8" href="#__codelineno-1-8"></a>digest:       sha256:f3a8c9b...
-<a id="__codelineno-1-9" name="__codelineno-1-9" href="#__codelineno-1-9"></a>classes:      3
-<a id="__codelineno-1-10" name="__codelineno-1-10" href="#__codelineno-1-10"></a>slots:        0
+<p>(It is also included in <code>hippo[all]</code>.)</p>
+<h2 id="serving">Serving<a class="headerlink" href="#serving" title="Permanent link">&para;</a></h2>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>hippo<span class="w"> </span>serve<span class="w"> </span>--graphql<span class="w">                 </span><span class="c1"># auto-detect config in the cwd</span>
+<a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a>hippo<span class="w"> </span>serve<span class="w"> </span>--graphql<span class="w"> </span>--config<span class="w"> </span>hippo.yaml
+<a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a>hippo<span class="w"> </span>serve<span class="w"> </span>--graphql<span class="w"> </span>--graphql-max-depth<span class="w"> </span><span class="m">6</span><span class="w">   </span><span class="c1"># tighten the query-depth limit</span>
 </code></pre></div>
-<p>To list every class and slot the recipe declares, add <code>--show-elements</code>:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a>hippo<span class="w"> </span>recipe<span class="w"> </span>inspect<span class="w"> </span>./scrnaseq-1.2.0.tar.gz<span class="w"> </span>--show-elements
+<p>The GraphQL endpoint mounts at <code>http://host:port/graphql</code> on the same server as
+the REST routes. Opening it in a browser (GET) serves the <strong>GraphiQL</strong> IDE;
+executing operations (POST) requires the same <code>Authorization: Bearer &lt;token&gt;</code>
+header as the REST API.</p>
+<p>The deployment must be schema-backed: your config's <code>schema_path</code> (or
+<code>--config</code>) provides the LinkML schema the GraphQL surface is generated from.
+Without one, <code>--graphql</code> fails at startup with a configuration error.</p>
+<h3 id="embedding">Embedding<a class="headerlink" href="#embedding" title="Permanent link">&para;</a></h3>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">hippo.core.factory</span><span class="w"> </span><span class="kn">import</span> <span class="n">create_client_from_config</span><span class="p">,</span> <span class="n">load_config_autodetect</span>
+<a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a><span class="kn">from</span><span class="w"> </span><span class="nn">hippo.serve</span><span class="w"> </span><span class="kn">import</span> <span class="n">create_default_app</span>
+<a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a>
+<a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a><span class="n">config</span> <span class="o">=</span> <span class="n">load_config_autodetect</span><span class="p">(</span><span class="s2">&quot;hippo.yaml&quot;</span><span class="p">)</span>
+<a id="__codelineno-2-5" name="__codelineno-2-5" href="#__codelineno-2-5"></a><span class="n">client</span> <span class="o">=</span> <span class="n">create_client_from_config</span><span class="p">(</span><span class="n">config</span><span class="p">)</span>
+<a id="__codelineno-2-6" name="__codelineno-2-6" href="#__codelineno-2-6"></a><span class="n">app</span> <span class="o">=</span> <span class="n">create_default_app</span><span class="p">(</span><span class="n">client</span><span class="p">,</span> <span class="n">graphql</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">graphql_max_query_depth</span><span class="o">=</span><span class="mi">10</span><span class="p">)</span>
 </code></pre></div>
-<p><code>inspect</code> accepts a directory path, tarball path, <code>file:</code> URI, or <code>https:</code> URI. No DB writes, no cache writes, no provenance records are created.</p>
-<hr />
-<h2 id="installing-a-recipe">Installing a recipe<a class="headerlink" href="#installing-a-recipe" title="Permanent link">&para;</a></h2>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a>hippo<span class="w"> </span>recipe<span class="w"> </span>import<span class="w"> </span>&lt;source&gt;<span class="w"> </span><span class="o">[</span>--digest<span class="w"> </span>&lt;hash&gt;<span class="o">]</span><span class="w"> </span><span class="o">[</span>--dry-run<span class="o">]</span>
-</code></pre></div>
-<p><strong>From a local directory or tarball:</strong></p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a>hippo<span class="w"> </span>recipe<span class="w"> </span>import<span class="w"> </span>./scrnaseq-1.2.0/
-<a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a>hippo<span class="w"> </span>recipe<span class="w"> </span>import<span class="w"> </span>/path/to/scrnaseq-1.2.0.tar.gz
-</code></pre></div>
-<p><strong>From an HTTPS URL:</strong></p>
-<p><code>--digest</code> is required for <code>https:</code> sources. Obtain the digest from the recipe author's release notes or by running <code>hippo recipe inspect</code> on a local copy:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a>hippo<span class="w"> </span>recipe<span class="w"> </span>import<span class="w"> </span>https://zenodo.org/record/12345/files/scrnaseq-1.2.0.tar.gz<span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a><span class="w">    </span>--digest<span class="w"> </span>sha256:f3a8c9b...
-</code></pre></div>
-<p><strong>Dry run:</strong></p>
-<p>A dry run resolves and validates all dependencies, checks the <code>hippo_version</code> specifier, and checks Reference Loader preconditions — but writes nothing to the database:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a>hippo<span class="w"> </span>recipe<span class="w"> </span>import<span class="w"> </span>./scrnaseq-1.2.0/<span class="w"> </span>--dry-run
-</code></pre></div>
-<h3 id="what-happens-during-import">What happens during import<a class="headerlink" href="#what-happens-during-import" title="Permanent link">&para;</a></h3>
-<ol>
-<li>Hippo resolves every <code>parent</code> and <code>requires.recipes</code> dependency bottom-up, recursively.</li>
-<li><code>hippo_version</code> is checked against the running Hippo version; import fails if the specifier excludes it.</li>
-<li>Every <code>requires.reference_loaders</code> pin is checked against installed loader versions; import fails if any pin is unmet (Hippo does not install loaders automatically).</li>
-<li>Each schema fragment is merged through <code>SchemaManager</code>, verifying no prefix collisions and no in-place redefinition of upstream classes.</li>
-<li>An <code>installed_recipes</code> entry and a <code>recipe_imported</code> provenance event are written for each recipe — all in a single storage transaction.</li>
-</ol>
-<p>If anything fails, the entire transaction rolls back — no partial state is left.</p>
-<h3 id="prefix-collision">Prefix collision<a class="headerlink" href="#prefix-collision" title="Permanent link">&para;</a></h3>
-<p>If a recipe's <code>name</code>/<code>default_prefix</code> matches a prefix already installed by another recipe, a Reference Loader, or a hand-authored class, import fails immediately with <code>RecipePrefixCollisionError</code>. The error message identifies the conflicting prefix and its source. No state is changed.</p>
-<h3 id="digest-mismatch">Digest mismatch<a class="headerlink" href="#digest-mismatch" title="Permanent link">&para;</a></h3>
-<p>For <code>https:</code> sources, Hippo verifies the fetched bytes' canonical content hash against the declared <code>--digest</code>. A mismatch aborts with <code>RecipeDigestMismatchError</code>. The cache is not polluted — the fetch result is discarded.</p>
-<hr />
-<h2 id="content-addressable-cache">Content-addressable cache<a class="headerlink" href="#content-addressable-cache" title="Permanent link">&para;</a></h2>
-<p><code>HttpsResolver</code> caches fetched recipes at <code>~/.hippo/recipe-cache/&lt;sha256&gt;/</code>. A cache hit skips the network entirely on subsequent installs of the same digest. Cache eviction is not implemented in v1.</p>
-<p>To use a different cache directory, set <code>HIPPO_RECIPE_CACHE</code>:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a><span class="nb">export</span><span class="w"> </span><span class="nv">HIPPO_RECIPE_CACHE</span><span class="o">=</span>/shared/hippo-recipe-cache
-<a id="__codelineno-7-2" name="__codelineno-7-2" href="#__codelineno-7-2"></a>hippo<span class="w"> </span>recipe<span class="w"> </span>import<span class="w"> </span>https://zenodo.org/record/12345/files/scrnaseq-1.2.0.tar.gz<span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-7-3" name="__codelineno-7-3" href="#__codelineno-7-3"></a><span class="w">    </span>--digest<span class="w"> </span>sha256:f3a8c9b...
-</code></pre></div>
-<hr />
-<h2 id="reproducing-a-deployment-with-a-lockfile">Reproducing a deployment with a lockfile<a class="headerlink" href="#reproducing-a-deployment-with-a-lockfile" title="Permanent link">&para;</a></h2>
-<div class="admonition note">
-<p class="admonition-title">Phase 4 — coming soon</p>
-<p><code>export-lockfile</code> and <code>install-from-lockfile</code> are not yet available. They ship in Phase 4 of the recipe system.</p>
-</div>
-<p>A <strong>lockfile</strong> captures the exact set of installed recipes — id, version, source URI, and verified digest — so a peer instance can reproduce the same schema state.</p>
-<p><strong>Export the lockfile from an existing instance:</strong></p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a>hippo<span class="w"> </span>recipe<span class="w"> </span>export-lockfile<span class="w"> </span>--out<span class="w"> </span>recipe.lock.yaml
-</code></pre></div>
-<p>This serialises <code>hippo_meta.installed_recipes</code> as a portable YAML document:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a><span class="nt">lockfile_version</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">1</span>
-<a id="__codelineno-9-2" name="__codelineno-9-2" href="#__codelineno-9-2"></a><span class="nt">installed_recipes</span><span class="p">:</span>
-<a id="__codelineno-9-3" name="__codelineno-9-3" href="#__codelineno-9-3"></a><span class="w">  </span><span class="nt">org.broad.scrnaseq</span><span class="p">:</span>
-<a id="__codelineno-9-4" name="__codelineno-9-4" href="#__codelineno-9-4"></a><span class="w">    </span><span class="nt">id</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">org.broad.scrnaseq</span>
-<a id="__codelineno-9-5" name="__codelineno-9-5" href="#__codelineno-9-5"></a><span class="w">    </span><span class="nt">version</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">1.2.0</span>
-<a id="__codelineno-9-6" name="__codelineno-9-6" href="#__codelineno-9-6"></a><span class="w">    </span><span class="nt">source</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">https://zenodo.org/record/12345/files/scrnaseq-1.2.0.tar.gz</span>
-<a id="__codelineno-9-7" name="__codelineno-9-7" href="#__codelineno-9-7"></a><span class="w">    </span><span class="nt">digest</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">sha256:f3a8c9b...</span>
-<a id="__codelineno-9-8" name="__codelineno-9-8" href="#__codelineno-9-8"></a><span class="w">    </span><span class="nt">installed_at</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;2026-05-27T14:30:00Z&quot;</span>
-<a id="__codelineno-9-9" name="__codelineno-9-9" href="#__codelineno-9-9"></a><span class="w">    </span><span class="nt">parent</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">null</span>
-</code></pre></div>
-<p><strong>Reproduce on a fresh instance:</strong></p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-10-1" name="__codelineno-10-1" href="#__codelineno-10-1"></a>hippo<span class="w"> </span>recipe<span class="w"> </span>install-from-lockfile<span class="w"> </span>recipe.lock.yaml
-</code></pre></div>
-<p>Hippo re-fetches each entry via its <code>source</code>, verifies each <code>digest</code>, and installs in dependency order. The round-trip guarantee: the restored instance will have identical <code>id</code>, <code>version</code>, and <code>digest</code> values for every entry.</p>
-<p>Relative paths in a lockfile resolve against the lockfile's directory, so a lockfile alongside local tarballs is fully portable.</p>
-<hr />
-<h2 id="v1-limitations">v1 limitations<a class="headerlink" href="#v1-limitations" title="Permanent link">&para;</a></h2>
-<p>The following limitations apply in v1. Future versions may lift some of them.</p>
+<h2 id="what-gets-generated">What gets generated<a class="headerlink" href="#what-gets-generated" title="Permanent link">&para;</a></h2>
+<p>For each concrete entity class in your schema (say <code>Sample</code>), Hippo generates:</p>
 <table>
 <thead>
 <tr>
-<th>Limitation</th>
-<th>Notes</th>
+<th>Surface</th>
+<th>Example</th>
 </tr>
 </thead>
 <tbody>
 <tr>
-<td><strong>URL availability</strong></td>
-<td>Hippo cannot guarantee that <code>source</code> URIs remain resolvable over time. Use DOI-minted releases (Zenodo, figshare) for maximum link stability.</td>
+<td>Object type</td>
+<td><code>type Sample</code> with every slot as a typed field</td>
 </tr>
 <tr>
-<td><strong>No signing</strong></td>
-<td>v1 verifies byte integrity (digest) but not authorship. Signing is deferred to v2.</td>
+<td>Page type</td>
+<td><code>type SamplePage { items, total, limit, offset }</code></td>
 </tr>
 <tr>
-<td><strong>No uninstall</strong></td>
-<td>Recipes cannot be removed from an instance, consistent with Hippo's no-hard-deletes principle. Schema elements contributed by a recipe may be referenced by existing entities. <strong>Workaround:</strong> rebuild the instance from a lockfile that omits the unwanted recipe.</td>
+<td>Input types</td>
+<td><code>input SampleCreateInput</code>, <code>input SampleUpdateInput</code></td>
 </tr>
 <tr>
-<td><strong>Bootstrap-only install</strong></td>
-<td>v1 only supports additive imports — the recipe's fragment must not overlap with any already-installed prefix. In-place modification of upstream classes is rejected. Extend upstream classes via LinkML inheritance (<code>is_a:</code> + <code>slot_usage:</code>).</td>
+<td>Queries</td>
+<td><code>sample(id)</code>, <code>samples(filters, filterMode, limit, offset)</code>, <code>searchSamples(q, limit, offset)</code></td>
 </tr>
 <tr>
-<td><strong>No registry or discovery</strong></td>
-<td>There is no <code>hippo recipe search</code> command. Find recipes via READMEs, lab wikis, or DOI-minted releases.</td>
+<td>Mutations</td>
+<td><code>createSample</code>, <code>updateSample</code>, <code>setSampleAvailability</code>, <code>setSampleAvailabilityBulk</code>, <code>supersedeSample</code></td>
 </tr>
 </tbody>
 </table>
+<p>LinkML enums become GraphQL enums. Field names are camelCased
+(<code>volume_ml</code> → <code>volumeMl</code>); write payloads are mapped back to slot names before
+they reach the SDK.</p>
+<p>The exposed class set is decided by Hippo's shared type model
+(<code>hippo.core.schema_typing</code>) — the same model behind the typed Python SDK — so
+the two surfaces never drift. Framework classes (<code>Entity</code>, <code>ProvenanceRecord</code>,
+<code>Process</code>, <code>Validator</code>, <code>ReferenceLoader</code>) are never exposed; <code>ExternalID</code> is.</p>
+<h3 id="relationships-traverse-the-graph">Relationships traverse the graph<a class="headerlink" href="#relationships-traverse-the-graph" title="Permanent link">&para;</a></h3>
+<p>A class-ranged slot generates <strong>two</strong> fields: the raw stored UUID and a resolved
+field that walks the relationship.</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="p">{</span>
+<a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a><span class="w">  </span><span class="n">samples</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a><span class="w">    </span><span class="n">items</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-3-4" name="__codelineno-3-4" href="#__codelineno-3-4"></a><span class="w">      </span><span class="n">name</span>
+<a id="__codelineno-3-5" name="__codelineno-3-5" href="#__codelineno-3-5"></a><span class="w">      </span><span class="n">donorId</span><span class="w">          </span><span class="c"># raw stored UUID</span>
+<a id="__codelineno-3-6" name="__codelineno-3-6" href="#__codelineno-3-6"></a><span class="w">      </span><span class="n">donor</span><span class="w"> </span><span class="p">{</span><span class="w">          </span><span class="c"># resolved Donor — one batched query, no N+1</span>
+<a id="__codelineno-3-7" name="__codelineno-3-7" href="#__codelineno-3-7"></a><span class="w">        </span><span class="n">name</span>
+<a id="__codelineno-3-8" name="__codelineno-3-8" href="#__codelineno-3-8"></a><span class="w">        </span><span class="n">sex</span>
+<a id="__codelineno-3-9" name="__codelineno-3-9" href="#__codelineno-3-9"></a><span class="w">      </span><span class="p">}</span>
+<a id="__codelineno-3-10" name="__codelineno-3-10" href="#__codelineno-3-10"></a><span class="w">    </span><span class="p">}</span>
+<a id="__codelineno-3-11" name="__codelineno-3-11" href="#__codelineno-3-11"></a><span class="w">  </span><span class="p">}</span>
+<a id="__codelineno-3-12" name="__codelineno-3-12" href="#__codelineno-3-12"></a><span class="p">}</span>
+</code></pre></div>
+<p>Resolved fields load through a per-request DataLoader: resolving the same target
+type N times in one request issues a single batched query.</p>
+<h3 id="system-and-temporal-fields">System and temporal fields<a class="headerlink" href="#system-and-temporal-fields" title="Permanent link">&para;</a></h3>
+<p>Every entity type carries <code>id</code> and <code>isAvailable</code> (stored), plus the read-only
+computed fields <code>version</code>, <code>createdAt</code>, <code>updatedAt</code>, <code>schemaVersion</code>,
+<code>createdBy</code>, <code>updatedBy</code>, and <code>supersededBy</code> — derived from the provenance log
+at read time, never stored on entity rows.</p>
+<h3 id="lifecycle-not-deletion">Lifecycle, not deletion<a class="headerlink" href="#lifecycle-not-deletion" title="Permanent link">&para;</a></h3>
+<p>There are no delete mutations. Hippo never hard-deletes; use availability
+transitions:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="k">mutation</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a><span class="w">  </span><span class="n">setSampleAvailability</span><span class="p">(</span><span class="n">id</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;…&quot;</span><span class="p">,</span><span class="w"> </span><span class="n">isAvailable</span><span class="p">:</span><span class="w"> </span><span class="nb">false</span><span class="p">,</span><span class="w"> </span><span class="n">reason</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;depleted&quot;</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a><span class="w">    </span><span class="n">entityId</span>
+<a id="__codelineno-4-4" name="__codelineno-4-4" href="#__codelineno-4-4"></a><span class="w">    </span><span class="n">isAvailable</span>
+<a id="__codelineno-4-5" name="__codelineno-4-5" href="#__codelineno-4-5"></a><span class="w">  </span><span class="p">}</span>
+<a id="__codelineno-4-6" name="__codelineno-4-6" href="#__codelineno-4-6"></a><span class="p">}</span>
+<a id="__codelineno-4-7" name="__codelineno-4-7" href="#__codelineno-4-7"></a>
+<a id="__codelineno-4-8" name="__codelineno-4-8" href="#__codelineno-4-8"></a><span class="k">mutation</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-4-9" name="__codelineno-4-9" href="#__codelineno-4-9"></a><span class="w">  </span><span class="n">setSampleAvailabilityBulk</span><span class="p">(</span><span class="n">ids</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="s">&quot;…&quot;</span><span class="p">,</span><span class="w"> </span><span class="s">&quot;…&quot;</span><span class="p">],</span><span class="w"> </span><span class="n">isAvailable</span><span class="p">:</span><span class="w"> </span><span class="nb">false</span><span class="p">,</span><span class="w"> </span><span class="n">reason</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;audit&quot;</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-4-10" name="__codelineno-4-10" href="#__codelineno-4-10"></a><span class="w">    </span><span class="n">total</span><span class="w"> </span><span class="n">succeeded</span><span class="w"> </span><span class="n">failed</span>
+<a id="__codelineno-4-11" name="__codelineno-4-11" href="#__codelineno-4-11"></a><span class="w">    </span><span class="n">failures</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="n">entityId</span><span class="w"> </span><span class="n">error</span><span class="w"> </span><span class="p">}</span>
+<a id="__codelineno-4-12" name="__codelineno-4-12" href="#__codelineno-4-12"></a><span class="w">  </span><span class="p">}</span>
+<a id="__codelineno-4-13" name="__codelineno-4-13" href="#__codelineno-4-13"></a><span class="p">}</span>
+</code></pre></div>
+<p>The bulk form mirrors the REST bulk-availability endpoint: per-record error
+isolation — one bad id never rolls back its siblings.</p>
+<p>Supersession works the same way as in the SDK, with a read-side query for the
+chain:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="k">mutation</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="n">supersedeSample</span><span class="p">(</span><span class="n">id</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;old&quot;</span><span class="p">,</span><span class="w"> </span><span class="n">replacementId</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;new&quot;</span><span class="p">,</span><span class="w"> </span><span class="n">reason</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;remeasured&quot;</span><span class="p">)</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="n">entityId</span><span class="w"> </span><span class="n">supersededBy</span><span class="w"> </span><span class="p">}</span><span class="w"> </span><span class="p">}</span>
+<a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a>
+<a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a><span class="k">query</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="n">supersededBy</span><span class="p">(</span><span class="n">id</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;old&quot;</span><span class="p">)</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="n">entityId</span><span class="w"> </span><span class="n">supersededBy</span><span class="w"> </span><span class="n">chain</span><span class="w"> </span><span class="p">}</span><span class="w"> </span><span class="p">}</span>
+</code></pre></div>
+<h3 id="full-text-search">Full-text search<a class="headerlink" href="#full-text-search" title="Permanent link">&para;</a></h3>
+<p>Slots annotated <code>hippo_search</code> in your schema are searchable per type:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a><span class="p">{</span><span class="w"> </span><span class="n">searchSamples</span><span class="p">(</span><span class="n">q</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;hippocampus&quot;</span><span class="p">,</span><span class="w"> </span><span class="n">limit</span><span class="p">:</span><span class="w"> </span><span class="mi">20</span><span class="p">)</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="n">id</span><span class="w"> </span><span class="n">name</span><span class="w"> </span><span class="p">}</span><span class="w"> </span><span class="p">}</span>
+</code></pre></div>
+<h3 id="schema-introspection-the-hippo-kind">Schema introspection (the Hippo kind)<a class="headerlink" href="#schema-introspection-the-hippo-kind" title="Permanent link">&para;</a></h3>
+<p>Beyond GraphQL's own <code>__schema</code>, the API exposes Hippo's domain type model —
+useful for generic clients that need the LinkML classification:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a><span class="p">{</span>
+<a id="__codelineno-7-2" name="__codelineno-7-2" href="#__codelineno-7-2"></a><span class="w">  </span><span class="n">hippoSchema</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="n">name</span><span class="w"> </span><span class="n">accessorName</span><span class="w"> </span><span class="p">}</span>
+<a id="__codelineno-7-3" name="__codelineno-7-3" href="#__codelineno-7-3"></a><span class="w">  </span><span class="n">hippoEntityType</span><span class="p">(</span><span class="n">name</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Sample&quot;</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-7-4" name="__codelineno-7-4" href="#__codelineno-7-4"></a><span class="w">    </span><span class="n">fields</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="n">name</span><span class="w"> </span><span class="n">kind</span><span class="w"> </span><span class="n">range</span><span class="w"> </span><span class="n">role</span><span class="w"> </span><span class="n">required</span><span class="w"> </span><span class="n">multivalued</span><span class="w"> </span><span class="n">targetEntityType</span><span class="w"> </span><span class="n">enumValues</span><span class="w"> </span><span class="p">}</span>
+<a id="__codelineno-7-5" name="__codelineno-7-5" href="#__codelineno-7-5"></a><span class="w">    </span><span class="n">relationships</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="n">field</span><span class="w"> </span><span class="n">targetEntityType</span><span class="w"> </span><span class="p">}</span>
+<a id="__codelineno-7-6" name="__codelineno-7-6" href="#__codelineno-7-6"></a><span class="w">  </span><span class="p">}</span>
+<a id="__codelineno-7-7" name="__codelineno-7-7" href="#__codelineno-7-7"></a><span class="p">}</span>
+</code></pre></div>
+<h2 id="errors">Errors<a class="headerlink" href="#errors" title="Permanent link">&para;</a></h2>
+<p>SDK errors surface as structured GraphQL errors with a machine-readable
+<code>extensions.code</code>: <code>VALIDATION_FAILED</code> (with the tier-tagged failure envelope
+when available), <code>NOT_FOUND</code>, <code>ALREADY_SUPERSEDED</code>,
+<code>AVAILABILITY_CHANGE_FAILED</code>, or <code>INTERNAL_ERROR</code>.</p>
+<h2 id="hardening">Hardening<a class="headerlink" href="#hardening" title="Permanent link">&para;</a></h2>
+<p>Queries nesting deeper than the configured depth limit (default 10) are
+rejected before execution — relationship fields make unbounded traversals
+expressible, so the cap is the transport's recursion guard. Introspection is
+exempt, so GraphiQL works regardless. Configure with
+<code>--graphql-max-depth</code> / <code>max_query_depth</code>.</p>
+<h2 id="known-limitations">Known limitations<a class="headerlink" href="#known-limitations" title="Permanent link">&para;</a></h2>
+<ul>
+<li><strong>Offset pagination only</strong> — cursor pagination follows the REST roadmap.</li>
+<li><strong>No schema versioning</strong> — the GraphQL schema regenerates from your LinkML
+  schema at startup; breaking LinkML changes break the GraphQL contract the
+  same way they break the typed SDK.</li>
+<li><strong>Equality filters only</strong> (<code>filters</code> + AND/OR composition), mirroring
+  <code>HippoClient.query</code>.</li>
+<li><strong>Updates cannot null-out a field</strong> — omitted and <code>null</code> input fields are
+  both dropped from the patch.</li>
+</ul>
 
 
 
