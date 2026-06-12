@@ -152,3 +152,323 @@ def test_authorization_header_sent_on_every_request(monkeypatch):
 
     assert len(captured_headers) == 1
     assert captured_headers[0].get("Authorization") == "Bearer testtoken"
+
+
+# ---------------------------------------------------------------------------
+# Tests: full REST surface against a mocked `hippo serve` (httpx.MockTransport)
+# ---------------------------------------------------------------------------
+
+import json as _json
+
+from hippo.tui.backend.protocol import BackendError
+
+_SCHEMAS_PAYLOAD = [
+    {
+        "name": "Entity",
+        "abstract": True,
+        "description": "Base",
+        "fields": [{"name": "id", "range": "string", "required": True}],
+    },
+    {
+        "name": "Project",
+        "abstract": False,
+        "description": "A project",
+        "fields": [
+            {"name": "name", "range": "string", "required": True},
+            {"name": "id", "range": "string", "required": True, "identifier": True},
+        ],
+    },
+    {
+        "name": "Sample",
+        "abstract": False,
+        "description": "A sample",
+        "fields": [
+            {"name": "name", "range": "string", "required": True},
+            {"name": "project_id", "range": "Project", "required": False},
+            {"name": "id", "range": "string", "required": True, "identifier": True},
+        ],
+    },
+    {
+        "name": "ProvenanceRecord",
+        "abstract": False,
+        "description": "infra — must be hidden",
+        "fields": [],
+    },
+]
+
+_SAMPLE_RECORD = {
+    "id": "s-1",
+    "entity_type": "Sample",
+    "data": {"name": "S1", "project_id": "p-1"},
+    "version": 2,
+    "is_available": True,
+    "created_at": "2026-06-01T10:00:00+00:00",
+    "updated_at": "2026-06-02T10:00:00+00:00",
+    "schema_version": "1.0.0",
+    "created_by": "alice",
+    "updated_by": "bob",
+    "superseded_by": None,
+}
+
+_HISTORY_PAYLOAD = [
+    {
+        "operation_type": "create",
+        "timestamp": "2026-06-01T10:00:00+00:00",
+        "user_id": "alice",
+        "state_snapshot": {"name": "S1"},
+    },
+    {
+        "operation_type": "update",
+        "timestamp": "2026-06-02T10:00:00+00:00",
+        "user_id": "bob",
+        "state_snapshot": {"name": "S1", "project_id": "p-1"},
+    },
+]
+
+
+def _mock_server(request):
+    """Simulate the `hippo serve` REST surface for the TUI backend."""
+    import httpx
+
+    path = request.url.path
+    if request.headers.get("authorization") != "Bearer test-token":
+        return httpx.Response(401, json={"detail": "Unauthorized access"})
+
+    if path == "/health":
+        return httpx.Response(200, json={"status": "healthy"})
+    if path == "/schemas":
+        return httpx.Response(200, json=_SCHEMAS_PAYLOAD)
+    if path == "/entities" and request.method == "GET":
+        params = dict(request.url.params)
+        assert params["entity_type"] == "Sample"
+        return httpx.Response(
+            200,
+            json={
+                "items": [_SAMPLE_RECORD],
+                "total": 41,
+                "limit": int(params["limit"]),
+                "offset": int(params["offset"]),
+            },
+        )
+    if path == "/entities/s-1" and request.method == "GET":
+        return httpx.Response(200, json=_SAMPLE_RECORD)
+    if path == "/entities/missing" and request.method == "GET":
+        return httpx.Response(404, json={"detail": "Entity not found: missing"})
+    if path == "/entities/s-1/history":
+        return httpx.Response(200, json=_HISTORY_PAYLOAD)
+    if path == "/search":
+        assert dict(request.url.params)["q"] == "S1"
+        return httpx.Response(200, json=[_SAMPLE_RECORD])
+    if path == "/ingest" and request.method == "POST":
+        body = _json.loads(request.content)
+        if not body["data"].get("name"):
+            return httpx.Response(422, json={"detail": "name is required"})
+        return httpx.Response(200, json={**_SAMPLE_RECORD, "id": "new-id"})
+    if path == "/entities/Sample/s-1" and request.method == "PUT":
+        return httpx.Response(200, json=_SAMPLE_RECORD)
+    if path == "/entities/Sample/bulk-availability" and request.method == "POST":
+        body = _json.loads(request.content)
+        if body["entity_ids"] == ["bad-id"]:
+            return httpx.Response(
+                207,
+                json={
+                    "total": 1,
+                    "succeeded": 0,
+                    "failed": 1,
+                    "successes": [],
+                    "failures": [
+                        {"id": "bad-id", "error": "Entity not found: bad-id"}
+                    ],
+                },
+            )
+        return httpx.Response(
+            200,
+            json={
+                "total": 1,
+                "succeeded": 1,
+                "failed": 0,
+                "successes": [
+                    {"id": body["entity_ids"][0], "is_available": body["is_available"]}
+                ],
+                "failures": [],
+            },
+        )
+    return httpx.Response(404, json={"detail": f"No route: {path}"})
+
+
+@pytest.fixture
+def mock_backend():
+    """RESTBackend wired to the mock server via httpx.MockTransport."""
+    import httpx
+
+    errors: list[str] = []
+    backend = RESTBackend(
+        url="http://testserver",
+        token="test-token",
+        status_callback=errors.append,
+    )
+    backend._client = httpx.AsyncClient(
+        transport=httpx.MockTransport(_mock_server),
+        base_url="http://testserver",
+        headers={"Authorization": "Bearer test-token"},
+    )
+    return backend, errors
+
+
+def test_rest_capabilities():
+    backend = RESTBackend(url="http://testserver")
+    caps = backend.capabilities()
+    assert caps.supports_filters is False
+    assert caps.supports_fts is True
+
+
+def test_rest_connection_info_healthy(mock_backend):
+    backend, _errors = mock_backend
+    info = asyncio.run(backend.connection_info())
+    assert info.mode == "rest"
+    assert info.ok is True
+    assert info.target == "http://testserver"
+
+
+def test_rest_schema_hides_abstract_and_infra(mock_backend):
+    backend, _errors = mock_backend
+    schema = asyncio.run(backend.get_schema())
+    names = [et.name for et in schema.entity_types]
+    assert names == ["Project", "Sample"]
+    sample = schema.get_entity_type("Sample")
+    project_ref = next(f for f in sample.fields if f.name == "project_id")
+    assert project_ref.ref_target == "Project"
+    assert len(schema.relationships) == 1
+    assert schema.relationships[0].target_type == "Project"
+
+
+def test_rest_list_entity_types_counts(mock_backend):
+    backend, _errors = mock_backend
+
+    async def run():
+        # Pre-cache schema, then list (counts come from /entities total)
+        await backend.get_schema()
+        return await backend.list_entity_types()
+
+    # The mock asserts entity_type == "Sample"; narrow the schema first.
+    backend._schema_view = None
+
+    async def run_narrow():
+        schema = await backend.get_schema()
+        schema.entity_types = [
+            et for et in schema.entity_types if et.name == "Sample"
+        ]
+        backend._schema_view = schema
+        return await backend.list_entity_types()
+
+    summaries = asyncio.run(run_narrow())
+    assert summaries == [
+        type(summaries[0])(name="Sample", count=41, description="A sample")
+    ]
+
+
+def test_rest_list_entities_pagination(mock_backend):
+    backend, _errors = mock_backend
+    result = asyncio.run(backend.list_entities("Sample", page=2))
+    assert result.page == 2
+    assert result.total_items == 41
+    assert result.total_pages == 3
+    assert result.items[0]["id"] == "s-1"
+
+
+def test_rest_get_entity_detail_with_relationships(mock_backend):
+    backend, _errors = mock_backend
+    detail = asyncio.run(backend.get_entity("Sample", "s-1"))
+    assert detail.id == "s-1"
+    assert detail.fields["is_available"] is True
+    assert detail.fields["version"] == 2
+    assert detail.fields["created_at"] == "2026-06-01T10:00:00+00:00"
+    assert detail.fields["name"] == "S1"
+    assert len(detail.relationships) == 1
+    assert detail.relationships[0].target_type == "Project"
+    assert detail.relationships[0].target_id == "p-1"
+
+
+def test_rest_get_entity_not_found(mock_backend):
+    backend, _errors = mock_backend
+    with pytest.raises(BackendError) as exc_info:
+        asyncio.run(backend.get_entity("Sample", "missing"))
+    assert "missing" in str(exc_info.value)
+
+
+def test_rest_provenance_newest_first(mock_backend):
+    backend, _errors = mock_backend
+    events = asyncio.run(backend.get_provenance("Sample", "s-1"))
+    assert [e.event_type for e in events] == ["update", "create"]
+    assert events[0].actor == "bob"
+    assert events[1].diff == {"name": "S1"}
+
+
+def test_rest_search(mock_backend):
+    backend, _errors = mock_backend
+    results = asyncio.run(backend.search_entities("Sample", "S1"))
+    assert len(results) == 1
+    assert results[0]["id"] == "s-1"
+
+
+def test_rest_create_entity(mock_backend):
+    backend, _errors = mock_backend
+    new_id = asyncio.run(backend.create_entity("Sample", {"name": "S2"}))
+    assert new_id == "new-id"
+
+
+def test_rest_create_entity_validation_error(mock_backend):
+    backend, _errors = mock_backend
+    with pytest.raises(BackendError) as exc_info:
+        asyncio.run(backend.create_entity("Sample", {"name": ""}))
+    assert "name is required" in str(exc_info.value)
+
+
+def test_rest_update_entity(mock_backend):
+    backend, _errors = mock_backend
+    asyncio.run(backend.update_entity("Sample", "s-1", {"name": "S1b"}))
+
+
+def test_rest_set_availability_success(mock_backend):
+    backend, _errors = mock_backend
+    asyncio.run(backend.set_availability("Sample", "s-1", False, reason="archived"))
+
+
+def test_rest_set_availability_partial_failure(mock_backend):
+    backend, _errors = mock_backend
+    with pytest.raises(BackendError) as exc_info:
+        asyncio.run(backend.set_availability("Sample", "bad-id", False))
+    assert "not found" in str(exc_info.value)
+
+
+def test_rest_query_entities_with_filters_unsupported(mock_backend):
+    backend, _errors = mock_backend
+    with pytest.raises(BackendError):
+        asyncio.run(
+            backend.query_entities(
+                "Sample", filters=[{"field": "name", "value": "x"}]
+            )
+        )
+
+
+def test_rest_unauthorized_reports_error():
+    import httpx
+
+    errors: list[str] = []
+    backend = RESTBackend(
+        url="http://testserver", token="wrong", status_callback=errors.append
+    )
+    backend._client = httpx.AsyncClient(
+        transport=httpx.MockTransport(_mock_server),
+        base_url="http://testserver",
+        headers={"Authorization": "Bearer wrong"},
+    )
+    info = asyncio.run(backend.connection_info())
+    assert info.ok is False
+    assert errors and "401" in errors[0]
+
+
+def test_rest_aclose(mock_backend):
+    backend, _errors = mock_backend
+    asyncio.run(backend.aclose())
+    assert backend._client is None

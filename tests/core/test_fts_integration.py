@@ -135,3 +135,69 @@ def sqlite_connection():
     conn.row_factory = sqlite3.Row
     yield conn
     conn.close()
+
+
+class TestFTSStoreThreadRebinding:
+    """Regression: _get_fts_store must re-bind to the caller's connection.
+
+    Connections are thread-local. Before the fix, the adapter cached an
+    FTSStore bound to the first thread's connection forever; FTS writes
+    from any other thread then went through that foreign connection and
+    were never committed, leaving the database permanently write-locked.
+    """
+
+    def test_get_fts_store_rebinds_to_new_connection(self, tmp_path):
+        import sqlite3
+
+        from tests.conftest import _build_minimal_schema_registry
+        from hippo.core.storage.adapters import SQLiteAdapter
+
+        adapter = SQLiteAdapter(
+            str(tmp_path / "rebind.db"),
+            schema_registry=_build_minimal_schema_registry(),
+        )
+        conn_a = sqlite3.connect(":memory:")
+        conn_b = sqlite3.connect(":memory:")
+        store_a = adapter._get_fts_store(conn_a)
+        store_b = adapter._get_fts_store(conn_b)
+        assert store_a._conn is conn_a
+        assert store_b._conn is conn_b
+        adapter.close()
+
+    def test_cross_thread_writes_do_not_wedge_database(self, tmp_path):
+        import sqlite3
+        import threading
+        from pathlib import Path
+
+        from hippo.core.client import HippoClient
+        from hippo.core.storage.adapters import SQLiteAdapter
+        from hippo.linkml_bridge import SchemaRegistry
+
+        schema = (
+            Path(__file__).parents[1] / "fixtures" / "schemas" / "sample_schema.yaml"
+        )
+        db_path = tmp_path / "threads.db"
+        registry = SchemaRegistry.from_path(schema)
+        storage = SQLiteAdapter(str(db_path), schema_registry=registry)
+        client = HippoClient(storage=storage, registry=registry)
+
+        # First write on the main thread binds the (formerly sticky) store.
+        client.create(entity_type="Project", data={"name": "Alpha"})
+
+        # Second write from a worker thread uses a fresh thread-local
+        # connection; its FTS rows must be committed on *that* connection.
+        def worker() -> None:
+            client.create(entity_type="Project", data={"name": "Beta"})
+
+        t = threading.Thread(target=worker)
+        t.start()
+        t.join()
+
+        # The database must not be left write-locked by either thread.
+        probe = sqlite3.connect(str(db_path), timeout=2)
+        try:
+            probe.execute("BEGIN IMMEDIATE")
+            probe.rollback()
+        finally:
+            probe.close()
+        storage.close()
