@@ -150,7 +150,7 @@ class QueryService:
 
     def query(
         self,
-        entity_type: str,
+        entity_type: Optional[str] = None,
         filters: Optional[list[dict[str, Any]]] = None,
         date_from: Optional[str] = None,
         date_to: Optional[str] = None,
@@ -161,6 +161,8 @@ class QueryService:
         """Query entities with filter criteria.
 
         Args:
+            entity_type: Restrict the query to one entity type. ``None``
+                queries across all types.
             filter_mode: How to combine filters — "and" (all must match,
                 default) or "or" (any may match).
         """

@@ -73,7 +73,7 @@ async def list_entities(
     client = await get_client(request)
 
     paginated = client.query(
-        entity_type=entity_type or "entity",
+        entity_type=entity_type,
         filters=[],
         limit=limit,
         offset=offset,
@@ -111,9 +111,15 @@ async def get_entity(
     """
     client = await get_client(request)
 
+    entity_type = client.resolve_type(entity_id)
+    if entity_type is None:
+        raise HTTPException(
+            status_code=404, detail=f"Entity not found: {entity_id}"
+        )
+
     try:
         entity = client.get(
-            entity_type="entity",
+            entity_type=entity_type,
             entity_id=entity_id,
             expand=expand,
         )
@@ -185,8 +191,14 @@ async def delete_entity(
     """
     client = await get_client(request)
 
+    entity_type = client.resolve_type(entity_id)
+    if entity_type is None:
+        raise HTTPException(
+            status_code=404, detail=f"Entity not found: {entity_id}"
+        )
+
     try:
-        client.delete(entity_type="entity", entity_id=entity_id)
+        client.delete(entity_type=entity_type, entity_id=entity_id)
         return {"status": "deleted", "entity_id": entity_id}
     except EntityNotFoundError as e:
         raise HTTPException(status_code=404, detail=str(e))

@@ -4,6 +4,17 @@
 
 ### Fixed
 
+- **REST get/delete-by-id resolve the entity's real type (issue #44).**
+  `GET /entities/{id}` and `DELETE /entities/{id}` passed a hardcoded
+  placeholder `entity_type="entity"` to the SDK; against relational storage
+  that type does not exist, so get-by-id 404'd for entities that exist and
+  delete skipped its existence check. Both routes now resolve the type from
+  the id via `HippoClient.resolve_type` (storage-adapter lookup) and 404
+  cleanly on unknown ids. The list endpoint's no-type path
+  (`GET /entities` without `entity_type`) now queries across all types:
+  `HippoClient.query` accepts `entity_type=None` (cross-class scan in the
+  SQLite adapter; type predicate dropped in Postgres) instead of the same
+  broken placeholder.
 - **`hippo serve` now persists (issue #42).** The serve command built the
   FastAPI app with no `HippoClient`, so every request fell back to a no-arg
   client with `storage=None` — a non-persistent echo stub that ignored config

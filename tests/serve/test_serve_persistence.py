@@ -21,7 +21,7 @@ _FIXTURE_SCHEMA = (
 _AUTH = {"Authorization": "Bearer test-token"}
 
 
-def test_rest_reads_through_configured_client(tmp_path):
+def _make_api(tmp_path):
     cfg = HippoConfig(
         schema_path=str(_FIXTURE_SCHEMA),
         database_url=str(tmp_path / "api.db"),
@@ -29,7 +29,11 @@ def test_rest_reads_through_configured_client(tmp_path):
     )
     client = create_client_from_config(cfg)
     app = create_default_app(client)
-    api = TestClient(app)
+    return client, TestClient(app)
+
+
+def test_rest_reads_through_configured_client(tmp_path):
+    client, api = _make_api(tmp_path)
 
     created = client.create("Project", {"name": "Gamma"})
     pid = created["id"]
@@ -40,6 +44,58 @@ def test_rest_reads_through_configured_client(tmp_path):
     ids = [item["id"] for item in body["items"]]
     assert pid in ids
     assert body["total"] >= 1
+
+    # Get-by-id resolves the entity's real type from the id (issue #44):
+    # no entity_type in the URL, yet the typed row must come back.
+    resp = api.get(f"/entities/{pid}", headers=_AUTH)
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["id"] == pid
+    assert body["entity_type"] == "Project"
+    assert body["data"]["name"] == "Gamma"
+
+
+def test_rest_get_by_id_unknown_id_returns_404(tmp_path):
+    _, api = _make_api(tmp_path)
+
+    resp = api.get("/entities/no-such-id", headers=_AUTH)
+    assert resp.status_code == 404
+
+
+def test_rest_delete_by_id_resolves_type(tmp_path):
+    client, api = _make_api(tmp_path)
+
+    pid = client.create("Project", {"name": "Doomed"})["id"]
+
+    resp = api.delete(f"/entities/{pid}", headers=_AUTH)
+    assert resp.status_code == 200
+    assert resp.json() == {"status": "deleted", "entity_id": pid}
+
+    # Soft-deleted: no longer readable through the API.
+    resp = api.get(f"/entities/{pid}", headers=_AUTH)
+    assert resp.status_code == 404
+
+
+def test_rest_delete_by_id_unknown_id_returns_404(tmp_path):
+    _, api = _make_api(tmp_path)
+
+    resp = api.delete("/entities/no-such-id", headers=_AUTH)
+    assert resp.status_code == 404
+
+
+def test_rest_list_without_type_scans_all_types(tmp_path):
+    client, api = _make_api(tmp_path)
+
+    pid = client.create("Project", {"name": "Alpha"})["id"]
+    sid = client.create("Sample", {"name": "S1", "project_id": pid})["id"]
+
+    resp = api.get("/entities", headers=_AUTH)
+    assert resp.status_code == 200
+    body = resp.json()
+    by_id = {item["id"]: item["entity_type"] for item in body["items"]}
+    assert by_id.get(pid) == "Project"
+    assert by_id.get(sid) == "Sample"
+    assert body["total"] >= 2
 
 
 def test_rest_without_client_does_not_persist(tmp_path):

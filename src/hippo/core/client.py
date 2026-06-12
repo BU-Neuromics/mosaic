@@ -670,7 +670,7 @@ class HippoClient:
 
     def query(
         self,
-        entity_type: str,
+        entity_type: Optional[str] = None,
         filters: Optional[list[dict[str, Any]]] = None,
         date_from: Optional[str] = None,
         date_to: Optional[str] = None,
@@ -681,6 +681,9 @@ class HippoClient:
         """Query entities with filter criteria.
 
         Args:
+            entity_type: Restrict the query to one entity type. ``None``
+                queries across all types (relational adapters scan every
+                concrete per-class table / drop the type predicate).
             filter_mode: How to combine filters — "and" (all must match,
                 default) or "or" (any may match).
         """
