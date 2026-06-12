@@ -79,6 +79,7 @@ class SlotModel:
     required: bool = False
     multivalued: bool = False
     identifier: bool = False
+    has_default: bool = False  # LinkML ``ifabsent`` present
     description: Optional[str] = None
     target_class: Optional[str] = None  # set when kind is REFERENCE
     enum_name: Optional[str] = None  # set when kind is ENUM
@@ -151,6 +152,7 @@ def _classify_slot(slot: Any, registry: SchemaRegistry, enums: dict[str, Any]) -
         required=bool(slot.required),
         multivalued=bool(slot.multivalued),
         identifier=bool(slot.identifier),
+        has_default=getattr(slot, "ifabsent", None) is not None,
         description=slot.description,
         target_class=target_class,
         enum_name=enum_name,

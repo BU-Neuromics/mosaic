@@ -79,3 +79,31 @@ def test_system_fields_partitioned_from_user_fields():
 def test_accessor_name_present():
     project = build_type_model(_registry())["Project"]
     assert project.accessor_name  # canonical plural accessor, non-empty
+
+
+def test_has_default_reflects_ifabsent():
+    registry = SchemaRegistry.from_yaml(
+        """
+id: https://example.org/hippo/test_ifabsent
+name: test_ifabsent
+prefixes:
+  linkml: https://w3id.org/linkml/
+imports:
+  - linkml:types
+  - hippo_core
+default_range: string
+classes:
+  Widget:
+    is_a: Entity
+    attributes:
+      name:
+        required: true
+      kind:
+        required: true
+        ifabsent: string(generic)
+"""
+    )
+    widget = build_type_model(registry)["Widget"]
+    by_name = {f.name: f for f in widget.fields}
+    assert by_name["kind"].has_default is True
+    assert by_name["name"].has_default is False
