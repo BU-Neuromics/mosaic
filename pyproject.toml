@@ -50,7 +50,7 @@ all = [
 hippo = "hippo.cli.main:app"
 
 [project.entry-points."hippo.storage_adapters"]
-sqlite = "hippo.adapters.sqlite.store:SQLiteEntityStore"
+sqlite = "hippo.core.storage.adapters.sqlite_adapter:SQLiteAdapter"
 postgres = "hippo.core.storage.adapters.postgres_adapter:PostgresAdapter"
 
 [project.entry-points."hippo.write_validators"]
