@@ -75,6 +75,7 @@ nav:
   - TUI: tui.md
   - API Reference: api-reference.md
   - Typed OpenAPI: typed-openapi.md
+  - GraphQL API: graphql.md
   - Schema Packages:
       - Overview: reference-loaders.md
       - Writing a Reference Loader: writing-a-reference-loader.md
