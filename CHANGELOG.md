@@ -1,5 +1,32 @@
 # Changelog
 
+## [Unreleased]
+
+### Fixed
+
+- **`hippo serve` now persists (issue #42).** The serve command built the
+  FastAPI app with no `HippoClient`, so every request fell back to a no-arg
+  client with `storage=None` — a non-persistent echo stub that ignored config
+  and the schema. `serve` now builds a configured client from the resolved
+  config (new `--config` flag; auto-detects `config.json` / `hippo.yaml` in the
+  cwd, else a default SQLite database) and injects it, so REST serves the same
+  deployment the SDK and TUI do.
+
+### Changed
+
+- **Config-driven storage/client construction (issue #42).** New
+  `hippo.core.factory` is the single construction path shared by the CLI, the
+  TUI SDK backend, and `hippo serve`. It resolves the storage backend through
+  the `hippo.storage_adapters` entry-point group (`storage_backend` in config,
+  default `sqlite`) and assembles a `HippoClient` (registry + adapter +
+  validation pipeline). The TUI now honours a deployment's configured
+  `storage_backend` rather than assuming SQLite.
+- `HippoClient.storage` is now typed against the `EntityStore` ABC instead of
+  the concrete `SQLiteAdapter`, so the SDK depends on the storage interface.
+- Corrected the stale `hippo.storage_adapters` `sqlite` entry point, which
+  pointed at a non-existent module (`hippo.adapters.sqlite.store`); it now
+  resolves to `hippo.core.storage.adapters.sqlite_adapter:SQLiteAdapter`.
+
 ## v0.8.0 — 2026-06-03 (SchemaPackage extension model + Recipe system v1)
 
 This release introduces the **SchemaPackage** genus/species extension model and

@@ -21,7 +21,7 @@ from hippo.core.recipe import (
 from hippo.core.recipe_service import RecipeService
 from hippo.core.relationship import RelationshipManager
 from hippo.core.schema_manager import SchemaManager
-from hippo.core.storage.adapters.sqlite_adapter import SQLiteAdapter
+from hippo.core.storage import EntityStore
 from hippo.core.storage.fts import FTSTableMetadata
 from hippo.core.validation.validators import (
     ValidationResult,
@@ -51,7 +51,7 @@ class HippoClient:
         self,
         pipeline: Optional[ValidationPipeline] = None,
         bypass_validation: bool = False,
-        storage: Optional[SQLiteAdapter] = None,
+        storage: Optional[EntityStore] = None,
         registry: Optional[SchemaRegistry] = None,
     ) -> None:
         """Initialize HippoClient.
@@ -264,12 +264,12 @@ class HippoClient:
     # -- Property accessors (backwards compatibility) --
 
     @property
-    def storage(self) -> Optional[SQLiteAdapter]:
+    def storage(self) -> Optional[EntityStore]:
         """Get the storage adapter."""
         return self._storage
 
     @storage.setter
-    def storage(self, value: Optional[SQLiteAdapter]) -> None:
+    def storage(self, value: Optional[EntityStore]) -> None:
         """Set the storage adapter.
 
         Note: Phase 2 will propagate this to facades. Currently a known

@@ -101,11 +101,37 @@ def _resolve_validators_path(validators_path: str | Path | None) -> Path | None:
     return None
 
 
+def _resolve_storage_backend(storage_backend: str | None) -> str:
+    """Resolve the storage backend name.
+
+    Priority: explicit *storage_backend* argument > ``storage_backend`` in
+    ``config.json`` > ``"sqlite"``. Lets the TUI honour a deployment's
+    configured backend (e.g. PostgreSQL) rather than assuming SQLite.
+    """
+    if storage_backend is not None:
+        return storage_backend
+
+    config_file = Path("config.json")
+    if config_file.exists():
+        try:
+            cfg = json.loads(config_file.read_text())
+        except (json.JSONDecodeError, OSError):
+            return "sqlite"
+        candidate = cfg.get("storage_backend")
+        if candidate:
+            return str(candidate)
+    return "sqlite"
+
+
 class SDKBackend:
     """TUIBackend implementation that uses ``HippoClient`` directly.
 
+    Constructs the client through :func:`hippo.core.factory.create_client` —
+    the same config-driven factory the CLI and ``hippo serve`` use — so the
+    TUI opens a deployment exactly as the other transports do.
+
     Args:
-        db_path: Path to the SQLite database file. If omitted, falls back to
+        db_path: Path/URL of the database. If omitted, falls back to
             ``config.json`` in the cwd, then ``data/hippo.db``, then
             ``hippo.db``.
         schema_path: Path to a LinkML schema file or directory. If omitted,
@@ -116,6 +142,8 @@ class SDKBackend:
             ``validators_path`` (unless ``validation_enabled`` is false),
             then ``None``. Mirrors how a deployment configures the SDK so
             TUI writes honour the same business-rule validators.
+        storage_backend: Storage backend name. If omitted, falls back to
+            ``config.json``'s ``storage_backend``, then ``"sqlite"``.
     """
 
     def __init__(
@@ -123,10 +151,12 @@ class SDKBackend:
         db_path: str | Path | None = None,
         schema_path: str | Path | None = None,
         validators_path: str | Path | None = None,
+        storage_backend: str | None = None,
     ) -> None:
         self._db_path = _resolve_db_path(db_path)
         self._schema_path = _resolve_schema_path(schema_path)
         self._validators_path = _resolve_validators_path(validators_path)
+        self._storage_backend = _resolve_storage_backend(storage_backend)
         self._client: Any = None  # lazy-initialized on first use
         self._schema_view: SchemaView | None = None
 
@@ -134,57 +164,17 @@ class SDKBackend:
     # Internal helpers
     # ------------------------------------------------------------------
 
-    def _build_registry(self) -> Any:
-        """Build a SchemaRegistry from ``schema_path`` or bundled hippo_core."""
-        from hippo.linkml_bridge import SchemaRegistry
-
-        if self._schema_path is not None:
-            return SchemaRegistry.from_path(self._schema_path)
-
-        import importlib.resources
-
-        from linkml_runtime.utils.schemaview import SchemaView as LinkMLSchemaView
-
-        hippo_core_path = importlib.resources.files("hippo.schemas").joinpath(
-            "hippo_core.yaml"
-        )
-        return SchemaRegistry(LinkMLSchemaView(str(hippo_core_path)))
-
-    def _build_pipeline(self) -> Any:
-        """Build the write-validation pipeline from the configured validators.
-
-        Without this, TUI writes would skip the CEL business-rule validators a
-        deployment declares (see the bibliography example). Returns ``None``
-        when none are configured, in which case ``HippoClient`` behaves exactly
-        as before (schema-level validation via the registry still applies).
-        """
-        if self._validators_path is None:
-            return None
-
-        from hippo.core.pipeline import ValidationPipeline
-        from hippo.core.validators.write_validator import CELWriteValidator
-
-        pipeline = ValidationPipeline()
-        pipeline.add_validator(
-            CELWriteValidator(validators_path=str(self._validators_path))
-        )
-        return pipeline
-
     def _get_client(self) -> Any:
-        """Lazy-create and return the HippoClient + SQLiteAdapter."""
+        """Lazy-create and return the configured HippoClient."""
         if self._client is None:
-            from hippo.core.client import HippoClient
-            from hippo.core.storage.adapters.sqlite_adapter import SQLiteAdapter
+            from hippo.core.factory import create_client
 
             try:
-                registry = self._build_registry()
-                storage = SQLiteAdapter(
-                    str(self._db_path), schema_registry=registry
-                )
-                self._client = HippoClient(
-                    storage=storage,
-                    registry=registry,
-                    pipeline=self._build_pipeline(),
+                self._client = create_client(
+                    storage_backend=self._storage_backend,
+                    database_url=str(self._db_path),
+                    schema_path=self._schema_path,
+                    validators_path=self._validators_path,
                 )
             except Exception as exc:  # noqa: BLE001 — surfaced as BackendError
                 raise BackendError(

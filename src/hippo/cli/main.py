@@ -59,23 +59,68 @@ def serve(
         "-l",
         help="Set the logging level (debug, info, warning, error)",
     ),
+    config: str = typer.Option(
+        None,
+        "--config",
+        "-c",
+        help=(
+            "Path to a Hippo config (config.json / hippo.yaml). If omitted, "
+            "one is auto-detected in the current directory; otherwise the "
+            "server falls back to a default SQLite database."
+        ),
+    ),
 ) -> None:
     """Start the REST API server with customizable configuration.
 
-    This command starts the Hippo REST API server with options for specifying
-    host address, port number, auto-reload behavior, worker processes,
-    and logging levels. By default it runs on 127.0.0.1:8000 with info logging.
+    The server serves the deployment described by the resolved config —
+    storage backend, schema, and validators — built through the same SDK
+    factory the CLI and TUI use, so REST, SDK, and TUI all open the same
+    instance the same way.
 
     Usage:
-      hippo serve                    # Start with default config
-      hippo serve --port 9000        # Start on custom port
-      hippo serve --log-level debug  # Start with debug logging
+      hippo serve                       # Auto-detect config in the cwd
+      hippo serve --config hippo.yaml   # Explicit config
+      hippo serve --port 9000           # Start on custom port
+      hippo serve --log-level debug     # Start with debug logging
     """
     import uvicorn
+
+    from hippo.config import ConfigError
+    from hippo.config import ValidationError as ConfigValidationError
+    from hippo.core.factory import (
+        DEFAULT_SQLITE_PATH,
+        create_client,
+        create_client_from_config,
+        load_config_autodetect,
+    )
     from hippo.serve import create_default_app
 
+    try:
+        cfg = load_config_autodetect(config)
+    except (ConfigError, ConfigValidationError) as exc:
+        if config is not None:
+            # An explicitly-requested config must be valid — fail loudly.
+            typer.echo(f"Error: could not load config {config!r}: {exc}", err=True)
+            raise typer.Exit(1)
+        typer.echo(f"Warning: ignoring malformed config in cwd: {exc}", err=True)
+        cfg = None
+
+    if cfg is not None:
+        client = create_client_from_config(cfg)
+        backend = cfg.storage_backend or "sqlite"
+        typer.echo(
+            f"Serving {backend} deployment "
+            f"(schema: {cfg.schema_path}, db: {cfg.database_url or 'default'})"
+        )
+    else:
+        client = create_client()
+        typer.echo(
+            f"No config found; serving a default SQLite database at "
+            f"{DEFAULT_SQLITE_PATH} with the bundled hippo_core schema"
+        )
+
     typer.echo(f"Starting Hippo server on {host}:{port} with log level {log_level}")
-    app = create_default_app()
+    app = create_default_app(client)
     # Note: Uvicorn's logging is currently configured through uvicorn configuration,
     # so we might need to pass it explicitly if needed
     uvicorn.run(
@@ -376,22 +421,13 @@ def _build_schema_registry(schema_path: str | None = None):
     ProvenanceRecord, ExternalID, ...). Callers that need user-domain
     classes (Sample, Project, ...) must pass an explicit ``schema_path``.
     """
-    from hippo.linkml_bridge import SchemaRegistry
-    from linkml_runtime.utils.schemaview import SchemaView
-    import importlib.resources
+    from hippo.core.factory import build_schema_registry
 
-    if schema_path:
-        return SchemaRegistry.from_path(schema_path)
-
-    hippo_core_path = importlib.resources.files("hippo.schemas").joinpath(
-        "hippo_core.yaml"
-    )
-    schema_view = SchemaView(str(hippo_core_path))
-    return SchemaRegistry(schema_view)
+    return build_schema_registry(schema_path)
 
 
 def _get_client(db_path: str | None = None, schema_path: str | None = None):
-    """Construct a HippoClient backed by SQLite.
+    """Construct a HippoClient via the shared config-driven factory.
 
     Looks for the database at --db-path, then data/hippo.db. When
     ``schema_path`` is provided, the storage adapter is wired to a
@@ -399,15 +435,11 @@ def _get_client(db_path: str | None = None, schema_path: str | None = None):
     validate correctly; otherwise only the bundled hippo_core classes
     are recognized.
     """
-    from hippo.core.client import HippoClient
-    from hippo.core.storage.adapters.sqlite_adapter import SQLiteAdapter
+    from hippo.core.factory import create_client
 
-    path = Path(db_path) if db_path else Path("data/hippo.db")
-    registry = _build_schema_registry(schema_path)
-
-    return HippoClient(
-        storage=SQLiteAdapter(str(path), schema_registry=registry),
-        registry=registry,
+    return create_client(
+        database_url=str(db_path) if db_path else None,
+        schema_path=schema_path,
     )
 
 
