@@ -116,6 +116,7 @@ New decisions to be introduced in sec9 (preview):
 | Storage backend v0.1 | SQLite via stdlib `sqlite3` | sec2 |
 | Client construction | `hippo.core.factory` resolves `storage_backend` via the `hippo.storage_adapters` entry points and builds the `HippoClient`; shared by CLI, TUI, and `hippo serve` (issue #42) | sec2, sec4 |
 | Schema typing core | `hippo.core.schema_typing` is the single LinkML→type model (class exposure, slot kind, relationships, system/temporal fields); typed SDK, GraphQL, and OpenAPI render it (issue #47) | sec9 |
+| Typed OpenAPI via enrichment (approach A) | REST routes stay generic (type-erased dicts); `hippo.api.openapi` renders `schema_typing` into per-entity-type JSON Schema components plus a `oneOf` `Entity` umbrella and injects them into the generated document (`app.openapi` override, cached on `app.openapi_schema`). No OpenAPI `discriminator` — entity payloads carry no inline type property; the type travels in the URL path / envelope `entity_type`, and the mapping is documented in the umbrella description. Per-type routes (approach B) deferred (issue #46) | sec2, sec4 |
 | Data model approach | Config-driven relational + graph-shaped API; graph DB as future adapter | sec3 |
 | Temporal metadata | Provenance log only — not stored on entities; computed at read time | sec3, sec6 |
 | Entity lifecycle | `is_available` boolean; storage adapters optimize for this filter | sec3, sec3b |

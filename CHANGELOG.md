@@ -2,6 +2,25 @@
 
 ## [Unreleased]
 
+### Added
+
+- **LinkML-derived OpenAPI components (issue #46, approach A).** When the
+  REST app is built around a schema-bearing client (as `hippo serve` does),
+  `/openapi.json` now carries one JSON Schema component per exposed entity
+  type — typed user fields with required/enum markers, reference slots as
+  uuid strings naming the target type, multivalued slots as arrays, and
+  read-only system (`id`, `is_available`) plus computed temporal fields
+  (`created_at`, `updated_at`, `schema_version`, `created_by`,
+  `updated_by`) — together with an umbrella `Entity` (`oneOf`) component
+  and an `EntityEnvelope` for read responses. The generic entity endpoints
+  (PUT replace, GET by id, GET list) reference these components.
+  Exposure/classification derives from `hippo.core.schema_typing` (the
+  issue #47 contract); rendering lives in the new `hippo.api.openapi`
+  module via an `app.openapi` override cached on `app.openapi_schema`.
+  Routes and runtime behavior are unchanged; apps without a
+  client/registry serve the default document. See
+  `docs/typed-openapi.md` for client-codegen usage.
+
 ### Fixed
 
 - **REST get/delete-by-id resolve the entity's real type (issue #44).**
