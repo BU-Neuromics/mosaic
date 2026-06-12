@@ -115,6 +115,7 @@ New decisions to be introduced in sec9 (preview):
 | Plugin system | Entry points (`hippo.storage_adapters`, `hippo.external_adapters`, `hippo.write_validators`, `hippo.reference_loaders`) | sec2 |
 | Storage backend v0.1 | SQLite via stdlib `sqlite3` | sec2 |
 | Client construction | `hippo.core.factory` resolves `storage_backend` via the `hippo.storage_adapters` entry points and builds the `HippoClient`; shared by CLI, TUI, and `hippo serve` (issue #42) | sec2, sec4 |
+| Schema typing core | `hippo.core.schema_typing` is the single LinkML→type model (class exposure, slot kind, relationships, system/temporal fields); typed SDK, GraphQL, and OpenAPI render it (issue #47) | sec9 |
 | Data model approach | Config-driven relational + graph-shaped API; graph DB as future adapter | sec3 |
 | Temporal metadata | Provenance log only — not stored on entities; computed at read time | sec3, sec6 |
 | Entity lifecycle | `is_available` boolean; storage adapters optimize for this filter | sec3, sec3b |

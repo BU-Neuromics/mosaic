@@ -18,6 +18,7 @@ import textwrap
 from typing import Any, Iterable, Optional
 
 from hippo.core.exceptions import ValidationFailed
+from hippo.core.schema_typing import exposed_class_names
 from hippo.core.validation.validators import WriteOperation
 
 logger = logging.getLogger(__name__)
@@ -395,26 +396,11 @@ def build_typed_surface(
     root = Namespace("")
     sv = registry.schema_view
 
-    # hippo_core classes are infrastructure; the typed client doesn't
-    # expose them as write targets (Entity is abstract; ProvenanceRecord,
-    # Process, Validator, ReferenceLoader are system concerns). Domain
-    # schemas subclass Entity via is_a, so we identify domain classes
-    # as non-abstract concrete classes that are not the hippo_core
-    # fixed set.
-    hippo_core_infrastructure = {
-        "Entity",
-        "ProvenanceRecord",
-        "Process",
-        "Validator",
-        "ReferenceLoader",
-    }
-
-    for cls_name in registry.class_names():
-        if cls_name in hippo_core_infrastructure:
-            continue
+    # Domain classes = concrete, non-abstract classes that aren't hippo_core
+    # infrastructure. The selection lives once in hippo.core.schema_typing so
+    # the typed client and the GraphQL/OpenAPI transports can't drift.
+    for cls_name in exposed_class_names(registry):
         cls_obj = sv.get_class(cls_name)
-        if cls_obj is None or cls_obj.abstract:
-            continue
 
         segments = _resolve_namespace(cls_name, cls_obj)
         accessor_name = _resolve_accessor(cls_name, cls_obj)
