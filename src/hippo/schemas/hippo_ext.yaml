@@ -17,7 +17,7 @@ description: >-
   slots as data slots.
 
 license: https://creativecommons.org/publicdomain/zero/1.0/
-version: 0.3.0
+version: 0.4.0
 
 prefixes:
   linkml: https://w3id.org/linkml/
@@ -84,6 +84,29 @@ slots:
       and adapters enforce capability). Current canonical mode: `fts5`
       (SQLite FTS5).
     range: string
+    in_subset:
+      - slot_annotation
+
+  hippo_external_xref:
+    description: >-
+      Mark an `ExternalReference`-ranged slot as a reverse-lookup key.
+      The annotated slot's `(system, value)` pairs are maintained in the
+      adapter's `hippo_xref_index` side table on every entity write
+      (create / update / replace / availability transition) in the same
+      transaction as the entity write — the same annotation-driven
+      side-table pattern as `hippo_search`. The index enforces global
+      uniqueness of `(system, value)` among AVAILABLE entities (index
+      rows exist only for `is_available = 1` rows, mirroring the
+      `hippo_unique` partial-index semantics from PTS-348) and serves
+      `HippoClient.find_by_xref(system, value)` / `GET /xref/{system}/
+      {value}` reverse lookups. Only valid on slots whose range is the
+      `ExternalReference` value type (single- or multivalued); the DDL
+      generator fails at startup otherwise. A slot can hold an
+      `ExternalReference` without this annotation — it then carries the
+      structured value but is not a lookup key and is not
+      uniqueness-constrained.
+    range: boolean
+    ifabsent: "false"
     in_subset:
       - slot_annotation
 

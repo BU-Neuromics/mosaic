@@ -37,6 +37,17 @@ HIPPO_UNIQUE = "hippo_unique"
 HIPPO_APPEND_ONLY = "hippo_append_only"
 HIPPO_ACCESSOR = "hippo_accessor"
 HIPPO_NAMESPACE = "hippo_namespace"
+HIPPO_EXTERNAL_XREF = "hippo_external_xref"
+
+#: Name of the framework-provided external-reference value type (issue #48).
+EXTERNAL_REFERENCE_CLASS = "ExternalReference"
+
+#: hippo_core classes that are structured VALUE types, not entities: they
+#: have no ``id``/lifecycle, get no table or typed-client accessor, and are
+#: stored inline (JSON TEXT) on the entity slot that ranges them. Distinct
+#: from the transport-level INFRASTRUCTURE_CLASSES set in
+#: ``hippo.core.schema_typing`` (which re-uses this constant).
+VALUE_TYPE_CLASSES: frozenset[str] = frozenset({EXTERNAL_REFERENCE_CLASS})
 
 HIPPO_ANNOTATION_PREFIX = "hippo_"
 _CLASS_ANNOTATION_SUBSET = "class_annotation"
@@ -372,6 +383,11 @@ def _build_tree_root_class(sv: SchemaView) -> ClassDefinition:
     seen_slots: dict[str, str] = {}
     for cls_name, cls in existing.items():
         if cls.abstract:
+            continue
+        # Value types (e.g. ExternalReference) are stored inline on entity
+        # slots — they are not independently ingestable, so they get no
+        # tree-root slot in the instance bundle.
+        if cls_name in VALUE_TYPE_CLASSES:
             continue
         slot_name = class_accessor_name(cls_name, cls)
         if slot_name in seen_slots:
@@ -900,6 +916,32 @@ class SchemaRegistry:
             if rng and rng in known:
                 refs.append((slot.name, rng))
         return refs
+
+    def external_xref_slots(self, class_name: str) -> list[SlotDefinition]:
+        """Slots annotated ``hippo_external_xref: true`` on ``class_name``.
+
+        The annotation is only meaningful on slots whose range is the
+        ``ExternalReference`` value type; annotating any other slot is a
+        schema defect surfaced as :class:`SchemaError` (consistent with
+        the fail-at-startup contract of sec9 §9.10 — schemas declare
+        intent, adapters enforce capability, misdeclarations fail loudly).
+        """
+        out: list[SlotDefinition] = []
+        for slot in self.induced_slots(class_name):
+            if not annotation_value(slot, HIPPO_EXTERNAL_XREF):
+                continue
+            if slot.range != EXTERNAL_REFERENCE_CLASS:
+                from hippo.core.exceptions import SchemaError
+
+                raise SchemaError(
+                    f"Slot {class_name}.{slot.name} declares "
+                    f"`hippo_external_xref: true` but its range is "
+                    f"{slot.range!r}; the annotation is only valid on "
+                    f"slots ranged against {EXTERNAL_REFERENCE_CLASS!r}.",
+                    error_code="HIPPO_EXTERNAL_XREF_RANGE",
+                )
+            out.append(slot)
+        return out
 
     def indexed_slots(self, class_name: str) -> list[tuple[SlotDefinition, bool]]:
         """(slot, partial) pairs for slots annotated with ``hippo_index``."""

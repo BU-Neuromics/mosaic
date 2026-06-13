@@ -11,7 +11,7 @@ description: >-
   `design/reference_hippo_core.md` for the per-class reference.
 
 license: https://creativecommons.org/publicdomain/zero/1.0/
-version: 0.5.0
+version: 0.6.0
 
 prefixes:
   linkml: https://w3id.org/linkml/
@@ -294,9 +294,67 @@ classes:
           available for use in `entity_type` and in the user schema after
           registration (Decision 9.5.E).
 
+  ExternalReference:
+    description: >-
+      Structured VALUE type (not an entity) describing a cross-system
+      identifier: which external system owns the identifier (`system`)
+      and the identifier as it appears there (`value`), optionally with
+      capture metadata (`retrieved_at`, `version`). Deliberately NOT
+      `is_a: Entity` — an ExternalReference has no `id`, no lifecycle,
+      and no provenance of its own. It is stored INLINE on the entity
+      that declares a slot ranged against it (single- or multivalued;
+      relational adapters persist it as a JSON TEXT column), so changing
+      an entity's external references is an ordinary entity update
+      captured by normal provenance.
+
+      Slots ranged against ExternalReference may additionally carry the
+      `hippo_external_xref` annotation to opt into reverse-lookup
+      behavior: a global `(system, value)` uniqueness constraint among
+      available entities and `HippoClient.find_by_xref(system, value)` /
+      `GET /xref/{system}/{value}` lookups, served by an
+      annotation-driven side-index table maintained on every write. See
+      issue #48 and `design/reference_hippo_ext.md`.
+
+      Replaces the deprecated `ExternalID` entity pattern (see the
+      ExternalID class note).
+    attributes:
+      system:
+        range: string
+        required: true
+        description: >-
+          Stable name of the external system that owns the identifier
+          (e.g., "STARLIMS", "HALO", "DONOR_DB"). Controlled by
+          deployers; not validated against an enum by hippo_core.
+      value:
+        range: string
+        required: true
+        description: The identifier string as it appears in `system`.
+      retrieved_at:
+        range: datetime
+        required: false
+        description: >-
+          Optional UTC timestamp at which this reference was captured
+          from the external system.
+      version:
+        range: string
+        required: false
+        description: >-
+          Optional version/revision of the external record this
+          reference was captured against (caller-defined semantics).
+
   ExternalID:
     is_a: Entity
     description: >-
+      DEPRECATED (since 0.6.0, issue #48): use the `ExternalReference`
+      value type on a domain slot (optionally annotated
+      `hippo_external_xref` for reverse lookup) instead. ExternalID
+      remains for backward compatibility only and will be removed from
+      hippo_core in a future major release; the SDK methods
+      (`register_external_id`, `get_by_external_id`,
+      `list_external_ids`, mapping-level `supersede`) and the
+      `/external-ids` REST endpoints emit DeprecationWarning /
+      are marked deprecated in OpenAPI.
+
       A stable cross-system identifier linking a Hippo entity to an ID
       managed by an external source system (e.g., STARLIMS barcode, HALO
       sample ID, Donor DB donor number). Lifecycle-tracked: each
@@ -402,9 +460,14 @@ enums:
       relationship_remove:
         description: A relationship slot lost a value; patch carries {slot, target_id}.
       external_id_add:
-        description: An ExternalID was associated with the entity.
+        description: >-
+          An ExternalID was associated with the entity. DEPRECATED with
+          the ExternalID entity (issue #48) — ExternalReference slot
+          changes are ordinary `update` operations.
       external_id_remove:
-        description: An ExternalID was disassociated.
+        description: >-
+          An ExternalID was disassociated. DEPRECATED with the
+          ExternalID entity (issue #48).
       migration_applied:
         description: A schema migration was applied (system event; entity_id is null).
       reference_data_installed:
