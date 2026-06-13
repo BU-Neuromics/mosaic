@@ -72,6 +72,38 @@ class ValidationError(HippoError):
         super().__init__(message, **context)
 
 
+class XrefUniquenessError(ValidationError):
+    """A ``hippo_external_xref`` ``(system, value)`` pair is already claimed.
+
+    Raised by the storage adapter inside the entity-write transaction
+    (create / update / replace / availability-on) when inserting the
+    side-index rows for an annotated slot would violate the global
+    ``UNIQUE (system, value)`` constraint among available entities. The
+    triggering write is rolled back. Subclasses :class:`ValidationError`
+    so the standard transport error paths apply (REST 422 /
+    GraphQL ``VALIDATION_FAILED``).
+    """
+
+    def __init__(
+        self,
+        message: str,
+        system: Optional[str] = None,
+        value: Optional[str] = None,
+        conflicting_entity_id: Optional[str] = None,
+        conflicting_entity_type: Optional[str] = None,
+        **context: Any,
+    ):
+        self.system = system
+        self.value = value
+        self.conflicting_entity_id = conflicting_entity_id
+        self.conflicting_entity_type = conflicting_entity_type
+        context["system"] = system
+        context["value"] = value
+        context["conflicting_entity_id"] = conflicting_entity_id
+        context["conflicting_entity_type"] = conflicting_entity_type
+        super().__init__(message, **context)
+
+
 class EntityNotFoundError(HippoError):
     """Exception raised when an entity is not found in the system."""
 

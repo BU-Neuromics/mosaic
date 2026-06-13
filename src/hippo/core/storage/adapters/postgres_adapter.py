@@ -1652,6 +1652,35 @@ class PostgresAdapter(EntityStore):
             patch={"status": "deleted", **metadata},
         )
 
+    # -- hippo_external_xref side index (issue #48) --------------------------
+
+    _XREF_NOT_IMPLEMENTED = (
+        "hippo_external_xref reverse lookup is not implemented on the "
+        "PostgreSQL adapter yet. The xref side index (hippo_xref_index) "
+        "is maintained by the SQLite adapter's per-class write path; the "
+        "PostgreSQL adapter still uses the legacy single-table `entities` "
+        "layout and gains xref parity together with its per-class-table "
+        "migration. Use the SQLite adapter for hippo_external_xref-"
+        "annotated schemas, or query the ExternalReference slot data "
+        "directly."
+    )
+
+    def find_xref(self, system: str, value: str) -> Optional[dict[str, Any]]:
+        """Reverse-lookup an entity by ``(system, value)``. Not implemented.
+
+        See :data:`_XREF_NOT_IMPLEMENTED` — PostgreSQL xref parity is
+        scoped to the adapter's per-class-table migration.
+        """
+        raise NotImplementedError(self._XREF_NOT_IMPLEMENTED)
+
+    def list_xrefs(self, entity_id: str) -> list[dict[str, Any]]:
+        """List indexed xref pairs for an entity. Not implemented.
+
+        See :data:`_XREF_NOT_IMPLEMENTED` — PostgreSQL xref parity is
+        scoped to the adapter's per-class-table migration.
+        """
+        raise NotImplementedError(self._XREF_NOT_IMPLEMENTED)
+
     def search_capabilities(self) -> set[str]:
         """PostgreSQL adapter supports FTS and trigram fuzzy search."""
         return {"fts", "trigram"}

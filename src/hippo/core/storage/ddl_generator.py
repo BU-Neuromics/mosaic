@@ -17,11 +17,14 @@ from typing import Any
 from linkml.generators.sqltablegen import SQLTableGenerator
 
 from hippo.core.storage.fts import FTSFieldMetadata, FTSTableMetadata
+from hippo.core.storage.xref import XREF_TABLE_DDL
 from hippo.linkml_bridge import (
+    EXTERNAL_REFERENCE_CLASS,
     HIPPO_APPEND_ONLY,
     HIPPO_INDEX,
     HIPPO_INDEX_PARTIAL,
     HIPPO_UNIQUE,
+    VALUE_TYPE_CLASSES,
     SchemaRegistry,
     annotation_value,
     slot_default,
@@ -63,6 +66,15 @@ class DDLGenerator:
         # Step 1: Flatten schema to self-contained dict (resolves imports inline)
         flat_schema = _flatten_for_validator(sv)
 
+        # Step 1b: Value types (ExternalReference) store INLINE as JSON
+        # TEXT on the declaring entity's table — they get no table of
+        # their own and no FK column. Rewrite the flat schema so
+        # SQLTableGenerator emits a plain TEXT column for every slot
+        # ranged against a value type (single- AND multivalued; without
+        # this, single-valued slots become `<slot>_id` FK columns and
+        # multivalued slots become dropped linktables).
+        self._rewrite_value_type_slots(flat_schema)
+
         # Step 2: Write to temp file for SQLTableGenerator
         with tempfile.NamedTemporaryFile(
             mode="w", suffix=".yaml", delete=False
@@ -84,10 +96,13 @@ class DDLGenerator:
         # Step 4: Parse DDL string into statements
         base_statements = self._parse_ddl_string(raw_ddl)
 
-        # Step 5: Filter and post-process CREATE TABLE statements
+        # Step 5: Filter and post-process CREATE TABLE statements.
+        # Value types are excluded: they are concrete LinkML classes but
+        # have no entity table (stored inline as JSON TEXT).
         concrete_classes = {
             name for name in registry.class_names()
-            if not (cls := sv.get_class(name)) or not cls.abstract
+            if name not in VALUE_TYPE_CLASSES
+            and (not (cls := sv.get_class(name)) or not cls.abstract)
         }
 
         table_statements = []
@@ -114,7 +129,61 @@ class DDLGenerator:
         fts_planner.add_registry(registry)
         fts_statements = fts_planner.generate_fts_ddl()
 
-        return table_statements + hippo_extras + index_statements + fts_statements
+        # Step 8: hippo_external_xref side-index table (issue #48) —
+        # emitted once when any concrete class carries an annotated slot.
+        # ``external_xref_slots`` also validates annotation placement
+        # (range must be ExternalReference), failing DDL generation —
+        # i.e. adapter startup — on a misdeclared schema.
+        xref_statements: list[str] = []
+        if any(
+            registry.external_xref_slots(name) for name in sorted(concrete_classes)
+        ):
+            xref_statements = list(XREF_TABLE_DDL)
+
+        return (
+            table_statements
+            + hippo_extras
+            + index_statements
+            + fts_statements
+            + xref_statements
+        )
+
+    @staticmethod
+    def _rewrite_value_type_slots(flat_schema: dict[str, Any]) -> None:
+        """Mutate a flattened schema dict so value-type-ranged slots emit
+        plain TEXT columns.
+
+        For every slot (class ``attributes``/``slot_usage`` and top-level
+        ``slots``) whose range is a value type (``ExternalReference``):
+        force ``range: string`` and ``multivalued: false`` and drop the
+        inlining flags — the storage representation is one JSON TEXT
+        column either way (``_coerce_for_column`` JSON-encodes dict/list
+        values; ``_decode_column_value`` reverses on read). The value-type
+        classes themselves are removed so no table is generated for them.
+        This rewrite is local to the DDL temp schema; validation and
+        typed surfaces keep seeing the real ``ExternalReference`` range.
+        """
+
+        def _rewrite(slot_spec: Any) -> None:
+            if (
+                isinstance(slot_spec, dict)
+                and slot_spec.get("range") in VALUE_TYPE_CLASSES
+            ):
+                slot_spec["range"] = "string"
+                slot_spec["multivalued"] = False
+                slot_spec.pop("inlined", None)
+                slot_spec.pop("inlined_as_list", None)
+
+        for cls_spec in (flat_schema.get("classes") or {}).values():
+            if not isinstance(cls_spec, dict):
+                continue
+            for section in ("attributes", "slot_usage"):
+                for slot_spec in (cls_spec.get(section) or {}).values():
+                    _rewrite(slot_spec)
+        for slot_spec in (flat_schema.get("slots") or {}).values():
+            _rewrite(slot_spec)
+        for name in VALUE_TYPE_CLASSES:
+            (flat_schema.get("classes") or {}).pop(name, None)
 
     def _parse_ddl_string(self, raw_ddl: str) -> list[str]:
         """Parse semicolon-delimited DDL string into statement list.

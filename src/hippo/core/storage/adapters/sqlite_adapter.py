@@ -41,8 +41,9 @@ from hippo.core.storage.fts import (
     get_fts_tables_for_entity_type,
     normalize_bm25_score,
 )
+from hippo.core.storage.xref import XREF_TABLE, extract_xref_pairs
 from hippo.core.types import ProvenanceRecord as ProvenanceRecordType, TemporalRecord
-from hippo.core.exceptions import SearchCapabilityError
+from hippo.core.exceptions import SearchCapabilityError, XrefUniquenessError
 
 
 class SQLiteEntity:
@@ -776,6 +777,8 @@ class SQLiteAdapter(EntityStore):
         self._provenance_store: Optional[ProvenanceStore] = None
         self._relationship_store: Optional[RelationshipStore] = None
         self._fts_store: Optional[FTSStore] = None
+        # Per-class cache of hippo_external_xref slot names (issue #48).
+        self._xref_slots_cache: dict[str, list[str]] = {}
         self._init_database()
 
     def _get_connection(self) -> sqlite3.Connection:
@@ -1557,6 +1560,7 @@ class SQLiteAdapter(EntityStore):
             f'INSERT INTO "{entity_type}" ({column_sql}) VALUES ({placeholders})',
             values,
         )
+        self._refresh_xref_rows(cursor, entity_type, entity_id)
 
     def _update_per_class(
         self,
@@ -1589,6 +1593,7 @@ class SQLiteAdapter(EntityStore):
             f'UPDATE "{entity_type}" SET {", ".join(sets)} WHERE id = ?',
             params,
         )
+        self._refresh_xref_rows(cursor, entity_type, entity_id)
 
     def _set_per_class_availability(
         self,
@@ -1604,6 +1609,10 @@ class SQLiteAdapter(EntityStore):
             f'UPDATE "{entity_type}" SET "is_available" = ? WHERE id = ?',
             (1 if is_available else 0, entity_id),
         )
+        # Availability transitions drive the xref index lifecycle: rows
+        # are removed when the entity goes unavailable and re-derived
+        # (re-checking global uniqueness) when it comes back.
+        self._refresh_xref_rows(cursor, entity_type, entity_id)
 
     def _set_per_class_superseded_by(
         self,
@@ -1627,6 +1636,168 @@ class SQLiteAdapter(EntityStore):
                 f" WHERE id = ?",
                 (replacement_id, 1 if is_available else 0, entity_id),
             )
+            self._refresh_xref_rows(cursor, entity_type, entity_id)
+
+    # -- hippo_external_xref side index (issue #48) ---------------------------
+    #
+    # Index rows exist ONLY for available entities (the `hippo_unique`
+    # "unique among live records" semantics from PTS-348, realised here by
+    # deleting/recreating rows on availability transitions instead of a
+    # partial-index predicate). Every write-path hook re-derives the
+    # entity's rows from the just-written per-class row, inside the SAME
+    # transaction as the entity write — a uniqueness violation rolls the
+    # whole write back.
+
+    def _xref_slot_names(self, entity_type: str) -> list[str]:
+        """Names of ``hippo_external_xref``-annotated slots for a class.
+
+        Cached per class. Empty when the registry is absent, the class is
+        unknown/abstract, or no slot carries the annotation.
+        """
+        cached = self._xref_slots_cache.get(entity_type)
+        if cached is None:
+            if not self._per_class_table_exists(entity_type):
+                cached = []
+            else:
+                cached = [
+                    slot.name
+                    for slot in self.schema_registry.external_xref_slots(
+                        entity_type
+                    )
+                ]
+            self._xref_slots_cache[entity_type] = cached
+        return cached
+
+    def _refresh_xref_rows(
+        self, cursor: sqlite3.Cursor, entity_type: str, entity_id: str
+    ) -> None:
+        """Re-derive an entity's ``hippo_xref_index`` rows from its stored row.
+
+        Idempotent delete-then-insert: existing rows for the entity are
+        removed, then re-inserted from the entity's current slot values —
+        only when the row exists AND is available. Runs on the caller's
+        cursor so it shares the entity write's transaction.
+
+        Raises:
+            XrefUniquenessError: When a ``(system, value)`` pair is
+                already claimed by another available entity (or twice by
+                this one). The caller's transaction rolls back.
+        """
+        slots = self._xref_slot_names(entity_type)
+        if not slots:
+            return
+
+        cursor.execute(
+            f"DELETE FROM {XREF_TABLE} WHERE entity_id = ?", (entity_id,)
+        )
+
+        cols = ", ".join(f'"{s}"' for s in slots)
+        cursor.execute(
+            f'SELECT {cols}, "is_available" FROM "{entity_type}" '
+            f"WHERE id = ?",
+            (entity_id,),
+        )
+        row = cursor.fetchone()
+        if row is None or not row["is_available"]:
+            return
+
+        for slot in slots:
+            for system, value in extract_xref_pairs(row[slot]):
+                try:
+                    cursor.execute(
+                        f"INSERT INTO {XREF_TABLE} "
+                        "(entity_id, entity_type, slot, system, value) "
+                        "VALUES (?, ?, ?, ?, ?)",
+                        (entity_id, entity_type, slot, system, value),
+                    )
+                except sqlite3.IntegrityError as exc:
+                    cursor.execute(
+                        f"SELECT entity_id, entity_type FROM {XREF_TABLE} "
+                        "WHERE system = ? AND value = ?",
+                        (system, value),
+                    )
+                    conflict = cursor.fetchone()
+                    holder_id = conflict["entity_id"] if conflict else None
+                    holder_type = conflict["entity_type"] if conflict else None
+                    if holder_id == entity_id:
+                        detail = (
+                            f"duplicated within entity {entity_id} "
+                            f"({entity_type})"
+                        )
+                    else:
+                        detail = (
+                            f"already registered to entity {holder_id} "
+                            f"({holder_type})"
+                        )
+                    raise XrefUniquenessError(
+                        f"External reference (system={system!r}, "
+                        f"value={value!r}) on {entity_type}.{slot} is "
+                        f"{detail}; hippo_external_xref requires "
+                        f"(system, value) to be globally unique among "
+                        f"available entities.",
+                        system=system,
+                        value=value,
+                        conflicting_entity_id=holder_id,
+                        conflicting_entity_type=holder_type,
+                    ) from exc
+
+    def _xref_table_exists(self, cursor: sqlite3.Cursor) -> bool:
+        cursor.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name = ?",
+            (XREF_TABLE,),
+        )
+        return cursor.fetchone() is not None
+
+    def find_xref(self, system: str, value: str) -> Optional[dict[str, Any]]:
+        """Reverse-lookup the available entity holding ``(system, value)``.
+
+        Returns ``{"entity_id", "entity_type", "slot"}`` or ``None``. At
+        most one match can exist — the side table enforces global
+        uniqueness of ``(system, value)`` among available entities.
+        """
+        with self._transaction() as conn:
+            cursor = conn.cursor()
+            if not self._xref_table_exists(cursor):
+                return None
+            cursor.execute(
+                f"SELECT entity_id, entity_type, slot FROM {XREF_TABLE} "
+                "WHERE system = ? AND value = ?",
+                (system, value),
+            )
+            row = cursor.fetchone()
+            if row is None:
+                return None
+            return {
+                "entity_id": row["entity_id"],
+                "entity_type": row["entity_type"],
+                "slot": row["slot"],
+            }
+
+    def list_xrefs(self, entity_id: str) -> list[dict[str, Any]]:
+        """All indexed ``hippo_external_xref`` pairs for an entity.
+
+        Returns ``[{"slot", "system", "value"}, ...]`` (empty when the
+        entity is unavailable, unknown, or has no annotated slots). The
+        full ``ExternalReference`` values — including ``retrieved_at`` /
+        ``version`` — live on the entity's slots; this is the index view.
+        """
+        with self._transaction() as conn:
+            cursor = conn.cursor()
+            if not self._xref_table_exists(cursor):
+                return []
+            cursor.execute(
+                f"SELECT slot, system, value FROM {XREF_TABLE} "
+                "WHERE entity_id = ? ORDER BY slot, system, value",
+                (entity_id,),
+            )
+            return [
+                {
+                    "slot": row["slot"],
+                    "system": row["system"],
+                    "value": row["value"],
+                }
+                for row in cursor.fetchall()
+            ]
 
     def read(self, entity_id: str) -> Optional[SQLiteEntity]:
         """Read an entity by its ID (available entities only).
