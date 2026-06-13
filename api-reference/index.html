@@ -1104,10 +1104,21 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#external-ids" class="md-nav__link">
+  <a href="#external-references-xref" class="md-nav__link">
     <span class="md-ellipsis">
       
-        External IDs
+        External References (xref)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#external-ids-deprecated" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        External IDs (deprecated)
       
     </span>
   </a>
@@ -1864,10 +1875,21 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#external-ids" class="md-nav__link">
+  <a href="#external-references-xref" class="md-nav__link">
     <span class="md-ellipsis">
       
-        External IDs
+        External References (xref)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#external-ids-deprecated" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        External IDs (deprecated)
       
     </span>
   </a>
@@ -2919,7 +2941,42 @@
 <p><em>Response:</em> Array of superseded external ID records</p>
 <p><em>Error Codes:</em> <code>404</code> - Entity not found</p>
 <hr />
-<h3 id="external-ids">External IDs<a class="headerlink" href="#external-ids" title="Permanent link">&para;</a></h3>
+<h3 id="external-references-xref">External References (xref)<a class="headerlink" href="#external-references-xref" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>Method</th>
+<th>Path</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>GET</td>
+<td><code>/xref/{system}/{value}</code></td>
+<td>Resolve an external reference to its entity</td>
+</tr>
+</tbody>
+</table>
+<p><strong>GET /xref/{system}/{value}</strong></p>
+<p>Reverse lookup over <code>hippo_external_xref</code>-annotated <code>ExternalReference</code>
+slots: returns the full envelope of the single AVAILABLE entity whose
+annotated slot carries the <code>(system, value)</code> pair. An entity's external
+references themselves are ordinary slot data on the entity endpoints.</p>
+<p><em>Path Parameters:</em>
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| <code>system</code> | string | External system name (e.g., "STARLIMS") |
+| <code>value</code> | string | Identifier value in that system |</p>
+<p><em>Response:</em> Entity envelope (same shape as <code>GET /entities/{id}</code>)</p>
+<p><em>Error Codes:</em> <code>404</code> - No available entity holds the pair; <code>501</code> - storage adapter does not implement the xref index (PostgreSQL)</p>
+<hr />
+<h3 id="external-ids-deprecated">External IDs (deprecated)<a class="headerlink" href="#external-ids-deprecated" title="Permanent link">&para;</a></h3>
+<blockquote>
+<p><strong>Deprecated (issue #48):</strong> these endpoints are backed by the deprecated
+<code>ExternalID</code> entity and are marked <code>deprecated</code> in OpenAPI. Use
+<code>ExternalReference</code> slots and <code>GET /xref/{system}/{value}</code> instead.</p>
+</blockquote>
 <table>
 <thead>
 <tr>
