@@ -1,6 +1,13 @@
 """External ID router for Hippo API.
 
-Provides endpoints for managing external identifiers.
+DEPRECATED (issue #48): these endpoints are backed by the deprecated
+``ExternalID`` entity pattern. New deployments should declare
+``ExternalReference``-ranged slots (annotated ``hippo_external_xref`` for
+reverse lookup) and use ``GET /xref/{system}/{value}``; an entity's
+external references travel as ordinary slot data on the entity endpoints.
+The endpoints below remain functional shims and are marked ``deprecated``
+in the OpenAPI document; they will be removed together with the
+ExternalID entity in a future major release.
 """
 
 from typing import Any, Optional
@@ -39,7 +46,15 @@ class ExternalIdRequest(BaseModel):
     source_system: str = "default"
 
 
-@router.get("/external-ids/{id_type}/{external_id}")
+@router.get(
+    "/external-ids/{id_type}/{external_id}",
+    deprecated=True,
+    description=(
+        "DEPRECATED (issue #48): backed by the deprecated ExternalID "
+        "entity. Use `GET /xref/{system}/{value}` over "
+        "`hippo_external_xref`-annotated ExternalReference slots instead."
+    ),
+)
 async def get_entity_by_external_id(
     id_type: str = Path(..., description="External ID type"),
     external_id: str = Path(..., description="External ID value"),
@@ -47,6 +62,8 @@ async def get_entity_by_external_id(
     auth: dict = Depends(require_auth),
 ) -> dict[str, Any]:
     """Get an entity by its external ID.
+
+    DEPRECATED (issue #48): use ``GET /xref/{system}/{value}`` instead.
 
     Args:
         id_type: The type of external ID.
@@ -69,7 +86,16 @@ async def get_entity_by_external_id(
         raise HTTPException(status_code=404, detail=str(e))
 
 
-@router.get("/entities/{entity_id}/external-ids")
+@router.get(
+    "/entities/{entity_id}/external-ids",
+    deprecated=True,
+    description=(
+        "DEPRECATED (issue #48): backed by the deprecated ExternalID "
+        "entity. An entity's ExternalReference slots travel as ordinary "
+        "slot data on the entity endpoints; use those (or the SDK's "
+        "`list_xrefs`) instead."
+    ),
+)
 async def list_entity_external_ids(
     entity_id: str,
     request: Request = None,
@@ -77,6 +103,9 @@ async def list_entity_external_ids(
     auth: dict = Depends(require_auth),
 ) -> list[dict[str, Any]]:
     """List all external IDs for an entity.
+
+    DEPRECATED (issue #48): read the entity's ExternalReference slots
+    (ordinary entity payload data) instead.
 
     Args:
         entity_id: The ID of the entity.
@@ -102,7 +131,16 @@ async def list_entity_external_ids(
         raise HTTPException(status_code=404, detail=str(e))
 
 
-@router.post("/entities/{entity_id}/external-ids")
+@router.post(
+    "/entities/{entity_id}/external-ids",
+    deprecated=True,
+    description=(
+        "DEPRECATED (issue #48): backed by the deprecated ExternalID "
+        "entity. Write an ExternalReference value to an entity slot "
+        "(annotated `hippo_external_xref` for reverse lookup) via the "
+        "ordinary entity write endpoints instead."
+    ),
+)
 async def register_external_id(
     entity_id: str,
     request: Request,
@@ -110,6 +148,9 @@ async def register_external_id(
     auth: dict = Depends(require_auth),
 ) -> dict[str, Any]:
     """Register an external ID for an entity.
+
+    DEPRECATED (issue #48): write an ExternalReference value to an
+    entity slot via the ordinary entity write endpoints instead.
 
     Args:
         entity_id: The ID of the entity.

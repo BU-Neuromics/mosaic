@@ -3,6 +3,7 @@
 import hashlib
 import os
 import urllib.request
+import warnings
 from contextlib import contextmanager
 from pathlib import Path
 from typing import Any, Iterator, Optional
@@ -713,12 +714,25 @@ class HippoClient:
     ) -> dict[str, Any]:
         """Register an external ID for an entity.
 
+        .. deprecated:: 0.9
+            The ExternalID entity pattern is deprecated (issue #48).
+            Declare an ``ExternalReference``-ranged slot on the entity
+            class (annotate it ``hippo_external_xref: true`` for reverse
+            lookup) and write the reference as ordinary slot data.
+
         ``source_system`` defaults to ``"default"`` for backward
         compatibility with legacy two-argument callers. Callers managing
         multiple source systems should pass the parameter explicitly so
         the ``(source_system, value)`` uniqueness constraint applies
         within the correct scope.
         """
+        warnings.warn(
+            "register_external_id() and the ExternalID entity are "
+            "deprecated (issue #48); store an ExternalReference value on "
+            "an entity slot annotated hippo_external_xref instead.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
         return self._provenance_service.register_external_id(
             entity_id, external_id, source_system=source_system
         )
@@ -732,9 +746,25 @@ class HippoClient:
     ) -> dict[str, Any]:
         """Supersede an entity's external ID with a new one.
 
+        .. deprecated:: 0.9
+            Mapping-level supersession is deprecated with the ExternalID
+            entity (issue #48). Updating an ``ExternalReference`` slot is
+            an ordinary entity update captured by normal provenance —
+            no dedicated supersession lifecycle is needed. (Entity-level
+            :meth:`supersede_entity` is NOT deprecated.)
+
         The supersede operation is scoped to one ``source_system``;
         legacy two-argument callers default to ``"default"``.
         """
+        warnings.warn(
+            "Mapping-level supersede() and the ExternalID entity are "
+            "deprecated (issue #48); update the entity's "
+            "ExternalReference slot instead (ordinary entity update, "
+            "normal provenance). Entity-level supersede_entity() is "
+            "unaffected.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
         return self._provenance_service.supersede(
             entity_id,
             old_external_id,
@@ -757,7 +787,20 @@ class HippoClient:
     def get_by_external_id(
         self, external_id: str, include_archived: bool = False
     ) -> dict[str, Any]:
-        """Get an entity by its external ID."""
+        """Get an entity by its external ID.
+
+        .. deprecated:: 0.9
+            The ExternalID entity pattern is deprecated (issue #48).
+            Use :meth:`find_by_xref` (system, value) over
+            ``hippo_external_xref``-annotated slots instead.
+        """
+        warnings.warn(
+            "get_by_external_id() and the ExternalID entity are "
+            "deprecated (issue #48); use find_by_xref(system, value) "
+            "over hippo_external_xref-annotated slots instead.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
         return self._provenance_service.get_by_external_id(
             external_id, include_archived
         )
@@ -765,7 +808,20 @@ class HippoClient:
     def list_external_ids(
         self, entity_id: str, include_superseded: bool = False
     ) -> list[dict[str, Any]]:
-        """List all external IDs for an entity."""
+        """List all external IDs for an entity.
+
+        .. deprecated:: 0.9
+            The ExternalID entity pattern is deprecated (issue #48).
+            Use :meth:`list_xrefs` (or read the entity's
+            ``ExternalReference`` slots directly) instead.
+        """
+        warnings.warn(
+            "list_external_ids() and the ExternalID entity are "
+            "deprecated (issue #48); use list_xrefs(entity_id) or read "
+            "the entity's ExternalReference slots instead.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
         return self._provenance_service.list_external_ids(
             entity_id, include_superseded
         )
