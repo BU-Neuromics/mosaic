@@ -41,6 +41,9 @@ CORE_INFRA_CLASSES: frozenset[str] = frozenset(
         "Validator",
         "ReferenceLoader",
         "ExternalID",
+        # ExternalReference is a structured VALUE type (issue #48) —
+        # stored inline on entity slots, never an entity of its own.
+        "ExternalReference",
     }
 )
 

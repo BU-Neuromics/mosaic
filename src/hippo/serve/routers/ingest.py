@@ -11,7 +11,10 @@ from pydantic import BaseModel, ValidationError
 
 from hippo.api.exceptions import EntityNotFoundError
 from hippo.core.client import HippoClient
-from hippo.core.exceptions import ValidationFailure
+from hippo.core.exceptions import (
+    ValidationError as HippoValidationError,
+    ValidationFailure,
+)
 
 router = APIRouter(prefix="/ingest", tags=["ingest"])
 
@@ -80,6 +83,11 @@ async def ingest_entity(
         result = client.create(entity_type=entity_type, data=data)
         return result
     except ValidationFailure as e:
+        raise HTTPException(status_code=422, detail=str(e))
+    except HippoValidationError as e:
+        # Adapter-level integrity violations (e.g. XrefUniquenessError on
+        # a hippo_external_xref slot) follow the standard validation
+        # error path — same 422 shape as schema validation failures.
         raise HTTPException(status_code=422, detail=str(e))
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Invalid JSON format: {str(e)}")
