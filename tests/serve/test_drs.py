@@ -56,6 +56,33 @@ def app_no_client():
     return create_app(routers=[drs.router])
 
 
+class TestDrsMountedInDefaultApp:
+    """The DRS router must be part of the default ``hippo serve`` app."""
+
+    def test_default_app_exposes_drs_route(self):
+        from hippo.serve import create_default_app
+
+        app = create_default_app()
+        # Assert via the OpenAPI path map — robust across FastAPI versions and
+        # the router-include mechanism (raw `app.routes` may expose opaque
+        # include wrappers without a `.path`).
+        assert "/ga4gh/drs/v1/objects/{object_id}" in app.openapi()["paths"]
+
+    def test_default_app_resolves_drs_object(self):
+        from hippo.serve import create_default_app
+
+        uri = "s3://bucket/file.bam"
+        raw = _make_raw_entity(data={"uri": uri})
+        full = _make_full_entity(data={"uri": uri})
+        mock_client = _make_client(raw_entity=raw, full_entity=full)
+        app = create_default_app(hippo_client=mock_client)
+        client = TestClient(app)
+
+        response = client.get("/ga4gh/drs/v1/objects/abc-123")
+        assert response.status_code == 200
+        assert response.json()["access_methods"][0]["access_url"]["url"] == uri
+
+
 class TestDrsObjectNotFound:
     def test_no_storage_returns_404(self, app_no_client):
         client = TestClient(app_no_client)
