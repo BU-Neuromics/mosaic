@@ -14,8 +14,6 @@ services:
       POSTGRES_DB: hippo_test
     ports:
       - "5433:5432"
-    volumes:
-      - pgdata-test:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U hippo_test"]
       interval: 5s
@@ -23,6 +21,3 @@ services:
       retries: 5
     tmpfs:
       - /var/lib/postgresql/data  # RAM-backed for fast tests
-
-volumes:
-  pgdata-test:

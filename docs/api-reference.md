@@ -352,11 +352,12 @@ Error responses use the same envelope with `data` set to `null`:
 
 ---
 
-### Health
+### Health & Status
 
 | Method | Path | Description |
 |--------|------|-------------|
-| GET | `/health` | Service health check |
+| GET | `/health` | Service health check (unauthenticated) |
+| GET | `/status` | System status: adapter, schema version, entity counts, capabilities |
 | GET | `/` | API root with version info |
 
 **GET /health**
@@ -393,6 +394,37 @@ Returns API information.
 ```
 
 *Error Codes: None (unauthenticated)*
+
+**GET /status**
+
+Returns a system status summary. Authenticated — unlike `/health`, the
+response describes the deployment's data. Mirrors the SDK's
+`client.status()`.
+
+*Response:*
+```json
+{
+  "service": "hippo",
+  "version": "0.8.0",
+  "adapter": "SQLiteAdapter",
+  "schema_version": "1.2.3",
+  "entity_types": ["Donor", "Sample"],
+  "entity_counts": { "Donor": 12, "Sample": 240 },
+  "capabilities": {
+    "search": ["fts"],
+    "staged_transaction": true
+  }
+}
+```
+
+Entity counts include unavailable (soft-deleted / superseded) entities —
+Hippo never hard-deletes. `adapter` and `schema_version` are `null` when
+the server runs without a storage adapter or schema registry.
+
+```python
+# SDK equivalent
+status = client.status()
+```
 
 ---
 

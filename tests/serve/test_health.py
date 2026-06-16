@@ -2,6 +2,7 @@
 
 from fastapi.testclient import TestClient
 
+import hippo
 from hippo.api.factory import create_app
 from hippo.serve.routers import health
 
@@ -32,7 +33,7 @@ def test_openapi_docs_available():
     assert response.status_code == 200
     data = response.json()
     assert data["info"]["title"] == "Hippo API"
-    assert data["info"]["version"] == "0.1.0"
+    assert data["info"]["version"] == hippo.__version__
 
 
 def test_swagger_ui_available():

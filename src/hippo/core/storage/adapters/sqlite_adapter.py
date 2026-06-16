@@ -2377,6 +2377,26 @@ class SQLiteAdapter(EntityStore):
         """
         return {"fts"}
 
+    def entity_counts(self) -> dict[str, int]:
+        """Count stored entities per entity type.
+
+        Counts come from the ``_entity_registry`` shadow table (one row
+        per created entity). Because Hippo never hard-deletes, the count
+        for a type includes unavailable (soft-deleted / superseded)
+        entities.
+
+        Returns:
+            Mapping of entity type name → total entity count, for types
+            with at least one entity.
+        """
+        with self._transaction() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                "SELECT class_name, COUNT(*) AS c FROM _entity_registry "
+                "GROUP BY class_name ORDER BY class_name"
+            )
+            return {row["class_name"]: row["c"] for row in cursor.fetchall()}
+
     def explain_query(
         self, sql: str, params: Optional[list] = None
     ) -> list[dict[str, Any]]:

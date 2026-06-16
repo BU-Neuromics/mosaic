@@ -234,6 +234,19 @@ class TestPostgresAdapterFTS:
         assert "fts" in caps
         assert "trigram" in caps
 
+    def test_entity_counts(self, adapter, sample_entity):
+        assert adapter.entity_counts() == {}
+
+        adapter.create(sample_entity)
+        assert adapter.entity_counts() == {"Sample": 1}
+
+    def test_entity_counts_include_unavailable(self, adapter, sample_entity):
+        """No hard deletes — soft-deleted entities still count."""
+        adapter.create(sample_entity)
+        adapter.delete(sample_entity.id)
+
+        assert adapter.entity_counts() == {"Sample": 1}
+
 
 class TestPostgresAdapterProvenance:
     """Test provenance tracking."""
