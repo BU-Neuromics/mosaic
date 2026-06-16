@@ -55,16 +55,25 @@ async def list_entities(
     limit: int = Query(100, ge=1, le=1000, description="Maximum number of results"),
     offset: int = Query(0, ge=0, description="Number of results to skip"),
     filter_mode: str = Query("and", description="Filter composition: 'and' (all match) or 'or' (any match)"),
+    updated_since: Optional[str] = Query(
+        None,
+        description=(
+            "Only return entities whose provenance-derived updated_at is "
+            "strictly greater than this ISO 8601 timestamp; results are "
+            "ordered by updated_at ascending for watermark polling (sec4 §4.5)"
+        ),
+    ),
     auth: dict = Depends(require_auth),
 ) -> dict[str, Any]:
     """List entities with optional filtering and pagination.
 
     Args:
         request: FastAPI request object.
-        entity_type: Optional entity type filter.
+        entity_type: Optional entity type filter (``None`` scans all types).
         limit: Maximum number of results to return.
         offset: Number of results to skip.
         filter_mode: How to combine filters — "and" or "or".
+        updated_since: Optional ISO 8601 watermark for polling callers.
         auth: Authentication context.
 
     Returns:
@@ -72,13 +81,24 @@ async def list_entities(
     """
     client = await get_client(request)
 
-    paginated = client.query(
-        entity_type=entity_type,
-        filters=[],
-        limit=limit,
-        offset=offset,
-        filter_mode=filter_mode,
-    )
+    if updated_since is not None:
+        # sec4 §4.5 polling path. entity_type stays optional so the
+        # watermark filter composes with the issue #44/#49 cross-class
+        # scan (None polls across all types).
+        paginated = client.query_updated_since(
+            entity_type=entity_type,
+            since=updated_since,
+            limit=limit,
+            offset=offset,
+        )
+    else:
+        paginated = client.query(
+            entity_type=entity_type,
+            filters=[],
+            limit=limit,
+            offset=offset,
+            filter_mode=filter_mode,
+        )
 
     return {
         "items": paginated.items,

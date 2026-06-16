@@ -4,6 +4,19 @@
 
 ### Added
 
+- **`query_updated_since` incremental polling (sec4 §4.5).**
+  `HippoClient.query_updated_since(entity_type=None, since, ...)` returns
+  entities whose provenance-derived `updated_at` is strictly greater than the
+  `since` watermark, ordered by `updated_at` ascending so polling callers (e.g.
+  Cappella's `hippo_poll` trigger) can advance their watermark incrementally.
+  `entity_type` is optional and composes with the issue #44/#49 cross-class
+  scan (`None` polls across all types). Exposed over REST as
+  `GET /entities?updated_since=<ISO8601>`; an unparseable watermark raises
+  `TemporalQueryError`, mapped to HTTP 400 "Temporal Query Error". Comparison
+  uses Hippo's server-side provenance timestamps (UTC) to avoid clock skew.
+  Re-derived from an unsanctioned `feat/maturity` experiment with no original
+  spec; reconciled against sec4 §4.5.
+
 - **`ExternalReference` value type + `hippo_external_xref` annotation
   (issue #48, non-breaking phase).** Cross-system identifiers are now a
   framework value type plus a declarative behavior annotation instead of a

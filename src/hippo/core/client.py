@@ -692,6 +692,30 @@ class HippoClient:
             entity_type, filters, date_from, date_to, limit, offset, filter_mode
         )
 
+    def query_updated_since(
+        self,
+        entity_type: Optional[str] = None,
+        since: str = "",
+        limit: Optional[int] = None,
+        offset: Optional[int] = None,
+        filters: Optional[list[dict[str, Any]]] = None,
+    ) -> "PaginatedResult":
+        """Query entities updated after a watermark timestamp (sec4 §4.5).
+
+        Polling support for change detection (e.g. Cappella's
+        ``hippo_poll`` trigger). Returns entities whose provenance-derived
+        ``updated_at`` is strictly greater than ``since``, ordered by
+        ``updated_at`` ascending so callers can advance their watermark
+        incrementally. ``since`` is compared against Hippo's server-side
+        provenance timestamps (UTC) to avoid clock-skew issues.
+
+        ``entity_type`` is optional: pass ``None`` to poll across all
+        entity types (composes with the issue #44/#49 cross-class scan).
+        """
+        return self._query_service.query_updated_since(
+            entity_type, since, limit, offset, filters
+        )
+
     def search(
         self,
         entity_type: str,

@@ -12,6 +12,7 @@ from hippo.api.exceptions import EntityNotFoundError
 from hippo.api.schemas import ErrorResponse
 from hippo.core.client import HippoClient
 from hippo.core.exceptions import (
+    TemporalQueryError,
     ValidationError as HippoValidationError,
     ValidationFailed,
 )
@@ -101,6 +102,19 @@ def create_app(
             status_code=422,
             content=ErrorResponse(
                 error="Validation Error",
+                detail=exc.message,
+            ).model_dump(),
+        ),
+    )
+
+    # sec4 §4.5: an unparseable updated_since watermark (or other invalid
+    # temporal query input) surfaces as a 400 Temporal Query Error.
+    app.add_exception_handler(
+        TemporalQueryError,
+        lambda request, exc: JSONResponse(
+            status_code=400,
+            content=ErrorResponse(
+                error="Temporal Query Error",
                 detail=exc.message,
             ).model_dump(),
         ),

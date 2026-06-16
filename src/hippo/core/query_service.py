@@ -272,6 +272,97 @@ class QueryService:
             offset=actual_offset,
         )
 
+    def query_updated_since(
+        self,
+        entity_type: Optional[str] = None,
+        since: str = "",
+        limit: Optional[int] = None,
+        offset: Optional[int] = None,
+        filters: Optional[list[dict[str, Any]]] = None,
+    ) -> "PaginatedResult":
+        """Query entities updated after a watermark timestamp (sec4 §4.5).
+
+        Designed for polling callers (e.g. Cappella's ``hippo_poll``
+        trigger). Selects entities whose provenance-derived ``updated_at``
+        is strictly greater than ``since`` and orders results by
+        ``updated_at`` ascending — oldest first, so callers can process
+        in order and persist the last ``updated_at`` they saw as the
+        watermark for the next poll.
+
+        ``since`` is compared against Hippo's server-side provenance
+        timestamps (UTC); callers should never use their own clock. The
+        watermark filter runs over the same provenance-derived read path
+        :meth:`query` uses (mirroring its ``date_from``/``date_to`` in-Python
+        pattern); pushing it into the ``entity_provenance_summary`` view
+        (sec6 §6.6) is the documented optimization if polling volume grows.
+
+        Args:
+            entity_type: Restrict the poll to one entity type. ``None``
+                polls across all types (composes with the issue #44/#49
+                cross-class scan).
+            since: ISO 8601 timestamp watermark (exclusive).
+            limit: Maximum number of results to return.
+            offset: Number of results to skip.
+            filters: Optional additional field filters (AND-composed).
+
+        Raises:
+            TemporalQueryError: If ``since`` is not a parseable ISO 8601
+                timestamp.
+        """
+        from hippo.core.exceptions import TemporalQueryError
+        from hippo.core.types import PaginatedResult
+
+        since_dt = self._parse_iso_timestamp(since)
+        if since_dt is None:
+            raise TemporalQueryError(
+                message=(
+                    f"updated_since must be an ISO 8601 timestamp; got {since!r}"
+                ),
+                requested_timestamp=since,
+            )
+
+        base = self.query(entity_type, filters=filters)
+
+        matched: list[tuple[Any, dict[str, Any]]] = []
+        for item in base.items:
+            updated = self._parse_iso_timestamp(
+                item.get("updated_at") or item.get("created_at") or ""
+            )
+            if updated is not None and updated > since_dt:
+                matched.append((updated, item))
+
+        matched.sort(key=lambda pair: pair[0])
+        sorted_items = [item for _, item in matched]
+
+        total = len(sorted_items)
+        actual_offset = offset or 0
+        if actual_offset:
+            sorted_items = sorted_items[actual_offset:]
+        if limit:
+            sorted_items = sorted_items[:limit]
+
+        return PaginatedResult(
+            items=sorted_items,
+            total=total,
+            limit=limit or 0,
+            offset=actual_offset,
+        )
+
+    @staticmethod
+    def _parse_iso_timestamp(value: str) -> Optional["datetime"]:
+        """Parse an ISO 8601 timestamp, normalizing ``Z`` and naive values to UTC."""
+        from datetime import datetime, timezone
+
+        if not value:
+            return None
+        try:
+            parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+        except ValueError:
+            return None
+        if parsed.tzinfo is None:
+            parsed = parsed.replace(tzinfo=timezone.utc)
+        return parsed
+
     def search(
         self,
         entity_type: str,
