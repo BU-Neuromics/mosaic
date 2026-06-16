@@ -4,6 +4,25 @@
 
 ### Added
 
+- **Full SDK exception → HTTP status mapping in the REST layer (sec4 §4.3).**
+  Previously only `EntityNotFoundError` (404) and the validation errors (422)
+  had dedicated REST handlers; every other `HippoError` (supersession
+  conflicts, config/adapter failures, provenance-integrity violations,
+  ingestion / search-capability / temporal-query / schema errors, recipe and
+  migration errors, ...) collapsed to an anonymous `500 Internal Server
+  Error`, leaving clients unable to distinguish causes. The API factory now
+  maps the hierarchy via a `_make_hippo_handler(status, title)` factory: 409
+  for `EntityAlreadySupersededError` and `ConfigError` (adapter conflict),
+  422 for `ValidationFailure`, 400 for `IngestionError` (and its subclass
+  `IngestionValidationError`) / `SearchCapabilityError` / `TemporalQueryError`
+  / `SchemaError`, named-and-logged 500s for `AdapterError` and
+  `ProvenanceIntegrityError`, and a named-500 `HippoError` fallback (using the
+  concrete class name) for any other SDK error. Non-Hippo exceptions still
+  return an opaque 500 with the detail withheld. All responses reuse the
+  existing `ErrorResponse` body, and the tier-tagged `ValidationFailed`
+  envelope handler (sec9 §9.9) is unchanged. Documented in
+  `docs/api-reference.md`.
+
 - **`ExternalReference` value type + `hippo_external_xref` annotation
   (issue #48, non-breaking phase).** Cross-system identifiers are now a
   framework value type plus a declarative behavior annotation instead of a
