@@ -4,6 +4,11 @@
 
 ### Added
 
+- **Ship `py.typed` (PEP 561) + package metadata (issue #56).** Hippo now
+  advertises inline type information to downstream type-checkers via a
+  `py.typed` marker, and `pyproject.toml` gains `keywords` and trove
+  `classifiers` (including `Typing :: Typed`).
+
 - **`ExternalReference` value type + `hippo_external_xref` annotation
   (issue #48, non-breaking phase).** Cross-system identifiers are now a
   framework value type plus a declarative behavior annotation instead of a
