@@ -4,7 +4,7 @@ Covers the public path that lets a consumer obtain a registry/client
 spanning **its own schema + an installed reference loader** with zero
 hand-assembled registry code:
 
-- ``hippo.cli.commands.reference.fragment_specs_for_requires`` — resolve a
+- ``hippo.core.loaders.discovery.fragment_specs_for_requires`` — resolve a
   schema's ``requires:`` pins to installed loader fragments;
 - ``hippo.core.factory.build_schema_registry(..., merge_requires=True)`` and
   the public ``hippo.registry_for_schema`` / ``hippo.client_for_schema``.
@@ -24,9 +24,9 @@ from pathlib import Path
 import pytest
 
 import hippo
-from hippo.cli.commands.reference import fragment_specs_for_requires
 from hippo.core.exceptions import SchemaError
 from hippo.core.factory import build_schema_registry
+from hippo.core.loaders.discovery import fragment_specs_for_requires
 
 
 # Consumer schema: links its own ``Annotation`` to the loader's ``FakeTerm``

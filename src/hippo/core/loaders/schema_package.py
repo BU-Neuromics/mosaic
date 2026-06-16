@@ -57,7 +57,7 @@ class SchemaPackage(ABC):
     Concrete packages are distributed as Python distributions and
     registered via the ``hippo.schema_packages`` entry-point group (with
     ``hippo.reference_loaders`` as a subset/alias — see
-    :func:`hippo.cli.commands.reference.discover_schema_packages`).
+    :func:`hippo.core.loaders.discovery.discover_schema_packages`).
 
     A pure-schema package implements only the two abstract methods
     (:meth:`versions` and :meth:`schema_fragment`); the lifecycle hooks

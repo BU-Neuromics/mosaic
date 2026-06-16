@@ -77,14 +77,11 @@ def build_schema_registry(
 def _merge_required_loaders(registry: Any, schema_path: PathLike) -> Any:
     """Merge the schema's installed ``requires:`` loader fragments into *registry*.
 
-    Deferred import: loader discovery currently lives under
-    ``hippo.cli.commands.reference`` (it is infrastructure, not CLI logic —
-    a future cleanup may relocate it to ``hippo.core``). The import is
-    function-local so module load stays free of that dependency and no
-    import cycle forms. Returns the original registry unchanged when the
-    schema declares no ``requires:``.
+    Returns the original registry unchanged when the schema declares no
+    ``requires:``. The import is function-local to keep module load cheap
+    (discovery walks entry points); it stays within the core layer.
     """
-    from hippo.cli.commands.reference import fragment_specs_for_requires
+    from hippo.core.loaders.discovery import fragment_specs_for_requires
 
     specs = fragment_specs_for_requires(schema_path)
     if specs:

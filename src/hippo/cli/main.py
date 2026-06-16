@@ -412,7 +412,7 @@ def validate(
             # Span the registry over the pinned loaders so a `--data` bundle
             # validates against loader-provided classes too (issue #67). The
             # version gate already passed above, so skip re-checking here.
-            from hippo.cli.commands.reference import fragment_specs_for_requires
+            from hippo.core.loaders.discovery import fragment_specs_for_requires
 
             specs = fragment_specs_for_requires(schema, check_versions=False)
             if specs:
