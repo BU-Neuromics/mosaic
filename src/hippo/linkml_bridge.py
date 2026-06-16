@@ -714,6 +714,80 @@ def merge_loader_fragment(
     return _merge_prepared_fragment(deployed_sv, prepared)
 
 
+def _loader_prefix_of(element: Any) -> Optional[str]:
+    """Loader prefix that provided ``element`` (from ``provided_by``), or None.
+
+    ``provided_by`` is injected as ``<loader_name>@<version>`` (Rule 3); the
+    loader name equals the loader's ``default_prefix`` (Rule 1), so the part
+    before ``@`` is exactly the prefix a consumer would use in a CURIE range.
+    """
+    val = annotation_value(element, PROVIDED_BY_ANNOTATION)
+    if isinstance(val, str) and "@" in val:
+        return val.split("@", 1)[0]
+    return None
+
+
+def _resolve_loader_prefixed_ranges(sv: SchemaView) -> SchemaView:
+    """Rewrite consumer slot ranges of the form ``<loader>:<Class>`` to ``<Class>``.
+
+    After a consumer schema is merged with its ``requires:`` loader fragments
+    (issue #67), a slot that referenced a loader class through the documented
+    loader-prefixed CURIE form (e.g. ``range: ensembl:Gene``) is rewritten to
+    the bare merged class name (``Gene``) — but only when a class of that name
+    exists *and* was provided by exactly that loader (matched via the injected
+    ``provided_by`` attribution). The rewrite turns an otherwise-advisory
+    opaque range into a recognized cross-loader reference, so the slot
+    participates in joins/expansion and is validated against the merged class.
+
+    Loader-owned slots/classes (those carrying ``provided_by``) are left
+    untouched: loader-to-loader cross-references stay advisory in v1
+    (decision D2.14.H, spec §2.14.6). Returns ``sv`` unchanged when nothing
+    resolves.
+    """
+    classes = sv.all_classes(imports=True)
+
+    def _resolve(rng: Any) -> Any:
+        if not (isinstance(rng, str) and ":" in rng and "//" not in rng):
+            return rng
+        prefix, _, cname = rng.partition(":")
+        target = classes.get(cname)
+        if target is not None and _loader_prefix_of(target) == prefix:
+            return cname
+        return rng
+
+    schema = sv.schema
+    changed = False
+
+    for slot in (schema.slots or {}).values():
+        if _loader_prefix_of(slot) is not None:
+            continue  # loader-owned top-level slot — advisory (D2.14.H)
+        new = _resolve(slot.range)
+        if new != slot.range:
+            slot.range = new
+            changed = True
+
+    for cls in (schema.classes or {}).values():
+        if _loader_prefix_of(cls) is not None:
+            continue  # loader-owned class — its attribute ranges stay advisory
+        for attr in (cls.attributes or {}).values():
+            new = _resolve(attr.range)
+            if new != attr.range:
+                attr.range = new
+                changed = True
+        for usage in (cls.slot_usage or {}).values():
+            new = _resolve(usage.range)
+            if new != usage.range:
+                usage.range = new
+                changed = True
+
+    if not changed:
+        return sv
+
+    from linkml_runtime.dumpers import yaml_dumper
+
+    return SchemaView(yaml_dumper.dumps(schema), importmap=_bundled_importmap())
+
+
 def merge_loader_fragments(
     deployed_sv: SchemaView,
     specs: list[LoaderFragmentSpec],
@@ -848,6 +922,10 @@ class SchemaRegistry:
         merged_sv = merge_loader_fragments(
             self._sv, specs, installed_loader_names=installed_loader_names
         )
+        # Resolve consumer `range: <loader>:<Class>` CURIEs against the now-
+        # merged loader classes so cross-loader references are non-advisory
+        # (issue #67, layer 3). No-op when the consumer used bare class names.
+        merged_sv = _resolve_loader_prefixed_ranges(merged_sv)
         return SchemaRegistry(merged_sv)
 
     @property
