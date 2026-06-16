@@ -701,6 +701,11 @@ from hippo.cli.commands.recipe import recipe_app
 
 app.add_typer(recipe_app, name="recipe")
 
+from hippo.cli.commands.entity import entity_app, status as _status_command
+
+app.add_typer(entity_app, name="entity")
+app.command(name="status")(_status_command)
+
 schema_app = typer.Typer(name="schema", help="Schema management commands")
 app.add_typer(schema_app, name="schema")
 
