@@ -3,7 +3,7 @@
 - **Status:** Proposed
 - **Date:** 2026-06-17
 - **Deciders:** labadorf, design session
-- **Related:** sec6 (Provenance & Audit), sec4 §4.7 (GraphQL transport), sec3/sec3b (data model & storage), `docs/data-model.md` (`client.state_at`, history); **Aperture ADR-0023** (data-story reproducibility) + Aperture `instruction-path-model.md` §9 (the requirement origin)
+- **Related:** **sec6 §6.8 (the design this ADR drives)**, sec6 §6.4/§6.6/§6.7 (temporal fields, provenance storage, history/`state_at`), sec4 §4.3/§4.7 (REST/GraphQL `as_of`), sec3/sec3b (data model & storage), `docs/data-model.md` (`client.state_at`, history); **Aperture ADR-0023** (data-story reproducibility) + Aperture `instruction-path-model.md` §9 (the requirement origin)
 
 ## Context
 
@@ -74,17 +74,33 @@ already retains.
   cost, checkpoint-cadence guesswork, and it duplicates what the append-only provenance log
   already encodes. Rejected: reconstruct from the log on demand.
 
-## Notes / open sub-questions
+## Sub-questions resolved (2026-06-17)
 
-- **Bitemporality:** is **transaction-time** as-of (when Hippo recorded the fact) sufficient, or
-  is **valid-time** (when the fact was true in the world) also needed? The provenance log gives
-  transaction-time directly; valid-time would be a larger data-model change. Lead with
-  transaction-time.
-- **GraphQL expression:** a per-query argument vs. a request-level header vs. a "snapshot handle"
-  obtained once and reused — which best fits the additive-only contract and DataLoader batching?
-- **Performance:** what provenance indexes / caching make subgraph reconstruction at `T`
-  acceptable? Relationship immutability (relationships are append-only) helps.
-- **Schema-as-of:** confirm `schema_version` reconstruction at `T` composes cleanly with typed
-  decoding when the schema has evolved between `T` and now (additive-only tolerance).
-- **Versioning:** scope which Hippo version targets this; the requirement is recorded now,
-  driven by Aperture's keystone.
+The design that resolves these is **sec6 §6.8 (Graph-Level As-Of Reconstruction)**; summary:
+
+1. **Bitemporality → transaction-time only.** `T` selects the graph as Hippo *recorded* it (the
+   provenance `timestamp` axis) — exactly what reproducibility needs. Valid-time is deferred (it
+   needs per-fact `valid_from`/`valid_to`, a data-model change). *(§6.8.1)*
+2. **Transport expression → a per-field `asOf` argument** (REST `?as_of=`, GraphQL `asOf:
+   DateTime`), additive and filter-composable; DataLoader batch/cache keys include `asOf`. A
+   request-level default may be layered later as ergonomics. *(§6.8.5)*
+3. **Performance → query-time reconstruction on the existing `idx_provenance_entity`** plus one
+   covering index `idx_provenance_type_time (entity_type, timestamp, entity_id)` for type-scoped
+   set selection. No materialized snapshots (a cache tier only if profiling demands). *(§6.8.4)*
+4. **Schema-as-of → additive-only tolerance.** Decode as-of-`T` records under the current model;
+   slots added after `T` resolve to defaults. Non-additive change between `T` and now is out of
+   scope (flagged, not silently mis-decoded). *(§6.8.3)*
+5. **Versioning → decomposed into shippable increments** (§6.8.6), sequenced via OpenSpec after
+   the current surface; not a v0.1 commitment.
+
+## Notes / remaining items before ratify
+
+- **Status is still `Proposed`** — recommended for ratification (`Accepted`) by the decider on
+  review of sec6 §6.8.
+- **Reconstruction contract to verify in implementation (§6.8.2):** confirm, per `operation`,
+  whether each provenance `patch` is a full post-image (latest-record-≤-`T` suffices) or a sparse
+  delta (must replay from `create`). Today's `state_at` takes the latest patch; §6.7 intends
+  replay — the first increment reconciles them.
+- **Relationship liveness must be provenance-driven** (`relationship_add`/`remove` events), since
+  `relationships.is_available` carries no change-timestamp (§6.8.2). Confirm those events capture
+  enough to reconstruct edge liveness at `T`.
