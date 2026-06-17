@@ -204,3 +204,53 @@ def test_query_as_of_applies_filters(client_and_adapter):
     res = client.query(entity_type="TestEntity",
                        filters=[{"field": "name", "value": "keep"}], as_of=FUTURE)
     assert _ids(res) == {"x"}
+
+
+# --------------------------------------------------------------------------
+# Relationship liveness at T — provenance-driven traverse (sec6 §6.8 increment 3).
+# --------------------------------------------------------------------------
+
+
+def _entities(adapter, *ids):
+    for i in ids:
+        adapter.create(SQLiteEntity(id=i, entity_type="TestEntity", is_available=True,
+                                    version=1, data={"name": i}))
+
+
+def test_traverse_as_of_excludes_edge_added_after_t(client_and_adapter):
+    client, adapter = client_and_adapter
+    _entities(adapter, "p", "c")
+    t_before_edge = adapter.history("c")[0]["timestamp"]  # before any relate
+    time.sleep(0.01)
+    client.relationships.relate("p", "c", "contains")
+
+    # current: edge present
+    assert any(e["target_id"] == "c" for e in client.relationships.traverse("p"))
+    # as of before the edge existed: no live edges
+    assert client.relationships.traverse("p", as_of=t_before_edge) == []
+
+
+def test_traverse_as_of_includes_edge_removed_after_t(client_and_adapter):
+    client, adapter = client_and_adapter
+    _entities(adapter, "p", "c")
+    client.relationships.relate("p", "c", "contains")
+    t_live = adapter.history("p")[-1]["timestamp"]  # the relationship_add event
+    time.sleep(0.01)
+    client.relationships.unrelate("p", "c", "contains")
+
+    # current: edge is gone
+    assert all(e["target_id"] != "c" for e in client.relationships.traverse("p"))
+    # as of while the edge was live: present
+    asof = client.relationships.traverse("p", as_of=t_live)
+    assert any(e["target_id"] == "c" for e in asof)
+
+
+def test_traverse_as_of_multi_hop(client_and_adapter):
+    client, adapter = client_and_adapter
+    _entities(adapter, "a", "b", "cc")
+    client.relationships.relate("a", "b", "r")
+    client.relationships.relate("b", "cc", "r")
+
+    res = client.relationships.traverse("a", as_of=FUTURE)
+    depths = {e["target_id"]: e["depth"] for e in res}
+    assert depths == {"b": 1, "cc": 2}

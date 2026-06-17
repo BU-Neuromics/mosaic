@@ -590,7 +590,8 @@ sub-question 5 — sequence via OpenSpec, after the current surface; not a v0.1 
 2. ✅ **(done) Entity set + state + temporal + schema at `T`** — `client.query(..., as_of=)`
    end-to-end on the SQLite adapter (provenance-driven entity-set reconstruction); added
    `idx_provenance_type_time`; closed the §6.8.2 supersede-annotation gap.
-3. **Relationship liveness at `T`** — provenance-driven `traverse(..., as_of=)`.
+3. ✅ **(done) Relationship liveness at `T`** — provenance-driven `traverse(..., as_of=)`: edge
+   liveness reconstructed from `relationship_add`/`remove` events (SQLite). Postgres parity in (5).
 4. **Transports** — REST `?as_of=` and GraphQL `asOf` (with DataLoader keying); optional snapshot
    handle.
 5. **Postgres adapter parity** + performance profiling (snapshot/cache tier only if needed).

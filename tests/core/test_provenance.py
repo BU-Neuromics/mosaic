@@ -316,7 +316,7 @@ class TestHistoryMethods:
         adapter = SQLiteAdapter(db_path, wal_mode=True, schema_registry=_build_minimal_schema_registry())
 
         from hippo.core.storage.adapters.sqlite_adapter import SQLiteEntity
-        from datetime import datetime, timezone
+        from datetime import datetime, timezone, timedelta
 
         now = datetime.now(timezone.utc)
         time1 = now.isoformat()
@@ -333,7 +333,7 @@ class TestHistoryMethods:
         history = adapter.history("state-test-1")
         create_timestamp = history[0]["timestamp"]
 
-        time2 = (now.replace(second=now.second + 1)).isoformat()
+        time2 = (now + timedelta(seconds=1)).isoformat()
 
         adapter.update_data(
             entity_id="state-test-1",

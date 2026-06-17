@@ -158,6 +158,7 @@ class RelationshipManager:
                 operation="relationship_add",
                 actor_id=self._user_context,
                 patch={
+                    "relationship_id": relationship.id,
                     "source_id": source_id,
                     "target_id": target_id,
                     "relationship_type": relationship_type,
@@ -242,6 +243,8 @@ class RelationshipManager:
         source_id: str,
         relationship_type: Optional[str] = None,
         max_depth: int = 10,
+        *,
+        as_of: Optional[str] = None,
     ) -> list[dict[str, Any]]:
         """Traverse relationships from a starting entity.
 
@@ -249,12 +252,18 @@ class RelationshipManager:
             source_id: The starting entity ID.
             relationship_type: Optional filter for relationship type.
             max_depth: Maximum traversal depth (default: 10).
+            as_of: Optional ISO-8601 transaction-time. When given, traversal
+                walks only edges live at that time, reconstructed from
+                relationship_add/remove provenance events (sec6 §6.8.2) — not
+                the relationships table's current ``is_available`` flag.
 
         Returns:
             List of relationships found during traversal, with depth information.
 
         Raises:
-            EntityNotFoundError: If the source entity doesn't exist.
+            EntityNotFoundError: If the source entity doesn't exist (current-state
+                traversal only; the as-of path does no current-state existence
+                check — the source may have existed only at/around ``as_of``).
         """
         if max_depth <= 0:
             max_depth = 1
@@ -266,6 +275,16 @@ class RelationshipManager:
             return []
 
         with self._storage._transaction() as conn:
+            relationship_store = self._storage._get_relationship_store(conn)
+
+            if as_of is not None:
+                return relationship_store.traverse(
+                    source_id=source_id,
+                    relationship_type=relationship_type,
+                    max_depth=max_depth,
+                    as_of=as_of,
+                )
+
             existing = self._storage.read(source_id)
             if existing is None:
                 raise EntityNotFoundError(
@@ -273,7 +292,6 @@ class RelationshipManager:
                     entity_id=source_id,
                 )
 
-            relationship_store = self._storage._get_relationship_store(conn)
             return relationship_store.traverse(
                 source_id=source_id,
                 relationship_type=relationship_type,
