@@ -678,6 +678,7 @@ class HippoClient:
         limit: Optional[int] = None,
         offset: Optional[int] = None,
         filter_mode: str = "and",
+        as_of: Optional[str] = None,
     ) -> "PaginatedResult":
         """Query entities with filter criteria.
 
@@ -687,9 +688,13 @@ class HippoClient:
                 concrete per-class table / drop the type predicate).
             filter_mode: How to combine filters — "and" (all must match,
                 default) or "or" (any may match).
+            as_of: Optional ISO-8601 transaction-time; when given, results are
+                reconstructed as the graph stood at that time (sec6 §6.8 /
+                ADR-0001). Omitted = current state.
         """
         return self._query_service.query(
-            entity_type, filters, date_from, date_to, limit, offset, filter_mode
+            entity_type, filters, date_from, date_to, limit, offset, filter_mode,
+            as_of=as_of,
         )
 
     def search(

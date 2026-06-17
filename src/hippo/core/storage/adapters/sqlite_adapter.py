@@ -350,6 +350,42 @@ class ProvenanceStore:
         row = cursor.fetchone()
         return row["timestamp"] if row else None
 
+    def entities_created_by(
+        self, as_of: str, entity_type: Optional[str] = None
+    ) -> list[tuple[str, str]]:
+        """Candidate ``(entity_id, entity_type)`` set for an as-of query: entities
+        with a ``create`` record at-or-before ``as_of`` (sec6 §6.8.2 entity-set
+        selection), optionally scoped to ``entity_type``. Per-entity availability
+        at ``as_of`` is decided downstream by ``get_state_at``."""
+        cursor = self._conn.cursor()
+        if entity_type is not None:
+            cursor.execute(
+                """SELECT DISTINCT entity_id, entity_type FROM "ProvenanceRecord"
+                   WHERE operation = 'create' AND entity_type = ?
+                     AND timestamp <= ?""",
+                (entity_type, as_of),
+            )
+        else:
+            cursor.execute(
+                """SELECT DISTINCT entity_id, entity_type FROM "ProvenanceRecord"
+                   WHERE operation = 'create' AND timestamp <= ?""",
+                (as_of,),
+            )
+        return [(row["entity_id"], row["entity_type"]) for row in cursor.fetchall()]
+
+    def state_version_at(self, entity_id: str, as_of: str) -> int:
+        """Entity version as of ``T`` — the count of state-replacing
+        (``create``/``update``) records at-or-before ``as_of``."""
+        cursor = self._conn.cursor()
+        cursor.execute(
+            """SELECT COUNT(*) AS n FROM "ProvenanceRecord"
+               WHERE entity_id = ? AND operation IN ('create', 'update')
+                 AND timestamp <= ?""",
+            (entity_id, as_of),
+        )
+        row = cursor.fetchone()
+        return int(row["n"]) if row and row["n"] else 1
+
     def get_provenance_timestamps(
         self, entity_id: str
     ) -> Optional[dict[str, Optional[str]]]:
@@ -978,6 +1014,12 @@ class SQLiteAdapter(EntityStore):
             cursor.execute("""
                 CREATE INDEX IF NOT EXISTS idx_ProvenanceRecord_entity_timestamp
                 ON "ProvenanceRecord"(entity_id, timestamp)
+            """)
+            # Type-scoped as-of set selection (sec6 §6.8.4): "entities of type X
+            # present at T" scans creates by (entity_type, timestamp).
+            cursor.execute("""
+                CREATE INDEX IF NOT EXISTS idx_ProvenanceRecord_type_timestamp
+                ON "ProvenanceRecord"(entity_type, timestamp, entity_id)
             """)
 
             cursor.execute("""
@@ -2148,17 +2190,13 @@ class SQLiteAdapter(EntityStore):
         per-class table in the schema and merges results (cross-class
         scan).
 
-        ``as_of`` (sec6 §6.8, ADR-0001) is part of the as-of contract but
-        query-spanning entity-set reconstruction is increment 2 (BU-Neuromics/
-        hippo#71); passing a non-``None`` ``as_of`` raises ``NotImplementedError``
-        rather than silently returning current state.
+        When ``as_of`` (ISO-8601) is given, the result is reconstructed from the
+        provenance log as the graph stood at that transaction-time — query-spanning
+        as-of reconstruction (sec6 §6.8 / ADR-0001). Omitted = current state.
         """
         if as_of is not None:
-            raise NotImplementedError(
-                "as-of entity-set reconstruction (find(as_of=...)) is not yet "
-                "implemented — sec6 §6.8 increment 2 (BU-Neuromics/hippo#71). "
-                "Per-entity as-of is available via state_at()."
-            )
+            yield from self._find_as_of(query, as_of)
+            return
         if query.entity_type:
             if not self._per_class_table_exists(query.entity_type):
                 return
@@ -2172,6 +2210,81 @@ class SQLiteAdapter(EntityStore):
             if not self._per_class_table_exists(class_name):
                 continue
             yield from self._find_per_class(class_name, query)
+
+    def _find_as_of(
+        self, query: Query, as_of: str
+    ) -> Iterator[SQLiteEntity]:
+        """Query-spanning as-of reconstruction (sec6 §6.8).
+
+        Candidate entities are those created at-or-before ``as_of`` (optionally
+        scoped to ``query.entity_type``); each is reconstructed to its state at
+        ``as_of`` via the provenance log (``get_state_at`` — ``None`` if it was
+        unavailable/deleted then); equality filters apply to the reconstructed
+        data; offset/limit are applied last.
+
+        Filters and pagination run in Python over the reconstructed records
+        (correctness-first; the §6.8.4 indexed/cached fast path is a later
+        optimization). Relationship-existence filters and cross-class temporal
+        joins are out of scope for this increment (BU-Neuromics/hippo#71).
+        """
+        with self._transaction() as conn:
+            prov = self._get_provenance_store(conn)
+            candidates = prov.entities_created_by(
+                as_of, entity_type=query.entity_type
+            )
+
+            matched: list[SQLiteEntity] = []
+            for entity_id, entity_type in candidates:
+                reconstructed = prov.get_state_at(entity_id, as_of)
+                if reconstructed is None:
+                    continue  # not created yet, or unavailable/deleted at as_of
+                data = reconstructed.get("state")
+                if not isinstance(data, dict):
+                    continue
+                if not self._matches_filters(data, entity_id, query):
+                    continue
+                matched.append(
+                    SQLiteEntity(
+                        id=entity_id,
+                        entity_type=entity_type,
+                        is_available=True,
+                        version=prov.state_version_at(entity_id, as_of),
+                        data=data,
+                    )
+                )
+
+        offset = query.offset or 0
+        sliced = matched[offset:]
+        if query.limit:
+            sliced = sliced[: query.limit]
+        yield from sliced
+
+    @staticmethod
+    def _matches_filters(
+        data: dict[str, Any], entity_id: str, query: Query
+    ) -> bool:
+        """Equality-match ``query.filters`` against a reconstructed ``data`` dict,
+        honoring ``filter_mode`` — the as-of (Python-side) analogue of
+        ``_find_per_class``'s column predicates. ``id`` resolves to ``entity_id``."""
+        filters = query.filters or []
+        if not filters:
+            return True
+
+        def one(field: str, value: Any) -> bool:
+            actual = entity_id if field == "id" else data.get(field)
+            return actual == value
+
+        checks: list[bool] = []
+        for f in filters:
+            if "field" in f and "value" in f:
+                checks.append(one(f["field"], f["value"]))
+            else:
+                for key, value in f.items():
+                    checks.append(one(key, value))
+        if not checks:
+            return True
+        mode = getattr(query, "filter_mode", "and")
+        return any(checks) if mode == "or" else all(checks)
 
     def _find_per_class(
         self, entity_type: str, query: Query

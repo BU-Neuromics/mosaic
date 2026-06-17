@@ -308,9 +308,9 @@ class TestBatchPrimitive:
         original = storage.get_temporal
         calls: list[list[str]] = []
 
-        def spy(entity_ids: list[str]):
+        def spy(entity_ids: list[str], *, as_of: str | None = None):
             calls.append(list(entity_ids))
-            return original(entity_ids)
+            return original(entity_ids, as_of=as_of)
 
         storage.get_temporal = spy
         try:

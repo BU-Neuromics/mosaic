@@ -491,10 +491,10 @@ provenance record with `timestamp <= T` — i.e. `state_at` (§6.7) applied per 
 > never define the reconstructed state; the most recent `availability_change` with
 > `timestamp <= T` decides availability. `state_at` / `get_state_at` now implement exactly this
 > (previously they returned the latest record's `patch` regardless of `operation` — incorrect for
-> non-state ops). **Gap to close before query-spanning state reconstruction:** the supersede path
-> records an `operation='update'` *annotation* patch on the replacement entity (not a full
-> post-image), so annotation-updates are not yet distinguishable from state-updates — give such
-> writes a distinct operation/marker.
+> non-state ops). **Resolved (increment 2):** the supersede path now records the replacement's
+> **full post-image** as the `patch` (the audit note moved to provenance `context`), so the
+> full-post-image invariant holds for *every* `create`/`update` record and as-of reconstruction
+> returns the replacement's real data — no annotation masquerading as state.
 
 **Entity set at `T`.** A query for type `X` as-of `T` returns the entities that, at `T`, had been
 created and were available: an entity is **present at `T`** iff its earliest `create` record has
@@ -585,11 +585,11 @@ snap.query("Sample", filters=[...]); snap.relationships.traverse(...)
 Decomposed so each increment is independently shippable and testable *(resolves ADR-0001
 sub-question 5 — sequence via OpenSpec, after the current surface; not a v0.1 commitment)*:
 
-1. **Formalize the `EntityStore` as-of contract** — declare `state_at` / `get_temporal` /
-   `find(..., as_of=)` on the ABC; verify the §6.8.2 reconstruction contract (full post-image vs.
-   replay) per `operation`. Lowest-risk; mostly contract + the entity state/temporal path.
-2. **Entity set + state + temporal + schema at `T`** — `client.query(..., as_of=)` end-to-end on
-   the SQLite adapter; add `idx_provenance_type_time`.
+1. ✅ **(done — #73) Formalize the `EntityStore` as-of contract** — `state_at` / `get_temporal` /
+   `find(..., as_of=)` on the ABC; verified the §6.8.2 reconstruction contract per `operation`.
+2. ✅ **(done) Entity set + state + temporal + schema at `T`** — `client.query(..., as_of=)`
+   end-to-end on the SQLite adapter (provenance-driven entity-set reconstruction); added
+   `idx_provenance_type_time`; closed the §6.8.2 supersede-annotation gap.
 3. **Relationship liveness at `T`** — provenance-driven `traverse(..., as_of=)`.
 4. **Transports** — REST `?as_of=` and GraphQL `asOf` (with DataLoader keying); optional snapshot
    handle.

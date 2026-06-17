@@ -115,8 +115,92 @@ def test_get_temporal_as_of_at_create_excludes_later_update(adapter):
     assert asof.updated_at == t_create
 
 
-def test_find_as_of_not_implemented(adapter):
-    """find(as_of=...) is the increment-2 contract; until then it raises rather
-    than silently returning current state (sec6 §6.8)."""
-    with pytest.raises(NotImplementedError):
-        list(adapter.find(Query(entity_type="TestEntity"), as_of=FUTURE))
+def test_find_as_of_reconstructs_entity_set(adapter):
+    """find(as_of=...) reconstructs the entity set as the graph stood at T
+    (increment 2): an entity created after T is absent."""
+    adapter.create(SQLiteEntity(id="f1", entity_type="TestEntity", is_available=True,
+                                version=1, data={"name": "f1"}))
+    t1 = adapter.history("f1")[0]["timestamp"]
+    time.sleep(0.01)
+    adapter.create(SQLiteEntity(id="f2", entity_type="TestEntity", is_available=True,
+                                version=1, data={"name": "f2"}))
+
+    at_t1 = {e.id for e in adapter.find(Query(entity_type="TestEntity"), as_of=t1)}
+    assert at_t1 == {"f1"}  # f2 was created after t1
+
+    current = {e.id for e in adapter.find(Query(entity_type="TestEntity"))}
+    assert current == {"f1", "f2"}
+
+
+# --------------------------------------------------------------------------
+# End-to-end client.query(as_of=...) — sec6 §6.8 increment 2.
+# --------------------------------------------------------------------------
+
+
+@pytest.fixture
+def client_and_adapter(db_path):
+    from hippo.core.client import HippoClient
+    adapter = SQLiteAdapter(
+        db_path, wal_mode=True, schema_registry=_build_minimal_schema_registry()
+    )
+    client = HippoClient(storage=adapter)
+    yield client, adapter
+    adapter.close()
+
+
+def _ids(result):
+    return {item["id"] for item in result.items}
+
+
+def test_query_as_of_excludes_entities_created_after_t(client_and_adapter):
+    client, adapter = client_and_adapter
+    adapter.create(SQLiteEntity(id="a", entity_type="TestEntity", is_available=True,
+                                version=1, data={"name": "A"}))
+    t_after_a = adapter.history("a")[0]["timestamp"]
+    time.sleep(0.01)
+    adapter.create(SQLiteEntity(id="b", entity_type="TestEntity", is_available=True,
+                                version=1, data={"name": "B"}))
+
+    assert {"a", "b"} <= _ids(client.query(entity_type="TestEntity"))
+    assert _ids(client.query(entity_type="TestEntity", as_of=t_after_a)) == {"a"}
+
+
+def test_query_as_of_reflects_historical_state(client_and_adapter):
+    client, adapter = client_and_adapter
+    adapter.create(SQLiteEntity(id="a", entity_type="TestEntity", is_available=True,
+                                version=1, data={"name": "v1"}))
+    t1 = adapter.history("a")[0]["timestamp"]
+    time.sleep(0.01)
+    adapter.update_data(entity_id="a", entity_type="TestEntity",
+                        data={"name": "v2"}, new_version=2)
+
+    asof = client.query(entity_type="TestEntity", as_of=t1)
+    assert next(i for i in asof.items if i["id"] == "a")["data"]["name"] == "v1"
+
+    current = client.query(entity_type="TestEntity")
+    assert next(i for i in current.items if i["id"] == "a")["data"]["name"] == "v2"
+
+
+def test_query_as_of_respects_availability_over_time(client_and_adapter):
+    client, adapter = client_and_adapter
+    adapter.create(SQLiteEntity(id="c", entity_type="TestEntity", is_available=True,
+                                version=1, data={"name": "C"}))
+    t_present = adapter.history("c")[0]["timestamp"]
+    time.sleep(0.01)
+    adapter.delete("c")
+
+    # present at t_present; gone from the current view after delete
+    assert "c" in _ids(client.query(entity_type="TestEntity", as_of=t_present))
+    assert "c" not in _ids(client.query(entity_type="TestEntity"))
+
+
+def test_query_as_of_applies_filters(client_and_adapter):
+    client, adapter = client_and_adapter
+    adapter.create(SQLiteEntity(id="x", entity_type="TestEntity", is_available=True,
+                                version=1, data={"name": "keep"}))
+    adapter.create(SQLiteEntity(id="y", entity_type="TestEntity", is_available=True,
+                                version=1, data={"name": "drop"}))
+
+    res = client.query(entity_type="TestEntity",
+                       filters=[{"field": "name", "value": "keep"}], as_of=FUTURE)
+    assert _ids(res) == {"x"}

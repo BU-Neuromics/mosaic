@@ -84,7 +84,7 @@ class LinkMLStoreAdapter(EntityStore):
             "Reserved for future Option a adoption - see GitHub Issue #2"
         )
 
-    def find(self, query: Query) -> Iterator[Any]:
+    def find(self, query: Query, *, as_of: Optional[str] = None) -> Iterator[Any]:
         """Find entities matching a query.
 
         Raises:
