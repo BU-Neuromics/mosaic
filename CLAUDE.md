@@ -41,4 +41,5 @@ Adapters are registered via entry points: `hippo.storage_adapters`, `hippo.exter
 - When drafting new spec sections (sec4–sec7), follow the structure of sec1–sec3: numbered subsections, tables for structured data, ASCII diagrams for architecture.
 - Keep the **SDK-first** principle consistent: business logic in SDK, transport layers are thin wrappers.
 - Update `design/INDEX.md` whenever a section's status changes or a new key decision is made.
+- **Design decisions are recorded as ADRs** per the platform-wide convention (root `../CLAUDE.md`; canonical process in `../platform/design/decisions/README.md`). New/non-trivial decisions get an ADR in `design/decisions/`; the Key Decisions Log in `design/INDEX.md` remains the scannable index (forward-only/hybrid adoption — no mass backfill). See `design/decisions/README.md`.
 - The `images/` directory holds diagrams referenced by spec documents.

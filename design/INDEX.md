@@ -107,6 +107,13 @@ New decisions to be introduced in sec9 (preview):
 
 ## Key Decisions Log
 
+> **Recording format (ADRs, hybrid — 2026-06-17).** Hippo follows the platform-wide ADR
+> convention ([`platform/design/decisions/README.md`](../../platform/design/decisions/README.md)).
+> **New, non-trivial, or still-in-flux decisions** get an ADR in
+> [`decisions/`](./decisions/); this table remains the **scannable index of record** for the
+> settled, shipped decisions and is backfilled only opportunistically (forward-only adoption —
+> no mass migration). See [`decisions/README.md`](./decisions/README.md).
+
 | Decision | Choice | Section |
 |---|---|---|
 | Deployment model | SDK-first; REST and GraphQL are independent transport adapters | sec2 |
@@ -200,6 +207,7 @@ out of scope for v0.1 and documented here for tracking.
 | Whole-`upgrade()` multi-entity transaction atomicity | sec11 §11.8.1 | High | **Resolved (S3 → S4)** — no per-`upgrade()` transaction in the runtime (per-write only); S3 documented the limitation, S4 shipped `SQLiteAdapter.staged_transaction()` — a re-entrant outer scope giving true end-to-end commit-or-rollback across all hops/packages (PTS-340). |
 | Runtime `loader_depends_on` ordering | sec11 §11.8.2 | Medium | **Resolved (S4 / PTS-340)** — no runtime path orders loaders by `loader_depends_on`; it is documentation-only (warning-only in `linkml_bridge`). The S4 orchestrator sequences base→dependents explicitly via `topological_sort`; it relies on no implicit ordering. |
 | `HippoClient.schema_references(entity_type)` | — | **✅ Implemented (Hippo v0.4)** | Reads `FieldDefinition.references` from already-loaded schema. Returns `[{field, target_entity_type}]` for each field with `references: {entity_type: <name>}` declared in schema YAML. REST endpoint: `GET /schemas/{entity_type}/references`. Works today — caller schemas must declare `references:` on foreign-key fields. |
+| Graph-level / query-spanning as-of reconstruction | sec6, sec4 | High | **🟡 Proposed — see [`decisions/ADR-0001`](./decisions/ADR-0001-graph-level-as-of-query.md).** Per-entity `state_at` exists; query-spanning ("evaluate this whole subgraph query as the graph stood at T", resolving entities + relationships + schema version) does not. Required by Aperture data-story reproducibility (Aperture ADR-0023). Read-only view over the existing append-only provenance log. Bitemporal scope (transaction- vs valid-time) and GraphQL expression are open sub-questions. |
 
 ---
 
