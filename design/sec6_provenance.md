@@ -483,12 +483,18 @@ For a timestamp `T`, the graph is reconstructed from the provenance log as follo
 **Entity state at `T`.** An entity's state at `T` is the post-image carried by its most recent
 provenance record with `timestamp <= T` — i.e. `state_at` (§6.7) applied per entity.
 
-> **Reconstruction contract (implementation requirement).** This is correct iff each
-> entity-mutating provenance record's `patch` carries a **full post-image** of the entity (not a
-> sparse delta). Where that does not hold, reconstruction MUST replay records from `create`
-> forward to `T`. The §6.8.6 increment verifies, per `operation`, which holds and chooses
-> latest-record vs. replay accordingly. (Today's `state_at` returns the latest record's `patch`;
-> §6.7 describes the *intended* semantics as replay — the increment reconciles the two.)
+> **Reconstruction contract (verified — increment 1, BU-Neuromics/hippo#71).** The `create` and
+> `update` write paths both record the **full post-image** of the entity as the `patch`, so an
+> entity's data state at `T` is the patch of its most recent **state-replacing** (`create` /
+> `update`) record with `timestamp <= T` — no replay needed. Non-state-replacing records
+> (`availability_change`, `external_id_add`, `supersede`) carry **deltas**, not entity state, and
+> never define the reconstructed state; the most recent `availability_change` with
+> `timestamp <= T` decides availability. `state_at` / `get_state_at` now implement exactly this
+> (previously they returned the latest record's `patch` regardless of `operation` — incorrect for
+> non-state ops). **Gap to close before query-spanning state reconstruction:** the supersede path
+> records an `operation='update'` *annotation* patch on the replacement entity (not a full
+> post-image), so annotation-updates are not yet distinguishable from state-updates — give such
+> writes a distinct operation/marker.
 
 **Entity set at `T`.** A query for type `X` as-of `T` returns the entities that, at `T`, had been
 created and were available: an entity is **present at `T`** iff its earliest `create` record has

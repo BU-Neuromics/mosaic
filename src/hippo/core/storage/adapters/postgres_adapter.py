@@ -215,35 +215,55 @@ class PostgresProvenanceStore:
         return results
 
     def get_state_at(self, entity_id: str, timestamp: str) -> Optional[dict[str, Any]]:
+        """Reconstruct entity state as of ``timestamp`` — Postgres mirror of the
+        SQLite path (sec6 §6.8.2): data state = the most recent ``create`` /
+        ``update`` full post-image with ``timestamp <= T``; availability decided
+        by the most recent ``availability_change <= T``. Non-state-replacing
+        records (availability/external_id/supersede) carry deltas and never
+        define the returned state. Same known limitations as the SQLite path."""
         cur = self._conn.cursor()
         cur.execute(
             """SELECT patch, timestamp, operation
                FROM "ProvenanceRecord"
                WHERE entity_id = %s AND timestamp <= %s
-               ORDER BY timestamp DESC
-               LIMIT 1""",
+               ORDER BY timestamp DESC""",
             (entity_id, timestamp),
         )
 
-        row = cur.fetchone()
-        if row is None:
-            return None
+        data_state: Optional[dict[str, Any]] = None
+        data_ts: Optional[Any] = None
+        availability_resolved = False
+        deleted = False
 
-        patch_val = row["patch"]
-        if isinstance(patch_val, str):
-            patch_val = json.loads(patch_val) if patch_val else None
-
-        if row["operation"] == "availability_change" and isinstance(patch_val, dict):
+        for row in cur.fetchall():  # newest first
+            patch_val = row["patch"]
+            if isinstance(patch_val, str):
+                patch_val = json.loads(patch_val) if patch_val else None
+            op = row["operation"]
             if (
-                patch_val.get("status") == "deleted"
-                or patch_val.get("is_available") is False
+                not availability_resolved
+                and op == "availability_change"
+                and isinstance(patch_val, dict)
             ):
-                return None
+                availability_resolved = True
+                if (
+                    patch_val.get("status") == "deleted"
+                    or patch_val.get("is_available") is False
+                ):
+                    deleted = True
+            if data_state is None and op in ("create", "update"):
+                data_state = patch_val
+                data_ts = row["timestamp"]
+            if availability_resolved and data_state is not None:
+                break
+
+        if deleted or data_state is None:
+            return None
 
         return {
             "entity_id": entity_id,
-            "state": patch_val,
-            "timestamp": row["timestamp"],
+            "state": data_state,
+            "timestamp": data_ts,
         }
 
     def get_entity_creation_time(self, entity_id: str) -> Optional[str]:
@@ -269,21 +289,27 @@ class PostgresProvenanceStore:
         return {"created_at": rec.created_at, "updated_at": rec.updated_at}
 
     def get_temporal(
-        self, entity_ids: list[str]
+        self, entity_ids: list[str], *, as_of: Optional[str] = None
     ) -> "dict[str, TemporalRecord]":
-        """Batch sec9 §9.7 temporal derivation (Postgres mirror of the SQLite path)."""
+        """Batch sec9 §9.7 temporal derivation (Postgres mirror of the SQLite path).
+
+        ``as_of`` bounds derivation to ``timestamp <= as_of`` (sec6 §6.8)."""
         from hippo.core.types import TemporalRecord
 
         if not entity_ids:
             return {}
 
+        as_of_clause = " AND timestamp <= %s" if as_of else ""
+        params: tuple[Any, ...] = (
+            (list(entity_ids), as_of) if as_of else (list(entity_ids),)
+        )
         cur = self._conn.cursor()
         cur.execute(
-            """WITH target AS (
+            f"""WITH target AS (
                     SELECT entity_id, operation, timestamp, actor_id,
                            schema_version, patch
                     FROM "ProvenanceRecord"
-                    WHERE entity_id = ANY(%s)
+                    WHERE entity_id = ANY(%s){as_of_clause}
                 ),
                 agg AS (
                     SELECT
@@ -318,7 +344,7 @@ class PostgresProvenanceStore:
                        AND t.timestamp = agg.updated_at
                      LIMIT 1) AS schema_version
                 FROM agg""",
-            (list(entity_ids),),
+            params,
         )
 
         result: dict[str, TemporalRecord] = {}
@@ -1434,8 +1460,20 @@ class PostgresAdapter(EntityStore):
 
             return True
 
-    def find(self, query: Query) -> Iterator[PostgresEntity]:
-        """Find entities matching a query."""
+    def find(
+        self, query: Query, *, as_of: Optional[str] = None
+    ) -> Iterator[PostgresEntity]:
+        """Find entities matching a query.
+
+        ``as_of`` is part of the as-of contract (sec6 §6.8); query-spanning
+        entity-set reconstruction is increment 2 (BU-Neuromics/hippo#71), so a
+        non-``None`` ``as_of`` raises ``NotImplementedError``.
+        """
+        if as_of is not None:
+            raise NotImplementedError(
+                "as-of entity-set reconstruction (find(as_of=...)) is not yet "
+                "implemented — sec6 §6.8 increment 2 (BU-Neuromics/hippo#71)."
+            )
         with self._transaction() as conn:
             cur = conn.cursor()
 
@@ -1695,12 +1733,14 @@ class PostgresAdapter(EntityStore):
             return provenance.get_history(entity_id)
 
     def get_temporal(
-        self, entity_ids: list[str]
+        self, entity_ids: list[str], *, as_of: Optional[str] = None
     ) -> "dict[str, TemporalRecord]":
-        """Batch sec9 §9.7 temporal-field derivation. One SQL round-trip."""
+        """Batch sec9 §9.7 temporal-field derivation. One SQL round-trip.
+
+        ``as_of`` bounds the derivation to ``timestamp <= as_of`` (sec6 §6.8)."""
         with self._transaction() as conn:
             provenance = PostgresProvenanceStore(conn, self._schema_version)
-            return provenance.get_temporal(entity_ids)
+            return provenance.get_temporal(entity_ids, as_of=as_of)
 
     def state_at(self, entity_id: str, timestamp: str) -> Optional[dict[str, Any]]:
         with self._transaction() as conn:

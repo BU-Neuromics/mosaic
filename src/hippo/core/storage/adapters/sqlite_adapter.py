@@ -274,35 +274,67 @@ class ProvenanceStore:
         return results
 
     def get_state_at(self, entity_id: str, timestamp: str) -> Optional[dict[str, Any]]:
-        """Get the entity state at a specific point in time."""
+        """Reconstruct entity state as of ``timestamp`` (transaction-time as-of).
+
+        Per sec6 §6.8.2, an entity's data state at ``T`` is the **full
+        post-image** carried by its most recent *state-replacing* record
+        (``create`` / ``update``) with ``timestamp <= T`` — verified: the
+        ``create`` and ``update_data`` paths both record the full entity data
+        as the ``patch``. Non-state-replacing records (``availability_change``,
+        ``external_id_add``, ``supersede``) carry *deltas*, not entity state, so
+        they never define the returned state. The most recent
+        ``availability_change`` with ``timestamp <= T`` decides availability: if
+        it marks the entity deleted/unavailable, the entity is absent at ``T``
+        and ``None`` is returned.
+
+        Known limitation (flagged for a later increment, sec6 §6.8.2): the
+        supersede path records an ``operation='update'`` *annotation* patch on
+        the replacement entity (not a full post-image), and source-entity
+        availability via ``supersede`` is not yet reflected here.
+        """
         cursor = self._conn.cursor()
         cursor.execute(
             """SELECT patch, timestamp, operation
                FROM "ProvenanceRecord"
                WHERE entity_id = ? AND timestamp <= ?
-               ORDER BY timestamp DESC
-               LIMIT 1""",
+               ORDER BY timestamp DESC""",
             (entity_id, timestamp),
         )
 
-        row = cursor.fetchone()
-        if row is None:
-            return None
+        data_state: Optional[dict[str, Any]] = None
+        data_ts: Optional[str] = None
+        availability_resolved = False
+        deleted = False
 
-        # availability_change with status=deleted supersedes the old
-        # SOFT_DELETE operation (Decision 9.6.B) — treat as unavailable.
-        if row["operation"] == "availability_change":
-            patch_obj = json.loads(row["patch"]) if row["patch"] else {}
+        for row in cursor.fetchall():  # newest first
+            patch_obj = json.loads(row["patch"]) if row["patch"] else None
+            op = row["operation"]
+            # First (newest) availability_change <= T decides availability.
             if (
-                patch_obj.get("status") == "deleted"
-                or patch_obj.get("is_available") is False
+                not availability_resolved
+                and op == "availability_change"
+                and isinstance(patch_obj, dict)
             ):
-                return None
+                availability_resolved = True
+                if (
+                    patch_obj.get("status") == "deleted"
+                    or patch_obj.get("is_available") is False
+                ):
+                    deleted = True
+            # Newest state-replacing record carries the full post-image.
+            if data_state is None and op in ("create", "update"):
+                data_state = patch_obj
+                data_ts = row["timestamp"]
+            if availability_resolved and data_state is not None:
+                break
+
+        if deleted or data_state is None:
+            return None
 
         return {
             "entity_id": entity_id,
-            "state": json.loads(row["patch"]) if row["patch"] else None,
-            "timestamp": row["timestamp"],
+            "state": data_state,
+            "timestamp": data_ts,
         }
 
     def get_entity_creation_time(self, entity_id: str) -> Optional[str]:
@@ -334,9 +366,15 @@ class ProvenanceStore:
         }
 
     def get_temporal(
-        self, entity_ids: list[str]
+        self, entity_ids: list[str], *, as_of: Optional[str] = None
     ) -> "dict[str, TemporalRecord]":
         """Batch-derive sec9 §9.7 temporal fields for the given entities.
+
+        When ``as_of`` (an ISO-8601 timestamp) is given, the derivation is
+        bounded to provenance records with ``timestamp <= as_of`` — the
+        transaction-time as-of view (sec6 §6.8): ``created_at`` / ``updated_at``
+        / ``schema_version`` reflect the graph as it stood at ``as_of``.
+
 
         Returns a dict mapping ``entity_id`` → ``TemporalRecord``. An
         ``entity_id`` that has no ``ProvenanceRecord`` rows is absent from
@@ -360,13 +398,15 @@ class ProvenanceStore:
             return {}
 
         placeholders = ",".join("?" for _ in entity_ids)
+        as_of_clause = " AND timestamp <= ?" if as_of else ""
+        params = (*entity_ids, as_of) if as_of else tuple(entity_ids)
         cursor = self._conn.cursor()
         cursor.execute(
             f"""WITH target AS (
                     SELECT entity_id, operation, timestamp, actor_id,
                            schema_version, patch
                     FROM "ProvenanceRecord"
-                    WHERE entity_id IN ({placeholders})
+                    WHERE entity_id IN ({placeholders}){as_of_clause}
                 ),
                 agg AS (
                     SELECT
@@ -401,7 +441,7 @@ class ProvenanceStore:
                        AND t.timestamp = agg.updated_at
                      LIMIT 1) AS schema_version
                 FROM agg""",
-            tuple(entity_ids),
+            params,
         )
 
         result: dict[str, TemporalRecord] = {}
@@ -2096,7 +2136,9 @@ class SQLiteAdapter(EntityStore):
 
             return True
 
-    def find(self, query: Query) -> Iterator[SQLiteEntity]:
+    def find(
+        self, query: Query, *, as_of: Optional[str] = None
+    ) -> Iterator[SQLiteEntity]:
         """Find entities matching a query.
 
         When ``query.entity_type`` is set the query targets the
@@ -2105,7 +2147,18 @@ class SQLiteAdapter(EntityStore):
         Without ``entity_type``, the adapter scans every concrete
         per-class table in the schema and merges results (cross-class
         scan).
+
+        ``as_of`` (sec6 §6.8, ADR-0001) is part of the as-of contract but
+        query-spanning entity-set reconstruction is increment 2 (BU-Neuromics/
+        hippo#71); passing a non-``None`` ``as_of`` raises ``NotImplementedError``
+        rather than silently returning current state.
         """
+        if as_of is not None:
+            raise NotImplementedError(
+                "as-of entity-set reconstruction (find(as_of=...)) is not yet "
+                "implemented — sec6 §6.8 increment 2 (BU-Neuromics/hippo#71). "
+                "Per-entity as-of is available via state_at()."
+            )
         if query.entity_type:
             if not self._per_class_table_exists(query.entity_type):
                 return
@@ -2329,11 +2382,17 @@ class SQLiteAdapter(EntityStore):
             provenance = self._get_provenance_store(conn)
             return provenance.get_history(entity_id)
 
-    def get_temporal(self, entity_ids: list[str]) -> "dict[str, TemporalRecord]":
-        """Batch sec9 §9.7 temporal-field derivation. One SQL round-trip."""
+    def get_temporal(
+        self, entity_ids: list[str], *, as_of: Optional[str] = None
+    ) -> "dict[str, TemporalRecord]":
+        """Batch sec9 §9.7 temporal-field derivation. One SQL round-trip.
+
+        ``as_of`` (ISO-8601) bounds the derivation to ``timestamp <= as_of``
+        (transaction-time as-of, sec6 §6.8).
+        """
         with self._transaction() as conn:
             provenance = self._get_provenance_store(conn)
-            return provenance.get_temporal(entity_ids)
+            return provenance.get_temporal(entity_ids, as_of=as_of)
 
     def state_at(self, entity_id: str, timestamp: str) -> Optional[dict[str, Any]]:
         """Get the entity state at a specific point in time.
