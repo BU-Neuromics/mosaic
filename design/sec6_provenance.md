@@ -596,7 +596,12 @@ sub-question 5 — sequence via OpenSpec, after the current surface; not a v0.1 
    queries) thread to `client.query(as_of=)`. As-of resolution of *nested* resolved-relationship
    fields (DataLoader keyed by `as_of`) and the optional `client.snapshot()` handle remain
    follow-ups.
-5. **Postgres adapter parity** + performance profiling (snapshot/cache tier only if needed).
+5. ✅ **(done) Postgres adapter parity** — `find(as_of=)`, `entities_created_by` /
+   `state_version_at`, provenance-driven relationship `traverse(as_of=)`, and the
+   `idx_ProvenanceRecord_type_timestamp` index, all mirrored from the SQLite path. Verified by
+   compile + the gated `tests/integration/test_postgres_asof.py` (runs only with a live
+   PostgreSQL / `HIPPO_DATABASE_URL`). The §6.8.4 snapshot/cache **performance tier** remains
+   deliberately deferred ("only if profiling demands"); both adapters carry the type-scoped index.
 
 #### 6.8.7 Deferred
 

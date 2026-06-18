@@ -359,6 +359,39 @@ class PostgresProvenanceStore:
             )
         return result
 
+    def entities_created_by(
+        self, as_of: str, entity_type: Optional[str] = None
+    ) -> list[tuple[str, str]]:
+        """Candidate (entity_id, entity_type) set for an as-of query (sec6
+        §6.8.2) — Postgres mirror of the SQLite path."""
+        cur = self._conn.cursor()
+        if entity_type is not None:
+            cur.execute(
+                """SELECT DISTINCT entity_id, entity_type FROM "ProvenanceRecord"
+                   WHERE operation = 'create' AND entity_type = %s
+                     AND timestamp <= %s""",
+                (entity_type, as_of),
+            )
+        else:
+            cur.execute(
+                """SELECT DISTINCT entity_id, entity_type FROM "ProvenanceRecord"
+                   WHERE operation = 'create' AND timestamp <= %s""",
+                (as_of,),
+            )
+        return [(row["entity_id"], row["entity_type"]) for row in cur.fetchall()]
+
+    def state_version_at(self, entity_id: str, as_of: str) -> int:
+        """Entity version as of T — count of create/update records <= as_of."""
+        cur = self._conn.cursor()
+        cur.execute(
+            """SELECT COUNT(*) AS n FROM "ProvenanceRecord"
+               WHERE entity_id = %s AND operation IN ('create', 'update')
+                 AND timestamp <= %s""",
+            (entity_id, as_of),
+        )
+        row = cur.fetchone()
+        return int(row["n"]) if row and row["n"] else 1
+
 
 class PostgresRelationshipRecord:
     """Relationship between two entities."""
@@ -499,7 +532,13 @@ class PostgresRelationshipStore:
         source_id: str,
         relationship_type: Optional[str] = None,
         max_depth: int = 10,
+        *,
+        as_of: Optional[str] = None,
     ) -> list[dict[str, Any]]:
+        if as_of is not None:
+            return self._traverse_as_of(
+                source_id, relationship_type, max_depth, as_of
+            )
         cur = self._conn.cursor()
 
         if relationship_type:
@@ -544,6 +583,72 @@ class PostgresRelationshipStore:
                     "depth": row["depth"],
                 }
             )
+        return results
+
+    def _live_edges_at(self, as_of: str) -> list[dict[str, Any]]:
+        """Edges live at as_of (sec6 §6.8.2) — Postgres mirror: replay
+        relationship_add/remove provenance events <= as_of; an edge keyed by
+        (source, target, type) is live iff its latest such event is an add."""
+        cur = self._conn.cursor()
+        cur.execute(
+            """SELECT operation,
+                      patch::jsonb->>'source_id'         AS s,
+                      patch::jsonb->>'target_id'         AS t,
+                      patch::jsonb->>'relationship_type' AS rt,
+                      patch::jsonb->>'relationship_id'   AS rid
+               FROM "ProvenanceRecord"
+               WHERE operation IN ('relationship_add', 'relationship_remove')
+                 AND timestamp <= %s
+               ORDER BY timestamp ASC""",
+            (as_of,),
+        )
+        live: dict[tuple[Any, Any, Any], Optional[str]] = {}
+        for row in cur.fetchall():
+            key = (row["s"], row["t"], row["rt"])
+            if row["operation"] == "relationship_add":
+                live[key] = row["rid"]
+            else:
+                live.pop(key, None)
+        return [
+            {"id": rid, "source_id": s, "target_id": t, "relationship_type": rt}
+            for (s, t, rt), rid in live.items()
+        ]
+
+    def _traverse_as_of(
+        self,
+        source_id: str,
+        relationship_type: Optional[str],
+        max_depth: int,
+        as_of: str,
+    ) -> list[dict[str, Any]]:
+        """Depth-bounded traversal over edges live at as_of (Postgres mirror of
+        the SQLite path; same recursive-CTE semantics)."""
+        from collections import defaultdict, deque
+
+        adjacency: dict[str, list[dict[str, Any]]] = defaultdict(list)
+        for edge in self._live_edges_at(as_of):
+            adjacency[edge["source_id"]].append(edge)
+
+        results: list[dict[str, Any]] = []
+        queue: deque[tuple[dict[str, Any], int]] = deque()
+        for edge in adjacency.get(source_id, []):
+            if relationship_type and edge["relationship_type"] != relationship_type:
+                continue
+            queue.append((edge, 1))
+        while queue:
+            edge, depth = queue.popleft()
+            results.append(
+                {
+                    "id": edge["id"],
+                    "source_id": edge["source_id"],
+                    "target_id": edge["target_id"],
+                    "relationship_type": edge["relationship_type"],
+                    "depth": depth,
+                }
+            )
+            if depth < max_depth:
+                for nxt in adjacency.get(edge["target_id"], []):
+                    queue.append((nxt, depth + 1))
         return results
 
     def _row_to_relationship(self, row: dict) -> PostgresRelationshipRecord:
@@ -1053,6 +1158,11 @@ class PostgresAdapter(EntityStore):
                 CREATE INDEX IF NOT EXISTS idx_ProvenanceRecord_entity_timestamp
                 ON "ProvenanceRecord"(entity_id, timestamp)
             """)
+            # Type-scoped as-of set selection (sec6 §6.8.4) — Postgres parity.
+            cur.execute("""
+                CREATE INDEX IF NOT EXISTS idx_ProvenanceRecord_type_timestamp
+                ON "ProvenanceRecord"(entity_type, timestamp, entity_id)
+            """)
 
             cur.execute("""
                 CREATE TABLE IF NOT EXISTS relationships (
@@ -1465,15 +1575,13 @@ class PostgresAdapter(EntityStore):
     ) -> Iterator[PostgresEntity]:
         """Find entities matching a query.
 
-        ``as_of`` is part of the as-of contract (sec6 §6.8); query-spanning
-        entity-set reconstruction is increment 2 (BU-Neuromics/hippo#71), so a
-        non-``None`` ``as_of`` raises ``NotImplementedError``.
+        When ``as_of`` (ISO-8601) is given, the result is reconstructed from the
+        provenance log as the graph stood at that transaction-time (sec6 §6.8 /
+        ADR-0001) — Postgres parity with the SQLite adapter. Omitted = current.
         """
         if as_of is not None:
-            raise NotImplementedError(
-                "as-of entity-set reconstruction (find(as_of=...)) is not yet "
-                "implemented — sec6 §6.8 increment 2 (BU-Neuromics/hippo#71)."
-            )
+            yield from self._find_as_of(query, as_of)
+            return
         with self._transaction() as conn:
             cur = conn.cursor()
 
@@ -1517,6 +1625,71 @@ class PostgresAdapter(EntityStore):
             cur.execute(sql, params)
             for row in cur.fetchall():
                 yield self._row_to_entity(row)
+
+    def _find_as_of(
+        self, query: Query, as_of: str
+    ) -> Iterator[PostgresEntity]:
+        """Query-spanning as-of reconstruction (sec6 §6.8) — Postgres mirror of
+        the SQLite path: candidates created <= as_of, reconstructed via
+        get_state_at, equality filters in Python, offset/limit last."""
+        with self._transaction() as conn:
+            prov = PostgresProvenanceStore(conn, self._schema_version)
+            candidates = prov.entities_created_by(
+                as_of, entity_type=query.entity_type
+            )
+
+            matched: list[PostgresEntity] = []
+            for entity_id, entity_type in candidates:
+                reconstructed = prov.get_state_at(entity_id, as_of)
+                if reconstructed is None:
+                    continue
+                data = reconstructed.get("state")
+                if not isinstance(data, dict):
+                    continue
+                if not self._matches_filters(data, entity_id, query):
+                    continue
+                matched.append(
+                    PostgresEntity(
+                        id=entity_id,
+                        entity_type=entity_type,
+                        is_available=True,
+                        version=prov.state_version_at(entity_id, as_of),
+                        data=data,
+                    )
+                )
+
+        offset = query.offset or 0
+        sliced = matched[offset:]
+        if query.limit:
+            sliced = sliced[: query.limit]
+        yield from sliced
+
+    @staticmethod
+    def _matches_filters(
+        data: dict[str, Any], entity_id: str, query: Query
+    ) -> bool:
+        """Equality-match query.filters against reconstructed data (honoring
+        filter_mode). Mirrors the SQLite as-of path; ``id`` resolves to
+        ``entity_id``."""
+        filters = query.filters or []
+        if not filters:
+            return True
+
+        def one(field: str, value: Any) -> bool:
+            actual = entity_id if field == "id" else data.get(field)
+            return actual == value
+
+        checks: list[bool] = []
+        for f in filters:
+            if "field" in f and "value" in f:
+                checks.append(one(f["field"], f["value"]))
+            else:
+                for key, value in f.items():
+                    checks.append(one(key, value))
+        if not checks:
+            return True
+        mode = getattr(query, "filter_mode", "and")
+        return any(checks) if mode == "or" else all(checks)
 
     def findAll(self) -> Iterator[PostgresEntity]:
         """Find all entities."""
