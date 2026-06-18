@@ -292,6 +292,7 @@ def _make_list_resolver(builder: GraphQLTypeBuilder, entity: EntityGraphQLInfo):
         filter_mode: FilterMode = FilterMode.AND,
         limit: int = 100,
         offset: int = 0,
+        as_of: Optional[str] = None,
     ):
         paginated = _client(info).query(
             entity_type=class_name,
@@ -299,6 +300,7 @@ def _make_list_resolver(builder: GraphQLTypeBuilder, entity: EntityGraphQLInfo):
             limit=limit,
             offset=offset,
             filter_mode=filter_mode.value,
+            as_of=as_of,
         )
         b = _builder(info)
         return entity.page_type(
