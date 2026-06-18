@@ -637,8 +637,20 @@ class RelationshipStore:
         source_id: str,
         relationship_type: Optional[str] = None,
         max_depth: int = 10,
+        *,
+        as_of: Optional[str] = None,
     ) -> list[dict[str, Any]]:
-        """Traverse relationships using recursive CTE."""
+        """Traverse relationships using a recursive CTE over the current graph.
+
+        When ``as_of`` is given, traversal instead walks only edges live at that
+        transaction-time, reconstructed from relationship_add/remove provenance
+        events (sec6 §6.8.2) — the relationships table's ``is_available`` flag is
+        not consulted (it carries no per-edge change timestamp).
+        """
+        if as_of is not None:
+            return self._traverse_as_of(
+                source_id, relationship_type, max_depth, as_of
+            )
         cursor = self._conn.cursor()
 
         if relationship_type:
@@ -683,6 +695,75 @@ class RelationshipStore:
                     "depth": row["depth"],
                 }
             )
+        return results
+
+    def _live_edges_at(self, as_of: str) -> list[dict[str, Any]]:
+        """Edges live at ``as_of`` (sec6 §6.8.2): replay ``relationship_add`` /
+        ``relationship_remove`` provenance events with ``timestamp <= as_of`` in
+        order; an edge keyed by (source, target, type) is live iff its latest
+        such event is an add. The relationships table is NOT consulted."""
+        cursor = self._conn.cursor()
+        cursor.execute(
+            """SELECT operation,
+                      json_extract(patch, '$.source_id')         AS s,
+                      json_extract(patch, '$.target_id')         AS t,
+                      json_extract(patch, '$.relationship_type') AS rt,
+                      json_extract(patch, '$.relationship_id')   AS rid
+               FROM "ProvenanceRecord"
+               WHERE operation IN ('relationship_add', 'relationship_remove')
+                 AND timestamp <= ?
+               ORDER BY timestamp ASC""",
+            (as_of,),
+        )
+        live: dict[tuple[Any, Any, Any], Optional[str]] = {}
+        for row in cursor.fetchall():
+            key = (row["s"], row["t"], row["rt"])
+            if row["operation"] == "relationship_add":
+                live[key] = row["rid"]
+            else:
+                live.pop(key, None)
+        return [
+            {"id": rid, "source_id": s, "target_id": t, "relationship_type": rt}
+            for (s, t, rt), rid in live.items()
+        ]
+
+    def _traverse_as_of(
+        self,
+        source_id: str,
+        relationship_type: Optional[str],
+        max_depth: int,
+        as_of: str,
+    ) -> list[dict[str, Any]]:
+        """Depth-bounded traversal over the edges live at ``as_of``. Mirrors the
+        recursive-CTE semantics: the anchor filters by ``relationship_type`` (if
+        given); deeper hops follow live edges of any type. ``id`` is the original
+        relationship id when the add event recorded it, else ``None``."""
+        from collections import defaultdict, deque
+
+        adjacency: dict[str, list[dict[str, Any]]] = defaultdict(list)
+        for edge in self._live_edges_at(as_of):
+            adjacency[edge["source_id"]].append(edge)
+
+        results: list[dict[str, Any]] = []
+        queue: deque[tuple[dict[str, Any], int]] = deque()
+        for edge in adjacency.get(source_id, []):
+            if relationship_type and edge["relationship_type"] != relationship_type:
+                continue
+            queue.append((edge, 1))
+        while queue:
+            edge, depth = queue.popleft()
+            results.append(
+                {
+                    "id": edge["id"],
+                    "source_id": edge["source_id"],
+                    "target_id": edge["target_id"],
+                    "relationship_type": edge["relationship_type"],
+                    "depth": depth,
+                }
+            )
+            if depth < max_depth:
+                for nxt in adjacency.get(edge["target_id"], []):
+                    queue.append((nxt, depth + 1))
         return results
 
     def _row_to_relationship(self, row: sqlite3.Row) -> RelationshipRecord:
