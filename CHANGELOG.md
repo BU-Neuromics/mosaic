@@ -16,7 +16,13 @@
   dispatches each instance under a base accessor to the concrete subclass its discriminator
   names, storing it as that subclass so its fields persist and it is queryable as its real
   type. Concrete-subclass accessors keep working alongside base accessors. The synthesized
-  `_HippoInstanceBundle` remains the (hidden, table-less) wire contract.
+  `_HippoInstanceBundle` remains the (hidden, table-less) wire contract. To close the
+  related silent-loss hole, a polymorphic base that declares *no* `designates_type` slot no
+  longer downcasts a subtype instance to the base (dropping its fields) — ingest now raises
+  an actionable error naming the dropped fields, the valid subclasses, and the fix
+  (add a `designates_type` discriminator, or use the concrete accessor), with a new guide at
+  `docs/polymorphic-ingest.md`. This is a behavior change: bundles that previously
+  "succeeded" by discarding subtype fields now error.
 
 - **Multivalued slots no longer silently dropped on ingest (issue #79 /
   [ADR-0002](design/decisions/ADR-0002-multivalued-reference-slots-as-relationships.md)).**

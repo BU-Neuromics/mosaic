@@ -166,8 +166,12 @@ def _dispatch_class(
 
     Raises:
         IngestError: if the discriminator value resolves to no subclass of
-            ``declared_range``, names an abstract class, or if the declared
-            range is itself abstract and the instance carries no designator.
+            ``declared_range`` or names an abstract class; or — the
+            downcast guard — if ``declared_range`` is a polymorphic base
+            (abstract, or concrete with subclasses and the instance carries
+            fields the base cannot store) and no usable designator routes the
+            instance to a concrete subclass. The message explains the fix; see
+            ``docs/polymorphic-ingest.md``.
     """
     designator = registry.type_designator_slot(declared_range)
     if designator is not None:
@@ -178,24 +182,91 @@ def _dispatch_class(
             )
             if resolved is None:
                 raise IngestError(
-                    f"{designator.name}={value!r} does not name {declared_range!r} "
-                    f"or any of its subclasses"
+                    f"Type designator {designator.name}={value!r} does not name "
+                    f"{declared_range!r} or any of its subclasses. Set "
+                    f"{designator.name!r} to one of "
+                    f"{registry.concrete_subclasses(declared_range)}. "
+                    f"{_DISPATCH_DOC_HINT}"
                 )
             cls = registry.get_class(resolved)
             if cls is not None and getattr(cls, "abstract", False):
                 raise IngestError(
-                    f"{designator.name}={value!r} names abstract class "
-                    f"{resolved!r}, which cannot be instantiated"
+                    f"Type designator {designator.name}={value!r} names abstract "
+                    f"class {resolved!r}, which cannot be instantiated. Use a "
+                    f"concrete subclass: one of "
+                    f"{registry.concrete_subclasses(declared_range)}. "
+                    f"{_DISPATCH_DOC_HINT}"
                 )
             return resolved
 
+    # No usable type designator. Storing under the declared range is safe ONLY
+    # when it is concrete AND not a polymorphic base hiding subtype fields —
+    # otherwise we'd silently drop the subtype's slots (issue #80).
     cls = registry.get_class(declared_range)
-    if cls is not None and getattr(cls, "abstract", False):
-        raise IngestError(
-            f"Cannot ingest into abstract class {declared_range!r}: each "
-            f"instance must carry a type designator naming a concrete subclass"
-        )
+    is_abstract = cls is not None and getattr(cls, "abstract", False)
+    if is_abstract or registry.has_subclasses(declared_range):
+        base_slots = {s.name for s in registry.induced_slots(declared_range)}
+        extra = sorted(k for k in instance if k not in base_slots)
+        if is_abstract or extra:
+            raise IngestError(
+                _downcast_message(registry, declared_range, designator, extra, is_abstract)
+            )
     return declared_range
+
+
+#: Trailing hint appended to every dispatch error, pointing at the dedicated
+#: guide so non-expert LinkML authors can self-serve the fix.
+_DISPATCH_DOC_HINT = (
+    "See the 'Polymorphic ingest' guide (docs/polymorphic-ingest.md)."
+)
+
+
+def _downcast_message(
+    registry: Any,
+    declared_range: str,
+    designator: Any,
+    extra: list[str],
+    is_abstract: bool,
+) -> str:
+    """Build an actionable error for a refused polymorphic-base downcast.
+
+    Two failure shapes share remediation: an abstract base cannot be stored at
+    all, and a concrete base carrying subtype-only fields would silently drop
+    them. The fix depends on whether the base already declares a
+    ``designates_type`` discriminator (set its value per instance) or not (add
+    one, or ingest under the concrete subclass collection).
+    """
+    subclasses = registry.concrete_subclasses(declared_range)
+    if is_abstract:
+        lead = (
+            f"Cannot ingest an instance under the {declared_range!r} collection: "
+            f"{declared_range!r} is an abstract base class and is never stored "
+            f"directly — each instance must be dispatched to a concrete subclass."
+        )
+    else:
+        lead = (
+            f"An instance under the {declared_range!r} collection carries "
+            f"field(s) {extra} that {declared_range!r} does not define. Because "
+            f"{declared_range!r} has subclasses this is a subtype instance, but "
+            f"storing it as {declared_range!r} would silently drop those "
+            f"field(s)."
+        )
+
+    if designator is not None:
+        fix = (
+            f"Set the type-designator slot {designator.name!r} on each such "
+            f"instance to its concrete subclass name (one of {subclasses})."
+        )
+    else:
+        fix = (
+            f"{declared_range!r} declares no type designator, so Hippo cannot "
+            f"tell which subclass to store. Either (1) mark a discriminator slot "
+            f"on {declared_range!r} with `designates_type: true` and set it on "
+            f"each instance to the concrete subclass name (one of {subclasses}), "
+            f"or (2) ingest each instance under its concrete subclass collection "
+            f"instead."
+        )
+    return f"{lead} {fix} {_DISPATCH_DOC_HINT}"
 
 
 def _upsert_instance(
