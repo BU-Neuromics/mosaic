@@ -112,8 +112,8 @@ def ingest_linkml_yaml(
     result = IngestResult(source_file=str(path))
 
     for slot_name, instances in parsed.items():
-        target_class = slot_to_class.get(slot_name)
-        if target_class is None:
+        declared_range = slot_to_class.get(slot_name)
+        if declared_range is None:
             # Tree-root validation already rejects unknown slots in
             # closed-schema mode; guard against schema drift just in case.
             result.errors += 1
@@ -137,14 +137,65 @@ def ingest_linkml_yaml(
                 )
                 continue
             try:
+                target_class = _dispatch_class(
+                    registry, declared_range, instance
+                )
                 _upsert_instance(client, target_class, instance, result)
             except Exception as exc:
                 result.errors += 1
                 result.error_messages.append(
-                    f"{slot_name}[{idx}] ({target_class}): {exc}"
+                    f"{slot_name}[{idx}] ({declared_range}): {exc}"
                 )
 
     return result
+
+
+def _dispatch_class(
+    registry: Any,
+    declared_range: str,
+    instance: dict[str, Any],
+) -> str:
+    """Resolve the concrete class to instantiate for a single instance.
+
+    When ``declared_range`` is a polymorphic base — it declares a
+    ``designates_type`` slot (e.g. ``Sample.category``) — the instance's
+    discriminator value selects the concrete subclass it is stored as, so
+    subclass-specific fields persist and the instance is queryable as its
+    real type (issue #80). When there is no designator the declared range is
+    used directly.
+
+    Raises:
+        IngestError: if the discriminator value resolves to no subclass of
+            ``declared_range``, names an abstract class, or if the declared
+            range is itself abstract and the instance carries no designator.
+    """
+    designator = registry.type_designator_slot(declared_range)
+    if designator is not None:
+        value = instance.get(designator.name)
+        if value is not None:
+            resolved = registry.resolve_designated_class(
+                declared_range, str(value)
+            )
+            if resolved is None:
+                raise IngestError(
+                    f"{designator.name}={value!r} does not name {declared_range!r} "
+                    f"or any of its subclasses"
+                )
+            cls = registry.get_class(resolved)
+            if cls is not None and getattr(cls, "abstract", False):
+                raise IngestError(
+                    f"{designator.name}={value!r} names abstract class "
+                    f"{resolved!r}, which cannot be instantiated"
+                )
+            return resolved
+
+    cls = registry.get_class(declared_range)
+    if cls is not None and getattr(cls, "abstract", False):
+        raise IngestError(
+            f"Cannot ingest into abstract class {declared_range!r}: each "
+            f"instance must carry a type designator naming a concrete subclass"
+        )
+    return declared_range
 
 
 def _upsert_instance(
