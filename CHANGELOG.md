@@ -4,6 +4,20 @@
 
 ### Fixed
 
+- **Polymorphic tree-root collections now ingest with subtype dispatch (issue #80 /
+  [ADR-0003](design/decisions/ADR-0003-polymorphic-tree-root-ingest.md)).**
+  `hippo ingest` previously skipped abstract bases when building the bundle, so a
+  collection ranged on an abstract base (e.g. `samples:` → abstract `Sample`) had no
+  accessor and the bundle hard-failed validation; and it ignored the `designates_type`
+  discriminator, so an instance under a base-class accessor (e.g. `assays:` → `Assay`) was
+  silently stored as the base — subclass-specific fields dropped, not queryable as the
+  subclass. Now an abstract class that declares a `designates_type` slot gets a base-ranged
+  tree-root accessor (plain abstract roots like `Entity` are still excluded), and ingest
+  dispatches each instance under a base accessor to the concrete subclass its discriminator
+  names, storing it as that subclass so its fields persist and it is queryable as its real
+  type. Concrete-subclass accessors keep working alongside base accessors. The synthesized
+  `_HippoInstanceBundle` remains the (hidden, table-less) wire contract.
+
 - **Multivalued slots no longer silently dropped on ingest (issue #79 /
   [ADR-0002](design/decisions/ADR-0002-multivalued-reference-slots-as-relationships.md)).**
   `HippoClient.put` — and therefore `hippo ingest` — previously discarded
