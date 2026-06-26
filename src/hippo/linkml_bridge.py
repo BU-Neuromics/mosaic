@@ -1025,6 +1025,29 @@ class SchemaRegistry:
                 refs.append((slot.name, rng))
         return refs
 
+    def has_subclasses(self, class_name: str) -> bool:
+        """True if ``class_name`` has any proper descendant class.
+
+        Marks a class as a polymorphic *base* — instances under its tree-root
+        accessor may be subtype instances that must be dispatched to a concrete
+        subclass rather than stored as the base (issue #80).
+        """
+        return bool(self._sv.class_descendants(class_name, reflexive=False))
+
+    def concrete_subclasses(self, class_name: str) -> list[str]:
+        """Names of concrete (non-abstract) proper descendants of ``class_name``.
+
+        The set of classes an instance under a ``class_name`` collection could
+        legitimately be — surfaced in remediation messages so authors see the
+        valid type-designator values (issue #80).
+        """
+        out: list[str] = []
+        for name in self._sv.class_descendants(class_name, reflexive=False):
+            cls = self._sv.get_class(name)
+            if cls is not None and not getattr(cls, "abstract", False):
+                out.append(name)
+        return out
+
     def type_designator_slot(self, class_name: str) -> Optional[SlotDefinition]:
         """The induced slot marked ``designates_type: true`` on ``class_name``.
 

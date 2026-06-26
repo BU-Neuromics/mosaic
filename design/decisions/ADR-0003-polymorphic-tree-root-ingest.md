@@ -72,6 +72,15 @@ working.
 - Out-of-family or abstract discriminator values are caught — by up-front bundle validation
   (the designator enum) in the normal path, and by the dispatch guard as defense-in-depth
   if validation is bypassed.
+- **No silent downcast even without a designator.** A polymorphic base that declares *no*
+  `designates_type` slot still validates a subtype instance under its accessor (LinkML
+  permits a subclass under a base-ranged inlined slot via `anyOf`), and Hippo would store it
+  as the base and drop the subtype's fields. The dispatch guard refuses this: when the
+  fallback target is a polymorphic base (abstract, or concrete carrying fields the base does
+  not define) it raises an **actionable** error naming the dropped fields, the valid concrete
+  subclasses, and the two fixes (add a `designates_type` discriminator, or use the concrete
+  accessor), pointing at `docs/polymorphic-ingest.md`. This is a behavior change: bundles
+  that previously "succeeded" by silently discarding subtype fields now error.
 - The wire contract is unchanged (still accessor-keyed, `_HippoInstanceBundle` still hidden:
   no table, absent from `class_names`/typed client/schema-diff). A user-declared
   `tree_root: true` remains **ignored** by ingest (status quo) — see Alternatives.
@@ -105,8 +114,10 @@ working.
 - `SchemaRegistry.type_designator_slot`, `resolve_designated_class`; module helper
   `_has_type_designator`; `_build_tree_root_class` polymorphic-base inclusion
   (`src/hippo/linkml_bridge.py`).
-- `_dispatch_class` + per-instance dispatch in `ingest_linkml_yaml`
+- `SchemaRegistry.has_subclasses` / `concrete_subclasses` back the downcast guard.
+- `_dispatch_class` + `_downcast_message` + per-instance dispatch in `ingest_linkml_yaml`
   (`src/hippo/cli/commands/ingest.py`).
+- Author-facing guide: `docs/polymorphic-ingest.md` (linked from every dispatch error).
 - Tests: `tests/cli/test_ingest_polymorphic.py`.
 
 ## Notes / open sub-questions
@@ -114,7 +125,7 @@ working.
 - `designates_type` value matching is name → `class_uri` → CURIE short form. Confirm no
   schema in scope relies on a designator value that is *only* expressible as a full URI not
   reducible by the short-form rule.
-- A concrete base that has subclasses but declares **no** `designates_type` still downcasts
-  silently under its own accessor (no discriminator to dispatch on). That is by design —
-  dispatch requires an explicit designator — but worth flagging: such a schema cannot be
-  polymorphically ingested until it declares one.
+- The downcast guard keys "is this a polymorphic base?" off having any proper descendant
+  (`class_descendants`). A concrete leaf class with no subclasses is never guarded (and
+  closed-schema validation already rejects stray fields on it), so the guard is scoped to
+  genuine polymorphic bases.

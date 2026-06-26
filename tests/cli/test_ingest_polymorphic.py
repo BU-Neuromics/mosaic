@@ -91,6 +91,40 @@ def _bundle(tmp_path: Path, data: dict, name: str = "bundle.yaml") -> Path:
     return p
 
 
+# A schema whose base (`Widget`) has subclasses but declares NO designates_type
+# discriminator — the silent-downcast hole the guard closes.
+_NO_DESIGNATOR_SCHEMA = """\
+id: https://example.org/nd
+name: nd
+prefixes: {linkml: https://w3id.org/linkml/}
+imports: [linkml:types, hippo_core]
+default_range: string
+classes:
+  Widget:
+    is_a: Entity
+    attributes:
+      widget_id: {range: string}
+  FancyWidget:
+    is_a: Widget
+    attributes:
+      sparkle: {range: string}
+"""
+
+
+@pytest.fixture
+def nd_client(tmp_path: Path):
+    schema = tmp_path / "nd.yaml"
+    schema.write_text(_NO_DESIGNATOR_SCHEMA)
+    return hippo.client_for_schema(schema, database_url=str(tmp_path / "nd.db"))
+
+
+@pytest.fixture
+def nd_registry(tmp_path: Path):
+    schema = tmp_path / "nd.yaml"
+    schema.write_text(_NO_DESIGNATOR_SCHEMA)
+    return hippo.registry_for_schema(schema)
+
+
 class TestTreeRootAccessors:
     def test_abstract_polymorphic_base_gets_accessor(self, registry):
         names = {s.name for s in registry.tree_root_slots()}
@@ -218,3 +252,48 @@ class TestPolymorphicDispatch:
         result = ingest_linkml_yaml(bundle, client, registry)
         assert result.errors == 1
         assert "abstract" in result.error_messages[0].lower()
+
+
+class TestNoDesignatorDowncastGuard:
+    """A base with subclasses but no designates_type must not silently drop
+    subtype fields (issue #80 follow-up)."""
+
+    def test_subtype_fields_under_base_accessor_are_refused(
+        self, tmp_path, nd_client, nd_registry
+    ):
+        bundle = _bundle(
+            tmp_path,
+            {
+                "widgets": [
+                    {
+                        "id": "W1",
+                        "widget_id": "W1",
+                        "sparkle": "high",  # FancyWidget-only field
+                        "is_available": True,
+                    }
+                ]
+            },
+        )
+        result = ingest_linkml_yaml(bundle, nd_client, nd_registry)
+        # Refused, not silently downcast — nothing written.
+        assert result.errors == 1
+        msg = result.error_messages[0]
+        assert "sparkle" in msg  # names the field that would be lost
+        assert "designates_type" in msg  # tells the author the fix
+        assert "FancyWidget" in msg  # shows the valid subclass
+        assert "docs/polymorphic-ingest.md" in msg  # points at the guide
+        assert nd_client.query("Widget").items == []
+        assert nd_client.query("FancyWidget").items == []
+
+    def test_plain_base_instance_still_ingests(
+        self, tmp_path, nd_client, nd_registry
+    ):
+        # An instance with only base fields is a legitimate base entity and
+        # must still ingest — the guard fires only on subtype-only fields.
+        bundle = _bundle(
+            tmp_path,
+            {"widgets": [{"id": "W2", "widget_id": "W2", "is_available": True}]},
+        )
+        result = ingest_linkml_yaml(bundle, nd_client, nd_registry)
+        assert result.errors == 0 and result.created == 1
+        assert [e["id"] for e in nd_client.query("Widget").items] == ["W2"]
