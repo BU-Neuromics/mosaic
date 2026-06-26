@@ -146,10 +146,12 @@ must cause DDL generation (adapter startup) or the write to **raise** — never 
 - **As-of consistency.** `relationship_add`/`relationship_remove` events on every
   materialize/reconcile make slot edges fully visible to ADR-0001 as-of traversal and
   resolve the current-vs-as-of read discrepancy.
-- **Migration.** Existing stores that ingested under the buggy behavior have already lost
-  these values from the typed tables but **retain them in the provenance `patch`**. A
-  one-off backfill can replay create/update patches to materialize the missing edges; out
-  of scope for the fix itself but unblocked by it. New ingests are correct immediately.
+- **Migration / backfill: not needed.** Hippo is dev-only with no production deployments
+  (same directive that governs `_run_migrations` — drop-and-recreate rather than data
+  migration), so stores written under the buggy behavior are simply re-ingested; new
+  ingests are correct immediately. The values do survive in the provenance `patch`, so a
+  patch-replay backfill is *possible* if a deployment ever needs it, but it is explicitly
+  out of scope and unbuilt.
 - **Cost.** One extra in-transaction write per edge on ingest and one batched edge query
   per page on read. Bounded by edge count; acceptable for the relationship-heavy schemas
   this targets.
@@ -211,7 +213,5 @@ hooks), mirroring how ADR-0001 sequenced SQLite then PostgreSQL increments.
   slot edges remain live? Current relationship semantics leave edges untouched on target
   deletion; keep that, but confirm hydration should still surface ids of unavailable
   targets (probably yes — the reference was asserted).
-- **Backfill tooling:** decide whether the patch-replay backfill ships with this fix or as
-  a follow-up `hippo` maintenance command.
 - Confirm `boolean_slot_names`-style decoding isn't needed for hydrated id lists (ids are
   strings; no coercion expected).
