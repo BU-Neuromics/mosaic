@@ -2,6 +2,19 @@
 
 ## [Unreleased]
 
+## v0.10.0 — 2026-06-30 (Graph-level as-of reconstruction + batch unit-of-work + polymorphic ingest)
+
+This release adds **graph-level / query-spanning as-of reconstruction** (time-travel
+queries over the whole subgraph, ADR-0001) and a **batch unit-of-work** (whole-set
+validation + atomic multi-entity writes, issue #84), and fixes two ingest data-loss bugs
+(multivalued slots #79, polymorphic tree-root collections #80).
+
+> **Behavior change (issue #80).** `hippo ingest` no longer silently downcasts a subtype
+> instance to a polymorphic base that declares no `designates_type` discriminator — it now
+> raises an actionable error instead of dropping the subtype's fields. Bundles that
+> previously "succeeded" by discarding those fields will now error; add a `designates_type`
+> slot or ingest under the concrete-subclass accessor (see `docs/polymorphic-ingest.md`).
+
 ### Added
 
 - **Graph-level / query-spanning as-of reconstruction (ADR-0001, sec6 §6.8;
