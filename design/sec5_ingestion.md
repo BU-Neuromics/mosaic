@@ -198,6 +198,13 @@ writes.
 **`--atomic` flag (future):** A future `--atomic` flag will wrap the entire batch in a single
 transaction, rolling back all writes if any record fails. Deferred from v0.1.
 
+> **Batch unit-of-work (in progress — issue #84).** The flat-file `--atomic` idea generalizes to
+> an SDK-level **batch unit-of-work**: `HippoClient.validate_batch()` (whole-set dry-run
+> validation, no writes — *landed*) and `HippoClient.batch_put()` (atomic multi-entity commit via
+> the existing `staged_transaction()`, with intra-batch reference resolution — *planned*). Driven
+> by the Aperture write loop (`aperture/design/portal-requirements.md` X4). See
+> `openspec/changes/batch-unit-of-work/`.
+
 ---
 
 ### 5.5 Relationship Ingestion
