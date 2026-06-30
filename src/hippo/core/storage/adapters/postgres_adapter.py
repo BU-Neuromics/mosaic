@@ -18,6 +18,7 @@ immutability at the database level, mirroring the SQLite adapter's guarantees:
 
 import json
 import hashlib
+import threading
 import uuid
 from contextlib import contextmanager
 from datetime import datetime, timezone
@@ -1029,6 +1030,11 @@ class PostgresAdapter(EntityStore):
         self.max_pool_size = max_pool_size
         self._schema_version = schema_version or ""
         self._provenance_store: Optional[PostgresProvenanceStore] = None
+        # Per-thread staged-transaction state (mirrors SQLiteAdapter): when a
+        # ``staged_transaction`` scope is active, inner ``_transaction`` calls
+        # reuse the pinned connection and defer commit to the outer scope so a
+        # whole batch commits or rolls back as one unit.
+        self._local = threading.local()
 
         try:
             self._pool = ConnectionPool(
@@ -1061,7 +1067,21 @@ class PostgresAdapter(EntityStore):
 
     @contextmanager
     def _transaction(self) -> Generator[psycopg.Connection, None, None]:
-        """Get a connection with explicit transaction management."""
+        """Get a connection with explicit transaction management.
+
+        When a :meth:`staged_transaction` scope is active on this thread, inner
+        writes **defer** their commit to that outer scope: this yields the
+        pinned staged connection without committing, so a whole batch (entity
+        rows, provenance, relationships) commits or rolls back as one unit.
+        Reads on the same connection observe the staged (uncommitted) writes,
+        so an intra-batch relationship to an entity created earlier in the same
+        batch resolves.
+        """
+        if getattr(self._local, "staging_depth", 0) > 0:
+            # Inside an outer staged scope: defer commit/rollback to it. On
+            # error, propagate so the staged scope rolls everything back.
+            yield self._local.staged_conn
+            return
         with self._connection() as conn:
             try:
                 yield conn
@@ -1069,6 +1089,41 @@ class PostgresAdapter(EntityStore):
             except Exception:
                 conn.rollback()
                 raise
+
+    @contextmanager
+    def staged_transaction(self) -> Generator[psycopg.Connection, None, None]:
+        """Outer commit-or-rollback scope spanning many writes (issue #84).
+
+        Pins one pooled connection for the scope; every inner
+        :meth:`_transaction` defers its commit (see above). All writes commit
+        together on clean exit or roll back together if any exception escapes —
+        the guarantee ``HippoClient.batch_put`` relies on. Nesting is
+        reference-counted: only the outermost scope commits. Mirrors
+        :meth:`SQLiteAdapter.staged_transaction`.
+        """
+        depth = getattr(self._local, "staging_depth", 0)
+        if depth > 0:
+            # Already staging on this thread — join the existing scope.
+            self._local.staging_depth = depth + 1
+            try:
+                yield self._local.staged_conn
+            finally:
+                self._local.staging_depth -= 1
+            return
+        # Outermost scope: check out a dedicated connection. ``_connection``
+        # (the pool context) commits on clean exit and rolls back on exception,
+        # so the whole staged write-set is atomic.
+        with self._connection() as conn:
+            self._local.staged_conn = conn
+            self._local.staging_depth = 1
+            try:
+                yield conn
+            except Exception:
+                conn.rollback()
+                raise
+            finally:
+                self._local.staging_depth = 0
+                self._local.staged_conn = None
 
     def _init_database(self) -> None:
         """Initialize database schema and extensions."""
