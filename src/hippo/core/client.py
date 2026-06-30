@@ -25,6 +25,7 @@ from hippo.core.schema_manager import SchemaManager
 from hippo.core.storage import EntityStore
 from hippo.core.storage.fts import FTSTableMetadata
 from hippo.core.validation.validators import (
+    BatchValidationResult,
     ValidationResult,
     WriteOperation,
     WriteValidator,
@@ -353,6 +354,68 @@ class HippoClient:
 
     def validate(self, operation: WriteOperation) -> ValidationResult:
         return self._schema_manager.validate(operation)
+
+    def validate_batch(
+        self,
+        operations: list[WriteOperation],
+        *,
+        assign_ids: bool = True,
+    ) -> BatchValidationResult:
+        """Validate a *set* of write operations without writing (whole-set dry-run).
+
+        Increment 1 of the batch unit-of-work (BU-Neuromics/hippo#84). Runs the
+        standard per-entity validation pipeline (LinkML → CEL → Python) over
+        each operation and aggregates the results so callers see every problem
+        across the proposed set at once. **Performs zero writes** — neither the
+        entity tables nor the provenance log are touched.
+
+        Provisional ids are assigned (in-memory, on a copy of each operation's
+        data) to id-less operations so every per-entity result is addressable
+        and so a future atomic batch write (increment 2) can resolve references
+        between members of the set. The provisional ids are never persisted.
+
+        Note: intra-batch *referential existence* (an entity referencing another
+        entity in the same set) is enforced at write time — relationship edges
+        require their targets to exist — so it lands with the atomic-write
+        increment, not here. This method validates entity *data* shape/rules.
+
+        Args:
+            operations: The proposed set of write operations to validate.
+            assign_ids: When True (default), assign an in-memory provisional id
+                to any operation whose ``data`` lacks one, so results are
+                addressable. Set False to validate exactly as given.
+
+        Returns:
+            BatchValidationResult: overall validity plus per-entity results in
+            input order.
+        """
+        import uuid
+
+        results: list[ValidationResult] = []
+        for op in operations:
+            data = op.data
+            if (
+                assign_ids
+                and isinstance(data, dict)
+                and not data.get("id")
+            ):
+                # Copy so the caller's dict is never mutated; the provisional
+                # id exists only for this validation pass and is never written.
+                data = {**data, "id": str(uuid.uuid4())}
+                op = WriteOperation(
+                    operation=op.operation,
+                    entity_type=op.entity_type,
+                    data=data,
+                )
+            result = self.validate(op)
+            if result.entity_id is None and isinstance(op.data, dict):
+                result.entity_id = op.data.get("id")
+            results.append(result)
+
+        return BatchValidationResult(
+            is_valid=all(r.is_valid for r in results),
+            results=results,
+        )
 
     # -- Ingestion methods --
     # These keep the original call chain (put -> _put_internal -> _create_internal etc.)

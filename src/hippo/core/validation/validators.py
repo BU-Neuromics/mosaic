@@ -129,6 +129,70 @@ class ValidationResult:
 
 
 @dataclass
+class BatchValidationResult:
+    """Aggregated result of validating a *set* of write operations.
+
+    Increment 1 of the batch unit-of-work (see BU-Neuromics/hippo#84): the
+    whole-set dry-run validates a proposed group of related entities and
+    reports per-entity outcomes **without writing anything**.
+
+    Unlike the single-operation pipeline, the set is validated
+    *aggregating* (not fail-fast): every operation is validated and its
+    result retained, so a caller sees all problems across the set at once.
+
+    Attributes:
+        is_valid: True iff every per-entity result is valid.
+        results: Per-operation ``ValidationResult`` in input order. Each
+            result's ``entity_id`` identifies which operation it came from
+            (provisional ids are assigned by ``validate_batch`` when an
+            operation omits one).
+    """
+
+    is_valid: bool
+    results: list["ValidationResult"] = _dc_field(default_factory=list)
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.is_valid, bool):
+            raise TypeError("is_valid must be a boolean")
+        if not isinstance(self.results, list):
+            raise TypeError("results must be a list")
+
+    @property
+    def passed(self) -> bool:
+        """sec9 §9.9 spelling of ``is_valid``."""
+        return self.is_valid
+
+    @property
+    def failures(self) -> list[ValidationFailure]:
+        """All failures across the set, flattened (tier-annotated)."""
+        out: list[ValidationFailure] = []
+        for r in self.results:
+            out.extend(r.failures)
+        return out
+
+    @property
+    def errors(self) -> list[str]:
+        """Legacy string rendering of every failure across the set."""
+        out: list[str] = []
+        for r in self.results:
+            out.extend(r.errors)
+        return out
+
+    def invalid_results(self) -> list["ValidationResult"]:
+        """The subset of per-entity results that failed validation."""
+        return [r for r in self.results if not r.is_valid]
+
+    def to_envelope(self) -> dict[str, Any]:
+        """Render the batch as a plain dict (REST/GraphQL body shape)."""
+        return {
+            "passed": self.is_valid,
+            "results": [
+                {"entity_id": r.entity_id, **r.to_envelope()} for r in self.results
+            ],
+        }
+
+
+@dataclass
 class WriteOperation:
     """Represents a write operation to be validated.
 
