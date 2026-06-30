@@ -5,6 +5,7 @@ Provides core validation types and abstract base classes for write operation val
 
 from hippo.core.validation.validators import (
     BatchValidationResult,
+    BatchWriteResult,
     ValidationResult,
     WriteOperation,
     WriteValidator,
@@ -57,6 +58,7 @@ from hippo.core.validation.loader import (
 
 __all__ = [
     "BatchValidationResult",
+    "BatchWriteResult",
     "ValidationResult",
     "WriteOperation",
     "WriteValidator",
