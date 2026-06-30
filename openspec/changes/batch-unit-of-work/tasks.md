@@ -18,20 +18,32 @@ Tracking issue: BU-Neuromics/hippo#84
   `assign_ids=False` leaves id absent; empty set is valid.
 - [x] 1.4 Existing validation/client/pipeline suites stay green.
 
-## 2. Atomic multi-entity write (increment 2 — planned)
+## 2. Atomic multi-entity write (increment 2 — landed)
 
-- [ ] 2.1 `BatchWriteResult` type (per-entity created/updated id + status, or
-  per-entity failure).
-- [ ] 2.2 `HippoClient.batch_put(operations, dry_run=False)`: assign ids up front
-  → resolve intra-batch references → `validate_batch` → if valid and not
-  `dry_run`, wrap all writes in a single `staged_transaction()`; rollback on any
-  failure.
-- [ ] 2.3 Defer relationship-edge creation until after entity writes within the
-  same transaction so intra-batch forward references resolve (relax the
-  `relate()` pre-existence check for batch-local targets).
-- [ ] 2.4 Postgres adapter parity (`staged_transaction()` already present).
-- [ ] 2.5 Tests: atomic commit of a valid set; rollback-on-failure leaves no
-  partial writes / no orphan provenance; intra-batch forward reference resolves.
+- [x] 2.1 `BatchWriteResult` dataclass added to
+  `hippo/core/validation/validators.py` (`committed`/`dry_run` flags, the
+  whole-set `validation`, per-entity `entities`, created `relationships`),
+  exported from `hippo.core.validation`.
+- [x] 2.2 `HippoClient.batch_put(operations, *, relationships=None,
+  dry_run=False)`: assign real ids up front on copies (caller data untouched) →
+  `validate_batch(assign_ids=False)` → on invalid, return without writing → on
+  `dry_run`, return the plan without writing → else wrap all entity writes (then
+  relationships) in one `self.staged_transaction()`; any exception rolls the
+  whole set back and propagates.
+- [x] 2.3 Relationships created **after** all entity writes within the same
+  staged scope. No relaxation of `relate()`'s pre-existence check was needed:
+  staged reads observe staged writes, so a relationship to a batch-member
+  created earlier in the same transaction resolves naturally.
+- [ ] 2.4 Postgres adapter parity — `staged_transaction()` is present on the
+  Postgres adapter and `batch_put` is backend-agnostic (delegates via
+  `client.staged_transaction()`), but the new tests pin SQLite; a Postgres-bound
+  batch_put test is still TODO.
+- [x] 2.5 Tests (`tests/core/test_batch_put.py`): atomic commit of a valid set;
+  invalid set writes nothing; dry-run validates but writes nothing;
+  rollback-on-mid-batch-failure leaves no partial writes; intra-batch
+  relationship forward-reference resolves; relationship-to-missing-target rolls
+  back the entities; id assigned without mutating caller data. Guard
+  (`SDK_RESERVED_NAMES`) updated for `batch_put`.
 
 ## 3. Transport exposure (increment 3 — planned)
 

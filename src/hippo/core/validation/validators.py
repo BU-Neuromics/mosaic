@@ -193,6 +193,45 @@ class BatchValidationResult:
 
 
 @dataclass
+class BatchWriteResult:
+    """Result of an atomic multi-entity write (``HippoClient.batch_put``).
+
+    Increment 2 of the batch unit-of-work (BU-Neuromics/hippo#84). The set is
+    validated as a whole, then — if valid and not a dry run — every entity (and
+    any intra-batch relationship) is written inside a single
+    ``staged_transaction`` so the group commits all-or-nothing.
+
+    Attributes:
+        committed: True iff the whole set was written and committed. False on a
+            validation failure or a dry run (nothing was written in either case).
+        dry_run: True if the caller requested a dry run — the set was validated
+            and a write plan computed, but storage was not touched.
+        validation: The whole-set ``BatchValidationResult`` (always populated).
+        entities: On commit, the per-operation result dicts in input order. On a
+            valid dry run, the planned ``{id, entity_type, operation}`` per op.
+            On a validation failure, empty.
+        relationships: On commit, the created relationship dicts (empty otherwise).
+    """
+
+    committed: bool
+    dry_run: bool
+    validation: "BatchValidationResult"
+    entities: list[dict[str, Any]] = _dc_field(default_factory=list)
+    relationships: list[dict[str, Any]] = _dc_field(default_factory=list)
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.committed, bool):
+            raise TypeError("committed must be a boolean")
+        if not isinstance(self.dry_run, bool):
+            raise TypeError("dry_run must be a boolean")
+
+    @property
+    def is_valid(self) -> bool:
+        """Whether the whole-set validation passed."""
+        return self.validation.is_valid
+
+
+@dataclass
 class WriteOperation:
     """Represents a write operation to be validated.
 

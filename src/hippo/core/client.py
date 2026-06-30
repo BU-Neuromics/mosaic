@@ -26,6 +26,7 @@ from hippo.core.storage import EntityStore
 from hippo.core.storage.fts import FTSTableMetadata
 from hippo.core.validation.validators import (
     BatchValidationResult,
+    BatchWriteResult,
     ValidationResult,
     WriteOperation,
     WriteValidator,
@@ -415,6 +416,109 @@ class HippoClient:
         return BatchValidationResult(
             is_valid=all(r.is_valid for r in results),
             results=results,
+        )
+
+    def batch_put(
+        self,
+        operations: list[WriteOperation],
+        *,
+        relationships: Optional[list[dict[str, Any]]] = None,
+        dry_run: bool = False,
+    ) -> BatchWriteResult:
+        """Atomically write a *set* of related entities (batch unit-of-work).
+
+        Increment 2 of the batch unit-of-work (BU-Neuromics/hippo#84). The whole
+        set is validated first (see :meth:`validate_batch`); if valid and not a
+        dry run, every entity — and any intra-batch ``relationships`` — is
+        written inside a single ``staged_transaction`` so the group commits
+        **all-or-nothing**. If any write raises, the entire set is rolled back
+        and the exception propagates; nothing is left partially committed.
+
+        Real ids are assigned to id-less operations up front (on copies — the
+        caller's dicts are never mutated) and used for both validation and the
+        write. Relationships are created **after** all entities, within the same
+        transaction; because staged reads observe staged writes, a relationship
+        whose source/target is created earlier in the *same* batch resolves
+        without the target having to pre-exist (intra-batch forward reference).
+
+        Args:
+            operations: The set of write operations to commit together.
+            relationships: Optional edges to create after the entities, each a
+                dict with ``source_id``, ``target_id``, ``relationship_type``
+                (or ``type``), and optional ``metadata``. Ids must reference
+                entities in this batch or already-persisted ones.
+            dry_run: When True, validate and compute a write plan but touch no
+                storage. ``committed`` is False and ``entities`` holds the plan.
+
+        Returns:
+            BatchWriteResult: ``committed``/``dry_run`` flags, the whole-set
+            ``validation``, and per-entity (and relationship) results.
+        """
+        import uuid
+
+        # Normalize: copy each op's data and assign a real id when missing, so
+        # validation and the write share ids and relationships can reference
+        # batch members. The caller's dicts are never mutated.
+        normalized: list[WriteOperation] = []
+        for op in operations:
+            data = dict(op.data)
+            if not data.get("id"):
+                data["id"] = str(uuid.uuid4())
+            normalized.append(
+                WriteOperation(
+                    operation=op.operation,
+                    entity_type=op.entity_type,
+                    data=data,
+                )
+            )
+
+        validation = self.validate_batch(normalized, assign_ids=False)
+        if not validation.is_valid:
+            return BatchWriteResult(
+                committed=False, dry_run=dry_run, validation=validation
+            )
+
+        if dry_run:
+            plan = [
+                {
+                    "id": op.data["id"],
+                    "entity_type": op.entity_type,
+                    "operation": op.operation,
+                }
+                for op in normalized
+            ]
+            return BatchWriteResult(
+                committed=False, dry_run=True, validation=validation, entities=plan
+            )
+
+        rels = relationships or []
+        written_entities: list[dict[str, Any]] = []
+        written_rels: list[dict[str, Any]] = []
+        # One staged scope: all inner writes defer their commit and roll back
+        # together if anything raises (all-or-nothing).
+        with self.staged_transaction():
+            for op in normalized:
+                written_entities.append(
+                    self._put_internal(op.entity_type, op.data, op.data["id"])
+                )
+            for rel in rels:
+                written_rels.append(
+                    self.relationships.relate(
+                        source_id=rel["source_id"],
+                        target_id=rel["target_id"],
+                        relationship_type=(
+                            rel.get("relationship_type") or rel.get("type")
+                        ),
+                        metadata=rel.get("metadata"),
+                    )
+                )
+
+        return BatchWriteResult(
+            committed=True,
+            dry_run=False,
+            validation=validation,
+            entities=written_entities,
+            relationships=written_rels,
         )
 
     # -- Ingestion methods --
