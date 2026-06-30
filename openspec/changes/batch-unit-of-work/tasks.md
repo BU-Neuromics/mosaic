@@ -34,10 +34,12 @@ Tracking issue: BU-Neuromics/hippo#84
   staged scope. No relaxation of `relate()`'s pre-existence check was needed:
   staged reads observe staged writes, so a relationship to a batch-member
   created earlier in the same transaction resolves naturally.
-- [ ] 2.4 Postgres adapter parity — `staged_transaction()` is present on the
+- [x] 2.4 Postgres adapter parity — `staged_transaction()` is present on the
   Postgres adapter and `batch_put` is backend-agnostic (delegates via
-  `client.staged_transaction()`), but the new tests pin SQLite; a Postgres-bound
-  batch_put test is still TODO.
+  `client.staged_transaction()`). Postgres-bound `batch_put` tests added in
+  `tests/integration/test_postgres_adapter.py` (`TestPostgresBatchPut`: atomic
+  commit, mid-batch rollback, intra-batch relationship); run by the
+  `hippo-postgres` CI job (skipped locally without `HIPPO_DATABASE_URL`).
 - [x] 2.5 Tests (`tests/core/test_batch_put.py`): atomic commit of a valid set;
   invalid set writes nothing; dry-run validates but writes nothing;
   rollback-on-mid-batch-failure leaves no partial writes; intra-batch
@@ -45,13 +47,24 @@ Tracking issue: BU-Neuromics/hippo#84
   back the entities; id assigned without mutating caller data. Guard
   (`SDK_RESERVED_NAMES`) updated for `batch_put`.
 
-## 3. Transport exposure (increment 3 — planned)
+## 3. Transport exposure (increment 3 — landed)
 
-- [ ] 3.1 REST `POST /ingest/batch` (thin wrapper over `batch_put`/`validate_batch`).
-- [ ] 3.2 GraphQL `ingestBatch(entities, dryRun)` mutation.
-- [ ] 3.3 Per-entity failure rendering in the sec9 §9.9 envelope shape.
+- [x] 3.1 REST `POST /ingest/batch` (atomic write) and `POST /ingest/validate`
+  (whole-set dry-run), thin wrappers over `batch_put`/`validate_batch` in
+  `serve/routers/ingest.py`. Validation failure → 422 with the structured body;
+  dry-run → 200 with the plan.
+- [x] 3.2 GraphQL root mutations `ingestBatch(entities, relationships, dryRun)`
+  and `validateBatch(entities)` in `graphql/resolvers.py`, with
+  `BatchEntityInput`/`BatchRelationshipInput` inputs and
+  `BatchWriteGraphQLResult`/`BatchValidationGraphQLResult` types.
+- [x] 3.3 Per-entity failure rendering: REST via `to_envelope`; GraphQL via the
+  `BatchEntityValidation`/`ValidationFailureType` (tier-annotated) types.
+- [x] 3.4 Tests: `tests/serve/test_ingest_batch.py` (REST: auth, missing
+  entities, commit, dry-run, invalid→422 via a pre-write validator,
+  relationship) and `tests/graphql/test_batch.py` (valid-set validate,
+  commit, dry-run, write-time-constraint rollback, relationship).
 
 ## 4. Docs
 
-- [ ] 4.1 Note the batch unit-of-work in design/sec5 (supersedes the deferred
-  `--atomic` note in §5.4) once increment 2 lands.
+- [x] 4.1 design/sec5 §5.4 carries a "batch unit-of-work (issue #84)" note
+  (added with increment 1) generalizing the deferred `--atomic` flag.

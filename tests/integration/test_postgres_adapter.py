@@ -337,3 +337,69 @@ class TestPostgresAdapterExternalIds:
             found = eid_store.get_entity_by_external_id("EXT-001")
             assert found is not None
             assert found.entity_id == sample_entity.id
+
+
+class TestPostgresBatchPut:
+    """Atomic multi-entity write over Postgres (issue #84 increment 2).
+
+    Confirms ``HippoClient.batch_put`` is backend-agnostic: the Postgres
+    adapter's ``staged_transaction`` drives the same all-or-nothing commit
+    and intra-batch forward-reference resolution proven for SQLite.
+    """
+
+    @pytest.fixture
+    def client(self, adapter):
+        from hippo.core.client import HippoClient
+
+        return HippoClient(storage=adapter)
+
+    def test_commits_valid_set_atomically(self, client):
+        from hippo.core.validation import WriteOperation
+
+        ops = [
+            WriteOperation(operation="insert", entity_type="Sample", data={"id": "pg-s1", "name": "a"}),
+            WriteOperation(operation="insert", entity_type="Sample", data={"id": "pg-s2", "name": "b"}),
+        ]
+        result = client.batch_put(ops)
+        assert result.committed is True
+        assert client._storage.read("pg-s1") is not None
+        assert client._storage.read("pg-s2") is not None
+
+    def test_rollback_on_mid_batch_failure(self, client, monkeypatch):
+        from hippo.core.validation import WriteOperation
+
+        ops = [
+            WriteOperation(operation="insert", entity_type="Sample", data={"id": "pg-r1", "name": "a"}),
+            WriteOperation(operation="insert", entity_type="Sample", data={"id": "pg-r2", "name": "b"}),
+        ]
+        orig = client._put_internal
+        calls = {"n": 0}
+
+        def failing(entity_type, data, entity_id=None):
+            calls["n"] += 1
+            if calls["n"] == 2:
+                raise RuntimeError("boom on second write")
+            return orig(entity_type, data, entity_id)
+
+        monkeypatch.setattr(client, "_put_internal", failing)
+        with pytest.raises(RuntimeError, match="boom on second write"):
+            client.batch_put(ops)
+
+        assert client._storage.read("pg-r1") is None
+        assert client._storage.read("pg-r2") is None
+
+    def test_intra_batch_relationship_forward_reference(self, client):
+        from hippo.core.validation import WriteOperation
+
+        ops = [
+            WriteOperation(operation="insert", entity_type="Donor", data={"id": "pg-donor", "name": "D"}),
+            WriteOperation(operation="insert", entity_type="Sample", data={"id": "pg-sample", "name": "S"}),
+        ]
+        rels = [
+            {"source_id": "pg-donor", "target_id": "pg-sample", "relationship_type": "donated"}
+        ]
+        result = client.batch_put(ops, relationships=rels)
+        assert result.committed is True
+        assert len(result.relationships) == 1
+        assert client._storage.read("pg-donor") is not None
+        assert client._storage.read("pg-sample") is not None
