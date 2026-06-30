@@ -936,6 +936,8 @@ class SQLiteAdapter(EntityStore):
         self._fts_store: Optional[FTSStore] = None
         # Per-class cache of hippo_external_xref slot names (issue #48).
         self._xref_slots_cache: dict[str, list[str]] = {}
+        # Per-class cache of multivalued reference slot names (issue #79).
+        self._mv_ref_slots_cache: dict[str, list[str]] = {}
         self._init_database()
 
     def _get_connection(self) -> sqlite3.Connection:
@@ -1337,6 +1339,150 @@ class SQLiteAdapter(EntityStore):
             return json.dumps(value)
         return value
 
+    # -- multivalued reference slots → relationships (issue #79 / ADR-0002) ---
+
+    def _multivalued_ref_slot_names(self, entity_type: str) -> list[str]:
+        """Names of multivalued reference slots for a class (issue #79).
+
+        Cached per class. Empty when the registry is absent or the class
+        declares no multivalued slot ranged on an entity type. These slots
+        get no per-class column; their values persist as relationships keyed
+        by the slot name.
+        """
+        cached = self._mv_ref_slots_cache.get(entity_type)
+        if cached is None:
+            registry = self.schema_registry
+            if registry is None or not registry.has_class(entity_type):
+                cached = []
+            else:
+                cached = [
+                    name
+                    for name, _target in registry.multivalued_reference_slots(
+                        entity_type
+                    )
+                ]
+            self._mv_ref_slots_cache[entity_type] = cached
+        return cached
+
+    @staticmethod
+    def _normalize_ref_list(value: Any) -> list[str]:
+        """Normalize a multivalued reference slot value to a list of ids.
+
+        Tolerates a bare scalar (treated as a single-element list) and drops
+        ``None`` entries. Non-string ids are coerced to ``str`` so they match
+        the ``relationships`` table's TEXT columns.
+        """
+        if value is None:
+            return []
+        items = value if isinstance(value, (list, tuple)) else [value]
+        return [str(v) for v in items if v is not None]
+
+    def _materialize_multivalued_refs(
+        self,
+        conn: sqlite3.Connection,
+        entity_type: str,
+        entity_id: str,
+        data: dict[str, Any],
+        *,
+        reconcile: bool,
+        actor: Optional[str] = None,
+    ) -> None:
+        """Persist multivalued reference slots as relationships (issue #79).
+
+        One relationship per target id, keyed by the slot name, written in
+        the caller's transaction. On ``reconcile`` (update/replace) the
+        existing live edges of every such slot for this source are
+        soft-deleted first, then rebuilt from ``data`` — matching
+        ``_update_per_class``'s replace-every-user-slot semantics (an omitted
+        slot clears its edges, just as it nulls its column).
+
+        Target existence is NOT checked: single-valued reference ids persist
+        as opaque strings, and this matches that, so forward references during
+        bulk ingest are preserved. Each add/remove records a
+        ``relationship_add`` / ``relationship_remove`` ProvenanceRecord so
+        as-of edge replay (ADR-0001) stays consistent.
+        """
+        slot_names = self._multivalued_ref_slot_names(entity_type)
+        if not slot_names:
+            return
+
+        rel_store = self._get_relationship_store(conn)
+        prov = self._get_provenance_store(conn)
+
+        for slot in slot_names:
+            if reconcile:
+                for rel in list(
+                    rel_store.find_by_source(entity_id, relationship_type=slot)
+                ):
+                    rel_store.delete(entity_id, rel.target_id, slot)
+                    prov.record(
+                        entity_id=entity_id,
+                        entity_type="relationship",
+                        operation="relationship_remove",
+                        actor_id=actor,
+                        patch={
+                            "source_id": entity_id,
+                            "target_id": rel.target_id,
+                            "relationship_type": slot,
+                        },
+                    )
+
+            if slot not in data:
+                continue
+            for target_id in self._normalize_ref_list(data[slot]):
+                rel = rel_store.create(
+                    source_id=entity_id,
+                    target_id=target_id,
+                    relationship_type=slot,
+                    created_by=actor,
+                )
+                prov.record(
+                    entity_id=entity_id,
+                    entity_type="relationship",
+                    operation="relationship_add",
+                    actor_id=actor,
+                    patch={
+                        "relationship_id": rel.id,
+                        "source_id": entity_id,
+                        "target_id": target_id,
+                        "relationship_type": slot,
+                    },
+                )
+
+    def _hydrate_multivalued_refs_batch(
+        self,
+        conn: sqlite3.Connection,
+        entity_type: str,
+        entity_ids: list[str],
+    ) -> dict[str, dict[str, list[str]]]:
+        """Read multivalued reference slot edges for a set of entities.
+
+        Returns ``{entity_id: {slot_name: [target_id, ...]}}`` in a single
+        round-trip (no N+1). Target ids preserve insertion order (``rowid``).
+        Only currently-live edges are returned.
+        """
+        slot_names = self._multivalued_ref_slot_names(entity_type)
+        if not slot_names or not entity_ids:
+            return {}
+
+        cursor = conn.cursor()
+        id_ph = ",".join("?" for _ in entity_ids)
+        slot_ph = ",".join("?" for _ in slot_names)
+        cursor.execute(
+            "SELECT source_id, relationship_type, target_id FROM relationships "
+            f"WHERE source_id IN ({id_ph}) "
+            f"AND relationship_type IN ({slot_ph}) "
+            "AND is_available = 1 "
+            "ORDER BY rowid",
+            (*entity_ids, *slot_names),
+        )
+        out: dict[str, dict[str, list[str]]] = {}
+        for row in cursor.fetchall():
+            out.setdefault(row["source_id"], {}).setdefault(
+                row["relationship_type"], []
+            ).append(row["target_id"])
+        return out
+
     def _init_triggers(self, cursor: sqlite3.Cursor) -> None:
         """Initialize provenance immutability triggers."""
         for trigger_sql in sqlite_triggers.get_trigger_sql_list():
@@ -1687,6 +1833,15 @@ class SQLiteAdapter(EntityStore):
                 operation="create",
                 actor_id=user_context,
                 patch=entity_data,
+            )
+
+            self._materialize_multivalued_refs(
+                conn,
+                entity_type,
+                entity_id,
+                entity_data,
+                reconcile=False,
+                actor=user_context,
             )
 
             if loader_context is not None:
@@ -2063,6 +2218,9 @@ class SQLiteAdapter(EntityStore):
             if row is None:
                 return None
             version = self._compute_version(cursor, entity_id)
+            mv_refs = self._hydrate_multivalued_refs_batch(
+                conn, entity_type, [entity_id]
+            ).get(entity_id, {})
 
         boolean_cols = (
             self.schema_registry.boolean_slot_names(entity_type)
@@ -2074,6 +2232,7 @@ class SQLiteAdapter(EntityStore):
             for c in slot_columns
             if row[c] is not None
         }
+        data.update(mv_refs)
         return SQLiteEntity(
             id=row["id"],
             entity_type=entity_type,
@@ -2157,6 +2316,15 @@ class SQLiteAdapter(EntityStore):
                 operation=operation,
                 actor_id=actor,
                 patch=data,
+            )
+
+            self._materialize_multivalued_refs(
+                conn,
+                entity_type,
+                entity_id,
+                data,
+                reconcile=True,
+                actor=actor,
             )
 
             if loader_context is not None:
@@ -2438,6 +2606,10 @@ class SQLiteAdapter(EntityStore):
                     r["entity_id"]: int(r["c"]) for r in cursor.fetchall()
                 }
 
+            mv_refs_map = self._hydrate_multivalued_refs_batch(
+                conn, entity_type, row_ids
+            )
+
         boolean_cols = (
             self.schema_registry.boolean_slot_names(entity_type)
             if self.schema_registry is not None
@@ -2449,6 +2621,7 @@ class SQLiteAdapter(EntityStore):
                 for c in slot_columns
                 if row[c] is not None
             }
+            data.update(mv_refs_map.get(row["id"], {}))
             yield SQLiteEntity(
                 id=row["id"],
                 entity_type=entity_type,

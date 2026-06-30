@@ -4,6 +4,23 @@
 
 ### Fixed
 
+- **Multivalued slots no longer silently dropped on ingest (issue #79 /
+  [ADR-0002](design/decisions/ADR-0002-multivalued-reference-slots-as-relationships.md)).**
+  `HippoClient.put` — and therefore `hippo ingest` — previously discarded
+  any multivalued slot with no error: it was persisted neither inline nor
+  as relationships, because multivalued slots get no per-class column and
+  the DDL generator filters out LinkML's linktables. Two storage rules now
+  close the gap, both materialized inside the entity-write transaction so a
+  failure rolls the whole write back: (1) a multivalued slot whose range is
+  an **entity class** persists as relationships keyed by the slot name —
+  visible to `find_relationships`/`traverse` and as-of edge replay — and is
+  hydrated back into `entity["data"][slot]` on `get`/`query`; reference
+  targets are not existence-checked, so forward references during bulk
+  ingest are preserved, and `put`/`replace`/`update` reconcile edges
+  (an omitted slot clears them, mirroring the typed-column NULL semantics);
+  (2) a multivalued slot whose range is a **scalar/enum** stores inline as a
+  single JSON TEXT column. SQLite backend; PostgreSQL parity is a follow-up.
+
 - **Polymorphic tree-root collections now ingest with subtype dispatch (issue #80 /
   [ADR-0003](design/decisions/ADR-0003-polymorphic-tree-root-ingest.md)).**
   `hippo ingest` previously skipped abstract bases when building the bundle, so a

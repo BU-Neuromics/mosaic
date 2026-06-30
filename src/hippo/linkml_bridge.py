@@ -1025,6 +1025,30 @@ class SchemaRegistry:
                 refs.append((slot.name, rng))
         return refs
 
+    def multivalued_reference_slots(
+        self, class_name: str
+    ) -> list[tuple[str, str]]:
+        """(slot_name, target_class) for multivalued slots ranged on an entity class.
+
+        These slots get neither a per-class column nor a junction table (the
+        DDL generator filters LinkML's linktables), so Hippo persists them as
+        relationships keyed by the slot name (issue #79 / ADR-0002). Value
+        types (``ExternalReference``) are excluded — they store inline as JSON
+        TEXT regardless of cardinality.
+        """
+        known = set(self._sv.all_classes().keys())
+        refs: list[tuple[str, str]] = []
+        for slot in self.induced_slots(class_name):
+            rng = slot.range
+            if (
+                slot.multivalued
+                and rng
+                and rng in known
+                and rng not in VALUE_TYPE_CLASSES
+            ):
+                refs.append((slot.name, rng))
+        return refs
+
     def has_subclasses(self, class_name: str) -> bool:
         """True if ``class_name`` has any proper descendant class.
 

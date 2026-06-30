@@ -25,4 +25,5 @@ The supersede-don't-delete discipline already used in the Key Decisions Log (ent
 | ADR | Decision | Status |
 |---|---|---|
 | [0001](./ADR-0001-graph-level-as-of-query.md) | Graph-level / query-spanning as-of reconstruction | 🟡 Proposed |
+| [0002](./ADR-0002-multivalued-reference-slots-as-relationships.md) | Multivalued reference slots persist as relationships (issue #79) | 🟡 Proposed |
 | [0003](./ADR-0003-polymorphic-tree-root-ingest.md) | Polymorphic tree-root ingest via `designates_type` dispatch (issue #80) | 🟡 Proposed |

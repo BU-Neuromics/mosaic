@@ -75,6 +75,14 @@ class DDLGenerator:
         # multivalued slots become dropped linktables).
         self._rewrite_value_type_slots(flat_schema)
 
+        # Step 1c: Multivalued slots whose range is NOT an entity class
+        # (scalars, enums, unresolved ranges) store INLINE as a single JSON
+        # TEXT column rather than a dropped linktable (issue #79 / ADR-0002).
+        # Multivalued *reference* slots (range is an entity class) are left
+        # multivalued here so SQLTableGenerator still emits their linktable,
+        # which is filtered below; their values persist as relationships.
+        self._rewrite_multivalued_scalar_slots(flat_schema)
+
         # Step 2: Write to temp file for SQLTableGenerator
         with tempfile.NamedTemporaryFile(
             mode="w", suffix=".yaml", delete=False
@@ -184,6 +192,43 @@ class DDLGenerator:
             _rewrite(slot_spec)
         for name in VALUE_TYPE_CLASSES:
             (flat_schema.get("classes") or {}).pop(name, None)
+
+    @staticmethod
+    def _rewrite_multivalued_scalar_slots(flat_schema: dict[str, Any]) -> None:
+        """Collapse multivalued non-reference slots to a single JSON TEXT column.
+
+        Runs after :meth:`_rewrite_value_type_slots` (value-type classes are
+        already gone). For every multivalued slot whose range is **not** a
+        remaining class — i.e. a scalar, an enum, or an unresolved range —
+        force ``multivalued: false`` and drop the inlining flags so
+        SQLTableGenerator emits one plain column instead of a linktable. The
+        list round-trips through that TEXT column via ``_coerce_for_column``
+        (JSON-encodes lists) / ``_decode_column_value`` (JSON-decodes on read).
+
+        Multivalued slots whose range *is* a remaining class are left untouched
+        so their linktable is still generated (and then filtered in
+        ``generate``); those edges persist as relationships (ADR-0002).
+        """
+        class_names = set((flat_schema.get("classes") or {}).keys())
+
+        def _rewrite(slot_spec: Any) -> None:
+            if (
+                isinstance(slot_spec, dict)
+                and slot_spec.get("multivalued")
+                and slot_spec.get("range") not in class_names
+            ):
+                slot_spec["multivalued"] = False
+                slot_spec.pop("inlined", None)
+                slot_spec.pop("inlined_as_list", None)
+
+        for cls_spec in (flat_schema.get("classes") or {}).values():
+            if not isinstance(cls_spec, dict):
+                continue
+            for section in ("attributes", "slot_usage"):
+                for slot_spec in (cls_spec.get(section) or {}).values():
+                    _rewrite(slot_spec)
+        for slot_spec in (flat_schema.get("slots") or {}).values():
+            _rewrite(slot_spec)
 
     def _parse_ddl_string(self, raw_ddl: str) -> list[str]:
         """Parse semicolon-delimited DDL string into statement list.
