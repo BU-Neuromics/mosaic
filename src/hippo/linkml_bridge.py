@@ -350,6 +350,20 @@ def _flatten_for_validator(sv: SchemaView) -> dict[str, Any]:
     return flat
 
 
+def _has_type_designator(sv: SchemaView, class_name: str) -> bool:
+    """True if ``class_name`` has an induced slot marked ``designates_type``.
+
+    Identifies an explicit polymorphic dispatch base (issue #80). Uses
+    ``class_induced_slots`` so a designator declared on a base is seen on the
+    base itself (and would be on subclasses too).
+    """
+    try:
+        slots = sv.class_induced_slots(class_name)
+    except Exception:
+        return False
+    return any(getattr(s, "designates_type", False) for s in slots)
+
+
 def _build_tree_root_class(sv: SchemaView) -> ClassDefinition:
     """Construct the synthesized ``_HippoInstanceBundle`` tree-root class.
 
@@ -359,6 +373,13 @@ def _build_tree_root_class(sv: SchemaView) -> ClassDefinition:
     snake_case-pluralized class name, overridable via the ``hippo_accessor``
     class annotation. This keeps the wire format aligned with the
     typed-client accessor surface (sec9 §9.8).
+
+    Abstract classes get no accessor, with one exception (issue #80): an
+    explicit polymorphic *base* — an abstract class declaring a
+    ``designates_type`` slot (e.g. ``Sample``) — gets a base-ranged accessor
+    so its inlined collection is ingestable, with instances dispatched to
+    their concrete subclass by the discriminator at ingest time. Plain
+    abstract roots such as ``Entity`` carry no designator and stay excluded.
 
     The returned class is NOT added to ``sv``. ``SchemaRegistry`` injects
     it only into the validator's flat schema so the DDL generator,
@@ -382,13 +403,22 @@ def _build_tree_root_class(sv: SchemaView) -> ClassDefinition:
     attributes: dict[str, SlotDefinition] = {}
     seen_slots: dict[str, str] = {}
     for cls_name, cls in existing.items():
-        if cls.abstract:
-            continue
         # Value types (e.g. ExternalReference) are stored inline on entity
         # slots — they are not independently ingestable, so they get no
         # tree-root slot in the instance bundle.
         if cls_name in VALUE_TYPE_CLASSES:
             continue
+        if cls.abstract:
+            # Abstract classes normally get no accessor — except an explicit
+            # polymorphic *base* (one declaring a `designates_type` slot, e.g.
+            # `Sample`), which gets a base-ranged accessor so its inlined
+            # collection is ingestable; instances dispatch to their concrete
+            # subclass by the discriminator (issue #80). Plain abstract roots
+            # like `Entity` carry no designator and stay excluded.
+            if _has_type_designator(sv, cls_name):
+                pass
+            else:
+                continue
         slot_name = class_accessor_name(cls_name, cls)
         if slot_name in seen_slots:
             from hippo.core.exceptions import SchemaError
@@ -1018,6 +1048,70 @@ class SchemaRegistry:
             ):
                 refs.append((slot.name, rng))
         return refs
+
+    def has_subclasses(self, class_name: str) -> bool:
+        """True if ``class_name`` has any proper descendant class.
+
+        Marks a class as a polymorphic *base* — instances under its tree-root
+        accessor may be subtype instances that must be dispatched to a concrete
+        subclass rather than stored as the base (issue #80).
+        """
+        return bool(self._sv.class_descendants(class_name, reflexive=False))
+
+    def concrete_subclasses(self, class_name: str) -> list[str]:
+        """Names of concrete (non-abstract) proper descendants of ``class_name``.
+
+        The set of classes an instance under a ``class_name`` collection could
+        legitimately be — surfaced in remediation messages so authors see the
+        valid type-designator values (issue #80).
+        """
+        out: list[str] = []
+        for name in self._sv.class_descendants(class_name, reflexive=False):
+            cls = self._sv.get_class(name)
+            if cls is not None and not getattr(cls, "abstract", False):
+                out.append(name)
+        return out
+
+    def type_designator_slot(self, class_name: str) -> Optional[SlotDefinition]:
+        """The induced slot marked ``designates_type: true`` on ``class_name``.
+
+        This is the polymorphism discriminator (e.g. ``category``): an
+        instance's value for this slot names the concrete subclass it should
+        be instantiated as (issue #80). ``None`` when the class declares no
+        type designator — i.e. it is not a polymorphic dispatch base.
+        Inherited from a base via ``induced_slots`` so subclasses see it too.
+        """
+        for slot in self.induced_slots(class_name):
+            if getattr(slot, "designates_type", False):
+                return slot
+        return None
+
+    def resolve_designated_class(
+        self, base_class: str, value: str
+    ) -> Optional[str]:
+        """Resolve a ``designates_type`` value to a class under ``base_class``.
+
+        Returns the name of the class (``base_class`` itself or one of its
+        descendants) that ``value`` designates, or ``None`` if no candidate
+        matches. Per LinkML the designator value may be the class name, its
+        ``class_uri``, or the CURIE/short form of either — matched in that
+        order (issue #80). Concreteness is the caller's check.
+        """
+        if value is None:
+            return None
+        candidates = self._sv.class_descendants(base_class, reflexive=True)
+        for cand in candidates:
+            cls = self._sv.get_class(cand)
+            if cls is None:
+                continue
+            if cand == value:
+                return cand
+            class_uri = getattr(cls, "class_uri", None)
+            if class_uri and (
+                class_uri == value or class_uri.split(":")[-1] == value
+            ):
+                return cand
+        return None
 
     def external_xref_slots(self, class_name: str) -> list[SlotDefinition]:
         """Slots annotated ``hippo_external_xref: true`` on ``class_name``.

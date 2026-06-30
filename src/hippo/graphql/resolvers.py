@@ -32,6 +32,7 @@ from hippo.core.exceptions import (
     ValidationFailure,
 )
 from hippo.core.schema_typing import EntityTypeModel
+from hippo.core.validation.validators import WriteOperation
 from hippo.graphql import DEFAULT_MAX_QUERY_DEPTH
 from hippo.graphql.schema_builder import (
     EntityGraphQLInfo,
@@ -139,6 +140,76 @@ class SupersessionInfo:
     entity_id: strawberry.ID
     superseded_by: Optional[strawberry.ID]
     chain: list[strawberry.ID]
+
+
+# ---------------------------------------------------------------------------
+# Batch unit-of-work (issue #84): whole-set dry-run validation + atomic
+# multi-entity write. Cross-type, so these are root mutations with generic
+# JSON payloads (each entity's typed shape is only known at runtime).
+# ---------------------------------------------------------------------------
+
+
+@strawberry.input(description="One entity in a batch validate/write request.")
+class BatchEntityInput:
+    entity_type: str
+    data: JSON
+    operation: str = "insert"
+
+
+@strawberry.input(
+    description=(
+        "One intra-batch relationship edge, created after the entities "
+        "within the same atomic transaction. Source/target may reference "
+        "entities created earlier in the same batch."
+    )
+)
+class BatchRelationshipInput:
+    source_id: strawberry.ID
+    target_id: strawberry.ID
+    relationship_type: str
+    metadata: Optional[JSON] = None
+
+
+@strawberry.type(description="One tier-annotated validation failure (sec9 §9.9).")
+class ValidationFailureType:
+    tier: str
+    rule: str
+    message: str
+    field: Optional[str] = None
+    details: Optional[JSON] = None
+
+
+@strawberry.type(description="Per-entity validation outcome within a batch.")
+class BatchEntityValidation:
+    entity_id: Optional[strawberry.ID]
+    passed: bool
+    failures: list[ValidationFailureType]
+
+
+@strawberry.type(
+    description=(
+        "Whole-set dry-run validation result (HippoClient.validate_batch); "
+        "aggregated per-entity, no writes."
+    )
+)
+class BatchValidationGraphQLResult:
+    passed: bool
+    results: list[BatchEntityValidation]
+
+
+@strawberry.type(
+    description=(
+        "Result of an atomic multi-entity write (HippoClient.batch_put). "
+        "The set commits all-or-nothing; `entities`/`relationships` carry the "
+        "written (or, on a dry run, planned) payloads as JSON."
+    )
+)
+class BatchWriteGraphQLResult:
+    committed: bool
+    dry_run: bool
+    validation: BatchValidationGraphQLResult
+    entities: list[JSON]
+    relationships: list[JSON]
 
 
 # ---------------------------------------------------------------------------
@@ -642,6 +713,88 @@ def _make_supersede_resolver(entity: EntityGraphQLInfo):
 
 
 # ---------------------------------------------------------------------------
+# Batch unit-of-work resolvers (root mutations; issue #84)
+# ---------------------------------------------------------------------------
+
+
+def _ops_from_inputs(entities: list[BatchEntityInput]) -> list[WriteOperation]:
+    return [
+        WriteOperation(
+            operation=e.operation or "insert",
+            entity_type=e.entity_type,
+            data=dict(e.data or {}),
+        )
+        for e in entities
+    ]
+
+
+def _gql_batch_validation(vr: Any) -> BatchValidationGraphQLResult:
+    return BatchValidationGraphQLResult(
+        passed=vr.is_valid,
+        results=[
+            BatchEntityValidation(
+                entity_id=r.entity_id,
+                passed=r.is_valid,
+                failures=[
+                    ValidationFailureType(
+                        tier=f.tier,
+                        rule=f.rule,
+                        message=f.message,
+                        field=f.field,
+                        details=f.details or None,
+                    )
+                    for f in r.failures
+                ],
+            )
+            for r in vr.results
+        ],
+    )
+
+
+def _validate_batch_resolver(
+    info: Info, entities: list[BatchEntityInput]
+) -> BatchValidationGraphQLResult:
+    """Whole-set dry-run validation (no writes; mirrors REST POST /ingest/validate)."""
+    vr = _client(info).validate_batch(_ops_from_inputs(entities))
+    return _gql_batch_validation(vr)
+
+
+def _ingest_batch_resolver(
+    info: Info,
+    entities: list[BatchEntityInput],
+    relationships: Optional[list[BatchRelationshipInput]] = None,
+    dry_run: bool = False,
+) -> BatchWriteGraphQLResult:
+    """Atomic multi-entity write (mirrors REST POST /ingest/batch).
+
+    The set commits all-or-nothing; relationships are created after the
+    entities within the same transaction so intra-batch forward references
+    resolve. SDK errors map to coded GraphQL errors via ``_as_graphql_error``.
+    """
+    ops = _ops_from_inputs(entities)
+    rels = [
+        {
+            "source_id": str(r.source_id),
+            "target_id": str(r.target_id),
+            "relationship_type": r.relationship_type,
+            "metadata": r.metadata,
+        }
+        for r in (relationships or [])
+    ] or None
+    try:
+        result = _client(info).batch_put(ops, relationships=rels, dry_run=dry_run)
+    except Exception as exc:
+        raise _as_graphql_error(exc) from exc
+    return BatchWriteGraphQLResult(
+        committed=result.committed,
+        dry_run=result.dry_run,
+        validation=_gql_batch_validation(result.validation),
+        entities=result.entities,
+        relationships=result.relationships,
+    )
+
+
+# ---------------------------------------------------------------------------
 # Schema assembly
 # ---------------------------------------------------------------------------
 
@@ -724,6 +877,13 @@ def build_mutation_type(builder: GraphQLTypeBuilder) -> type:
                 name=camel_case(f"supersede_{singular}"),
             )
         )
+    # Cross-type batch unit-of-work (issue #84) — root mutations, added once.
+    fields.append(
+        strawberry.mutation(resolver=_ingest_batch_resolver, name="ingestBatch")
+    )
+    fields.append(
+        strawberry.mutation(resolver=_validate_batch_resolver, name="validateBatch")
+    )
     return create_type("Mutation", fields)
 
 

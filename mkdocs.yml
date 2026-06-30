@@ -69,6 +69,7 @@ nav:
   - Installation: installation.md
   - Quick Start: quickstart.md
   - Schema Guide: schema-guide.md
+  - Polymorphic Ingest: polymorphic-ingest.md
   - Data Model: data-model.md
   - Configuration: configuration.md
   - CLI Reference: cli-reference.md
