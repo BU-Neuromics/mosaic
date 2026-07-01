@@ -2,6 +2,22 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- **Inlined value-type objects (identifier-less LinkML classes) no longer
+  silently dropped on ingest (issue #90).** Value-type detection is now
+  **schema-driven** rather than a hardcoded allowlist of one class
+  (`ExternalReference`): any non-tree-root class with no identifier slot is
+  treated as an inline value type — stored as one JSON TEXT column on the
+  owning entity, never reified into its own table with a synthetic FK. Domain
+  value objects such as `Mass`/`Volume`/`Concentration` (identifier-less
+  subclasses of an abstract `Quantity`) now round-trip exactly as
+  `ExternalReference` does; previously `hippo migrate` gave them their own
+  table, `hippo ingest` could not populate the resulting `_id` FK from the
+  inline dict, and the value vanished while ingest reported `errors=0`. New
+  `SchemaRegistry.value_type_classes()` / `is_value_type()` expose the
+  schema-driven set.
+
 ## v0.10.0 — 2026-06-30 (Graph-level as-of reconstruction + batch unit-of-work + polymorphic ingest)
 
 This release adds **graph-level / query-spanning as-of reconstruction** (time-travel

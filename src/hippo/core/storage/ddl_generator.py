@@ -19,12 +19,10 @@ from linkml.generators.sqltablegen import SQLTableGenerator
 from hippo.core.storage.fts import FTSFieldMetadata, FTSTableMetadata
 from hippo.core.storage.xref import XREF_TABLE_DDL
 from hippo.linkml_bridge import (
-    EXTERNAL_REFERENCE_CLASS,
     HIPPO_APPEND_ONLY,
     HIPPO_INDEX,
     HIPPO_INDEX_PARTIAL,
     HIPPO_UNIQUE,
-    VALUE_TYPE_CLASSES,
     SchemaRegistry,
     annotation_value,
     slot_default,
@@ -66,14 +64,24 @@ class DDLGenerator:
         # Step 1: Flatten schema to self-contained dict (resolves imports inline)
         flat_schema = _flatten_for_validator(sv)
 
-        # Step 1b: Value types (ExternalReference) store INLINE as JSON
-        # TEXT on the declaring entity's table — they get no table of
-        # their own and no FK column. Rewrite the flat schema so
-        # SQLTableGenerator emits a plain TEXT column for every slot
-        # ranged against a value type (single- AND multivalued; without
-        # this, single-valued slots become `<slot>_id` FK columns and
-        # multivalued slots become dropped linktables).
-        self._rewrite_value_type_slots(flat_schema)
+        # Step 1b: Value types (ExternalReference and any identifier-less
+        # value object — issue #90) store INLINE as JSON TEXT on the
+        # declaring entity's table — they get no table of their own and no
+        # FK column. Rewrite the flat schema so SQLTableGenerator emits a
+        # plain TEXT column for every slot ranged against a value type
+        # (single- AND multivalued; without this, single-valued slots become
+        # `<slot>_id` FK columns and multivalued slots become dropped
+        # linktables — the data is then silently lost on ingest).
+        value_types = registry.value_type_classes()
+        # A value type that a *retained* (non-value-type) class inherits from
+        # must stay in the temp schema so SQLTableGenerator can resolve its
+        # ``is_a`` (its abstract table is filtered out later by
+        # ``concrete_classes``). Only value types with no retained descendant
+        # are safe to drop. In the common case (ExternalReference, or a
+        # Quantity→Mass value-object hierarchy that is value types all the way
+        # down) every value type is poppable.
+        poppable = self._poppable_value_types(registry, value_types)
+        self._rewrite_value_type_slots(flat_schema, value_types, poppable)
 
         # Step 1c: Multivalued slots whose range is NOT an entity class
         # (scalars, enums, unresolved ranges) store INLINE as a single JSON
@@ -109,7 +117,7 @@ class DDLGenerator:
         # have no entity table (stored inline as JSON TEXT).
         concrete_classes = {
             name for name in registry.class_names()
-            if name not in VALUE_TYPE_CLASSES
+            if name not in value_types
             and (not (cls := sv.get_class(name)) or not cls.abstract)
         }
 
@@ -157,25 +165,58 @@ class DDLGenerator:
         )
 
     @staticmethod
-    def _rewrite_value_type_slots(flat_schema: dict[str, Any]) -> None:
+    def _poppable_value_types(
+        registry: SchemaRegistry, value_types: frozenset[str]
+    ) -> frozenset[str]:
+        """Value types safe to remove from the DDL temp schema.
+
+        A value type kept as an ``is_a`` ancestor of a retained entity class
+        cannot be popped — SQLTableGenerator resolves the parent while
+        inducing the child's slots and raises if it is missing. Returns the
+        value types that no retained (non-value-type) class descends from.
+        """
+        sv = registry.schema_view
+        keep: set[str] = set()
+        for name in registry.class_names():
+            if name in value_types:
+                continue
+            for anc in sv.class_ancestors(name):
+                if anc in value_types:
+                    keep.add(anc)
+        return value_types - keep
+
+    @staticmethod
+    def _rewrite_value_type_slots(
+        flat_schema: dict[str, Any],
+        value_types: frozenset[str],
+        poppable: frozenset[str],
+    ) -> None:
         """Mutate a flattened schema dict so value-type-ranged slots emit
         plain TEXT columns.
 
         For every slot (class ``attributes``/``slot_usage`` and top-level
-        ``slots``) whose range is a value type (``ExternalReference``):
-        force ``range: string`` and ``multivalued: false`` and drop the
-        inlining flags — the storage representation is one JSON TEXT
-        column either way (``_coerce_for_column`` JSON-encodes dict/list
-        values; ``_decode_column_value`` reverses on read). The value-type
-        classes themselves are removed so no table is generated for them.
-        This rewrite is local to the DDL temp schema; validation and
-        typed surfaces keep seeing the real ``ExternalReference`` range.
+        ``slots``) whose range is a value type (``ExternalReference`` or any
+        identifier-less value object — issue #90): force ``range: string``
+        and ``multivalued: false`` and drop the inlining flags — the storage
+        representation is one JSON TEXT column either way
+        (``_coerce_for_column`` JSON-encodes dict/list values;
+        ``_decode_column_value`` reverses on read). The value-type classes
+        themselves are removed so no table is generated for them. This
+        rewrite is local to the DDL temp schema; validation and typed
+        surfaces keep seeing the real value-type range.
+
+        ``value_types`` is the schema-driven set from
+        :meth:`SchemaRegistry.value_type_classes`; ranges against any of them
+        are rewritten to TEXT. ``poppable`` (a subset) names the value-type
+        classes actually removed from the schema — see
+        :meth:`_poppable_value_types` for why a value type used as an entity's
+        ``is_a`` ancestor must be retained.
         """
 
         def _rewrite(slot_spec: Any) -> None:
             if (
                 isinstance(slot_spec, dict)
-                and slot_spec.get("range") in VALUE_TYPE_CLASSES
+                and slot_spec.get("range") in value_types
             ):
                 slot_spec["range"] = "string"
                 slot_spec["multivalued"] = False
@@ -190,7 +231,7 @@ class DDLGenerator:
                     _rewrite(slot_spec)
         for slot_spec in (flat_schema.get("slots") or {}).values():
             _rewrite(slot_spec)
-        for name in VALUE_TYPE_CLASSES:
+        for name in poppable:
             (flat_schema.get("classes") or {}).pop(name, None)
 
     @staticmethod

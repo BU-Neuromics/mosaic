@@ -42,11 +42,18 @@ HIPPO_EXTERNAL_XREF = "hippo_external_xref"
 #: Name of the framework-provided external-reference value type (issue #48).
 EXTERNAL_REFERENCE_CLASS = "ExternalReference"
 
-#: hippo_core classes that are structured VALUE types, not entities: they
-#: have no ``id``/lifecycle, get no table or typed-client accessor, and are
-#: stored inline (JSON TEXT) on the entity slot that ranges them. Distinct
-#: from the transport-level INFRASTRUCTURE_CLASSES set in
-#: ``hippo.core.schema_typing`` (which re-uses this constant).
+#: Framework-provided value type that is *always* treated as inline,
+#: independent of schema shape. ``ExternalReference`` is identifier-less so
+#: schema-driven detection (:func:`is_value_type`) already classifies it as a
+#: value type, but it is listed here as a documented baseline and so callers
+#: that lack a ``SchemaView`` can still recognise the built-in.
+#:
+#: As of issue #90 value-type detection is **schema-driven**, not a hardcoded
+#: allowlist: any non-tree-root class with no identifier slot is a value type
+#: (see :func:`is_value_type` / :meth:`SchemaRegistry.value_type_classes`).
+#: This constant is the framework floor; the authoritative per-schema set is
+#: computed from the schema. Distinct from the transport-level
+#: INFRASTRUCTURE_CLASSES set in ``hippo.core.schema_typing``.
 VALUE_TYPE_CLASSES: frozenset[str] = frozenset({EXTERNAL_REFERENCE_CLASS})
 
 HIPPO_ANNOTATION_PREFIX = "hippo_"
@@ -364,6 +371,53 @@ def _has_type_designator(sv: SchemaView, class_name: str) -> bool:
     return any(getattr(s, "designates_type", False) for s in slots)
 
 
+def is_value_type(sv: SchemaView, class_name: str) -> bool:
+    """True if ``class_name`` is an inline VALUE type rather than an entity.
+
+    Schema-driven definition (issue #90): a class is a value type when it
+    has **no identifier slot** (neither ``identifier`` nor ``key``) and is
+    **not a tree-root**. Such a class has no ``id``/lifecycle, gets no table
+    or typed-client accessor, and is stored inline (one JSON TEXT column) on
+    the entity slot that ranges it.
+
+    This replaces the former hardcoded allowlist of one class
+    (``ExternalReference``). The framework's ``ExternalReference`` is
+    identifier-less and so still classifies as a value type, but any
+    identifier-less domain value object — e.g. ``Mass``/``Volume``/
+    ``Concentration`` modeled as subclasses of an abstract ``Quantity`` —
+    now round-trips identically instead of being reified into its own table
+    with a synthetic FK (which silently dropped the inline value on ingest).
+
+    A polymorphic dispatch *base* (a class declaring a ``designates_type``
+    slot, e.g. ``Sample``) is never a value type even if it were
+    identifier-less: its concrete subclasses carry identity and get tables
+    (issue #80). In practice such bases are ``is_a: Entity`` and so have an
+    ``id`` anyway; the guard is belt-and-suspenders.
+    """
+    cls = sv.get_class(class_name)
+    if cls is None:
+        return False
+    if getattr(cls, "tree_root", False):
+        return False
+    if _has_type_designator(sv, class_name):
+        return False
+    try:
+        return sv.get_identifier_slot(class_name, use_key=True) is None
+    except Exception:
+        # A malformed class may throw during identifier resolution; treat it
+        # as a non-value-type and let LinkML's own validation surface it.
+        return False
+
+
+def value_type_class_names(sv: SchemaView) -> frozenset[str]:
+    """Names of every value type in ``sv`` (see :func:`is_value_type`)."""
+    return frozenset(
+        name
+        for name in sv.all_classes(imports=True)
+        if is_value_type(sv, name)
+    )
+
+
 def _build_tree_root_class(sv: SchemaView) -> ClassDefinition:
     """Construct the synthesized ``_HippoInstanceBundle`` tree-root class.
 
@@ -403,10 +457,11 @@ def _build_tree_root_class(sv: SchemaView) -> ClassDefinition:
     attributes: dict[str, SlotDefinition] = {}
     seen_slots: dict[str, str] = {}
     for cls_name, cls in existing.items():
-        # Value types (e.g. ExternalReference) are stored inline on entity
-        # slots — they are not independently ingestable, so they get no
-        # tree-root slot in the instance bundle.
-        if cls_name in VALUE_TYPE_CLASSES:
+        # Value types (e.g. ExternalReference, or any identifier-less domain
+        # value object like Mass/Volume) are stored inline on entity slots —
+        # they are not independently ingestable, so they get no tree-root
+        # slot in the instance bundle (issue #90).
+        if is_value_type(sv, cls_name):
             continue
         if cls.abstract:
             # Abstract classes normally get no accessor — except an explicit
@@ -853,6 +908,12 @@ class SchemaRegistry:
     def __init__(self, schema_view: SchemaView) -> None:
         _validate_hippo_annotations(schema_view)
         self._sv = schema_view
+        # Schema-driven set of inline value types (issue #90): identifier-less,
+        # non-tree-root classes stored inline as JSON TEXT rather than reified
+        # into their own table. Computed once — the SchemaView is immutable
+        # after construction. Authoritative over the static VALUE_TYPE_CLASSES
+        # baseline.
+        self._value_type_classes = value_type_class_names(schema_view)
         # Synthesize the wire-format tree-root class once at construction.
         # Kept off the SchemaView so DDL generation, schema-diff, and the
         # typed-client surface stay unaware of it; the validator's flat
@@ -962,6 +1023,19 @@ class SchemaRegistry:
     def schema_view(self) -> SchemaView:
         return self._sv
 
+    def value_type_classes(self) -> frozenset[str]:
+        """Names of classes that are inline VALUE types, not entities.
+
+        Schema-driven (issue #90): a class is a value type when it has no
+        identifier slot and is not a tree-root — it has no ``id``/lifecycle,
+        gets no table or typed-client accessor, and is stored inline (one
+        JSON TEXT column) on the slot that ranges it. ``ExternalReference``
+        is the framework's built-in example; identifier-less domain value
+        objects (``Mass``, ``Volume``, ``Concentration``) qualify too and
+        round-trip identically. See :func:`is_value_type`.
+        """
+        return self._value_type_classes
+
     def tree_root_class_name(self) -> str:
         """Name of the synthesized tree-root class (``_HippoInstanceBundle``).
 
@@ -1033,10 +1107,11 @@ class SchemaRegistry:
         These slots get neither a per-class column nor a junction table (the
         DDL generator filters LinkML's linktables), so Hippo persists them as
         relationships keyed by the slot name (issue #79 / ADR-0002). Value
-        types (``ExternalReference``) are excluded — they store inline as JSON
-        TEXT regardless of cardinality.
+        types (``ExternalReference`` and any identifier-less value object) are
+        excluded — they store inline as JSON TEXT regardless of cardinality.
         """
         known = set(self._sv.all_classes().keys())
+        value_types = self.value_type_classes()
         refs: list[tuple[str, str]] = []
         for slot in self.induced_slots(class_name):
             rng = slot.range
@@ -1044,7 +1119,7 @@ class SchemaRegistry:
                 slot.multivalued
                 and rng
                 and rng in known
-                and rng not in VALUE_TYPE_CLASSES
+                and rng not in value_types
             ):
                 refs.append((slot.name, rng))
         return refs

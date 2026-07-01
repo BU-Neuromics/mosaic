@@ -1276,12 +1276,11 @@ class SQLiteAdapter(EntityStore):
         cls = registry.get_class(entity_type)
         if cls is None or getattr(cls, "abstract", False):
             return False
-        # Value types (ExternalReference) are concrete LinkML classes but
-        # have no entity table — they are stored inline (JSON TEXT) on
-        # the slot that ranges them (issue #48).
-        from hippo.linkml_bridge import VALUE_TYPE_CLASSES
-
-        if entity_type in VALUE_TYPE_CLASSES:
+        # Value types (ExternalReference, or any identifier-less value
+        # object) are concrete LinkML classes but have no entity table —
+        # they are stored inline (JSON TEXT) on the slot that ranges them
+        # (issue #48 / #90). Detection is schema-driven via the registry.
+        if entity_type in registry.value_type_classes():
             return False
         # ProvenanceRecord is hand-coded with its own write path; the
         # adapter's CRUD never targets it as a per-class typed table.

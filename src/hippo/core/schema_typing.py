@@ -44,11 +44,13 @@ INFRASTRUCTURE_CLASSES: frozenset[str] = frozenset(
     }
 )
 
-# VALUE_TYPE_CLASSES (imported above) is re-exported here for transports:
-# framework-provided structured VALUE types (issue #48) — concrete LinkML
-# classes that are not entities (no id/lifecycle, stored inline on the slot
-# that ranges them). Not exposed as entity types; slots ranged against them
-# classify as ``SlotKind.STRUCTURED``. Single definition lives in
+# VALUE_TYPE_CLASSES (imported above) is the framework-baseline value-type
+# set, re-exported here for backward compatibility. As of issue #90 the
+# authoritative, per-schema set is computed from the schema via
+# ``SchemaRegistry.value_type_classes()`` (identifier-less, non-tree-root
+# classes — stored inline on the slot that ranges them, no id/lifecycle).
+# Slots ranged against a value type classify as ``SlotKind.STRUCTURED`` and
+# are not exposed as entity types. Detection logic lives in
 # ``hippo.linkml_bridge``.
 
 #: System fields stored on the entity table (present as induced slots).
@@ -134,9 +136,10 @@ def exposed_class_names(registry: SchemaRegistry) -> list[str]:
     that lived in both the typed client and the GraphQL builder.
     """
     sv = registry.schema_view
+    value_types = registry.value_type_classes()
     names: list[str] = []
     for name in registry.class_names():
-        if name in INFRASTRUCTURE_CLASSES or name in VALUE_TYPE_CLASSES:
+        if name in INFRASTRUCTURE_CLASSES or name in value_types:
             continue
         cls = sv.get_class(name)
         if cls is None or cls.abstract:
@@ -159,8 +162,8 @@ def _classify_slot(slot: Any, registry: SchemaRegistry, enums: dict[str, Any]) -
         kind = SlotKind.ENUM
         enum_name = rng
         enum_values = tuple(enums[rng].permissible_values.keys())
-    elif rng in VALUE_TYPE_CLASSES:
-        # Inline structured value (issue #48): the stored value is the
+    elif rng in registry.value_type_classes():
+        # Inline structured value (issue #48 / #90): the stored value is the
         # object itself (JSON), not a UUID reference to another entity.
         kind = SlotKind.STRUCTURED
         target_class = rng
