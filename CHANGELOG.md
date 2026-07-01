@@ -2,6 +2,15 @@
 
 ## [Unreleased]
 
+## v0.10.1 — 2026-07-01 (Schema-driven inline value types)
+
+Patch release fixing an ingest data-loss bug: inline value-type objects
+(identifier-less LinkML classes used as a slot range) were reified into their
+own table with a synthetic FK that ingest never populated, so the value was
+dropped silently. Value-type detection is now schema-driven — any
+identifier-less, non-tree-root class is stored inline as JSON TEXT, exactly as
+the built-in `ExternalReference` already was (issue #90).
+
 ### Fixed
 
 - **Inlined value-type objects (identifier-less LinkML classes) no longer
