@@ -111,6 +111,95 @@ classes:
 """
 
 
+# A schema exercising issue #93: single-valued references ranged on a
+# polymorphic base — abstract (`Sample`, via `Measurement.sample`) and
+# concrete (`Assay`, via `Sighting.assay`). Each reference points at a class
+# whose subtype instances are dispatched into their own tables, so a
+# base-table FK would fail for those referents.
+_REF_SCHEMA = _SCHEMA + """\
+  Measurement:                  # reference ranged on the abstract base `Sample`
+    is_a: Entity
+    attributes:
+      sample:
+        range: Sample
+  Sighting:                     # reference ranged on the concrete base `Assay`
+    is_a: Entity
+    attributes:
+      assay:
+        range: Assay
+"""
+
+
+@pytest.fixture
+def ref_client(tmp_path: Path):
+    schema = tmp_path / "ref.yaml"
+    schema.write_text(_REF_SCHEMA)
+    return hippo.client_for_schema(schema, database_url=str(tmp_path / "ref.db"))
+
+
+@pytest.fixture
+def ref_registry(tmp_path: Path):
+    schema = tmp_path / "ref.yaml"
+    schema.write_text(_REF_SCHEMA)
+    return hippo.registry_for_schema(schema)
+
+
+class TestPolymorphicBaseReferences:
+    """Issue #93: a reference ranged on a polymorphic base must resolve when
+    the referent is a subtype instance (dispatched into its own table)."""
+
+    def test_reference_to_abstract_base_subtype_resolves(
+        self, tmp_path, ref_client, ref_registry
+    ):
+        bundle = _bundle(
+            tmp_path,
+            {
+                "samples": [
+                    {
+                        "id": "S1",
+                        "category": "SolidSample",
+                        "tissue": "brain",
+                        "is_available": True,
+                    }
+                ],
+                "measurements": [
+                    {"id": "M1", "sample": "S1", "is_available": True}
+                ],
+            },
+        )
+        result = ingest_linkml_yaml(bundle, ref_client, ref_registry)
+        assert result.errors == 0, result.error_messages
+        assert result.created == 2
+        assert ref_client.get("Measurement", "M1")["data"]["sample"] == "S1"
+
+    def test_reference_to_concrete_base_subtype_resolves(
+        self, tmp_path, ref_client, ref_registry
+    ):
+        # This is the issue's exact shape: a concrete base (`Assay`) whose
+        # subtype (`RNASeqAssay`) instance is dispatched to its own table.
+        bundle = _bundle(
+            tmp_path,
+            {
+                "assays": [
+                    {
+                        "id": "A1",
+                        "category": "RNASeqAssay",
+                        "platform": "Illumina",
+                        "read_length": 150,
+                        "is_available": True,
+                    }
+                ],
+                "sightings": [
+                    {"id": "SG1", "assay": "A1", "is_available": True}
+                ],
+            },
+        )
+        result = ingest_linkml_yaml(bundle, ref_client, ref_registry)
+        assert result.errors == 0, result.error_messages
+        assert result.created == 2
+        assert ref_client.get("Sighting", "SG1")["data"]["assay"] == "A1"
+
+
 @pytest.fixture
 def nd_client(tmp_path: Path):
     schema = tmp_path / "nd.yaml"
