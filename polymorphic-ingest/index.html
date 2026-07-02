@@ -903,6 +903,17 @@
   
 </li>
       
+        <li class="md-nav__item">
+  <a href="#references-to-a-polymorphic-base" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        References to a polymorphic base
+      
+    </span>
+  </a>
+  
+</li>
+      
     </ul>
   
 </nav>
@@ -1638,6 +1649,17 @@
   
 </li>
       
+        <li class="md-nav__item">
+  <a href="#references-to-a-polymorphic-base" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        References to a polymorphic base
+      
+    </span>
+  </a>
+  
+</li>
+      
     </ul>
   
 </nav>
@@ -1789,6 +1811,18 @@ subtype's columns don't exist on the base table, so those values would vanish wi
 no error. Because that silent data loss is exactly the failure mode this behavior
 prevents, Hippo fails loudly with a fix instead. Declaring the <code>designates_type</code>
 discriminator (or using the concrete accessor) is the idiomatic, lossless path.</p>
+<h2 id="references-to-a-polymorphic-base">References to a polymorphic base<a class="headerlink" href="#references-to-a-polymorphic-base" title="Permanent link">&para;</a></h2>
+<p>A slot whose range <strong>is</strong> a polymorphic base — e.g. <code>Sighting.animal</code> ranged on
+<code>Animal</code>, or <code>Measurement.person</code> ranged on a <code>Person</code> base — points at a
+referent that may be any of the base's concrete subtypes. Because each subtype
+is dispatched into its own table (above), the base table is not where those
+referents live, so Hippo stores such a reference as a plain id value rather
+than a table-level foreign key: the id resolves across the subtype tables at
+read time. This applies to both abstract bases and concrete bases that have
+concrete subclasses. A reference to a concrete <em>leaf</em> class (no subclasses)
+keeps an enforced foreign key, since every referent lives in that one table.</p>
+<p>You author these references exactly as any other — just give the referent's
+<code>id</code>. No annotation or special handling is required (issue #93).</p>
 <p>See also: <a href="../schema-guide/">Schema Guide</a>, <a href="../cli-reference/">CLI Reference</a>.</p>
 
 
