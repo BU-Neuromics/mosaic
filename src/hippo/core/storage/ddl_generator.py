@@ -306,16 +306,23 @@ class DDLGenerator:
         """Post-process CREATE TABLE: fix BOOLEAN→INTEGER, inject DEFAULTs, add superseded_by."""
         sv = registry.schema_view
 
-        # Strip FKs whose target is an abstract class — abstract classes
-        # have no SQL table (filtered out earlier in ``generate``), so the
-        # FK clause references a non-existent table and the constraint
-        # fires on every insert. PR 2.4 will reintroduce these as FKs
-        # against the ``_entity_registry`` shadow table.
+        # Strip FKs whose target is a *polymorphic base* — a class whose
+        # instances do not all live in the one table the FK points at:
+        #   * an abstract base has no SQL table (filtered out earlier in
+        #     ``generate``), so the FK references a non-existent table; and
+        #   * a concrete base with concrete subclasses (issue #93) has its
+        #     subtype instances dispatched into their own per-subclass tables
+        #     (``hippo ingest`` routes them via ``designates_type`` — issue
+        #     #80), so the base table is never populated for those referents
+        #     and the FK fails ``FOREIGN KEY constraint`` for any subtype.
+        # In both cases the reference persists as a plain TEXT id column and is
+        # resolved across the subtype tables at read time. PR 2.4 will
+        # reintroduce these as FKs against the ``_entity_registry`` shadow table.
         for slot in registry.induced_slots(table_name):
             if not slot.range:
                 continue
             target_cls = sv.get_class(slot.range)
-            if target_cls is None or not getattr(target_cls, "abstract", False):
+            if target_cls is None or not registry.is_polymorphic_base(slot.range):
                 continue
             stmt = re.sub(
                 rf',\s*\n?\s*FOREIGN\s+KEY\s*\(\s*"?{re.escape(slot.name)}"?\s*\)'

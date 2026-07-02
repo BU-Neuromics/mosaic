@@ -159,4 +159,19 @@ no error. Because that silent data loss is exactly the failure mode this behavio
 prevents, Hippo fails loudly with a fix instead. Declaring the `designates_type`
 discriminator (or using the concrete accessor) is the idiomatic, lossless path.
 
+## References to a polymorphic base
+
+A slot whose range **is** a polymorphic base — e.g. `Sighting.animal` ranged on
+`Animal`, or `Measurement.person` ranged on a `Person` base — points at a
+referent that may be any of the base's concrete subtypes. Because each subtype
+is dispatched into its own table (above), the base table is not where those
+referents live, so Hippo stores such a reference as a plain id value rather
+than a table-level foreign key: the id resolves across the subtype tables at
+read time. This applies to both abstract bases and concrete bases that have
+concrete subclasses. A reference to a concrete *leaf* class (no subclasses)
+keeps an enforced foreign key, since every referent lives in that one table.
+
+You author these references exactly as any other — just give the referent's
+`id`. No annotation or special handling is required (issue #93).
+
 See also: [Schema Guide](schema-guide.md), [CLI Reference](cli-reference.md).

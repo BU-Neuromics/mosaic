@@ -2,6 +2,22 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- **References ranged on a polymorphic base class no longer fail their foreign
+  key on ingest (issue #93).** `hippo migrate` emitted a foreign key against
+  the base-class table for any single-valued reference whose declared range is
+  a polymorphic base (a class with `designates_type` and/or concrete
+  subclasses), but `hippo ingest` dispatches a subtype instance into its own
+  per-subclass table (issue #80) and never populates the base table — so every
+  such reference failed with `FOREIGN KEY constraint failed` and no amount of
+  re-ingest could resolve it. The DDL generators now recognize a **polymorphic
+  base** (abstract, or concrete-with-concrete-subclasses) and store references
+  to it as a plain TEXT id column instead of a foreign key, matching how
+  references to an abstract base already behaved. References to a concrete leaf
+  class (no subclasses) keep their foreign key unchanged. New
+  `SchemaRegistry.is_polymorphic_base()` exposes the classification.
+
 ## v0.10.1 — 2026-07-01 (Schema-driven inline value types)
 
 Patch release fixing an ingest data-loss bug: inline value-type objects

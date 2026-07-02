@@ -114,7 +114,12 @@ class PostgresDDLGenerator:
                     )
                 )
 
-            if rng in known_classes:
+            # Skip FKs whose target is a polymorphic base (abstract, or a
+            # concrete base with concrete subclasses): subtype instances live
+            # in their own per-subclass tables so the base table can never
+            # satisfy the FK, and an abstract base has no table at all. The
+            # reference is stored as the plain TEXT id column above (issue #93).
+            if rng in known_classes and not registry.is_polymorphic_base(rng):
                 table.foreign_keys.append(
                     ForeignKeyDefinition(
                         columns=[slot.name],

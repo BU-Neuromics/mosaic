@@ -1147,6 +1147,33 @@ class SchemaRegistry:
                 out.append(name)
         return out
 
+    def is_polymorphic_base(self, class_name: str) -> bool:
+        """True if a reference *ranged on* ``class_name`` cannot be a plain FK.
+
+        A slot's declared range is a polymorphic base when its instances do not
+        all live in one table an FK could point at:
+
+        * an **abstract** base has no SQL table of its own (the DDL generators
+          emit none), so an FK to it references a non-existent table; and
+        * a **concrete base with concrete subclasses** scatters subtype
+          instances into their own per-subclass tables — ``hippo ingest``
+          dispatches a subtype instance to its own table via the
+          ``designates_type`` discriminator (issue #80), so the base table is
+          never populated for those referents and an FK to it fails
+          ``FOREIGN KEY constraint`` for any subtype referent (issue #93).
+
+        In both cases the reference is stored as a plain TEXT id column instead
+        of a foreign key; the id is resolved across the subtype tables at read
+        time. A concrete leaf class (no subclasses) is *not* a polymorphic base
+        — its FK is safe and kept.
+        """
+        cls = self._sv.get_class(class_name)
+        if cls is None:
+            return False
+        if getattr(cls, "abstract", False):
+            return True
+        return bool(self.concrete_subclasses(class_name))
+
     def type_designator_slot(self, class_name: str) -> Optional[SlotDefinition]:
         """The induced slot marked ``designates_type: true`` on ``class_name``.
 
