@@ -2,6 +2,21 @@
 
 ## [Unreleased]
 
+## v0.10.2 — 2026-07-07 (Release pipeline + polymorphic-base reference fix)
+
+### Added
+
+- **Release pipeline (issue #97, DataHelix 1.0 epic P1.1).** Pushing a
+  `vX.Y.Z` tag now builds and publishes a wheel/sdist and a digest-addressed
+  image at `ghcr.io/bu-neuromics/hippo`, attaching the digest as an
+  `image-digest.json` release asset for the DataHelix certification ledger
+  (`composition.lock.json`). PyPI publishing is gated behind the
+  `PYPI_PUBLISH` repository variable pending the distribution-name decision
+  (`hippo` is taken on PyPI). The Dockerfile now actually builds (the old
+  builder stage never copied `src/`) and carries the `graphql` and `postgres`
+  extras the certification compose requires. Process documented in
+  `RELEASING.md`.
+
 ### Fixed
 
 - **References ranged on a polymorphic base class no longer fail their foreign
