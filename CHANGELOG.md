@@ -2,6 +2,18 @@
 
 ## [Unreleased]
 
+## v0.10.3 — 2026-07-07 (Postgres FTS write fix)
+
+### Fixed
+
+- **Writes on a postgres deployment no longer crash when the schema declares
+  `hippo_search` slots (#108).** `IngestionService._sync_entity_to_fts`
+  checked FTS-table existence with the SQLite helper (`sqlite_master` + `?`
+  placeholder), which psycopg rejects as "the query has 0 placeholders but 1
+  parameters were passed" — every `put()` failed. The check now goes through
+  the storage adapter's own FTS store. Found by the first real DataHelix
+  certification boot (datahelix#45).
+
 ## v0.10.2 — 2026-07-07 (Release pipeline + polymorphic-base reference fix)
 
 ### Added
