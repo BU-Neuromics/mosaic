@@ -50,9 +50,12 @@ class IngestionService:
                 table_name = fts_meta.table_name
                 fts_fields = fts_meta.get_fts_columns()
 
-                from hippo.core.storage.fts import fts_table_exists
-
-                if not fts_table_exists(conn.cursor(), table_name):
+                # Ask the adapter's own FTS store — the sqlite module helper
+                # queries sqlite_master with a `?` placeholder, which psycopg
+                # rejects ("0 placeholders but 1 parameters"), breaking every
+                # write on a postgres deployment whose schema declares
+                # hippo_search slots.
+                if not fts_store.fts_table_exists(table_name):
                     continue
 
                 content = extract_fts_content(data, fts_fields)
