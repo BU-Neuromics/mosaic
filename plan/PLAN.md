@@ -62,7 +62,7 @@ To implement a feature with OpenCode:
 
 ```bash
 # From hippo/plan/ directory — implement one feature at a time in epic order
-cd /path/to/drylims-docs/hippo
+cd /path/to/DataHelix-docs/hippo
 
 # OpenCode reads the spec and the design docs (design/ is co-located)
 # Point OpenCode at the openspec change for the feature you're implementing
