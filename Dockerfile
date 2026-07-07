@@ -12,16 +12,16 @@ FROM python:3.12-slim
 LABEL org.opencontainers.image.title="hippo" \
       org.opencontainers.image.description="DataHelix metadata tracking service"
 
-RUN groupadd -r bass && useradd -r -g bass -d /app bass
+RUN groupadd -r datahelix && useradd -r -g datahelix -d /app datahelix
 WORKDIR /app
 
 COPY --from=builder /install /usr/local
 COPY src/ ./src/
 
 # Default data and config directories
-RUN mkdir -p /data/hippo-db /app/schemas && chown -R bass:bass /data /app
+RUN mkdir -p /data/hippo-db /app/schemas && chown -R datahelix:datahelix /data /app
 
-USER bass
+USER datahelix
 
 EXPOSE 8001
 
