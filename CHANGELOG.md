@@ -2,6 +2,21 @@
 
 ## [Unreleased]
 
+## v0.10.4 — 2026-07-08 (String slots round-trip verbatim)
+
+### Fixed
+
+- **Scalar `range: string` slots no longer JSON-decode on read (SQLite
+  adapter).** `_decode_column_value` decoded any stored text that parsed
+  as a JSON container, so a string slot carrying serialized JSON (e.g.
+  Aperture's control-plane `payload` envelopes) came back as a dict and
+  the GraphQL `String` type refused to serialize it, nulling the whole
+  page. The decode is now schema-driven via the new
+  `SchemaRegistry.string_slot_names()` (mirroring the boolean reversal):
+  scalar string slots pass through verbatim; multivalued string slots
+  still decode their JSON arrays. Found by the aperture#15 live-seam
+  reconciliation (datahelix#45).
+
 ## v0.10.3 — 2026-07-07 (Postgres FTS write fix)
 
 ### Fixed
