@@ -2226,8 +2226,17 @@ class SQLiteAdapter(EntityStore):
             if self.schema_registry is not None
             else set()
         )
+        string_cols = (
+            self.schema_registry.string_slot_names(entity_type)
+            if self.schema_registry is not None
+            else set()
+        )
         data = {
-            c: self._decode_column_value(row[c], is_boolean=c in boolean_cols)
+            c: self._decode_column_value(
+                    row[c],
+                    is_boolean=c in boolean_cols,
+                    is_string=c in string_cols,
+                )
             for c in slot_columns
             if row[c] is not None
         }
@@ -2614,9 +2623,18 @@ class SQLiteAdapter(EntityStore):
             if self.schema_registry is not None
             else set()
         )
+        string_cols = (
+            self.schema_registry.string_slot_names(entity_type)
+            if self.schema_registry is not None
+            else set()
+        )
         for row in rows:
             data = {
-                c: self._decode_column_value(row[c], is_boolean=c in boolean_cols)
+                c: self._decode_column_value(
+                    row[c],
+                    is_boolean=c in boolean_cols,
+                    is_string=c in string_cols,
+                )
                 for c in slot_columns
                 if row[c] is not None
             }
@@ -2631,7 +2649,9 @@ class SQLiteAdapter(EntityStore):
             )
 
     @staticmethod
-    def _decode_column_value(value: Any, is_boolean: bool = False) -> Any:
+    def _decode_column_value(
+        value: Any, is_boolean: bool = False, is_string: bool = False
+    ) -> Any:
         """Best-effort reverse of ``_coerce_for_column`` for query results.
 
         SQLite stores JSON-encoded containers and 0/1 booleans as text /
@@ -2646,9 +2666,19 @@ class SQLiteAdapter(EntityStore):
         rejects the raw integer for a boolean slot (PTS-349). The integer
         guard leaves multivalued booleans untouched: they arrive as JSON
         strings and fall through to the JSON branch with native ``bool``s.
+
+        ``is_string`` must be set for columns backing a scalar
+        ``range: string`` slot: their text is user data that must
+        round-trip verbatim, even when it happens to parse as a JSON
+        container (Aperture's control-plane ``payload`` carries serialized
+        ``{"v": …, "data": …}`` envelopes that the JSON branch would
+        otherwise corrupt into dicts, which the GraphQL String type then
+        refuses to serialize).
         """
         if is_boolean and isinstance(value, int) and not isinstance(value, bool):
             return bool(value)
+        if is_string:
+            return value
         if isinstance(value, str) and value and value[0] in "[{":
             try:
                 return json.loads(value)
