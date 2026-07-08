@@ -28,7 +28,7 @@ FUTURE = "2999-01-01T00:00:00+00:00"
 
 @pytest.fixture
 def adapter(minimal_schema_registry):
-    from hippo.core.storage.adapters.postgres_adapter import PostgresAdapter
+    from mosaic.core.storage.adapters.postgres_adapter import PostgresAdapter
 
     a = PostgresAdapter(
         database_url=POSTGRES_URL,
@@ -50,13 +50,13 @@ def adapter(minimal_schema_registry):
 
 @pytest.fixture
 def client(adapter):
-    from hippo.core.client import HippoClient
+    from mosaic.core.client import MosaicClient
 
-    return HippoClient(storage=adapter, bypass_validation=True)
+    return MosaicClient(storage=adapter, bypass_validation=True)
 
 
 def _entity(adapter, name):
-    from hippo.core.storage.adapters.postgres_adapter import PostgresEntity
+    from mosaic.core.storage.adapters.postgres_adapter import PostgresEntity
 
     eid = str(uuid.uuid4())
     adapter.create(

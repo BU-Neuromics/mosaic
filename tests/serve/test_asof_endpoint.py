@@ -12,11 +12,11 @@ import tempfile
 import pytest
 from fastapi.testclient import TestClient
 
-from hippo.api.factory import create_app
-from hippo.core.client import HippoClient
-from hippo.core.storage.adapters.sqlite_adapter import SQLiteAdapter
+from mosaic.api.factory import create_app
+from mosaic.core.client import MosaicClient
+from mosaic.core.storage.adapters.sqlite_adapter import SQLiteAdapter
 from tests.conftest import _build_minimal_schema_registry
-from hippo.serve.routers import entity, health, ingest
+from mosaic.serve.routers import entity, health, ingest
 
 AUTH = {"Authorization": "Bearer test-token"}
 PAST = "2000-01-01T00:00:00+00:00"
@@ -32,7 +32,7 @@ def db_path():
 @pytest.fixture
 def client(db_path):
     storage = SQLiteAdapter(db_path, schema_registry=_build_minimal_schema_registry())
-    hippo_client = HippoClient(storage=storage, bypass_validation=True)
+    hippo_client = MosaicClient(storage=storage, bypass_validation=True)
     app = create_app(
         routers=[health.router, entity.router, ingest.router],
         hippo_client=hippo_client,

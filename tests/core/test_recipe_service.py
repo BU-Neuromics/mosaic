@@ -12,14 +12,14 @@ import tempfile
 
 import pytest
 
-from hippo.core.client import HippoClient
-from hippo.core.meta import set_meta
-from hippo.core.recipe import InstalledRecipe
-from hippo.core.recipe_service import (
+from mosaic.core.client import MosaicClient
+from mosaic.core.meta import set_meta
+from mosaic.core.recipe import InstalledRecipe
+from mosaic.core.recipe_service import (
     META_KEY_INSTALLED_RECIPES,
     RecipeService,
 )
-from hippo.core.storage.adapters.sqlite_adapter import SQLiteAdapter
+from mosaic.core.storage.adapters.sqlite_adapter import SQLiteAdapter
 from tests.conftest import _build_minimal_schema_registry
 
 
@@ -36,11 +36,11 @@ def storage(db_path):
 
 @pytest.fixture
 def client(storage):
-    return HippoClient(storage=storage, bypass_validation=True)
+    return MosaicClient(storage=storage, bypass_validation=True)
 
 
 class TestServiceConstruction:
-    def test_service_attached_to_client(self, client: HippoClient) -> None:
+    def test_service_attached_to_client(self, client: MosaicClient) -> None:
         assert isinstance(client._recipe_service, RecipeService)
 
     def test_no_storage_returns_empty(self) -> None:
@@ -49,10 +49,10 @@ class TestServiceConstruction:
 
 
 class TestListInstalledCleanInstance:
-    def test_returns_empty_on_clean_instance(self, client: HippoClient) -> None:
+    def test_returns_empty_on_clean_instance(self, client: MosaicClient) -> None:
         assert client.recipe_list() == []
 
-    def test_service_returns_empty_on_clean_instance(self, client: HippoClient) -> None:
+    def test_service_returns_empty_on_clean_instance(self, client: MosaicClient) -> None:
         assert client._recipe_service.list_installed() == []
 
 
@@ -64,7 +64,7 @@ class TestListInstalledHydration:
             set_meta(conn, META_KEY_INSTALLED_RECIPES, payload)
 
     def test_single_entry_without_parent(
-        self, storage: SQLiteAdapter, client: HippoClient
+        self, storage: SQLiteAdapter, client: MosaicClient
     ) -> None:
         self._seed(
             storage,
@@ -89,7 +89,7 @@ class TestListInstalledHydration:
         assert rec.parent is None
 
     def test_entry_with_parent_recipe_ref(
-        self, storage: SQLiteAdapter, client: HippoClient
+        self, storage: SQLiteAdapter, client: MosaicClient
     ) -> None:
         self._seed(
             storage,

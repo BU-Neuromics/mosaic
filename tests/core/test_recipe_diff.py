@@ -23,8 +23,8 @@ from textwrap import dedent
 
 import pytest
 
-from hippo.core.recipe import RecipeDiff
-from hippo.core.recipe_service import RecipeService
+from mosaic.core.recipe import RecipeDiff
+from mosaic.core.recipe_service import RecipeService
 
 
 def _write_recipe(

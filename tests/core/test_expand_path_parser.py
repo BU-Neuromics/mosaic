@@ -2,7 +2,7 @@
 
 import pytest
 
-from hippo.core.expand_path_parser import (
+from mosaic.core.expand_path_parser import (
     ExpandPathParser,
     MaxSizeExceededError,
     ParserConfig,

@@ -2,7 +2,7 @@
 
 Covers the four acceptance criteria from the issue:
 
-1. ``hippo reference <name> --help`` shows the registered subcommands.
+1. ``mosaic reference <name> --help`` shows the registered subcommands.
 2. Invoking a subcommand reads ``client.cache_dir_for(<name>)`` and
    gets the same path as ``load()`` would.
 3. A loader that registers only ``hippo.reference_loaders`` (no sub-app)
@@ -20,12 +20,12 @@ import pytest
 import typer
 from typer.testing import CliRunner
 
-from hippo.cli.commands.reference import (
+from mosaic.cli.commands.reference import (
     ReferenceLoaderRegistrationError,
     discover_reference_loader_subapps,
     mount_reference_loader_subapps,
 )
-from hippo.cli.main import app, reference_app
+from mosaic.cli.main import app, reference_app
 
 
 class TestFakeLoaderSubapp:
@@ -51,18 +51,18 @@ class TestFakeLoaderSubapp:
         assert result.exit_code == 0, result.output
 
         # Compute the canonical path the same way load() would (it calls
-        # the same HippoClient.cache_dir_for helper under the hood).
-        from hippo.core.client import HippoClient
-        from hippo.core.storage.adapters.sqlite_adapter import SQLiteAdapter
-        from hippo.linkml_bridge import SchemaRegistry
+        # the same MosaicClient.cache_dir_for helper under the hood).
+        from mosaic.core.client import MosaicClient
+        from mosaic.core.storage.adapters.sqlite_adapter import SQLiteAdapter
+        from mosaic.linkml_bridge import SchemaRegistry
         from linkml_runtime.utils.schemaview import SchemaView
         import importlib.resources
 
-        hippo_core_path = importlib.resources.files("hippo.schemas").joinpath(
+        hippo_core_path = importlib.resources.files("mosaic.schemas").joinpath(
             "hippo_core.yaml"
         )
         registry = SchemaRegistry(SchemaView(str(hippo_core_path)))
-        client = HippoClient(
+        client = MosaicClient(
             storage=SQLiteAdapter(":memory:", schema_registry=registry),
             registry=registry,
         )
@@ -87,7 +87,7 @@ class TestMountSemantics:
         """A loader with no sub-app entry leaves the reference group
         untouched — install/upgrade/list still serve the parent group."""
         monkeypatch.setattr(
-            "hippo.cli.commands.reference.discover_reference_loader_subapps",
+            "mosaic.cli.commands.reference.discover_reference_loader_subapps",
             lambda: [],
         )
         fresh = typer.Typer(name="reference")
@@ -127,7 +127,7 @@ class TestMountSemantics:
             typer.echo("pong-b")
 
         monkeypatch.setattr(
-            "hippo.cli.commands.reference.discover_reference_loader_subapps",
+            "mosaic.cli.commands.reference.discover_reference_loader_subapps",
             lambda: [("loader-a", sub_a), ("loader-b", sub_b)],
         )
 
@@ -190,7 +190,7 @@ class TestDiscoveryStrictness:
 class TestRealRegistryWiring:
     """Sanity check the live entry-point wiring loaded at import time.
 
-    The mounting happens in ``hippo.cli.main`` at module import — this
+    The mounting happens in ``mosaic.cli.main`` at module import — this
     test asserts the ``fake`` sub-app actually landed under the group.
     """
 

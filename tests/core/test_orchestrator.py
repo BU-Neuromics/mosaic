@@ -22,20 +22,20 @@ import pytest
 import yaml
 from linkml_runtime.utils.schemaview import SchemaView
 
-from hippo.core.client import HippoClient
-from hippo.core.exceptions import MigrationGateError, OrchestrationError
-from hippo.core.loaders.bundle import Bundle
-from hippo.core.loaders.domain_module import (
+from mosaic.core.client import MosaicClient
+from mosaic.core.exceptions import MigrationGateError, OrchestrationError
+from mosaic.core.loaders.bundle import Bundle
+from mosaic.core.loaders.domain_module import (
     DomainModule,
     MigrationContext,
     MigrationStep,
 )
-from hippo.core.loaders.orchestrator import (
+from mosaic.core.loaders.orchestrator import (
     migrate_to_bundle,
     topological_sort,
 )
-from hippo.core.storage.adapters.sqlite_adapter import SQLiteAdapter
-from hippo.linkml_bridge import SchemaRegistry, _bundled_importmap
+from mosaic.core.storage.adapters.sqlite_adapter import SQLiteAdapter
+from mosaic.linkml_bridge import SchemaRegistry, _bundled_importmap
 
 
 # ---------------------------------------------------------------------------
@@ -149,10 +149,10 @@ def client():
         storage = SQLiteAdapter(
             os.path.join(tmpdir, "orchestrator.db"), schema_registry=reg
         )
-        yield HippoClient(storage=storage, registry=reg)
+        yield MosaicClient(storage=storage, registry=reg)
 
 
-def _seed_sample(client: HippoClient, n: int) -> None:
+def _seed_sample(client: MosaicClient, n: int) -> None:
     for i in range(n):
         client.put(
             "Sample",
@@ -161,7 +161,7 @@ def _seed_sample(client: HippoClient, n: int) -> None:
         )
 
 
-def _seed_tag(client: HippoClient, wid: str, rank) -> None:
+def _seed_tag(client: MosaicClient, wid: str, rank) -> None:
     client.put(
         "SampleTag",
         {"id": wid, "tag": "t", "rank": rank, "is_available": True},
@@ -169,7 +169,7 @@ def _seed_tag(client: HippoClient, wid: str, rank) -> None:
     )
 
 
-def _sample_kinds(client: HippoClient) -> list:
+def _sample_kinds(client: MosaicClient) -> list:
     return [it["data"].get("kind") for it in client.query("Sample").items]
 
 
@@ -211,7 +211,7 @@ class TestTopologicalSort:
 
 
 class TestMigrateHappyPath:
-    def test_dependency_ordered_and_committed(self, client: HippoClient) -> None:
+    def test_dependency_ordered_and_committed(self, client: MosaicClient) -> None:
         call_log: list[str] = []
         base = _make_module("sample", "Sample", depends=[], call_log=call_log)
         ext = _make_module(
@@ -236,7 +236,7 @@ class TestMigrateHappyPath:
         # carries the migrated `kind`.
         assert _sample_kinds(client) == ["migrated", "migrated", "migrated"]
 
-    def test_no_op_when_already_at_target(self, client: HippoClient) -> None:
+    def test_no_op_when_already_at_target(self, client: MosaicClient) -> None:
         base = _make_module("sample", "Sample", depends=[])
         _seed_sample(client, 1)
         target = Bundle(name="bb", packages={"sample": "v2"})
@@ -253,7 +253,7 @@ class TestMigrateHappyPath:
 
 class TestStrandedFieldBlockedAtGate:
     def test_stranded_extension_field_blocks_and_rolls_back(
-        self, client: HippoClient
+        self, client: MosaicClient
     ) -> None:
         base = _make_module("sample", "Sample", depends=[])
         ext = _make_module("sampletag", "SampleTag", depends=["sample"])
@@ -279,7 +279,7 @@ class TestStrandedFieldBlockedAtGate:
         assert _sample_kinds(client) == [None, None]
         assert len(client.query("Sample").items) == 2
 
-    def test_clean_extension_state_commits(self, client: HippoClient) -> None:
+    def test_clean_extension_state_commits(self, client: MosaicClient) -> None:
         base = _make_module("sample", "Sample", depends=[])
         ext = _make_module("sampletag", "SampleTag", depends=["sample"])
         _seed_sample(client, 2)
@@ -298,7 +298,7 @@ class TestStrandedFieldBlockedAtGate:
 
 
 class TestOrchestrationErrors:
-    def test_target_pins_uninstalled_package(self, client: HippoClient) -> None:
+    def test_target_pins_uninstalled_package(self, client: MosaicClient) -> None:
         base = _make_module("sample", "Sample", depends=[])
         target = Bundle(name="bb", packages={"sample": "v2", "ghost": "v2"})
         with pytest.raises(OrchestrationError) as exc:

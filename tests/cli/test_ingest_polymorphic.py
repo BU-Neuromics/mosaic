@@ -19,8 +19,8 @@ from pathlib import Path
 import pytest
 import yaml
 
-import hippo
-from hippo.cli.commands.ingest import IngestError, ingest_linkml_yaml
+import mosaic
+from mosaic.cli.commands.ingest import IngestError, ingest_linkml_yaml
 
 
 _SCHEMA = """\
@@ -75,14 +75,14 @@ classes:
 def registry(tmp_path: Path):
     schema = tmp_path / "schema.yaml"
     schema.write_text(_SCHEMA)
-    return hippo.registry_for_schema(schema)
+    return mosaic.registry_for_schema(schema)
 
 
 @pytest.fixture
 def client(tmp_path: Path):
     schema = tmp_path / "schema.yaml"
     schema.write_text(_SCHEMA)
-    return hippo.client_for_schema(schema, database_url=str(tmp_path / "h.db"))
+    return mosaic.client_for_schema(schema, database_url=str(tmp_path / "h.db"))
 
 
 def _bundle(tmp_path: Path, data: dict, name: str = "bundle.yaml") -> Path:
@@ -134,14 +134,14 @@ _REF_SCHEMA = _SCHEMA + """\
 def ref_client(tmp_path: Path):
     schema = tmp_path / "ref.yaml"
     schema.write_text(_REF_SCHEMA)
-    return hippo.client_for_schema(schema, database_url=str(tmp_path / "ref.db"))
+    return mosaic.client_for_schema(schema, database_url=str(tmp_path / "ref.db"))
 
 
 @pytest.fixture
 def ref_registry(tmp_path: Path):
     schema = tmp_path / "ref.yaml"
     schema.write_text(_REF_SCHEMA)
-    return hippo.registry_for_schema(schema)
+    return mosaic.registry_for_schema(schema)
 
 
 class TestPolymorphicBaseReferences:
@@ -204,14 +204,14 @@ class TestPolymorphicBaseReferences:
 def nd_client(tmp_path: Path):
     schema = tmp_path / "nd.yaml"
     schema.write_text(_NO_DESIGNATOR_SCHEMA)
-    return hippo.client_for_schema(schema, database_url=str(tmp_path / "nd.db"))
+    return mosaic.client_for_schema(schema, database_url=str(tmp_path / "nd.db"))
 
 
 @pytest.fixture
 def nd_registry(tmp_path: Path):
     schema = tmp_path / "nd.yaml"
     schema.write_text(_NO_DESIGNATOR_SCHEMA)
-    return hippo.registry_for_schema(schema)
+    return mosaic.registry_for_schema(schema)
 
 
 class TestTreeRootAccessors:
@@ -324,7 +324,7 @@ class TestPolymorphicDispatch:
         # The dispatch-level guard is the defense-in-depth fallback for when
         # validation is bypassed / schema drift: it refuses an unresolvable
         # discriminator value rather than mis-storing the instance.
-        from hippo.cli.commands.ingest import _dispatch_class
+        from mosaic.cli.commands.ingest import _dispatch_class
 
         with pytest.raises(IngestError, match="does not name"):
             _dispatch_class(registry, "Sample", {"id": "S1", "category": "Nope"})

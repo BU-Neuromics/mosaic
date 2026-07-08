@@ -10,9 +10,9 @@ import tempfile
 
 import pytest
 
-from hippo.core.client import HippoClient
-from hippo.core.storage.adapters.sqlite_adapter import SQLiteAdapter
-from hippo.core.validation import (
+from mosaic.core.client import MosaicClient
+from mosaic.core.storage.adapters.sqlite_adapter import SQLiteAdapter
+from mosaic.core.validation import (
     BatchWriteResult,
     ValidationResult,
     WriteOperation,
@@ -41,15 +41,15 @@ def db_path():
 
 
 @pytest.fixture
-def client(db_path: str) -> HippoClient:
+def client(db_path: str) -> MosaicClient:
     storage = SQLiteAdapter(db_path, schema_registry=_build_minimal_schema_registry())
-    c = HippoClient(storage=storage)
+    c = MosaicClient(storage=storage)
     c.add_validator(_NameRequiredValidator())
     return c
 
 
 class TestBatchPut:
-    def test_commits_valid_set_atomically(self, client: HippoClient) -> None:
+    def test_commits_valid_set_atomically(self, client: MosaicClient) -> None:
         ops = [
             WriteOperation(operation="insert", entity_type="Sample", data={"id": "s1", "name": "a"}),
             WriteOperation(operation="insert", entity_type="Sample", data={"id": "s2", "name": "b"}),
@@ -62,7 +62,7 @@ class TestBatchPut:
         assert client._storage.read("s1") is not None
         assert client._storage.read("s2") is not None
 
-    def test_invalid_set_writes_nothing(self, client: HippoClient) -> None:
+    def test_invalid_set_writes_nothing(self, client: MosaicClient) -> None:
         ops = [
             WriteOperation(operation="insert", entity_type="Sample", data={"id": "ok", "name": "a"}),
             WriteOperation(operation="insert", entity_type="Sample", data={"id": "bad"}),  # no name
@@ -74,7 +74,7 @@ class TestBatchPut:
         assert client._storage.read("ok") is None
         assert client._storage.read("bad") is None
 
-    def test_dry_run_validates_but_writes_nothing(self, client: HippoClient) -> None:
+    def test_dry_run_validates_but_writes_nothing(self, client: MosaicClient) -> None:
         ops = [
             WriteOperation(operation="insert", entity_type="Sample", data={"id": "d1", "name": "a"}),
             WriteOperation(operation="insert", entity_type="Sample", data={"id": "d2", "name": "b"}),
@@ -90,7 +90,7 @@ class TestBatchPut:
         assert client._storage.read("d2") is None
 
     def test_rollback_on_mid_batch_failure(
-        self, client: HippoClient, monkeypatch: pytest.MonkeyPatch
+        self, client: MosaicClient, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         ops = [
             WriteOperation(operation="insert", entity_type="Sample", data={"id": "r1", "name": "a"}),
@@ -115,7 +115,7 @@ class TestBatchPut:
         assert client._storage.read("r2") is None
 
     def test_intra_batch_relationship_forward_reference(
-        self, client: HippoClient
+        self, client: MosaicClient
     ) -> None:
         # The sample references a donor created in the SAME batch — the edge
         # must resolve even though the donor did not pre-exist.
@@ -135,7 +135,7 @@ class TestBatchPut:
         assert result.relationships[0]["target_id"] == "sample-1"
 
     def test_relationship_failure_rolls_back_entities(
-        self, client: HippoClient
+        self, client: MosaicClient
     ) -> None:
         # A relationship to a non-existent (and not-in-batch) target must fail
         # and roll back the entities written earlier in the same batch.
@@ -149,7 +149,7 @@ class TestBatchPut:
             client.batch_put(ops, relationships=rels)
         assert client._storage.read("donor-x") is None
 
-    def test_assigns_ids_without_mutating_caller_data(self, client: HippoClient) -> None:
+    def test_assigns_ids_without_mutating_caller_data(self, client: MosaicClient) -> None:
         data = {"name": "a"}
         ops = [WriteOperation(operation="insert", entity_type="Sample", data=data)]
         result = client.batch_put(ops)

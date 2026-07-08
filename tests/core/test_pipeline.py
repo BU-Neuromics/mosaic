@@ -1,11 +1,11 @@
-"""Tests for ValidationPipeline and HippoClient."""
+"""Tests for ValidationPipeline and MosaicClient."""
 
 import pytest
 
-from hippo.core.client import HippoClient
-from hippo.core.exceptions import ValidationFailure
-from hippo.core.pipeline import ValidationPipeline, create_pipeline
-from hippo.core.validation import (
+from mosaic.core.client import MosaicClient
+from mosaic.core.exceptions import ValidationFailure
+from mosaic.core.pipeline import ValidationPipeline, create_pipeline
+from mosaic.core.validation import (
     ValidationResult,
     WriteOperation,
     WriteValidator,
@@ -208,11 +208,11 @@ class TestCreatePipeline:
         assert pipeline.get_validator_count() == 1
 
 
-class TestHippoClientValidation:
-    """Tests for HippoClient validation integration."""
+class TestMosaicClientValidation:
+    """Tests for MosaicClient validation integration."""
 
     def test_client_without_pipeline_allows_writes(self):
-        client = HippoClient()
+        client = MosaicClient()
         op = WriteOperation(
             operation="insert", entity_type="sample", data={"id": "123"}
         )
@@ -220,7 +220,7 @@ class TestHippoClientValidation:
         assert result.is_valid is True
 
     def test_client_with_bypass_validation_flag(self):
-        client = HippoClient(bypass_validation=True)
+        client = MosaicClient(bypass_validation=True)
         op = WriteOperation(
             operation="insert", entity_type="sample", data={"id": "123"}
         )
@@ -235,7 +235,7 @@ class TestHippoClientValidation:
         pipeline = ValidationPipeline()
         pipeline.add_validator(FailingValidator())
 
-        client = HippoClient(pipeline=pipeline)
+        client = MosaicClient(pipeline=pipeline)
         op = WriteOperation(
             operation="insert", entity_type="sample", data={"id": "123"}
         )
@@ -249,7 +249,7 @@ class TestHippoClientValidation:
             def validate(self, operation: WriteOperation) -> ValidationResult:
                 return ValidationResult(is_valid=True)
 
-        client = HippoClient()
+        client = MosaicClient()
         assert client.pipeline is None
 
         client.add_validator(TestValidator())
@@ -257,11 +257,11 @@ class TestHippoClientValidation:
         assert client.pipeline.get_validator_count() == 1
 
 
-class TestHippoClientWriteOperations:
-    """Tests for HippoClient write operations with validation."""
+class TestMosaicClientWriteOperations:
+    """Tests for MosaicClient write operations with validation."""
 
     def test_create_success(self):
-        client = HippoClient()
+        client = MosaicClient()
         result = client.create("Sample", {"id": "123", "name": "test"})
         assert result["id"] == "123"
 
@@ -273,7 +273,7 @@ class TestHippoClientWriteOperations:
         pipeline = ValidationPipeline()
         pipeline.add_validator(FailingValidator())
 
-        client = HippoClient(pipeline=pipeline)
+        client = MosaicClient(pipeline=pipeline)
 
         with pytest.raises(ValidationFailure) as exc_info:
             client.create("Sample", {"id": "123"})
@@ -287,16 +287,16 @@ class TestHippoClientWriteOperations:
         pipeline = ValidationPipeline()
         pipeline.add_validator(FailingValidator())
 
-        client = HippoClient(pipeline=pipeline)
+        client = MosaicClient(pipeline=pipeline)
         result = client.create("Sample", {"id": "123"}, bypass_validation=True)
         assert result["id"] == "123"
 
     def test_update_success(self):
-        client = HippoClient()
+        client = MosaicClient()
         result = client.update("Sample", "123", {"name": "updated"})
         assert result["id"] == "123"
 
     def test_delete_success(self):
-        client = HippoClient()
+        client = MosaicClient()
         result = client.delete("Sample", "123")
         assert result is True

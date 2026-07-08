@@ -10,10 +10,10 @@ import tempfile
 import pytest
 from fastapi.testclient import TestClient
 
-from hippo.core.client import HippoClient
-from hippo.core.storage.adapters.sqlite_adapter import SQLiteAdapter
-from hippo.core.validation import ValidationResult, WriteOperation, WriteValidator
-from hippo.serve import create_default_app
+from mosaic.core.client import MosaicClient
+from mosaic.core.storage.adapters.sqlite_adapter import SQLiteAdapter
+from mosaic.core.validation import ValidationResult, WriteOperation, WriteValidator
+from mosaic.serve import create_default_app
 from tests.conftest import _build_minimal_schema_registry
 
 AUTH = {"Authorization": "Bearer test-token"}
@@ -34,7 +34,7 @@ def hippo_client():
     with tempfile.TemporaryDirectory() as tmpdir:
         registry = _build_minimal_schema_registry()
         storage = SQLiteAdapter(os.path.join(tmpdir, "batch.db"), schema_registry=registry)
-        c = HippoClient(storage=storage, registry=registry)
+        c = MosaicClient(storage=storage, registry=registry)
         c.add_validator(_NameRequiredValidator())
         yield c
 

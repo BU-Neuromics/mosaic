@@ -10,9 +10,9 @@ import tempfile
 
 import pytest
 
-from hippo.core.client import HippoClient
-from hippo.core.storage.adapters.sqlite_adapter import SQLiteAdapter
-from hippo.core.validation import (
+from mosaic.core.client import MosaicClient
+from mosaic.core.storage.adapters.sqlite_adapter import SQLiteAdapter
+from mosaic.core.validation import (
     BatchValidationResult,
     ValidationResult,
     WriteOperation,
@@ -73,7 +73,7 @@ class TestBatchValidationResult:
 
 
 class TestValidateBatch:
-    """Integration tests for ``HippoClient.validate_batch`` against storage."""
+    """Integration tests for ``MosaicClient.validate_batch`` against storage."""
 
     @pytest.fixture
     def db_path(self):
@@ -81,15 +81,15 @@ class TestValidateBatch:
             yield os.path.join(tmpdir, "test_validate_batch.db")
 
     @pytest.fixture
-    def client(self, db_path: str) -> HippoClient:
+    def client(self, db_path: str) -> MosaicClient:
         storage = SQLiteAdapter(
             db_path, schema_registry=_build_minimal_schema_registry()
         )
-        c = HippoClient(storage=storage)
+        c = MosaicClient(storage=storage)
         c.add_validator(_NameRequiredValidator())
         return c
 
-    def test_all_valid_set(self, client: HippoClient) -> None:
+    def test_all_valid_set(self, client: MosaicClient) -> None:
         ops = [
             WriteOperation(operation="insert", entity_type="Sample", data={"name": "a"}),
             WriteOperation(operation="insert", entity_type="Sample", data={"name": "b"}),
@@ -100,7 +100,7 @@ class TestValidateBatch:
         assert len(result.results) == 2
         assert all(r.is_valid for r in result.results)
 
-    def test_mixed_set_aggregates_not_fail_fast(self, client: HippoClient) -> None:
+    def test_mixed_set_aggregates_not_fail_fast(self, client: MosaicClient) -> None:
         ops = [
             WriteOperation(operation="insert", entity_type="Sample", data={"name": "ok"}),
             WriteOperation(operation="insert", entity_type="Sample", data={"value": "x"}),
@@ -113,7 +113,7 @@ class TestValidateBatch:
         assert len(result.invalid_results()) == 2
 
     def test_provisional_id_assigned_and_caller_data_untouched(
-        self, client: HippoClient
+        self, client: MosaicClient
     ) -> None:
         data = {"name": "x"}
         ops = [WriteOperation(operation="insert", entity_type="Sample", data=data)]
@@ -124,7 +124,7 @@ class TestValidateBatch:
         assert "id" not in data
         assert ops[0].data == {"name": "x"}
 
-    def test_no_writes_occur(self, client: HippoClient) -> None:
+    def test_no_writes_occur(self, client: MosaicClient) -> None:
         ids = ["batch-e1", "batch-e2"]
         ops = [
             WriteOperation(
@@ -140,12 +140,12 @@ class TestValidateBatch:
         for eid in ids:
             assert client._storage.read(eid) is None
 
-    def test_assign_ids_false_leaves_id_absent(self, client: HippoClient) -> None:
+    def test_assign_ids_false_leaves_id_absent(self, client: MosaicClient) -> None:
         ops = [WriteOperation(operation="insert", entity_type="Sample", data={"name": "x"})]
         result = client.validate_batch(ops, assign_ids=False)
         assert result.results[0].entity_id is None
 
-    def test_empty_set_is_valid(self, client: HippoClient) -> None:
+    def test_empty_set_is_valid(self, client: MosaicClient) -> None:
         result = client.validate_batch([])
         assert result.is_valid is True
         assert result.results == []

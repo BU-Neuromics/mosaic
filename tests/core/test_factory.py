@@ -1,9 +1,9 @@
 """Tests for the config-driven storage/client factory (issue #42).
 
 The factory is the single construction path shared by the CLI, the TUI SDK
-backend, and ``hippo serve``: it resolves the storage backend through the
+backend, and ``mosaic serve``: it resolves the storage backend through the
 ``hippo.storage_adapters`` entry-point group and assembles a configured
-``HippoClient`` (registry + storage adapter + validation pipeline).
+``MosaicClient`` (registry + storage adapter + validation pipeline).
 """
 
 from __future__ import annotations
@@ -13,9 +13,9 @@ from pathlib import Path
 
 import pytest
 
-from hippo.config import HippoConfig
-from hippo.core.exceptions import AdapterError, ValidationFailure
-from hippo.core.factory import (
+from mosaic.config import MosaicConfig
+from mosaic.core.exceptions import AdapterError, ValidationFailure
+from mosaic.core.factory import (
     DEFAULT_SQLITE_PATH,
     build_schema_registry,
     create_client,
@@ -24,8 +24,8 @@ from hippo.core.factory import (
     load_config_autodetect,
     resolve_storage_adapter_class,
 )
-from hippo.core.storage import EntityStore
-from hippo.core.storage.adapters.sqlite_adapter import SQLiteAdapter
+from mosaic.core.storage import EntityStore
+from mosaic.core.storage.adapters.sqlite_adapter import SQLiteAdapter
 
 _FIXTURE_SCHEMA = (
     Path(__file__).parents[1] / "fixtures" / "schemas" / "sample_schema.yaml"
@@ -64,7 +64,7 @@ def test_resolve_postgres_backend_registered():
     except ImportError:
         with pytest.raises(AdapterError) as exc:
             resolve_storage_adapter_class("postgres")
-        assert "hippo[postgres]" in str(exc.value)
+        assert "datahelix-mosaic[postgres]" in str(exc.value)
     else:
         cls = resolve_storage_adapter_class("postgres")
         assert issubclass(cls, EntityStore)
@@ -154,7 +154,7 @@ def test_create_client_validation_disabled_skips_pipeline(tmp_path):
 
 
 def test_create_client_from_config(tmp_path):
-    cfg = HippoConfig(
+    cfg = MosaicConfig(
         schema_path=str(_FIXTURE_SCHEMA),
         database_url=str(tmp_path / "db.sqlite"),
         storage_backend="sqlite",

@@ -16,7 +16,7 @@ from __future__ import annotations
 import tarfile
 from pathlib import Path
 
-from hippo.core.recipe import FileResolver, canonical_content_hash
+from mosaic.core.recipe import FileResolver, canonical_content_hash
 
 
 def _make_recipe(root: Path) -> Path:

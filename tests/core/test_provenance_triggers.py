@@ -15,7 +15,7 @@ from datetime import datetime, timezone
 
 import pytest
 
-from hippo.core.storage.adapters import SQLiteAdapter
+from mosaic.core.storage.adapters import SQLiteAdapter
 
 
 class TestProvenanceImmutability:

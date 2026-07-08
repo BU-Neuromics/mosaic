@@ -9,9 +9,9 @@ supply a complementary step (or the end-to-end gate will block it).
 
 import pytest
 
-from hippo.core.exceptions import ConfigError
-from hippo.core.loaders.bundle import Bundle
-from hippo.core.loaders.exposure import (
+from mosaic.core.exceptions import ConfigError
+from mosaic.core.loaders.bundle import Bundle
+from mosaic.core.loaders.exposure import (
     SchemaElement,
     compute_write_set,
     exposure_report,
@@ -285,7 +285,7 @@ class TestBundle:
 
 
 # ---------------------------------------------------------------------------
-# compute_exposure SDK entrypoint (backs `hippo reference exposure`)
+# compute_exposure SDK entrypoint (backs `mosaic reference exposure`)
 # ---------------------------------------------------------------------------
 
 
@@ -298,7 +298,7 @@ class TestComputeExposureEntrypoint:
         return str(p)
 
     def test_reports_exposure_from_schema_files(self, tmp_path) -> None:
-        from hippo.cli.commands.reference import compute_exposure
+        from mosaic.cli.commands.reference import compute_exposure
 
         old = self._write(
             tmp_path,

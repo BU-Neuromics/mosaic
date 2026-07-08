@@ -4,9 +4,9 @@ from __future__ import annotations
 
 import pytest
 
-from hippo.tui.backend import create_backend
-from hippo.tui.backend.sdk import SDKBackend
-from hippo.tui.backend.rest import RESTBackend
+from mosaic.tui.backend import create_backend
+from mosaic.tui.backend.sdk import SDKBackend
+from mosaic.tui.backend.rest import RESTBackend
 
 
 def test_factory_returns_sdk_backend():

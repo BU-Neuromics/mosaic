@@ -7,12 +7,12 @@ import asyncio
 import pytest
 
 pytest.importorskip(
-    "textual", reason="textual not installed; run: pip install hippo[tui]"
+    "textual", reason="textual not installed; run: pip install datahelix-mosaic[tui]"
 )
 
 from textual.widgets import DataTable, Input, ListView, Select
 
-from hippo.tui.views.entity_detail import EntityDetailScreen
+from mosaic.tui.views.entity_detail import EntityDetailScreen
 
 
 def _sample_id(backend) -> str:
@@ -29,11 +29,11 @@ async def _open_detail(app, pilot, entity_type: str, entity_id: str):
 
 
 def test_detail_shows_fields_relationships_and_provenance(seeded_fake_backend):
-    from hippo.tui.app import HippoTUIApp
+    from mosaic.tui.app import MosaicTUIApp
 
     backend = seeded_fake_backend
     sample_id = _sample_id(backend)
-    app = HippoTUIApp(backend=backend)
+    app = MosaicTUIApp(backend=backend)
 
     async def run():
         async with app.run_test(headless=True, size=(120, 40)) as pilot:
@@ -57,11 +57,11 @@ def test_detail_shows_fields_relationships_and_provenance(seeded_fake_backend):
 
 
 def test_detail_relationship_navigation_chains_screens(seeded_fake_backend):
-    from hippo.tui.app import HippoTUIApp
+    from mosaic.tui.app import MosaicTUIApp
 
     backend = seeded_fake_backend
     sample_id = _sample_id(backend)
-    app = HippoTUIApp(backend=backend)
+    app = MosaicTUIApp(backend=backend)
 
     async def run():
         async with app.run_test(headless=True, size=(120, 40)) as pilot:
@@ -90,12 +90,12 @@ def test_detail_relationship_navigation_chains_screens(seeded_fake_backend):
 
 
 def test_detail_availability_action_writes_through_backend(seeded_fake_backend):
-    from hippo.tui.app import HippoTUIApp
-    from hippo.tui.widgets.availability_dialog import AvailabilityScreen
+    from mosaic.tui.app import MosaicTUIApp
+    from mosaic.tui.widgets.availability_dialog import AvailabilityScreen
 
     backend = seeded_fake_backend
     sample_id = _sample_id(backend)
-    app = HippoTUIApp(backend=backend)
+    app = MosaicTUIApp(backend=backend)
 
     async def run():
         async with app.run_test(headless=True, size=(120, 40)) as pilot:
@@ -122,12 +122,12 @@ def test_detail_availability_action_writes_through_backend(seeded_fake_backend):
 
 
 def test_detail_edit_action_opens_prefilled_form(seeded_fake_backend):
-    from hippo.tui.app import HippoTUIApp
-    from hippo.tui.views.entity_form import EntityFormScreen
+    from mosaic.tui.app import MosaicTUIApp
+    from mosaic.tui.views.entity_form import EntityFormScreen
 
     backend = seeded_fake_backend
     sample_id = _sample_id(backend)
-    app = HippoTUIApp(backend=backend)
+    app = MosaicTUIApp(backend=backend)
 
     async def run():
         async with app.run_test(headless=True, size=(120, 40)) as pilot:
@@ -147,12 +147,12 @@ def test_detail_edit_action_opens_prefilled_form(seeded_fake_backend):
 
 
 def test_detail_provenance_action_opens_history(seeded_fake_backend):
-    from hippo.tui.app import HippoTUIApp
-    from hippo.tui.views.provenance import ProvenanceScreen
+    from mosaic.tui.app import MosaicTUIApp
+    from mosaic.tui.views.provenance import ProvenanceScreen
 
     backend = seeded_fake_backend
     sample_id = _sample_id(backend)
-    app = HippoTUIApp(backend=backend)
+    app = MosaicTUIApp(backend=backend)
 
     async def run():
         async with app.run_test(headless=True, size=(120, 40)) as pilot:
@@ -168,10 +168,10 @@ def test_detail_provenance_action_opens_history(seeded_fake_backend):
 
 
 def test_detail_missing_entity_reports_error(seeded_fake_backend):
-    from hippo.tui.app import HippoTUIApp
-    from hippo.tui.widgets.status_bar import StatusBar
+    from mosaic.tui.app import MosaicTUIApp
+    from mosaic.tui.widgets.status_bar import StatusBar
 
-    app = HippoTUIApp(backend=seeded_fake_backend)
+    app = MosaicTUIApp(backend=seeded_fake_backend)
 
     async def run():
         async with app.run_test(headless=True, size=(120, 40)) as pilot:

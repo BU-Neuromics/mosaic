@@ -7,10 +7,10 @@ import asyncio
 import pytest
 
 pytest.importorskip(
-    "textual", reason="textual not installed; run: pip install hippo[tui]"
+    "textual", reason="textual not installed; run: pip install datahelix-mosaic[tui]"
 )
 
-from hippo.tui.backend.protocol import (
+from mosaic.tui.backend.protocol import (
     EntityDetail,
     EntityTypeSummary,
     PagedResult,
@@ -72,16 +72,16 @@ class MockBrowserBackend:
 
 def test_entity_browser_view_pagination():
     """EntityBrowserView shows correct total_pages for >20 entities."""
-    from hippo.tui.app import HippoTUIApp
+    from mosaic.tui.app import MosaicTUIApp
 
     backend = MockBrowserBackend(total_items=50)
-    app = HippoTUIApp(backend=backend)
+    app = MosaicTUIApp(backend=backend)
 
     async def run():
         async with app.run_test(headless=True, size=(120, 40)) as pilot:
             await pilot.pause()
             # Mount entity browser manually into the main panel
-            from hippo.tui.views.entity_browser import EntityBrowserView
+            from mosaic.tui.views.entity_browser import EntityBrowserView
 
             main_panel = app.query_one("#main-panel")
             view = EntityBrowserView(entity_type="Sample", backend=backend)
@@ -98,7 +98,7 @@ def test_entity_browser_view_pagination():
 
 def test_entity_browser_next_page_action():
     """EntityBrowserView action_next_page advances the page."""
-    from hippo.tui.views.entity_browser import EntityBrowserView
+    from mosaic.tui.views.entity_browser import EntityBrowserView
 
     backend = MockBrowserBackend(total_items=50)
     view = EntityBrowserView(entity_type="Sample", backend=backend)
@@ -114,7 +114,7 @@ def test_entity_browser_next_page_action():
 
 def test_entity_browser_prev_page_action():
     """EntityBrowserView action_prev_page goes back."""
-    from hippo.tui.views.entity_browser import EntityBrowserView
+    from mosaic.tui.views.entity_browser import EntityBrowserView
 
     backend = MockBrowserBackend(total_items=50)
     view = EntityBrowserView(entity_type="Sample", backend=backend)
@@ -130,7 +130,7 @@ def test_entity_browser_prev_page_action():
 
 def test_entity_browser_no_prev_at_first_page():
     """action_prev_page does nothing on page 1."""
-    from hippo.tui.views.entity_browser import EntityBrowserView
+    from mosaic.tui.views.entity_browser import EntityBrowserView
 
     backend = MockBrowserBackend(total_items=50)
     view = EntityBrowserView(entity_type="Sample", backend=backend)
@@ -146,7 +146,7 @@ def test_entity_browser_no_prev_at_first_page():
 
 def test_entity_browser_no_next_at_last_page():
     """action_next_page does nothing on last page."""
-    from hippo.tui.views.entity_browser import EntityBrowserView
+    from mosaic.tui.views.entity_browser import EntityBrowserView
 
     backend = MockBrowserBackend(total_items=50)
     view = EntityBrowserView(entity_type="Sample", backend=backend)
@@ -162,7 +162,7 @@ def test_entity_browser_no_next_at_last_page():
 
 def test_entity_browser_filter_resets_to_page_1():
     """Filter change resets to page 1."""
-    from hippo.tui.views.entity_browser import EntityBrowserView
+    from mosaic.tui.views.entity_browser import EntityBrowserView
     from textual.widgets import Input
 
     backend = MockBrowserBackend(total_items=50)
@@ -180,11 +180,11 @@ def test_entity_browser_filter_resets_to_page_1():
 
 def test_entity_browser_row_selection_opens_detail(seeded_fake_backend):
     """Selecting a row pushes an EntityDetailScreen for that entity."""
-    from hippo.tui.app import HippoTUIApp
-    from hippo.tui.views.entity_browser import EntityBrowserView
-    from hippo.tui.views.entity_detail import EntityDetailScreen
+    from mosaic.tui.app import MosaicTUIApp
+    from mosaic.tui.views.entity_browser import EntityBrowserView
+    from mosaic.tui.views.entity_detail import EntityDetailScreen
 
-    app = HippoTUIApp(backend=seeded_fake_backend)
+    app = MosaicTUIApp(backend=seeded_fake_backend)
 
     async def run():
         async with app.run_test(headless=True, size=(120, 40)) as pilot:
@@ -208,10 +208,10 @@ def test_entity_browser_row_selection_opens_detail(seeded_fake_backend):
 
 def test_entity_browser_empty_state(fake_backend):
     """Empty entity types show the empty-state hint instead of the table."""
-    from hippo.tui.app import HippoTUIApp
-    from hippo.tui.views.entity_browser import EntityBrowserView
+    from mosaic.tui.app import MosaicTUIApp
+    from mosaic.tui.views.entity_browser import EntityBrowserView
 
-    app = HippoTUIApp(backend=fake_backend)
+    app = MosaicTUIApp(backend=fake_backend)
 
     async def run():
         async with app.run_test(headless=True, size=(120, 40)) as pilot:

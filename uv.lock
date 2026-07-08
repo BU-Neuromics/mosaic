@@ -583,6 +583,98 @@ wheels = [
 ]
 
 [[package]]
+name = "datahelix-mosaic"
+version = "0.11.0"
+source = { editable = "." }
+dependencies = [
+    { name = "common-expression-language" },
+    { name = "fastapi" },
+    { name = "linkml" },
+    { name = "linkml-runtime" },
+    { name = "linkml-store" },
+    { name = "pydantic" },
+    { name = "pyyaml" },
+    { name = "typer" },
+    { name = "uvicorn", extra = ["standard"] },
+]
+
+[package.optional-dependencies]
+all = [
+    { name = "fastapi" },
+    { name = "httpx" },
+    { name = "jsonpath-ng" },
+    { name = "psycopg", extra = ["binary", "pool"] },
+    { name = "sqlalchemy" },
+    { name = "strawberry-graphql", extra = ["fastapi"] },
+    { name = "textual" },
+    { name = "uvicorn", extra = ["standard"] },
+]
+dev = [
+    { name = "httpx" },
+    { name = "pytest" },
+    { name = "pytest-cov" },
+]
+graphql = [
+    { name = "strawberry-graphql", extra = ["fastapi"] },
+]
+loaders-all = [
+    { name = "jsonpath-ng" },
+    { name = "sqlalchemy" },
+]
+loaders-json = [
+    { name = "jsonpath-ng" },
+]
+loaders-sql = [
+    { name = "sqlalchemy" },
+]
+postgres = [
+    { name = "psycopg", extra = ["binary", "pool"] },
+]
+rest = [
+    { name = "fastapi" },
+    { name = "uvicorn", extra = ["standard"] },
+]
+tui = [
+    { name = "httpx" },
+    { name = "textual" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "common-expression-language" },
+    { name = "fastapi" },
+    { name = "fastapi", marker = "extra == 'all'" },
+    { name = "fastapi", marker = "extra == 'rest'" },
+    { name = "httpx", marker = "extra == 'all'", specifier = ">=0.27.0" },
+    { name = "httpx", marker = "extra == 'dev'" },
+    { name = "httpx", marker = "extra == 'tui'", specifier = ">=0.27.0" },
+    { name = "jsonpath-ng", marker = "extra == 'all'", specifier = ">=1.6" },
+    { name = "jsonpath-ng", marker = "extra == 'loaders-all'", specifier = ">=1.6" },
+    { name = "jsonpath-ng", marker = "extra == 'loaders-json'", specifier = ">=1.6" },
+    { name = "linkml", specifier = ">=1.8" },
+    { name = "linkml-runtime", specifier = ">=1.8" },
+    { name = "linkml-store", specifier = ">=0.3" },
+    { name = "psycopg", extras = ["binary", "pool"], marker = "extra == 'all'", specifier = ">=3.1" },
+    { name = "psycopg", extras = ["binary", "pool"], marker = "extra == 'postgres'", specifier = ">=3.1" },
+    { name = "pydantic", specifier = ">=2.0" },
+    { name = "pytest", marker = "extra == 'dev'" },
+    { name = "pytest-cov", marker = "extra == 'dev'" },
+    { name = "pyyaml" },
+    { name = "sqlalchemy", marker = "extra == 'all'", specifier = ">=2.0" },
+    { name = "sqlalchemy", marker = "extra == 'loaders-all'", specifier = ">=2.0" },
+    { name = "sqlalchemy", marker = "extra == 'loaders-sql'", specifier = ">=2.0" },
+    { name = "strawberry-graphql", extras = ["fastapi"], marker = "extra == 'all'", specifier = ">=0.262" },
+    { name = "strawberry-graphql", extras = ["fastapi"], marker = "extra == 'graphql'", specifier = ">=0.262" },
+    { name = "textual", marker = "extra == 'all'", specifier = ">=0.50.0,<1.0" },
+    { name = "textual", marker = "extra == 'tui'", specifier = ">=0.50.0,<1.0" },
+    { name = "typer" },
+    { name = "uvicorn", extras = ["standard"] },
+    { name = "uvicorn", extras = ["standard"], marker = "extra == 'all'" },
+    { name = "uvicorn", extras = ["standard"], marker = "extra == 'rest'" },
+]
+provides-extras = ["rest", "postgres", "tui", "graphql", "loaders-sql", "loaders-json", "loaders-all", "dev", "all"]
+
+[[package]]
 name = "deprecated"
 version = "1.3.1"
 source = { registry = "https://pypi.org/simple" }
@@ -968,98 +1060,6 @@ sdist = { url = "https://files.pythonhosted.org/packages/54/66/3a649ce125e03d1d4
 wheels = [
     { url = "https://files.pythonhosted.org/packages/7b/24/61844afbf38acf419e01ca2639f7bd079584523d34471acbc4152ee991c5/hbreader-0.9.1-py3-none-any.whl", hash = "sha256:9a6e76c9d1afc1b977374a5dc430a1ebb0ea0488205546d4678d6e31cc5f6801", size = 7595, upload-time = "2021-02-25T19:22:31.944Z" },
 ]
-
-[[package]]
-name = "hippo"
-version = "0.10.6"
-source = { editable = "." }
-dependencies = [
-    { name = "common-expression-language" },
-    { name = "fastapi" },
-    { name = "linkml" },
-    { name = "linkml-runtime" },
-    { name = "linkml-store" },
-    { name = "pydantic" },
-    { name = "pyyaml" },
-    { name = "typer" },
-    { name = "uvicorn", extra = ["standard"] },
-]
-
-[package.optional-dependencies]
-all = [
-    { name = "fastapi" },
-    { name = "httpx" },
-    { name = "jsonpath-ng" },
-    { name = "psycopg", extra = ["binary", "pool"] },
-    { name = "sqlalchemy" },
-    { name = "strawberry-graphql", extra = ["fastapi"] },
-    { name = "textual" },
-    { name = "uvicorn", extra = ["standard"] },
-]
-dev = [
-    { name = "httpx" },
-    { name = "pytest" },
-    { name = "pytest-cov" },
-]
-graphql = [
-    { name = "strawberry-graphql", extra = ["fastapi"] },
-]
-loaders-all = [
-    { name = "jsonpath-ng" },
-    { name = "sqlalchemy" },
-]
-loaders-json = [
-    { name = "jsonpath-ng" },
-]
-loaders-sql = [
-    { name = "sqlalchemy" },
-]
-postgres = [
-    { name = "psycopg", extra = ["binary", "pool"] },
-]
-rest = [
-    { name = "fastapi" },
-    { name = "uvicorn", extra = ["standard"] },
-]
-tui = [
-    { name = "httpx" },
-    { name = "textual" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "common-expression-language" },
-    { name = "fastapi" },
-    { name = "fastapi", marker = "extra == 'all'" },
-    { name = "fastapi", marker = "extra == 'rest'" },
-    { name = "httpx", marker = "extra == 'all'", specifier = ">=0.27.0" },
-    { name = "httpx", marker = "extra == 'dev'" },
-    { name = "httpx", marker = "extra == 'tui'", specifier = ">=0.27.0" },
-    { name = "jsonpath-ng", marker = "extra == 'all'", specifier = ">=1.6" },
-    { name = "jsonpath-ng", marker = "extra == 'loaders-all'", specifier = ">=1.6" },
-    { name = "jsonpath-ng", marker = "extra == 'loaders-json'", specifier = ">=1.6" },
-    { name = "linkml", specifier = ">=1.8" },
-    { name = "linkml-runtime", specifier = ">=1.8" },
-    { name = "linkml-store", specifier = ">=0.3" },
-    { name = "psycopg", extras = ["binary", "pool"], marker = "extra == 'all'", specifier = ">=3.1" },
-    { name = "psycopg", extras = ["binary", "pool"], marker = "extra == 'postgres'", specifier = ">=3.1" },
-    { name = "pydantic", specifier = ">=2.0" },
-    { name = "pytest", marker = "extra == 'dev'" },
-    { name = "pytest-cov", marker = "extra == 'dev'" },
-    { name = "pyyaml" },
-    { name = "sqlalchemy", marker = "extra == 'all'", specifier = ">=2.0" },
-    { name = "sqlalchemy", marker = "extra == 'loaders-all'", specifier = ">=2.0" },
-    { name = "sqlalchemy", marker = "extra == 'loaders-sql'", specifier = ">=2.0" },
-    { name = "strawberry-graphql", extras = ["fastapi"], marker = "extra == 'all'", specifier = ">=0.262" },
-    { name = "strawberry-graphql", extras = ["fastapi"], marker = "extra == 'graphql'", specifier = ">=0.262" },
-    { name = "textual", marker = "extra == 'all'", specifier = ">=0.50.0,<1.0" },
-    { name = "textual", marker = "extra == 'tui'", specifier = ">=0.50.0,<1.0" },
-    { name = "typer" },
-    { name = "uvicorn", extras = ["standard"] },
-    { name = "uvicorn", extras = ["standard"], marker = "extra == 'all'" },
-    { name = "uvicorn", extras = ["standard"], marker = "extra == 'rest'" },
-]
-provides-extras = ["rest", "postgres", "tui", "graphql", "loaders-sql", "loaders-json", "loaders-all", "dev", "all"]
 
 [[package]]
 name = "httpcore"

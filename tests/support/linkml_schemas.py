@@ -7,7 +7,7 @@ from typing import Any, Optional
 
 import yaml
 
-from hippo.linkml_bridge import SchemaRegistry
+from mosaic.linkml_bridge import SchemaRegistry
 
 
 def schema_dict(
@@ -60,7 +60,7 @@ def write_schema_file(
     """Write a minimal LinkML schema YAML to ``path`` and return it.
 
     ``path`` may be a directory (file defaults to ``<schema_name>.yaml``) or a
-    file path. All Hippo-specific slot metadata must be expressed via LinkML
+    file path. All Mosaic-specific slot metadata must be expressed via LinkML
     annotations under ``hippo_*`` keys.
     """
     if path.is_dir():

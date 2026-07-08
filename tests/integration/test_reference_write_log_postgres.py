@@ -18,7 +18,7 @@ import pytest
 
 psycopg = pytest.importorskip("psycopg")
 
-from hippo.core.meta import set_meta as sqlite_set_meta  # noqa: E402
+from mosaic.core.meta import set_meta as sqlite_set_meta  # noqa: E402
 
 POSTGRES_URL = os.environ.get("HIPPO_DATABASE_URL")
 
@@ -31,7 +31,7 @@ pytestmark = pytest.mark.skipif(
 def _set_meta_pg(conn, key: str, value: dict) -> None:
     """Postgres-flavoured upsert into ``hippo_meta``.
 
-    Mirrors ``hippo.core.meta.set_meta`` but with ``%s`` placeholders so
+    Mirrors ``mosaic.core.meta.set_meta`` but with ``%s`` placeholders so
     it works against psycopg cursors.
     """
     from datetime import datetime, timezone
@@ -90,7 +90,7 @@ def fresh_db(database_url) -> Iterator[str]:
 @pytest.fixture
 def adapter_factory(minimal_schema_registry, fresh_db):
     """Construct ``PostgresAdapter`` instances against the shared test DB."""
-    from hippo.core.storage.adapters.postgres_adapter import PostgresAdapter
+    from mosaic.core.storage.adapters.postgres_adapter import PostgresAdapter
 
     created = []
 
@@ -148,7 +148,7 @@ def _simulate_v1_state(database_url: str) -> None:
 
 
 def _put_entity(adapter, entity_type: str, name: str) -> str:
-    from hippo.core.storage.adapters.postgres_adapter import PostgresEntity
+    from mosaic.core.storage.adapters.postgres_adapter import PostgresEntity
 
     entity_id = str(uuid.uuid4())
     adapter.create(

@@ -1,6 +1,6 @@
 """Integration tests for CLI ingest commands.
 
-The ``hippo reference install`` legacy pip-flow tests previously housed
+The ``mosaic reference install`` legacy pip-flow tests previously housed
 here were superseded by the loader-driven lifecycle in PTS-229; their
 coverage lives in ``test_reference_install_upgrade.py``.
 """
@@ -13,7 +13,7 @@ import yaml
 
 
 class TestIngest:
-    """Tests for hippo ingest command."""
+    """Tests for mosaic ingest command."""
 
     @pytest.fixture(autouse=True)
     def setup_test_env(self, monkeypatch, tmp_path):
@@ -38,7 +38,7 @@ class TestIngest:
                 }
             )
         )
-        result = os.system(f"python -m hippo.cli.main ingest --config {config_path}")
+        result = os.system(f"python -m mosaic.cli.main ingest --config {config_path}")
         assert result == 0
 
     def test_ingest_with_no_configured_sources(self):
@@ -46,7 +46,7 @@ class TestIngest:
         config_path = Path.home() / ".hippo" / "data" / "sources.yaml"
         if config_path.exists():
             config_path.unlink()
-        result = os.system("python -m hippo.cli.main ingest 2>&1")
+        result = os.system("python -m mosaic.cli.main ingest 2>&1")
         assert result != 0
 
     def test_ingest_with_empty_sources(self, tmp_path):
@@ -54,13 +54,13 @@ class TestIngest:
         config_path = tmp_path / ".hippo" / "data" / "sources.yaml"
         config_path.write_text(yaml.dump({"sources": []}))
         result = os.system(
-            f"python -m hippo.cli.main ingest --config {config_path} 2>&1"
+            f"python -m mosaic.cli.main ingest --config {config_path} 2>&1"
         )
         assert result != 0
 
     def test_ingest_with_nonexistent_config_file(self):
         """Test ingest with nonexistent config file shows error."""
         result = os.system(
-            "python -m hippo.cli.main ingest --config /nonexistent/config.yaml 2>&1"
+            "python -m mosaic.cli.main ingest --config /nonexistent/config.yaml 2>&1"
         )
         assert result != 0

@@ -4,7 +4,7 @@ import pytest
 import tempfile
 import os
 
-from hippo.core.validators import (
+from mosaic.core.validators import (
     CELCondition,
     ValidationContext,
     ValidatorEngine,

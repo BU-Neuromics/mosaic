@@ -5,8 +5,8 @@ from unittest.mock import MagicMock
 import pytest
 from fastapi.testclient import TestClient
 
-from hippo.api.factory import create_app
-from hippo.serve.routers import drs
+from mosaic.api.factory import create_app
+from mosaic.serve.routers import drs
 
 
 def _make_raw_entity(
@@ -42,7 +42,7 @@ def _make_full_entity(
 
 
 def _make_client(raw_entity=None, full_entity=None):
-    """Build a mock HippoClient configured for DRS tests."""
+    """Build a mock MosaicClient configured for DRS tests."""
     mock_client = MagicMock()
     mock_client.storage.read.return_value = raw_entity
     if full_entity is not None:

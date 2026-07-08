@@ -7,10 +7,10 @@ import tempfile
 import pytest
 from fastapi.testclient import TestClient
 
-from hippo.core.client import HippoClient
-from hippo.core.storage.adapters.sqlite_adapter import SQLiteAdapter
-from hippo.linkml_bridge import SchemaRegistry
-from hippo.serve import create_default_app
+from mosaic.core.client import MosaicClient
+from mosaic.core.storage.adapters.sqlite_adapter import SQLiteAdapter
+from mosaic.linkml_bridge import SchemaRegistry
+from mosaic.serve import create_default_app
 
 XREF_SERVE_SCHEMA = """
 id: https://example.org/hippo/test_xref_serve
@@ -48,7 +48,7 @@ def hippo_client(registry):
     with tempfile.TemporaryDirectory() as tmpdir:
         db_path = os.path.join(tmpdir, "xref_serve.db")
         storage = SQLiteAdapter(db_path, schema_registry=registry)
-        yield HippoClient(storage=storage, registry=registry)
+        yield MosaicClient(storage=storage, registry=registry)
 
 
 @pytest.fixture

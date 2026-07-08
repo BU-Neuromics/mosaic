@@ -1,7 +1,7 @@
 """Tests for FTS integration with SQLite storage adapter."""
 
 import pytest
-from hippo.core.storage.adapters.sqlite_adapter import FTSStore
+from mosaic.core.storage.adapters.sqlite_adapter import FTSStore
 
 
 class TestFTSStore:
@@ -150,7 +150,7 @@ class TestFTSStoreThreadRebinding:
         import sqlite3
 
         from tests.conftest import _build_minimal_schema_registry
-        from hippo.core.storage.adapters import SQLiteAdapter
+        from mosaic.core.storage.adapters import SQLiteAdapter
 
         adapter = SQLiteAdapter(
             str(tmp_path / "rebind.db"),
@@ -169,9 +169,9 @@ class TestFTSStoreThreadRebinding:
         import threading
         from pathlib import Path
 
-        from hippo.core.client import HippoClient
-        from hippo.core.storage.adapters import SQLiteAdapter
-        from hippo.linkml_bridge import SchemaRegistry
+        from mosaic.core.client import MosaicClient
+        from mosaic.core.storage.adapters import SQLiteAdapter
+        from mosaic.linkml_bridge import SchemaRegistry
 
         schema = (
             Path(__file__).parents[1] / "fixtures" / "schemas" / "sample_schema.yaml"
@@ -179,7 +179,7 @@ class TestFTSStoreThreadRebinding:
         db_path = tmp_path / "threads.db"
         registry = SchemaRegistry.from_path(schema)
         storage = SQLiteAdapter(str(db_path), schema_registry=registry)
-        client = HippoClient(storage=storage, registry=registry)
+        client = MosaicClient(storage=storage, registry=registry)
 
         # First write on the main thread binds the (formerly sticky) store.
         client.create(entity_type="Project", data={"name": "Alpha"})

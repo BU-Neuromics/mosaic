@@ -15,9 +15,9 @@ from typing import Iterator
 
 import pytest
 
-from hippo.core.exceptions import EntityNotFoundError
-from hippo.core.provenance_service import ProvenanceService
-from hippo.core.storage.adapters.sqlite_adapter import SQLiteAdapter, SQLiteEntity
+from mosaic.core.exceptions import EntityNotFoundError
+from mosaic.core.provenance_service import ProvenanceService
+from mosaic.core.storage.adapters.sqlite_adapter import SQLiteAdapter, SQLiteEntity
 from tests.conftest import _build_minimal_schema_registry
 
 

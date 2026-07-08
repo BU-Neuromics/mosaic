@@ -7,12 +7,12 @@ import asyncio
 import pytest
 
 pytest.importorskip(
-    "textual", reason="textual not installed; run: pip install hippo[tui]"
+    "textual", reason="textual not installed; run: pip install datahelix-mosaic[tui]"
 )
 
 from textual.widgets import DataTable
 
-from hippo.tui.views.provenance import ProvenanceScreen
+from mosaic.tui.views.provenance import ProvenanceScreen
 
 
 def _sample_id(backend) -> str:
@@ -30,11 +30,11 @@ async def _push_provenance(app, pilot, backend, entity_id: str) -> ProvenanceScr
 
 
 def test_provenance_lists_events_newest_first(seeded_fake_backend):
-    from hippo.tui.app import HippoTUIApp
+    from mosaic.tui.app import MosaicTUIApp
 
     backend = seeded_fake_backend
     sample_id = _sample_id(backend)
-    app = HippoTUIApp(backend=backend)
+    app = MosaicTUIApp(backend=backend)
 
     async def run():
         async with app.run_test(headless=True, size=(120, 40)) as pilot:
@@ -59,11 +59,11 @@ def test_provenance_lists_events_newest_first(seeded_fake_backend):
 
 
 def test_provenance_payload_follows_highlight(seeded_fake_backend):
-    from hippo.tui.app import HippoTUIApp
+    from mosaic.tui.app import MosaicTUIApp
 
     backend = seeded_fake_backend
     sample_id = _sample_id(backend)
-    app = HippoTUIApp(backend=backend)
+    app = MosaicTUIApp(backend=backend)
     shown: list[int] = []
 
     async def run():
@@ -85,10 +85,10 @@ def test_provenance_payload_follows_highlight(seeded_fake_backend):
 
 
 def test_provenance_empty_state(seeded_fake_backend):
-    from hippo.tui.app import HippoTUIApp
+    from mosaic.tui.app import MosaicTUIApp
 
     backend = seeded_fake_backend
-    app = HippoTUIApp(backend=backend)
+    app = MosaicTUIApp(backend=backend)
 
     async def run():
         async with app.run_test(headless=True, size=(120, 40)) as pilot:
@@ -101,11 +101,11 @@ def test_provenance_empty_state(seeded_fake_backend):
 
 
 def test_provenance_escape_goes_back(seeded_fake_backend):
-    from hippo.tui.app import HippoTUIApp
+    from mosaic.tui.app import MosaicTUIApp
 
     backend = seeded_fake_backend
     sample_id = _sample_id(backend)
-    app = HippoTUIApp(backend=backend)
+    app = MosaicTUIApp(backend=backend)
 
     async def run():
         async with app.run_test(headless=True, size=(120, 40)) as pilot:

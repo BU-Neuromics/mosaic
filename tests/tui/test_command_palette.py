@@ -1,4 +1,4 @@
-"""Tests for CommandPalette (HippoCommandPalette) widget."""
+"""Tests for CommandPalette (MosaicCommandPalette) widget."""
 
 from __future__ import annotations
 
@@ -7,10 +7,10 @@ import asyncio
 import pytest
 
 pytest.importorskip(
-    "textual", reason="textual not installed; run: pip install hippo[tui]"
+    "textual", reason="textual not installed; run: pip install datahelix-mosaic[tui]"
 )
 
-from hippo.tui.widgets.command_palette import _fuzzy_match, _BUILTIN_COMMANDS
+from mosaic.tui.widgets.command_palette import _fuzzy_match, _BUILTIN_COMMANDS
 
 
 def test_fuzzy_match_exact():
@@ -41,18 +41,18 @@ def test_builtin_commands_present():
 
 
 def test_command_palette_instantiation():
-    """HippoCommandPalette can be created with entity type names."""
-    from hippo.tui.widgets.command_palette import HippoCommandPalette
+    """MosaicCommandPalette can be created with entity type names."""
+    from mosaic.tui.widgets.command_palette import MosaicCommandPalette
 
-    palette = HippoCommandPalette(entity_type_names=["Sample", "Donor"])
+    palette = MosaicCommandPalette(entity_type_names=["Sample", "Donor"])
     assert palette is not None
 
 
 def test_command_palette_all_items():
     """_all_items includes entity types + built-in commands."""
-    from hippo.tui.widgets.command_palette import HippoCommandPalette
+    from mosaic.tui.widgets.command_palette import MosaicCommandPalette
 
-    palette = HippoCommandPalette(entity_type_names=["Sample", "Donor"])
+    palette = MosaicCommandPalette(entity_type_names=["Sample", "Donor"])
     assert "Sample" in palette._all_items
     assert "Donor" in palette._all_items
     assert "Quit" in palette._all_items
@@ -60,8 +60,8 @@ def test_command_palette_all_items():
 
 def test_command_palette_pilot_opens_and_closes():
     """CommandPalette opens, accepts input, and dismisses on Esc."""
-    from hippo.tui.app import HippoTUIApp
-    from hippo.tui.backend.protocol import EntityTypeSummary, PagedResult, SchemaView
+    from mosaic.tui.app import MosaicTUIApp
+    from mosaic.tui.backend.protocol import EntityTypeSummary, PagedResult, SchemaView
 
     class MockBackend:
         async def list_entity_types(self):
@@ -71,7 +71,7 @@ def test_command_palette_pilot_opens_and_closes():
             return PagedResult(items=[], page=1, total_pages=1, total_items=0)
 
         async def get_entity(self, *a, **kw):
-            from hippo.tui.backend.protocol import EntityDetail
+            from mosaic.tui.backend.protocol import EntityDetail
 
             return EntityDetail(
                 id="x", entity_type="Sample", fields={}, relationships=[]
@@ -83,7 +83,7 @@ def test_command_palette_pilot_opens_and_closes():
         async def get_provenance(self, *a, **kw):
             return []
 
-    app = HippoTUIApp(backend=MockBackend())
+    app = MosaicTUIApp(backend=MockBackend())
 
     async def run():
         async with app.run_test(headless=True, size=(80, 24)) as pilot:
@@ -101,7 +101,7 @@ def test_command_palette_pilot_opens_and_closes():
 
 def test_command_palette_fuzzy_filter_narrows_results():
     """Fuzzy match reduces result set."""
-    from hippo.tui.widgets.command_palette import _fuzzy_match
+    from mosaic.tui.widgets.command_palette import _fuzzy_match
 
     items = ["Sample", "Donor", "DataFile", "Go to schema", "Quit"]
     filtered = [item for item in items if _fuzzy_match("sam", item)]
@@ -111,10 +111,10 @@ def test_command_palette_fuzzy_filter_narrows_results():
 
 def test_command_palette_esc_dismisses():
     """Escape key dismisses command palette."""
-    from hippo.tui.widgets.command_palette import HippoCommandPalette
+    from mosaic.tui.widgets.command_palette import MosaicCommandPalette
 
     dismissed: list[bool] = []
-    palette = HippoCommandPalette(entity_type_names=["Sample"])
+    palette = MosaicCommandPalette(entity_type_names=["Sample"])
 
     # Simulate the dismiss action (without full app context)
     original_dismiss = palette.dismiss

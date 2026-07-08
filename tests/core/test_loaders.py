@@ -1,4 +1,4 @@
-"""Tests for hippo.core.loaders — EntityLoader ABC, ConfigurableLoader, concrete loaders, IngestPipeline."""
+"""Tests for mosaic.core.loaders — EntityLoader ABC, ConfigurableLoader, concrete loaders, IngestPipeline."""
 
 import json
 import tempfile
@@ -16,13 +16,13 @@ class TestEntityLoaderABC:
     """EntityLoader cannot be instantiated directly."""
 
     def test_cannot_instantiate_entity_loader(self):
-        from hippo.core.loaders.base import EntityLoader
+        from mosaic.core.loaders.base import EntityLoader
 
         with pytest.raises(TypeError):
             EntityLoader()  # abstract
 
     def test_subclass_without_fetch_cannot_instantiate(self):
-        from hippo.core.loaders.base import EntityLoader
+        from mosaic.core.loaders.base import EntityLoader
 
         class Incomplete(EntityLoader):
             name = "incomplete"
@@ -36,7 +36,7 @@ class TestEntityLoaderABC:
             Incomplete()
 
     def test_subclass_without_transform_cannot_instantiate(self):
-        from hippo.core.loaders.base import EntityLoader
+        from mosaic.core.loaders.base import EntityLoader
 
         class Incomplete(EntityLoader):
             name = "incomplete"
@@ -50,7 +50,7 @@ class TestEntityLoaderABC:
             Incomplete()
 
     def test_concrete_subclass_has_default_validate(self):
-        from hippo.core.loaders.base import EntityLoader
+        from mosaic.core.loaders.base import EntityLoader
 
         class Minimal(EntityLoader):
             name = "minimal"
@@ -66,7 +66,7 @@ class TestEntityLoaderABC:
         assert loader.validate({}, None) == []
 
     def test_concrete_subclass_has_default_health_check(self):
-        from hippo.core.loaders.base import EntityLoader
+        from mosaic.core.loaders.base import EntityLoader
 
         class Minimal(EntityLoader):
             name = "minimal"
@@ -90,7 +90,7 @@ class TestConfigurableLoaderTransform:
     """ConfigurableLoader.transform applies field_map and vocabulary_map."""
 
     def _loader(self, config: dict):
-        from hippo.core.loaders.base import ConfigurableLoader
+        from mosaic.core.loaders.base import ConfigurableLoader
 
         class ConcreteLoader(ConfigurableLoader):
             name = "test"
@@ -166,7 +166,7 @@ class TestCSVLoader:
     """CSVLoader.fetch yields dicts from CSV data."""
 
     def test_fetch_from_file(self, tmp_path):
-        from hippo.core.loaders.csv import CSVLoader
+        from mosaic.core.loaders.csv import CSVLoader
 
         csv_file = tmp_path / "data.csv"
         csv_file.write_text("external_id,name,sex\nBU0001,Alice,F\nBU0002,Bob,M\n")
@@ -177,7 +177,7 @@ class TestCSVLoader:
         assert records[0] == {"external_id": "BU0001", "name": "Alice", "sex": "F"}
 
     def test_fetch_from_bytes(self):
-        from hippo.core.loaders.csv import CSVLoader
+        from mosaic.core.loaders.csv import CSVLoader
 
         data = b"external_id,name\nX001,Carol\nX002,Dave\n"
         loader = CSVLoader({"entity_type": "Sample"})
@@ -186,7 +186,7 @@ class TestCSVLoader:
         assert records[1]["name"] == "Dave"
 
     def test_transform_with_field_map(self):
-        from hippo.core.loaders.csv import CSVLoader
+        from mosaic.core.loaders.csv import CSVLoader
 
         loader = CSVLoader({
             "entity_type": "Sample",
@@ -197,14 +197,14 @@ class TestCSVLoader:
         assert result == {"external_id": "BU0001", "sex": "M"}
 
     def test_fetch_no_source_raises(self):
-        from hippo.core.loaders.csv import CSVLoader
+        from mosaic.core.loaders.csv import CSVLoader
 
         loader = CSVLoader({"entity_type": "Sample"})
         with pytest.raises(ValueError, match="no source configured"):
             list(loader.fetch())
 
     def test_fetch_nonexistent_file_raises(self, tmp_path):
-        from hippo.core.loaders.csv import CSVLoader
+        from mosaic.core.loaders.csv import CSVLoader
 
         loader = CSVLoader({"entity_type": "Sample", "source_file": str(tmp_path / "missing.csv")})
         with pytest.raises(FileNotFoundError):
@@ -219,7 +219,7 @@ class TestJSONLoader:
     """JSONLoader.fetch yields dicts from JSON array data."""
 
     def test_fetch_from_file(self, tmp_path):
-        from hippo.core.loaders.json import JSONLoader
+        from mosaic.core.loaders.json import JSONLoader
 
         json_file = tmp_path / "data.json"
         json_file.write_text(json.dumps([
@@ -233,7 +233,7 @@ class TestJSONLoader:
         assert records[0]["name"] == "Carol"
 
     def test_fetch_from_bytes(self):
-        from hippo.core.loaders.json import JSONLoader
+        from mosaic.core.loaders.json import JSONLoader
 
         data = json.dumps([{"external_id": "X1", "name": "Eve"}]).encode()
         loader = JSONLoader({"entity_type": "Sample"})
@@ -242,7 +242,7 @@ class TestJSONLoader:
         assert records[0]["name"] == "Eve"
 
     def test_fetch_non_array_raises(self, tmp_path):
-        from hippo.core.loaders.json import JSONLoader
+        from mosaic.core.loaders.json import JSONLoader
 
         json_file = tmp_path / "data.json"
         json_file.write_text(json.dumps({"key": "value"}))
@@ -252,7 +252,7 @@ class TestJSONLoader:
             list(loader.fetch())
 
     def test_transform_with_field_map(self):
-        from hippo.core.loaders.json import JSONLoader
+        from mosaic.core.loaders.json import JSONLoader
 
         loader = JSONLoader({
             "entity_type": "Sample",
@@ -262,7 +262,7 @@ class TestJSONLoader:
         assert loader.transform(record)["external_id"] == "J001"
 
     def test_fetch_no_source_raises(self):
-        from hippo.core.loaders.json import JSONLoader
+        from mosaic.core.loaders.json import JSONLoader
 
         loader = JSONLoader({"entity_type": "Sample"})
         with pytest.raises(ValueError, match="no source configured"):
@@ -274,17 +274,17 @@ class TestJSONLoader:
 # ---------------------------------------------------------------------------
 
 class TestIngestPipeline:
-    """IngestPipeline upserts entities via a real HippoClient."""
+    """IngestPipeline upserts entities via a real MosaicClient."""
 
     @pytest.fixture()
     def real_client(self, tmp_path, minimal_schema_registry):
-        from hippo.core.client import HippoClient
-        from hippo.core.storage.adapters.sqlite_adapter import SQLiteAdapter
+        from mosaic.core.client import MosaicClient
+        from mosaic.core.storage.adapters.sqlite_adapter import SQLiteAdapter
 
-        return HippoClient(storage=SQLiteAdapter(str(tmp_path / "test.db"), schema_registry=minimal_schema_registry))
+        return MosaicClient(storage=SQLiteAdapter(str(tmp_path / "test.db"), schema_registry=minimal_schema_registry))
 
     def _csv_loader(self, data: bytes, config: dict = None):
-        from hippo.core.loaders.csv import CSVLoader
+        from mosaic.core.loaders.csv import CSVLoader
 
         cfg = {"entity_type": "Sample", "external_id_field": "external_id"}
         if config:
@@ -294,8 +294,8 @@ class TestIngestPipeline:
         return loader, data
 
     def test_create_cycle(self, real_client):
-        from hippo.core.loaders.csv import CSVLoader
-        from hippo.core.loaders.pipeline import IngestPipeline
+        from mosaic.core.loaders.csv import CSVLoader
+        from mosaic.core.loaders.pipeline import IngestPipeline
 
         data = b"external_id,name\nS001,Alice\nS002,Bob\n"
         loader = CSVLoader({"entity_type": "Sample"})
@@ -306,8 +306,8 @@ class TestIngestPipeline:
         assert result.errors == 0
 
     def test_unchanged_cycle(self, real_client):
-        from hippo.core.loaders.csv import CSVLoader
-        from hippo.core.loaders.pipeline import IngestPipeline
+        from mosaic.core.loaders.csv import CSVLoader
+        from mosaic.core.loaders.pipeline import IngestPipeline
 
         data = b"external_id,name\nS001,Alice\n"
         loader = CSVLoader({"entity_type": "Sample"})
@@ -319,8 +319,8 @@ class TestIngestPipeline:
         assert result2.created == 0
 
     def test_update_cycle(self, real_client):
-        from hippo.core.loaders.csv import CSVLoader
-        from hippo.core.loaders.pipeline import IngestPipeline
+        from mosaic.core.loaders.csv import CSVLoader
+        from mosaic.core.loaders.pipeline import IngestPipeline
 
         data_v1 = b"external_id,name\nS001,Alice\n"
         data_v2 = b"external_id,name\nS001,Alice-Updated\n"
@@ -336,8 +336,8 @@ class TestIngestPipeline:
         assert items[0]["data"]["name"] == "Alice-Updated"
 
     def test_dry_run_does_not_write(self, real_client):
-        from hippo.core.loaders.csv import CSVLoader
-        from hippo.core.loaders.pipeline import IngestPipeline
+        from mosaic.core.loaders.csv import CSVLoader
+        from mosaic.core.loaders.pipeline import IngestPipeline
 
         data = b"external_id,name\nS001,Alice\n"
         loader = CSVLoader({"entity_type": "Sample"})
@@ -349,8 +349,8 @@ class TestIngestPipeline:
         assert len(items) == 0
 
     def test_json_loader_create_cycle(self, real_client):
-        from hippo.core.loaders.json import JSONLoader
-        from hippo.core.loaders.pipeline import IngestPipeline
+        from mosaic.core.loaders.json import JSONLoader
+        from mosaic.core.loaders.pipeline import IngestPipeline
 
         data = json.dumps([
             {"external_id": "J001", "name": "Carol"},
@@ -371,7 +371,7 @@ class TestSQLLoaderQuerySafety:
     """SQLLoader rejects queries containing write/DDL keywords."""
 
     def test_select_query_accepted(self):
-        from hippo.core.loaders.sql import SQLLoader
+        from mosaic.core.loaders.sql import SQLLoader
 
         loader = SQLLoader({
             "entity_type": "Sample",
@@ -384,7 +384,7 @@ class TestSQLLoaderQuerySafety:
         "INSERT", "UPDATE", "DELETE", "DROP", "CREATE", "ALTER", "TRUNCATE"
     ])
     def test_forbidden_keyword_raises(self, keyword):
-        from hippo.core.loaders.sql import SQLLoader
+        from mosaic.core.loaders.sql import SQLLoader
 
         with pytest.raises(ValueError, match="forbidden keyword"):
             SQLLoader({
@@ -394,7 +394,7 @@ class TestSQLLoaderQuerySafety:
             })
 
     def test_forbidden_keyword_case_insensitive(self):
-        from hippo.core.loaders.sql import SQLLoader
+        from mosaic.core.loaders.sql import SQLLoader
 
         with pytest.raises(ValueError, match="forbidden keyword"):
             SQLLoader({
@@ -404,12 +404,12 @@ class TestSQLLoaderQuerySafety:
             })
 
     def test_validate_read_only_query_direct(self):
-        from hippo.core.loaders.sql import validate_read_only_query
+        from mosaic.core.loaders.sql import validate_read_only_query
 
         validate_read_only_query("SELECT * FROM foo")  # should not raise
 
     def test_validate_read_only_query_raises_for_insert(self):
-        from hippo.core.loaders.sql import validate_read_only_query
+        from mosaic.core.loaders.sql import validate_read_only_query
 
         with pytest.raises(ValueError):
             validate_read_only_query("INSERT INTO foo VALUES (1)")

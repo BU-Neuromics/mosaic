@@ -6,7 +6,7 @@ from pathlib import Path
 import pytest
 from typer.testing import CliRunner
 
-from hippo.cli.main import app
+from mosaic.cli.main import app
 from tests.support.linkml_schemas import write_schema_file
 
 runner = CliRunner()

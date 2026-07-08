@@ -22,8 +22,8 @@ from pathlib import Path
 
 import pytest
 
-from hippo.core.recipe import FileResolver
-from hippo.core.recipe.resolver import _tar_filter
+from mosaic.core.recipe import FileResolver
+from mosaic.core.recipe.resolver import _tar_filter
 
 
 @pytest.fixture

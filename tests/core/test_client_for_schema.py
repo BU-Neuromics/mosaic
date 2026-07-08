@@ -4,14 +4,14 @@ Covers the public path that lets a consumer obtain a registry/client
 spanning **its own schema + an installed reference loader** with zero
 hand-assembled registry code:
 
-- ``hippo.core.loaders.discovery.fragment_specs_for_requires`` — resolve a
+- ``mosaic.core.loaders.discovery.fragment_specs_for_requires`` — resolve a
   schema's ``requires:`` pins to installed loader fragments;
-- ``hippo.core.factory.build_schema_registry(..., merge_requires=True)`` and
-  the public ``hippo.registry_for_schema`` / ``hippo.client_for_schema``.
+- ``mosaic.core.factory.build_schema_registry(..., merge_requires=True)`` and
+  the public ``mosaic.registry_for_schema`` / ``mosaic.client_for_schema``.
 
 The ``fake`` reference loader (registered via the ``hippo.reference_loaders``
 entry point, shipping a ``FakeTerm`` class) stands in for a real
-``hippo-reference-*`` package. ``hippo.requires._dist_version`` is
+``hippo-reference-*`` package. ``mosaic.requires._dist_version`` is
 monkeypatched so the exact-match version gate treats ``fake`` as installed —
 the gate compares against the *pip* distribution version, which a synthetic
 entry-point loader has none of.
@@ -23,10 +23,10 @@ from pathlib import Path
 
 import pytest
 
-import hippo
-from hippo.core.exceptions import SchemaError
-from hippo.core.factory import build_schema_registry
-from hippo.core.loaders.discovery import fragment_specs_for_requires
+import mosaic
+from mosaic.core.exceptions import SchemaError
+from mosaic.core.factory import build_schema_registry
+from mosaic.core.loaders.discovery import fragment_specs_for_requires
 
 
 # Consumer schema: links its own ``Annotation`` to the loader's ``FakeTerm``
@@ -63,7 +63,7 @@ def consumer_schema(tmp_path: Path) -> Path:
 @pytest.fixture
 def fake_installed(monkeypatch: pytest.MonkeyPatch) -> None:
     """Make the ``fake`` loader pass the exact-match version gate."""
-    monkeypatch.setattr("hippo.requires._dist_version", lambda name: "v1")
+    monkeypatch.setattr("mosaic.requires._dist_version", lambda name: "v1")
 
 
 # ---------------------------------------------------------------------------
@@ -103,7 +103,7 @@ class TestFragmentSpecsForRequires:
     ):
         # A pin that passes the gate but exposes no entry point contributes
         # no fragment — a warning, not a hard error (the gate is the contract).
-        monkeypatch.setattr("hippo.requires._dist_version", lambda name: "3.3")
+        monkeypatch.setattr("mosaic.requires._dist_version", lambda name: "3.3")
         schema = tmp_path / "s.yaml"
         schema.write_text(
             "id: https://example.org/x\nname: x\n"
@@ -141,7 +141,7 @@ class TestSpanningRegistry:
     def test_public_registry_for_schema(
         self, consumer_schema: Path, fake_installed: None
     ):
-        registry = hippo.registry_for_schema(consumer_schema)
+        registry = mosaic.registry_for_schema(consumer_schema)
         assert registry.has_class("Annotation")
         assert registry.has_class("FakeTerm")
 
@@ -155,7 +155,7 @@ class TestClientForSchema:
     def test_client_registry_spans_both(
         self, consumer_schema: Path, fake_installed: None, tmp_path: Path
     ):
-        client = hippo.client_for_schema(
+        client = mosaic.client_for_schema(
             consumer_schema, database_url=str(tmp_path / "consumer.db")
         )
         assert client.registry.has_class("Annotation")
@@ -166,7 +166,7 @@ class TestClientForSchema:
     ):
         # The DESeq2→Gene scenario in miniature: write a loader entity, write a
         # consumer entity that links to it, read both back through one client.
-        client = hippo.client_for_schema(
+        client = mosaic.client_for_schema(
             consumer_schema, database_url=str(tmp_path / "consumer.db")
         )
         term = client.put("FakeTerm", {"label": "alpha"})
@@ -181,9 +181,9 @@ class TestClientForSchema:
 
     def test_uninstalled_loader_fails_fast(self, consumer_schema: Path, tmp_path: Path):
         # No monkeypatch ⇒ the gate fails and client construction raises,
-        # mirroring `hippo validate`.
+        # mirroring `mosaic validate`.
         with pytest.raises(SchemaError) as exc:
-            hippo.client_for_schema(
+            mosaic.client_for_schema(
                 consumer_schema, database_url=str(tmp_path / "x.db")
             )
         assert exc.value.error_code == "HIPPO_REQUIRES_UNSATISFIED"
@@ -241,7 +241,7 @@ class TestLoaderPrefixedRanges:
         # classes that reference each other by CURIE.
         from linkml_runtime.utils.schemaview import SchemaView
 
-        from hippo.linkml_bridge import _resolve_loader_prefixed_ranges
+        from mosaic.linkml_bridge import _resolve_loader_prefixed_ranges
 
         merged = """\
 id: https://example.org/merged

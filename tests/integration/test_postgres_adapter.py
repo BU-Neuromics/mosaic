@@ -29,7 +29,7 @@ pytestmark = pytest.mark.skipif(
 @pytest.fixture
 def adapter(minimal_schema_registry):
     """Create a fresh PostgresAdapter with clean tables for each test."""
-    from hippo.core.storage.adapters.postgres_adapter import PostgresAdapter
+    from mosaic.core.storage.adapters.postgres_adapter import PostgresAdapter
 
     db_url = POSTGRES_URL
     # Use a unique schema prefix to avoid cross-test contamination
@@ -62,7 +62,7 @@ def adapter(minimal_schema_registry):
 @pytest.fixture
 def sample_entity():
     """Create a sample entity for testing."""
-    from hippo.core.storage.adapters.postgres_adapter import PostgresEntity
+    from mosaic.core.storage.adapters.postgres_adapter import PostgresEntity
 
     return PostgresEntity(
         id=str(uuid.uuid4()),
@@ -129,7 +129,7 @@ class TestPostgresAdapterQuery:
         assert sample_entity.id in ids
 
     def test_find_by_entity_type(self, adapter, sample_entity):
-        from hippo.core.storage import Query
+        from mosaic.core.storage import Query
 
         adapter.create(sample_entity)
         query = Query(entity_type="Sample")
@@ -143,8 +143,8 @@ class TestPostgresAdapterQuery:
         assert len(results) >= 1
 
     def test_find_with_or_filter(self, adapter):
-        from hippo.core.storage import Query
-        from hippo.core.storage.adapters.postgres_adapter import PostgresEntity
+        from mosaic.core.storage import Query
+        from mosaic.core.storage.adapters.postgres_adapter import PostgresEntity
 
         e1 = PostgresEntity(
             id=str(uuid.uuid4()),
@@ -172,8 +172,8 @@ class TestPostgresAdapterQuery:
         assert len(results) >= 2
 
     def test_find_with_limit_offset(self, adapter):
-        from hippo.core.storage import Query
-        from hippo.core.storage.adapters.postgres_adapter import PostgresEntity
+        from mosaic.core.storage import Query
+        from mosaic.core.storage.adapters.postgres_adapter import PostgresEntity
 
         for i in range(5):
             e = PostgresEntity(
@@ -199,7 +199,7 @@ class TestPostgresAdapterFTS:
         assert "fts_sample_name" in tables
 
     def test_search_entities(self, adapter, sample_entity):
-        from hippo.core.storage.adapters.postgres_adapter import PostgresFTSStore
+        from mosaic.core.storage.adapters.postgres_adapter import PostgresFTSStore
 
         adapter.create(sample_entity)
         adapter.create_fts_table("fts_sample_name", ["entity_id", "content"])
@@ -220,7 +220,7 @@ class TestPostgresAdapterFTS:
         assert results[0].score > 0
 
     def test_search_nonexistent_fts_table(self, adapter):
-        from hippo.core.exceptions import SearchCapabilityError
+        from mosaic.core.exceptions import SearchCapabilityError
 
         with pytest.raises(SearchCapabilityError):
             adapter.search(
@@ -286,7 +286,7 @@ class TestPostgresAdapterRelationships:
     """Test relationship operations."""
 
     def test_create_and_find_relationship(self, adapter):
-        from hippo.core.storage.adapters.postgres_adapter import (
+        from mosaic.core.storage.adapters.postgres_adapter import (
             PostgresEntity,
             PostgresRelationshipStore,
         )
@@ -325,7 +325,7 @@ class TestPostgresAdapterExternalIds:
     """Test external ID operations."""
 
     def test_create_and_lookup_external_id(self, adapter, sample_entity):
-        from hippo.core.storage.adapters.postgres_adapter import PostgresExternalIdStore
+        from mosaic.core.storage.adapters.postgres_adapter import PostgresExternalIdStore
 
         adapter.create(sample_entity)
 
@@ -342,19 +342,19 @@ class TestPostgresAdapterExternalIds:
 class TestPostgresBatchPut:
     """Atomic multi-entity write over Postgres (issue #84 increment 2).
 
-    Confirms ``HippoClient.batch_put`` is backend-agnostic: the Postgres
+    Confirms ``MosaicClient.batch_put`` is backend-agnostic: the Postgres
     adapter's ``staged_transaction`` drives the same all-or-nothing commit
     and intra-batch forward-reference resolution proven for SQLite.
     """
 
     @pytest.fixture
     def client(self, adapter):
-        from hippo.core.client import HippoClient
+        from mosaic.core.client import MosaicClient
 
-        return HippoClient(storage=adapter)
+        return MosaicClient(storage=adapter)
 
     def test_commits_valid_set_atomically(self, client):
-        from hippo.core.validation import WriteOperation
+        from mosaic.core.validation import WriteOperation
 
         ops = [
             WriteOperation(operation="insert", entity_type="Sample", data={"id": "pg-s1", "name": "a"}),
@@ -366,7 +366,7 @@ class TestPostgresBatchPut:
         assert client._storage.read("pg-s2") is not None
 
     def test_rollback_on_mid_batch_failure(self, client, monkeypatch):
-        from hippo.core.validation import WriteOperation
+        from mosaic.core.validation import WriteOperation
 
         ops = [
             WriteOperation(operation="insert", entity_type="Sample", data={"id": "pg-r1", "name": "a"}),
@@ -389,7 +389,7 @@ class TestPostgresBatchPut:
         assert client._storage.read("pg-r2") is None
 
     def test_intra_batch_relationship_forward_reference(self, client):
-        from hippo.core.validation import WriteOperation
+        from mosaic.core.validation import WriteOperation
 
         ops = [
             WriteOperation(operation="insert", entity_type="Donor", data={"id": "pg-donor", "name": "D"}),
@@ -417,8 +417,8 @@ class TestPostgresClientFTSWrites:
 
     @pytest.fixture
     def fts_client(self):
-        from hippo.core.client import HippoClient
-        from hippo.core.storage.adapters.postgres_adapter import PostgresAdapter
+        from mosaic.core.client import MosaicClient
+        from mosaic.core.storage.adapters.postgres_adapter import PostgresAdapter
         from tests.support.linkml_schemas import build_registry
 
         registry = build_registry(
@@ -441,7 +441,7 @@ class TestPostgresClientFTSWrites:
             min_pool_size=1,
             max_pool_size=5,
         )
-        client = HippoClient(storage=adapter, registry=registry)
+        client = MosaicClient(storage=adapter, registry=registry)
         yield client
         with adapter._transaction() as conn:
             cur = conn.cursor()
@@ -511,9 +511,9 @@ class TestPostgresWriteParity:
 
     @pytest.fixture
     def parity_client(self, adapter):
-        from hippo.core.client import HippoClient
+        from mosaic.core.client import MosaicClient
 
-        return HippoClient(storage=adapter, bypass_validation=True)
+        return MosaicClient(storage=adapter, bypass_validation=True)
 
     def test_update_existing_entity(self, parity_client):
         created = parity_client.put(
@@ -534,13 +534,13 @@ class TestPostgresWriteParity:
             "Sample", [created["id"]], False, reason="parity test"
         )
         assert result["succeeded"] == 1 and result["failed"] == 0
-        from hippo.core.exceptions import EntityNotFoundError
+        from mosaic.core.exceptions import EntityNotFoundError
 
         with pytest.raises(EntityNotFoundError):
             parity_client.get("Sample", created["id"])
 
     def test_boolean_filter_matches_jsonb_literals(self, parity_client):
-        from hippo.core.storage import Query
+        from mosaic.core.storage import Query
 
         flagged = parity_client.put(
             "Sample", {"id": str(uuid.uuid4()), "name": "flagged", "in_print": False}

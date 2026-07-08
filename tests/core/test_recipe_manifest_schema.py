@@ -20,7 +20,7 @@ from linkml_runtime.utils.schemaview import SchemaView
 SCHEMA_PATH = (
     Path(__file__).parent.parent.parent
     / "src"
-    / "hippo"
+    / "mosaic"
     / "schemas"
     / "recipe_manifest.yaml"
 )

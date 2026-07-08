@@ -1,9 +1,9 @@
-"""Contract tests: Hippo's own behavioral invariants.
+"""Contract tests: Mosaic's own behavioral invariants.
 
-These are the behavioral guarantees Hippo makes to ALL consumers, not just
+These are the behavioral guarantees Mosaic makes to ALL consumers, not just
 Canon. They document the public API contract independently of any consumer.
 
-When these fail it means Hippo changed a behavioral invariant. Bump Hippo's
+When these fail it means Mosaic changed a behavioral invariant. Bump Mosaic's
 version and update all consumer contracts accordingly.
 
 See TESTING.md for the full failure protocol.
@@ -22,15 +22,15 @@ _p = str(_root / "src")
 if _p not in sys.path:
     sys.path.insert(0, _p)
 
-from hippo.core.client import HippoClient
-from hippo.core.exceptions import EntityNotFoundError, ValidationFailure
-from hippo.core.storage.adapters.sqlite_adapter import SQLiteAdapter
-from hippo.core.pipeline import ValidationPipeline
-from hippo.core.validators.write_validator import CELWriteValidator
+from mosaic.core.client import MosaicClient
+from mosaic.core.exceptions import EntityNotFoundError, ValidationFailure
+from mosaic.core.storage.adapters.sqlite_adapter import SQLiteAdapter
+from mosaic.core.pipeline import ValidationPipeline
+from mosaic.core.validators.write_validator import CELWriteValidator
 from tests.conftest import _build_minimal_schema_registry
 
 
-def _make_client(tmp_path: Path, validators: dict | None = None) -> HippoClient:
+def _make_client(tmp_path: Path, validators: dict | None = None) -> MosaicClient:
     registry = _build_minimal_schema_registry()
     storage = SQLiteAdapter(str(tmp_path / "hippo.db"), schema_registry=registry)
     pipeline: ValidationPipeline | None = None
@@ -39,7 +39,7 @@ def _make_client(tmp_path: Path, validators: dict | None = None) -> HippoClient:
         validators_path.write_text(yaml.dump(validators))
         pipeline = ValidationPipeline()
         pipeline.add_validator(CELWriteValidator(validators_path=str(validators_path)))
-    return HippoClient(storage=storage, pipeline=pipeline, registry=registry)
+    return MosaicClient(storage=storage, pipeline=pipeline, registry=registry)
 
 
 # ---------------------------------------------------------------------------

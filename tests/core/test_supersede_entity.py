@@ -6,9 +6,9 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from hippo.core.client import HippoClient
-from hippo.core.exceptions import EntityAlreadySupersededError, EntityNotFoundError
-from hippo.core.storage.adapters.sqlite_adapter import SQLiteAdapter
+from mosaic.core.client import MosaicClient
+from mosaic.core.exceptions import EntityAlreadySupersededError, EntityNotFoundError
+from mosaic.core.storage.adapters.sqlite_adapter import SQLiteAdapter
 from tests.conftest import _build_minimal_schema_registry
 
 
@@ -22,13 +22,13 @@ class TestSupersededEntity:
             yield os.path.join(tmpdir, "test_supersede.db")
 
     @pytest.fixture
-    def client(self, db_path: str) -> HippoClient:
-        """Create a HippoClient with SQLite storage."""
+    def client(self, db_path: str) -> MosaicClient:
+        """Create a MosaicClient with SQLite storage."""
         storage = SQLiteAdapter(db_path, schema_registry=_build_minimal_schema_registry())
-        return HippoClient(storage=storage, bypass_validation=True)
+        return MosaicClient(storage=storage, bypass_validation=True)
 
     def test_supersede_entity_marks_source_as_unavailable(
-        self, client: HippoClient
+        self, client: MosaicClient
     ) -> None:
         """Happy path: source entity is unavailable after supersession."""
         client.put("Sample", {"id": "old-e1", "name": "old"})
@@ -47,7 +47,7 @@ class TestSupersededEntity:
         assert entity.superseded_by == "new-e2"
 
     def test_supersede_entity_sets_superseded_by_column(
-        self, client: HippoClient
+        self, client: MosaicClient
     ) -> None:
         """superseded_by column is set to replacement_id after supersession."""
         client.put("Sample", {"id": "col-old", "name": "old"})
@@ -59,7 +59,7 @@ class TestSupersededEntity:
         assert entity.superseded_by == "col-new"
 
     def test_supersede_entity_writes_supersede_provenance_event(
-        self, client: HippoClient
+        self, client: MosaicClient
     ) -> None:
         """A 'supersede' provenance event is recorded on the source entity.
 
@@ -82,7 +82,7 @@ class TestSupersededEntity:
         assert len(superseded_events) == 1
 
     def test_supersede_entity_writes_update_provenance_on_replacement(
-        self, client: HippoClient
+        self, client: MosaicClient
     ) -> None:
         """An 'update' provenance event is recorded on the replacement entity.
 
@@ -101,7 +101,7 @@ class TestSupersededEntity:
         assert len(update_events) == 1
 
     def test_supersede_entity_creates_relationship_edge(
-        self, client: HippoClient
+        self, client: MosaicClient
     ) -> None:
         """A superseded_by relationship edge is created from source to replacement."""
         client.put("Sample", {"id": "rel-old", "name": "old"})
@@ -125,7 +125,7 @@ class TestSupersededEntity:
         assert rels[0].relationship_type == "superseded_by"
 
     def test_already_superseded_raises_error_with_no_state_change(
-        self, client: HippoClient
+        self, client: MosaicClient
     ) -> None:
         """Calling supersede_entity() on an already-superseded entity raises EntityAlreadySupersededError."""
         client.put("Sample", {"id": "dup-old", "name": "old"})
@@ -152,7 +152,7 @@ class TestSupersededEntity:
             )
         assert len(rels) == 0
 
-    def test_nonexistent_source_entity_raises_error(self, client: HippoClient) -> None:
+    def test_nonexistent_source_entity_raises_error(self, client: MosaicClient) -> None:
         """Calling supersede_entity() with a non-existent source raises EntityNotFoundError."""
         client.put("Sample", {"id": "real-new", "name": "new"})
 
@@ -160,7 +160,7 @@ class TestSupersededEntity:
             client.supersede_entity("does-not-exist", "real-new")
 
     def test_nonexistent_replacement_entity_raises_error(
-        self, client: HippoClient
+        self, client: MosaicClient
     ) -> None:
         """Calling supersede_entity() with a non-existent replacement raises EntityNotFoundError."""
         client.put("Sample", {"id": "real-old", "name": "old"})
@@ -169,7 +169,7 @@ class TestSupersededEntity:
             client.supersede_entity("real-old", "does-not-exist")
 
     def test_get_on_superseded_entity_raises_by_default(
-        self, client: HippoClient
+        self, client: MosaicClient
     ) -> None:
         """client.get() on a superseded entity raises EntityNotFoundError by default.
 
@@ -184,7 +184,7 @@ class TestSupersededEntity:
             client.get("Sample", "get-old")
 
     def test_get_on_superseded_entity_with_include_unavailable_returns_superseded_by_field(
-        self, client: HippoClient
+        self, client: MosaicClient
     ) -> None:
         """client.get(include_unavailable=True) returns superseded entity with superseded_by."""
         client.put("Sample", {"id": "get-old", "name": "old"})
@@ -198,7 +198,7 @@ class TestSupersededEntity:
         assert result["id"] == "get-old"
 
     def test_get_on_non_superseded_entity_returns_none_superseded_by(
-        self, client: HippoClient
+        self, client: MosaicClient
     ) -> None:
         """client.get() on a non-superseded entity returns superseded_by as None."""
         client.put("Sample", {"id": "not-superseded", "name": "test"})

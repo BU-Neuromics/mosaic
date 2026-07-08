@@ -2,7 +2,7 @@
 
 Decision D2.14.D: loaders that declare a Pydantic v2 ``load_params_schema``
 get their fields auto-rendered as ``--<field-name>`` flags on
-``hippo reference install`` / ``upgrade``. The CLI validates user input
+``mosaic reference install`` / ``upgrade``. The CLI validates user input
 before invoking ``load()``.
 
 These tests cover the acceptance criteria from PTS-230:
@@ -25,15 +25,15 @@ import pytest
 from pydantic import BaseModel, Field
 from typer.testing import CliRunner
 
-from hippo.cli.commands.reference import (
+from mosaic.cli.commands.reference import (
     ReferenceLoaderRegistrationError,
     _classify_load_params_field,
     _validate_load_params_schema,
     find_loader,
     parse_load_params,
 )
-from hippo.cli.main import app
-from hippo.testing.fake_reference_loader import (
+from mosaic.cli.main import app
+from mosaic.testing.fake_reference_loader import (
     BareReferenceLoader,
     RichParams,
     RichParamsLoader,
@@ -175,7 +175,7 @@ class TestRegistrationValidation:
     def test_unsupported_field_type_raises_at_registration(self):
         # dict[str, int] isn't in the v1 supported set; the validator
         # MUST flag it so the loader author finds out at install time
-        # rather than when an end user tries `hippo reference install`.
+        # rather than when an end user tries `mosaic reference install`.
         class BadModel(BaseModel):
             mapping: dict[str, int] = Field(default_factory=dict)
 
@@ -215,7 +215,7 @@ class TestRegistrationValidation:
         # red path is covered by the unit test above so we don't have
         # to pollute the entry-point registry with a deliberately broken
         # loader.
-        from hippo.cli.commands.reference import discover_reference_loaders
+        from mosaic.cli.commands.reference import discover_reference_loaders
 
         loaders = {info["name"] for info in discover_reference_loaders()}
         assert {"fake", "rich", "bare"} <= loaders

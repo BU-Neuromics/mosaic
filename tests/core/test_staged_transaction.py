@@ -2,7 +2,7 @@
 
 The S4 lifecycle orchestrator wraps a whole multi-package, multi-hop
 migration chain in a single commit-or-rollback scope
-(:meth:`HippoClient.staged_transaction` →
+(:meth:`MosaicClient.staged_transaction` →
 :meth:`SQLiteAdapter.staged_transaction`). Two load-bearing properties make
 that correct on SQLite's one-connection-per-thread model:
 
@@ -25,9 +25,9 @@ import pytest
 import yaml
 from linkml_runtime.utils.schemaview import SchemaView
 
-from hippo.core.client import HippoClient
-from hippo.core.storage.adapters.sqlite_adapter import SQLiteAdapter
-from hippo.linkml_bridge import SchemaRegistry, _bundled_importmap
+from mosaic.core.client import MosaicClient
+from mosaic.core.storage.adapters.sqlite_adapter import SQLiteAdapter
+from mosaic.linkml_bridge import SchemaRegistry, _bundled_importmap
 
 
 def _registry() -> SchemaRegistry:
@@ -59,14 +59,14 @@ def client():
         storage = SQLiteAdapter(
             os.path.join(tmpdir, "staged.db"), schema_registry=reg
         )
-        yield HippoClient(storage=storage, registry=reg)
+        yield MosaicClient(storage=storage, registry=reg)
 
 
-def _ids(client: HippoClient) -> set[str]:
+def _ids(client: MosaicClient) -> set[str]:
     return {item["id"] for item in client.query("Widget").items}
 
 
-def _put(client: HippoClient, wid: str) -> None:
+def _put(client: MosaicClient, wid: str) -> None:
     client.put(
         "Widget",
         {"id": wid, "label": wid, "is_available": True},
@@ -78,20 +78,20 @@ class _Boom(RuntimeError):
     """Stand-in for an end-to-end gate failure escaping the scope."""
 
 
-def test_staged_writes_visible_to_same_scope_reads(client: HippoClient) -> None:
+def test_staged_writes_visible_to_same_scope_reads(client: MosaicClient) -> None:
     with client.staged_transaction():
         _put(client, "w1")
         # Deferred (uncommitted) — yet readable on the same connection.
         assert "w1" in _ids(client)
 
 
-def test_clean_scope_commits(client: HippoClient) -> None:
+def test_clean_scope_commits(client: MosaicClient) -> None:
     with client.staged_transaction():
         _put(client, "w1")
     assert "w1" in _ids(client)
 
 
-def test_exception_rolls_back_whole_scope(client: HippoClient) -> None:
+def test_exception_rolls_back_whole_scope(client: MosaicClient) -> None:
     with pytest.raises(_Boom):
         with client.staged_transaction():
             _put(client, "w1")
@@ -102,7 +102,7 @@ def test_exception_rolls_back_whole_scope(client: HippoClient) -> None:
     assert _ids(client) == set()
 
 
-def test_prior_commit_survives_later_rollback(client: HippoClient) -> None:
+def test_prior_commit_survives_later_rollback(client: MosaicClient) -> None:
     """A committed baseline is untouched by a later scope that rolls back —
     rollback undoes only the staged transaction, not earlier history."""
     _put(client, "base")  # committed via the ordinary per-write transaction
@@ -113,7 +113,7 @@ def test_prior_commit_survives_later_rollback(client: HippoClient) -> None:
     assert _ids(client) == {"base"}
 
 
-def test_nested_scopes_commit_once(client: HippoClient) -> None:
+def test_nested_scopes_commit_once(client: MosaicClient) -> None:
     """Reference-counted nesting: only the outermost scope commits, so an
     inner orchestration helper can open its own scope harmlessly."""
     with client.staged_transaction():
@@ -125,7 +125,7 @@ def test_nested_scopes_commit_once(client: HippoClient) -> None:
     assert {"outer", "inner"} <= _ids(client)
 
 
-def test_nested_scope_rolls_back_to_outermost(client: HippoClient) -> None:
+def test_nested_scope_rolls_back_to_outermost(client: MosaicClient) -> None:
     with pytest.raises(_Boom):
         with client.staged_transaction():
             _put(client, "outer")

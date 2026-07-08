@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from hippo.linkml_bridge import (
+from mosaic.linkml_bridge import (
     HIPPO_SEARCH,
     HIPPO_INDEX,
     HIPPO_INDEX_PARTIAL,
@@ -210,7 +210,7 @@ class TestHippoExtValidation:
         assert "Thing" in reg.class_names()
 
     def test_undeclared_annotation_fails_with_actionable_message(self):
-        from hippo.core.exceptions import SchemaError
+        from mosaic.core.exceptions import SchemaError
 
         yaml_text = self._build({"hippo_bogus": True})
         with pytest.raises(SchemaError) as exc:
@@ -221,7 +221,7 @@ class TestHippoExtValidation:
         assert "not declared in hippo_ext" in msg
 
     def test_wrong_value_type_fails(self):
-        from hippo.core.exceptions import SchemaError
+        from mosaic.core.exceptions import SchemaError
 
         # hippo_index expects boolean, got string
         yaml_text = self._build({"hippo_index": "yes"})
@@ -236,7 +236,7 @@ class TestHippoExtValidation:
         # not yet declared in hippo_ext — so this surfaces as "undeclared"
         # rather than "wrong applies_to". When Wave 2 lands and declares
         # hippo_append_only, this test would shift to the wrong-target case.
-        from hippo.core.exceptions import SchemaError
+        from mosaic.core.exceptions import SchemaError
 
         yaml_text = self._build({"hippo_append_only": True})
         with pytest.raises(SchemaError) as exc:
@@ -246,7 +246,7 @@ class TestHippoExtValidation:
 
     def test_slot_annotation_on_class_fails(self):
         # hippo_index is a slot annotation; attaching it to a class should fail.
-        from hippo.core.exceptions import SchemaError
+        from mosaic.core.exceptions import SchemaError
 
         yaml_text = self._build({"hippo_index": True}, on="class")
         with pytest.raises(SchemaError) as exc:
@@ -257,7 +257,7 @@ class TestHippoExtValidation:
         assert "slot_annotation" in msg or "slot" in msg.lower()
 
     def test_multiple_errors_aggregate_into_one_exception(self):
-        from hippo.core.exceptions import SchemaError
+        from mosaic.core.exceptions import SchemaError
 
         yaml_text = self._build(
             {"hippo_bogus1": True, "hippo_bogus2": True, "hippo_index": "not-bool"}
@@ -359,7 +359,7 @@ class TestHippoCoreImport:
         assert is_avail.required is True
         # ifabsent is stored as a string form in LinkML; slot_default coerces
         # boolean-ranged strings back to Python bools.
-        from hippo.linkml_bridge import slot_default
+        from mosaic.linkml_bridge import slot_default
         assert slot_default(is_avail) is True
 
 
@@ -452,7 +452,7 @@ class TestHippoCoreProcess:
         # the induced slot via the existing annotation_value helper.
         reg = SchemaRegistry.from_yaml(self._schema_with_process_subclass())
         slots = {s.name: s for s in reg.induced_slots("Process")}
-        from hippo.linkml_bridge import annotation_value, HIPPO_INDEX
+        from mosaic.linkml_bridge import annotation_value, HIPPO_INDEX
         assert annotation_value(slots["operation_kind"], HIPPO_INDEX) is True
         assert annotation_value(slots["started_at"], HIPPO_INDEX) is True
 
@@ -516,13 +516,13 @@ class TestHippoCoreProvenanceRecord:
         reg = SchemaRegistry.from_yaml(self._schema_importing_hippo_core())
         cls = reg.get_class("ProvenanceRecord")
         assert cls is not None
-        from hippo.linkml_bridge import annotation_value
+        from mosaic.linkml_bridge import annotation_value
         assert annotation_value(cls, "hippo_append_only") is True
 
     def test_provenance_record_slots_are_indexed(self):
         reg = SchemaRegistry.from_yaml(self._schema_importing_hippo_core())
         slots = {s.name: s for s in reg.induced_slots("ProvenanceRecord")}
-        from hippo.linkml_bridge import annotation_value, HIPPO_INDEX
+        from mosaic.linkml_bridge import annotation_value, HIPPO_INDEX
         # Slots that sec9 §9.6 and §9.7 say should be indexed for the
         # canonical query paths
         assert annotation_value(slots["entity_id"], HIPPO_INDEX) is True
@@ -580,7 +580,7 @@ class TestHippoAppendOnlyAnnotation:
             self._schema_with_annotation("class", True)
         )
         cls = reg.get_class("LogEntry")
-        from hippo.linkml_bridge import annotation_value
+        from mosaic.linkml_bridge import annotation_value
         assert annotation_value(cls, "hippo_append_only") is True
 
     def test_hippo_append_only_false_on_class_passes(self):
@@ -588,13 +588,13 @@ class TestHippoAppendOnlyAnnotation:
             self._schema_with_annotation("class", False)
         )
         cls = reg.get_class("LogEntry")
-        from hippo.linkml_bridge import annotation_value
+        from mosaic.linkml_bridge import annotation_value
         assert annotation_value(cls, "hippo_append_only") is False
 
     def test_hippo_append_only_on_slot_fails(self):
         # hippo_append_only is a class_annotation; attaching it to a slot
         # must fail at schema load with an applies_to violation.
-        from hippo.core.exceptions import SchemaError
+        from mosaic.core.exceptions import SchemaError
 
         with pytest.raises(SchemaError) as exc:
             SchemaRegistry.from_yaml(
@@ -750,7 +750,7 @@ class TestHippoCoreExternalID:
     def test_value_slot_has_hippo_index_annotation(self):
         reg = SchemaRegistry.from_yaml(self._schema_importing_hippo_core())
         slots = {s.name: s for s in reg.induced_slots("ExternalID")}
-        from hippo.linkml_bridge import annotation_value, HIPPO_INDEX
+        from mosaic.linkml_bridge import annotation_value, HIPPO_INDEX
         assert annotation_value(slots["value"], HIPPO_INDEX) is True
 
     def test_source_system_slot_not_indexed(self):
@@ -758,13 +758,13 @@ class TestHippoCoreExternalID:
         # benefits from the composite unique_keys index, not a standalone one.
         reg = SchemaRegistry.from_yaml(self._schema_importing_hippo_core())
         slots = {s.name: s for s in reg.induced_slots("ExternalID")}
-        from hippo.linkml_bridge import annotation_value, HIPPO_INDEX
+        from mosaic.linkml_bridge import annotation_value, HIPPO_INDEX
         assert annotation_value(slots["source_system"], HIPPO_INDEX) is not True
 
     def test_is_active_default_is_true(self):
         reg = SchemaRegistry.from_yaml(self._schema_importing_hippo_core())
         slots = {s.name: s for s in reg.induced_slots("ExternalID")}
-        from hippo.linkml_bridge import slot_default
+        from mosaic.linkml_bridge import slot_default
         assert slot_default(slots["is_active"]) is True
 
     def test_entity_slot_range_is_entity(self):
@@ -948,7 +948,7 @@ class TestTreeRootSynthesis:
         assert default_accessor("ProvenanceRecord") == "provenance_records"
 
     def test_collision_with_reserved_class_name_raises(self):
-        from hippo.core.exceptions import SchemaError
+        from mosaic.core.exceptions import SchemaError
 
         schema = (
             "id: https://example.org/t\n"
@@ -966,7 +966,7 @@ class TestTreeRootSynthesis:
             SchemaRegistry.from_yaml(schema)
 
     def test_slot_name_collision_raises(self):
-        from hippo.core.exceptions import SchemaError
+        from mosaic.core.exceptions import SchemaError
 
         # Two classes whose snake_case_plural would collide and neither
         # overrides via hippo_accessor → synthesis must refuse.

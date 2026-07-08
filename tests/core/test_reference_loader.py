@@ -10,17 +10,17 @@ from typing import Any
 import pytest
 from pydantic import BaseModel
 
-from hippo.core.loaders.reference import EntityRef, LoadResult, ReferenceLoader
-from hippo.core.loaders.schema_package import (
+from mosaic.core.loaders.reference import EntityRef, LoadResult, ReferenceLoader
+from mosaic.core.loaders.schema_package import (
     ExternalData,
     MigratableData,
     SchemaPackage,
 )
-from hippo.testing.example_ontology_loader import OboDemoLoader, OboDemoParams
+from mosaic.testing.example_ontology_loader import OboDemoLoader, OboDemoParams
 
 
 class _StubClient:
-    """Tiny stand-in for HippoClient used by loader unit tests.
+    """Tiny stand-in for MosaicClient used by loader unit tests.
 
     Returns a deterministic synthetic UUID for each ``put`` so
     ``LoadResult.entities`` is populated without spinning up a real
@@ -238,7 +238,7 @@ class TestLoadResult:
 
 class TestFakeReferenceLoader:
     def test_fake_loader_is_a_reference_loader(self):
-        from hippo.testing.fake_reference_loader import FakeReferenceLoader
+        from mosaic.testing.fake_reference_loader import FakeReferenceLoader
 
         loader = FakeReferenceLoader()
         assert isinstance(loader, ReferenceLoader)
@@ -248,7 +248,7 @@ class TestFakeReferenceLoader:
         assert loader.schema_fragment()["default_prefix"] == "fake"
 
     def test_fake_loader_load_returns_loadresult(self):
-        from hippo.testing.fake_reference_loader import FakeReferenceLoader
+        from mosaic.testing.fake_reference_loader import FakeReferenceLoader
 
         loader = FakeReferenceLoader()
         # ``load()`` calls ``client.put()`` on each row (PTS-229 made the
@@ -266,7 +266,7 @@ class TestFakeReferenceLoader:
         assert all(e.type == "FakeTerm" for e in result.entities)
 
     def test_fake_loader_unknown_version_returns_error(self):
-        from hippo.testing.fake_reference_loader import FakeReferenceLoader
+        from mosaic.testing.fake_reference_loader import FakeReferenceLoader
 
         loader = FakeReferenceLoader()
         result = loader.load(client=None, version="nonexistent")
@@ -274,7 +274,7 @@ class TestFakeReferenceLoader:
         assert result.error_messages == ["unknown version: nonexistent"]
 
     def test_fake_loader_declares_pydantic_params_schema(self):
-        from hippo.testing.fake_reference_loader import (
+        from mosaic.testing.fake_reference_loader import (
             FakeLoadParams,
             FakeReferenceLoader,
         )
@@ -315,15 +315,15 @@ class TestDiscoverReferenceLoaders:
         monkeypatch.setattr(md, "entry_points", lambda: _FakeEntryPoints(eps))
 
     def test_discovery_returns_instance_for_valid_loader(self, monkeypatch):
-        from hippo.cli.commands import reference as ref_cmd
-        from hippo.testing.fake_reference_loader import FakeReferenceLoader
+        from mosaic.cli.commands import reference as ref_cmd
+        from mosaic.testing.fake_reference_loader import FakeReferenceLoader
 
         self._patch_entry_points(
             monkeypatch,
             [
                 _FakeEntryPoint(
                     "fake",
-                    "hippo.testing.fake_reference_loader:FakeReferenceLoader",
+                    "mosaic.testing.fake_reference_loader:FakeReferenceLoader",
                     FakeReferenceLoader,
                 )
             ],
@@ -339,7 +339,7 @@ class TestDiscoverReferenceLoaders:
         assert isinstance(entry["instance"], ReferenceLoader)
 
     def test_discovery_raises_clear_error_for_non_subclass(self, monkeypatch):
-        from hippo.cli.commands import reference as ref_cmd
+        from mosaic.cli.commands import reference as ref_cmd
 
         class NotALoader:
             pass
@@ -363,7 +363,7 @@ class TestDiscoverReferenceLoaders:
         assert "ReferenceLoader" in msg
 
     def test_discovery_raises_clear_error_for_non_class_object(self, monkeypatch):
-        from hippo.cli.commands import reference as ref_cmd
+        from mosaic.cli.commands import reference as ref_cmd
 
         self._patch_entry_points(
             monkeypatch,
@@ -454,7 +454,7 @@ class TestPureSchemaPackage:
     """``FakeSchemaPackage`` — a pure-schema package with no data hooks."""
 
     def test_is_schema_package_not_reference_loader(self):
-        from hippo.testing.fake_reference_loader import FakeSchemaPackage
+        from mosaic.testing.fake_reference_loader import FakeSchemaPackage
 
         pkg = FakeSchemaPackage()
         assert isinstance(pkg, SchemaPackage)
@@ -463,7 +463,7 @@ class TestPureSchemaPackage:
         assert pkg.schema_fragment()["default_prefix"] == "fake_schema"
 
     def test_lifecycle_hooks_are_noop(self):
-        from hippo.testing.fake_reference_loader import FakeSchemaPackage
+        from mosaic.testing.fake_reference_loader import FakeSchemaPackage
 
         pkg = FakeSchemaPackage()
         assert pkg.provision(client=None, version="v1") is None
@@ -476,7 +476,7 @@ class TestPureSchemaPackage:
     def test_omits_populates_types(self):
         # ``populates_types`` is a *species* concern; a pure-schema package
         # does not declare it (Doc 2 §2A).
-        from hippo.testing.fake_reference_loader import FakeSchemaPackage
+        from mosaic.testing.fake_reference_loader import FakeSchemaPackage
 
         assert not hasattr(FakeSchemaPackage(), "populates_types")
 
@@ -488,13 +488,13 @@ class TestPureSchemaPackage:
 
         from linkml_runtime.utils.schemaview import SchemaView
 
-        from hippo.linkml_bridge import (
+        from mosaic.linkml_bridge import (
             LoaderFragmentSpec,
             merge_loader_fragment,
         )
-        from hippo.testing.fake_reference_loader import FakeSchemaPackage
+        from mosaic.testing.fake_reference_loader import FakeSchemaPackage
 
-        hippo_core = importlib.resources.files("hippo.schemas").joinpath(
+        hippo_core = importlib.resources.files("mosaic.schemas").joinpath(
             "hippo_core.yaml"
         )
         deployed_sv = SchemaView(str(hippo_core))
@@ -515,7 +515,7 @@ class TestReferenceLoaderReparenting:
     mapped onto the historical method names."""
 
     def test_reference_loader_is_schema_package(self):
-        from hippo.testing.fake_reference_loader import FakeReferenceLoader
+        from mosaic.testing.fake_reference_loader import FakeReferenceLoader
 
         assert issubclass(ReferenceLoader, SchemaPackage)
         assert isinstance(FakeReferenceLoader(), SchemaPackage)
@@ -541,12 +541,12 @@ class TestCapabilityProtocols:
     """``ExternalData`` / ``MigratableData`` runtime-checkable dispatch."""
 
     def test_reference_loader_satisfies_external_data(self):
-        from hippo.testing.fake_reference_loader import FakeReferenceLoader
+        from mosaic.testing.fake_reference_loader import FakeReferenceLoader
 
         assert isinstance(FakeReferenceLoader(), ExternalData)
 
     def test_pure_schema_is_not_external_data(self):
-        from hippo.testing.fake_reference_loader import FakeSchemaPackage
+        from mosaic.testing.fake_reference_loader import FakeSchemaPackage
 
         assert not isinstance(FakeSchemaPackage(), ExternalData)
 
@@ -554,7 +554,7 @@ class TestCapabilityProtocols:
         # MigratableData keys on ``migration_steps()`` — which neither the
         # genus nor ReferenceLoader define. Critically, the genus's no-op
         # ``evolve`` must NOT make every package look Migratable.
-        from hippo.testing.fake_reference_loader import (
+        from mosaic.testing.fake_reference_loader import (
             FakeReferenceLoader,
             FakeSchemaPackage,
         )
@@ -656,20 +656,20 @@ class TestDiscoverSchemaPackages:
         )
 
     def test_resolves_both_groups_and_dedups_by_name(self, monkeypatch):
-        from hippo.cli.commands import reference as ref_cmd
-        from hippo.testing.fake_reference_loader import (
+        from mosaic.cli.commands import reference as ref_cmd
+        from mosaic.testing.fake_reference_loader import (
             FakeReferenceLoader,
             FakeSchemaPackage,
         )
 
         fake_ep = _FakeEntryPoint(
             "fake",
-            "hippo.testing.fake_reference_loader:FakeReferenceLoader",
+            "mosaic.testing.fake_reference_loader:FakeReferenceLoader",
             FakeReferenceLoader,
         )
         schema_ep = _FakeEntryPoint(
             "fake_schema",
-            "hippo.testing.fake_reference_loader:FakeSchemaPackage",
+            "mosaic.testing.fake_reference_loader:FakeSchemaPackage",
             FakeSchemaPackage,
         )
         # ``fake`` is registered under reference_loaders AND aliased into
@@ -690,12 +690,12 @@ class TestDiscoverSchemaPackages:
     def test_reference_loaders_only_package_resolves(self, monkeypatch):
         # A package present only in the reference_loaders subset/alias is
         # still discovered by the genus-level discovery.
-        from hippo.cli.commands import reference as ref_cmd
-        from hippo.testing.fake_reference_loader import FakeReferenceLoader
+        from mosaic.cli.commands import reference as ref_cmd
+        from mosaic.testing.fake_reference_loader import FakeReferenceLoader
 
         fake_ep = _FakeEntryPoint(
             "fake",
-            "hippo.testing.fake_reference_loader:FakeReferenceLoader",
+            "mosaic.testing.fake_reference_loader:FakeReferenceLoader",
             FakeReferenceLoader,
         )
         self._patch(
@@ -709,7 +709,7 @@ class TestDiscoverSchemaPackages:
         assert names == ["fake"]
 
     def test_non_subclass_raises_schema_package_error(self, monkeypatch):
-        from hippo.cli.commands import reference as ref_cmd
+        from mosaic.cli.commands import reference as ref_cmd
 
         class NotAPackage:
             pass
@@ -730,7 +730,7 @@ class TestDiscoverSchemaPackages:
         assert "SchemaPackage" in msg
 
     def test_reference_error_is_schema_package_error_subclass(self):
-        from hippo.cli.commands import reference as ref_cmd
+        from mosaic.cli.commands import reference as ref_cmd
 
         assert issubclass(
             ref_cmd.ReferenceLoaderRegistrationError,
@@ -753,9 +753,9 @@ class TestPureSchemaPackageInstall:
     ):
         import sqlite3
 
-        from hippo.cli.commands import reference as ref_cmd
-        from hippo.core.meta import get_meta
-        from hippo.testing.fake_reference_loader import FakeSchemaPackage
+        from mosaic.cli.commands import reference as ref_cmd
+        from mosaic.core.meta import get_meta
+        from mosaic.testing.fake_reference_loader import FakeSchemaPackage
 
         import importlib.metadata as md
 
@@ -766,7 +766,7 @@ class TestPureSchemaPackageInstall:
                 [
                     _FakeEntryPoint(
                         "fake_schema",
-                        "hippo.testing.fake_reference_loader:FakeSchemaPackage",
+                        "mosaic.testing.fake_reference_loader:FakeSchemaPackage",
                         FakeSchemaPackage,
                     )
                 ]
@@ -863,7 +863,7 @@ class TestOboDemoLoaderSurface:
         assert issubclass(OboDemoParams, BaseModel)
         # Both fields must be CLI-renderable (str | None and bool are
         # supported); discovery validates this in CI, asserted here too.
-        from hippo.cli.commands.reference import _validate_load_params_schema
+        from mosaic.cli.commands.reference import _validate_load_params_schema
 
         _validate_load_params_schema("obodemo", OboDemoParams)
 
@@ -913,10 +913,10 @@ class TestOboDemoFetch:
     """``cached_fetch`` integration: content-addressing + sha256 gate."""
 
     def test_fetch_is_content_addressed_and_cache_hits(self, isolated_cache):
-        from hippo.core.client import HippoClient
+        from mosaic.core.client import MosaicClient
 
         loader = OboDemoLoader()
-        client = HippoClient()
+        client = MosaicClient()
         first = loader._fetch(client, OboDemoParams(), "v1")
         second = loader._fetch(client, OboDemoParams(), "v1")
         # Stable, content-addressed path; bytes match the bundled release.
@@ -929,8 +929,8 @@ class TestOboDemoFetch:
     def test_fetch_sha256_mismatch_raises_cache_integrity_error(
         self, isolated_cache, tmp_path
     ):
-        from hippo.core.client import HippoClient
-        from hippo.core.exceptions import CacheIntegrityError
+        from mosaic.core.client import MosaicClient
+        from mosaic.core.exceptions import CacheIntegrityError
 
         loader = OboDemoLoader()
         # A tampered origin whose bytes do not match the pinned manifest
@@ -939,7 +939,7 @@ class TestOboDemoFetch:
         bad_origin.mkdir()
         (bad_origin / "obodemo-v1.obo").write_text("tampered\n", encoding="utf-8")
 
-        client = HippoClient()
+        client = MosaicClient()
         with pytest.raises(CacheIntegrityError):
             loader._fetch(
                 client, OboDemoParams(base_url=bad_origin.as_uri()), "v1"

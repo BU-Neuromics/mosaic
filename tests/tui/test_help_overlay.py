@@ -7,10 +7,10 @@ import asyncio
 import pytest
 
 pytest.importorskip(
-    "textual", reason="textual not installed; run: pip install hippo[tui]"
+    "textual", reason="textual not installed; run: pip install datahelix-mosaic[tui]"
 )
 
-from hippo.tui.widgets.help_overlay import HelpOverlay, _SHORTCUTS
+from mosaic.tui.widgets.help_overlay import HelpOverlay, _SHORTCUTS
 
 
 def test_shortcuts_not_empty():
@@ -57,8 +57,8 @@ def test_help_overlay_dismiss_action():
 
 def test_help_overlay_pilot_opens_on_question_mark():
     """? opens the help overlay; Esc dismisses it."""
-    from hippo.tui.app import HippoTUIApp
-    from hippo.tui.backend.protocol import EntityTypeSummary, PagedResult, SchemaView
+    from mosaic.tui.app import MosaicTUIApp
+    from mosaic.tui.backend.protocol import EntityTypeSummary, PagedResult, SchemaView
 
     class MockBackend:
         async def list_entity_types(self):
@@ -68,7 +68,7 @@ def test_help_overlay_pilot_opens_on_question_mark():
             return PagedResult(items=[], page=1, total_pages=1, total_items=0)
 
         async def get_entity(self, *a, **kw):
-            from hippo.tui.backend.protocol import EntityDetail
+            from mosaic.tui.backend.protocol import EntityDetail
 
             return EntityDetail(
                 id="x", entity_type="Sample", fields={}, relationships=[]
@@ -80,7 +80,7 @@ def test_help_overlay_pilot_opens_on_question_mark():
         async def get_provenance(self, *a, **kw):
             return []
 
-    app = HippoTUIApp(backend=MockBackend())
+    app = MosaicTUIApp(backend=MockBackend())
 
     async def run():
         async with app.run_test(headless=True, size=(80, 24)) as pilot:

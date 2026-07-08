@@ -4,8 +4,8 @@ import pytest
 import tempfile
 import os
 
-from hippo.core.validators import CELWriteValidator
-from hippo.core.validation.validators import WriteOperation
+from mosaic.core.validators import CELWriteValidator
+from mosaic.core.validation.validators import WriteOperation
 
 
 class TestCELWriteValidator:

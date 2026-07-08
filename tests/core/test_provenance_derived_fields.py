@@ -6,10 +6,10 @@ import time
 
 import pytest
 
-from hippo.core.client import HippoClient
-from hippo.core.storage.adapters.sqlite_adapter import SQLiteAdapter
+from mosaic.core.client import MosaicClient
+from mosaic.core.storage.adapters.sqlite_adapter import SQLiteAdapter
 from tests.conftest import _build_minimal_schema_registry
-from hippo.core.types import PaginatedResult
+from mosaic.core.types import PaginatedResult
 
 
 class TestProvenanceDerivedFields:
@@ -22,13 +22,13 @@ class TestProvenanceDerivedFields:
             yield os.path.join(tmpdir, "test_prov_fields.db")
 
     @pytest.fixture
-    def client(self, db_path: str) -> HippoClient:
-        """Create a HippoClient with SQLite storage."""
+    def client(self, db_path: str) -> MosaicClient:
+        """Create a MosaicClient with SQLite storage."""
         storage = SQLiteAdapter(db_path, schema_registry=_build_minimal_schema_registry())
-        return HippoClient(storage=storage, bypass_validation=True)
+        return MosaicClient(storage=storage, bypass_validation=True)
 
     def test_get_returns_provenance_derived_created_at(
-        self, client: HippoClient
+        self, client: MosaicClient
     ) -> None:
         """get() returns created_at equal to the first provenance CREATE timestamp."""
         result = client.put("Sample", {"id": "prov-1", "name": "test"})
@@ -44,7 +44,7 @@ class TestProvenanceDerivedFields:
         assert entity["created_at"] == prov_ts["created_at"]
 
     def test_get_updated_at_reflects_most_recent_write(
-        self, client: HippoClient
+        self, client: MosaicClient
     ) -> None:
         """After multiple updates, updated_at matches the most recent write event timestamp."""
         client.put("Sample", {"id": "prov-update", "name": "v1"})
@@ -65,7 +65,7 @@ class TestProvenanceDerivedFields:
         assert entity["updated_at"] == prov_ts["updated_at"]
 
     def test_query_returns_provenance_derived_created_at(
-        self, client: HippoClient
+        self, client: MosaicClient
     ) -> None:
         """query() returns entities with created_at derived from provenance."""
         client.put("Sample", {"id": "batch-1", "name": "one"})
@@ -84,7 +84,7 @@ class TestProvenanceDerivedFields:
             assert prov_ts is not None
             assert item["created_at"] == prov_ts["created_at"]
 
-    def test_entity_table_has_no_stored_temporal_columns(self, client: HippoClient) -> None:
+    def test_entity_table_has_no_stored_temporal_columns(self, client: MosaicClient) -> None:
         """Phase E: entities table must not have created_at/updated_at columns (PTS-69)."""
         client.put("Sample", {"id": "cache-test", "name": "test"})
 
@@ -97,7 +97,7 @@ class TestProvenanceDerivedFields:
         assert "created_at" not in col_names
         assert "updated_at" not in col_names
 
-    def test_temporal_fields_advance_via_provenance_on_update(self, client: HippoClient) -> None:
+    def test_temporal_fields_advance_via_provenance_on_update(self, client: MosaicClient) -> None:
         """After an update, updated_at advances in the provenance view (not stored column)."""
         client.put("Sample", {"id": "cache-update", "name": "v1"})
         storage = client._storage
@@ -128,13 +128,13 @@ class TestPaginatedResult:
             yield os.path.join(tmpdir, "test_paginated.db")
 
     @pytest.fixture
-    def client(self, db_path: str) -> HippoClient:
-        """Create a HippoClient with SQLite storage."""
+    def client(self, db_path: str) -> MosaicClient:
+        """Create a MosaicClient with SQLite storage."""
         storage = SQLiteAdapter(db_path, schema_registry=_build_minimal_schema_registry())
-        return HippoClient(storage=storage, bypass_validation=True)
+        return MosaicClient(storage=storage, bypass_validation=True)
 
     def test_non_empty_query_returns_paginated_result(
-        self, client: HippoClient
+        self, client: MosaicClient
     ) -> None:
         """Non-empty query returns a correct PaginatedResult."""
         client.put("Sample", {"id": "pg-1", "name": "one"})
@@ -149,7 +149,7 @@ class TestPaginatedResult:
         assert result.offset == 0
 
     def test_empty_query_returns_empty_paginated_result(
-        self, client: HippoClient
+        self, client: MosaicClient
     ) -> None:
         """Empty query returns PaginatedResult with items=[] and total=0."""
         result = client.query("NonExistentType")
@@ -158,7 +158,7 @@ class TestPaginatedResult:
         assert result.items == []
         assert result.total == 0
 
-    def test_total_reflects_count_ignoring_limit(self, client: HippoClient) -> None:
+    def test_total_reflects_count_ignoring_limit(self, client: MosaicClient) -> None:
         """total reflects count of all matching entities, ignoring limit/offset."""
         for i in range(10):
             client.put("Sample", {"id": f"pg-limit-{i}", "name": f"item{i}"})
@@ -170,7 +170,7 @@ class TestPaginatedResult:
         assert result.total == 10  # total ignores limit
         assert result.limit == 3
 
-    def test_total_reflects_count_ignoring_offset(self, client: HippoClient) -> None:
+    def test_total_reflects_count_ignoring_offset(self, client: MosaicClient) -> None:
         """total is unaffected by offset."""
         for i in range(5):
             client.put("Sample", {"id": f"pg-offset-{i}", "name": f"item{i}"})
@@ -182,7 +182,7 @@ class TestPaginatedResult:
         assert result.total == 5  # total ignores offset
         assert result.offset == 3
 
-    def test_paginated_result_items_are_iterable(self, client: HippoClient) -> None:
+    def test_paginated_result_items_are_iterable(self, client: MosaicClient) -> None:
         """Callers can iterate result.items just like a bare list."""
         client.put("Sample", {"id": "iter-1", "name": "first"})
         client.put("Sample", {"id": "iter-2", "name": "second"})
@@ -192,7 +192,7 @@ class TestPaginatedResult:
         ids = [item["id"] for item in result.items]
         assert set(ids) == {"iter-1", "iter-2"}
 
-    def test_query_returns_paginated_result_type(self, client: HippoClient) -> None:
+    def test_query_returns_paginated_result_type(self, client: MosaicClient) -> None:
         """client.query() return value is an instance of PaginatedResult."""
         client.put("Sample", {"id": "type-check", "name": "test"})
 

@@ -16,17 +16,17 @@ import pytest
 import yaml
 from linkml_runtime.utils.schemaview import SchemaView
 
-from hippo.cli.commands import reference as refmod
-from hippo.cli.commands.reference import _read_versions, _write_versions, migrate_bundle
-from hippo.core.client import HippoClient
-from hippo.core.exceptions import MigrationGateError
-from hippo.core.loaders.domain_module import (
+from mosaic.cli.commands import reference as refmod
+from mosaic.cli.commands.reference import _read_versions, _write_versions, migrate_bundle
+from mosaic.core.client import MosaicClient
+from mosaic.core.exceptions import MigrationGateError
+from mosaic.core.loaders.domain_module import (
     DomainModule,
     MigrationContext,
     MigrationStep,
 )
-from hippo.core.storage.adapters.sqlite_adapter import SQLiteAdapter
-from hippo.linkml_bridge import SchemaRegistry, _bundled_importmap
+from mosaic.core.storage.adapters.sqlite_adapter import SQLiteAdapter
+from mosaic.linkml_bridge import SchemaRegistry, _bundled_importmap
 
 
 def _registry() -> SchemaRegistry:
@@ -99,7 +99,7 @@ def deployment(monkeypatch):
     db = os.path.join(tmp, "hippo.db")
     reg = _registry()
     storage = SQLiteAdapter(db, schema_registry=reg)
-    client = HippoClient(storage=storage, registry=reg)
+    client = MosaicClient(storage=storage, registry=reg)
     for i in range(2):
         client.put(
             "Sample",
@@ -123,7 +123,7 @@ def deployment(monkeypatch):
     return {"db": db, "client": client, "reg": reg}
 
 
-def _seed_tag(client: HippoClient, wid: str, rank) -> None:
+def _seed_tag(client: MosaicClient, wid: str, rank) -> None:
     client.put(
         "SampleTag",
         {"id": wid, "tag": "t", "rank": rank, "is_available": True},
@@ -132,7 +132,7 @@ def _seed_tag(client: HippoClient, wid: str, rank) -> None:
 
 
 def _kinds(db: str, reg: SchemaRegistry) -> list:
-    c = HippoClient(storage=SQLiteAdapter(db, schema_registry=reg), registry=reg)
+    c = MosaicClient(storage=SQLiteAdapter(db, schema_registry=reg), registry=reg)
     return [it["data"].get("kind") for it in c.query("Sample").items]
 
 

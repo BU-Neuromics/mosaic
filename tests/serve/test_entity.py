@@ -3,8 +3,8 @@
 import pytest
 from fastapi.testclient import TestClient
 
-from hippo.api.factory import create_app
-from hippo.serve.routers import entity, health
+from mosaic.api.factory import create_app
+from mosaic.serve.routers import entity, health
 
 
 @pytest.fixture

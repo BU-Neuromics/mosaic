@@ -7,10 +7,10 @@ import asyncio
 import pytest
 
 pytest.importorskip(
-    "textual", reason="textual not installed; run: pip install hippo[tui]"
+    "textual", reason="textual not installed; run: pip install datahelix-mosaic[tui]"
 )
 
-from hippo.tui.backend.protocol import (
+from mosaic.tui.backend.protocol import (
     EntityTypeSchema,
     FieldInfo,
     RelationshipDeclaration,
@@ -39,7 +39,7 @@ def _make_schema():
 
 def test_schema_explorer_view_instantiation():
     """SchemaExplorerView can be created with a SchemaView."""
-    from hippo.tui.views.schema_explorer import SchemaExplorerView
+    from mosaic.tui.views.schema_explorer import SchemaExplorerView
 
     schema = _make_schema()
     view = SchemaExplorerView(schema=schema)
@@ -48,7 +48,7 @@ def test_schema_explorer_view_instantiation():
 
 def test_schema_explorer_field_table_content():
     """Field table shows all user-defined fields with correct data."""
-    from hippo.tui.views.schema_explorer import SchemaExplorerView
+    from mosaic.tui.views.schema_explorer import SchemaExplorerView
 
     schema = _make_schema()
     view = SchemaExplorerView(schema=schema)
@@ -100,7 +100,7 @@ def test_schema_explorer_required_indexed_flags():
 
 def test_schema_explorer_cache_invalidation():
     """SchemaExplorerView uses app_ref to invalidate cache."""
-    from hippo.tui.views.schema_explorer import SchemaExplorerView
+    from mosaic.tui.views.schema_explorer import SchemaExplorerView
 
     schema1 = _make_schema()
     schema2 = SchemaView()

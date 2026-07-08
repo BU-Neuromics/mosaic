@@ -10,7 +10,7 @@ from pathlib import Path
 
 import pytest
 
-from hippo.tui.backend.sdk import (
+from mosaic.tui.backend.sdk import (
     SDKBackend,
     _resolve_db_path,
     _resolve_validators_path,
@@ -268,7 +268,7 @@ def test_sdk_get_entity_detail(seeded_backend):
 
 
 def test_sdk_get_entity_not_found(sdk_backend):
-    from hippo.tui.backend.protocol import BackendError
+    from mosaic.tui.backend.protocol import BackendError
 
     with pytest.raises(BackendError):
         asyncio.run(sdk_backend.get_entity("Sample", "nonexistent-id"))
@@ -312,7 +312,7 @@ def test_sdk_provenance_newest_first(seeded_backend):
 
 
 def test_sdk_create_validation_failure(sdk_backend):
-    from hippo.tui.backend.protocol import BackendError
+    from mosaic.tui.backend.protocol import BackendError
 
     with pytest.raises(BackendError):
         # 'name' is required on Sample
@@ -343,7 +343,7 @@ def test_sdk_set_availability_round_trip(seeded_backend):
 
 
 def test_sdk_set_availability_unknown_entity(seeded_backend):
-    from hippo.tui.backend.protocol import BackendError
+    from mosaic.tui.backend.protocol import BackendError
 
     backend, _project_id, _sample_ids = seeded_backend
     with pytest.raises(BackendError):
@@ -411,11 +411,11 @@ def validated_backend(tmp_path):
 def test_configured_validator_rejects_bad_write(validated_backend):
     """A write violating the configured CEL rule is rejected via the SDK.
 
-    Without the pipeline wired into HippoClient this would succeed — the
+    Without the pipeline wired into MosaicClient this would succeed — the
     schema permits any float for volume_ml — so this proves the TUI honours
     deployment-configured validators rather than bypassing them.
     """
-    from hippo.tui.backend.protocol import BackendError
+    from mosaic.tui.backend.protocol import BackendError
 
     with pytest.raises(BackendError):
         asyncio.run(

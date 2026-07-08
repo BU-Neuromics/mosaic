@@ -14,9 +14,9 @@ import time
 import pytest
 
 from tests.conftest import _build_minimal_schema_registry
-from hippo.core.storage import Query
-from hippo.core.storage.adapters import SQLiteAdapter
-from hippo.core.storage.adapters.sqlite_adapter import SQLiteEntity
+from mosaic.core.storage import Query
+from mosaic.core.storage.adapters import SQLiteAdapter
+from mosaic.core.storage.adapters.sqlite_adapter import SQLiteEntity
 
 # Far-future timestamp: at-or-after every record, so state_at sees the whole log.
 FUTURE = "2999-01-01T00:00:00+00:00"
@@ -139,11 +139,11 @@ def test_find_as_of_reconstructs_entity_set(adapter):
 
 @pytest.fixture
 def client_and_adapter(db_path):
-    from hippo.core.client import HippoClient
+    from mosaic.core.client import MosaicClient
     adapter = SQLiteAdapter(
         db_path, wal_mode=True, schema_registry=_build_minimal_schema_registry()
     )
-    client = HippoClient(storage=adapter)
+    client = MosaicClient(storage=adapter)
     yield client, adapter
     adapter.close()
 

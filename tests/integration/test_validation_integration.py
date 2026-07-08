@@ -2,8 +2,8 @@
 
 import pytest
 
-from hippo.core.ingestion import IngestionPipeline
-from hippo.core.validation import (
+from mosaic.core.ingestion import IngestionPipeline
+from mosaic.core.validation import (
     ExecutorConfig,
     ValidationResult,
     ValidatorContext,

@@ -11,8 +11,8 @@ import sqlite3
 
 import pytest
 
-from hippo.core.storage.ddl_generator import DDLGenerator
-from hippo.linkml_bridge import SchemaRegistry
+from mosaic.core.storage.ddl_generator import DDLGenerator
+from mosaic.linkml_bridge import SchemaRegistry
 from tests.support.linkml_schemas import build_registry
 
 
@@ -216,7 +216,7 @@ class TestForeignKey:
         """A reference ranged on a concrete base that has subclasses must not
         emit an FK to the base table (issue #93).
 
-        ``hippo ingest`` dispatches a subtype instance into its own per-subclass
+        ``mosaic ingest`` dispatches a subtype instance into its own per-subclass
         table (issue #80), so the base table is never populated for that
         referent and a base-table FK fails ``FOREIGN KEY constraint``. The
         reference is stored as a plain TEXT id column instead.

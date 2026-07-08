@@ -1,7 +1,7 @@
 """REST transport persists through a config-built client (issue #42).
 
 Proves the end state: when the app is built with a configured client (as
-``hippo serve`` now does), an entity written through the SDK is visible over
+``mosaic serve`` now does), an entity written through the SDK is visible over
 the REST API — and that the no-client app (the old default) does not persist.
 """
 
@@ -11,9 +11,9 @@ from pathlib import Path
 
 from fastapi.testclient import TestClient
 
-from hippo.config import HippoConfig
-from hippo.core.factory import create_client_from_config
-from hippo.serve import create_default_app
+from mosaic.config import MosaicConfig
+from mosaic.core.factory import create_client_from_config
+from mosaic.serve import create_default_app
 
 _FIXTURE_SCHEMA = (
     Path(__file__).parents[1] / "fixtures" / "schemas" / "sample_schema.yaml"
@@ -22,7 +22,7 @@ _AUTH = {"Authorization": "Bearer test-token"}
 
 
 def _make_api(tmp_path):
-    cfg = HippoConfig(
+    cfg = MosaicConfig(
         schema_path=str(_FIXTURE_SCHEMA),
         database_url=str(tmp_path / "api.db"),
         storage_backend="sqlite",
@@ -100,7 +100,7 @@ def test_rest_list_without_type_scans_all_types(tmp_path):
 
 def test_rest_without_client_does_not_persist(tmp_path):
     # The old default: no injected client -> routers fall back to
-    # HippoClient() with storage=None, which never persists. A get-by-id
+    # MosaicClient() with storage=None, which never persists. A get-by-id
     # therefore 404s because nothing is ever written.
     app = create_default_app()
     api = TestClient(app)

@@ -1,4 +1,4 @@
-"""Integration tests for the ``hippo validate`` CLI command.
+"""Integration tests for the ``mosaic validate`` CLI command.
 
 The CLI runs real LinkML validation (sec9 PR 3.2):
 - ``--schema PATH``: loads via ``SchemaRegistry.from_path`` — fails on
@@ -17,7 +17,7 @@ from pathlib import Path
 import pytest
 from typer.testing import CliRunner
 
-from hippo.cli.main import app
+from mosaic.cli.main import app
 
 runner = CliRunner()
 

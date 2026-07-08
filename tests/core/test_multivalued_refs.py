@@ -17,7 +17,7 @@ from pathlib import Path
 
 import pytest
 
-import hippo
+import mosaic
 
 
 _SCHEMA = """\
@@ -53,7 +53,7 @@ classes:
 def client(tmp_path: Path):
     schema = tmp_path / "schema.yaml"
     schema.write_text(_SCHEMA)
-    return hippo.client_for_schema(
+    return mosaic.client_for_schema(
         schema, database_url=str(tmp_path / "h.db")
     )
 

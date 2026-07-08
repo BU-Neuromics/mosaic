@@ -6,7 +6,7 @@ import asyncio
 
 import pytest
 
-from hippo.tui.backend.protocol import (
+from mosaic.tui.backend.protocol import (
     EntityDetail,
     EntityTypeSummary,
     EntityTypeSchema,

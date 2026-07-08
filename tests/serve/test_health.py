@@ -1,9 +1,9 @@
-"""Tests for Hippo Serve routers."""
+"""Tests for Mosaic Serve routers."""
 
 from fastapi.testclient import TestClient
 
-from hippo.api.factory import create_app
-from hippo.serve.routers import health
+from mosaic.api.factory import create_app
+from mosaic.serve.routers import health
 
 
 def test_health_endpoint():
@@ -21,7 +21,7 @@ def test_root_endpoint():
     client = TestClient(app)
     response = client.get("/")
     assert response.status_code == 200
-    assert response.json()["service"] == "Hippo API"
+    assert response.json()["service"] == "Mosaic API"
 
 
 def test_openapi_docs_available():
@@ -31,7 +31,7 @@ def test_openapi_docs_available():
     response = client.get("/openapi.json")
     assert response.status_code == 200
     data = response.json()
-    assert data["info"]["title"] == "Hippo API"
+    assert data["info"]["title"] == "Mosaic API"
     assert data["info"]["version"] == "0.1.0"
 
 

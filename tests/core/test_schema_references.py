@@ -1,21 +1,21 @@
-"""Unit tests for HippoClient.schema_references()."""
+"""Unit tests for MosaicClient.schema_references()."""
 
 import pytest
 
-from hippo.core.client import HippoClient
+from mosaic.core.client import MosaicClient
 from tests.support.linkml_schemas import build_registry
 
 
 def client_with(classes):
-    return HippoClient(registry=build_registry(classes)) if classes else HippoClient()
+    return MosaicClient(registry=build_registry(classes)) if classes else MosaicClient()
 
 
 class TestSchemaReferencesNoSchemas:
     def test_returns_empty_when_no_schemas(self):
-        assert HippoClient().schema_references("Donor") == []
+        assert MosaicClient().schema_references("Donor") == []
 
     def test_returns_empty_when_schemas_is_none(self):
-        assert HippoClient(registry=None).schema_references("Sample") == []
+        assert MosaicClient(registry=None).schema_references("Sample") == []
 
 
 class TestSchemaReferencesEntityTypeNotFound:

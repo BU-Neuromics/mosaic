@@ -12,7 +12,7 @@ from pathlib import Path
 
 import pytest
 
-from hippo.core.recipe import canonical_content_hash
+from mosaic.core.recipe import canonical_content_hash
 
 
 def _write(recipe_dir: Path, files: dict[str, bytes]) -> None:

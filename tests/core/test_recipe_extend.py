@@ -25,9 +25,9 @@ from textwrap import dedent
 import pytest
 import yaml
 
-from hippo.core.client import HippoClient
-from hippo.core.recipe_service import RecipeService
-from hippo.core.storage.adapters.sqlite_adapter import SQLiteAdapter
+from mosaic.core.client import MosaicClient
+from mosaic.core.recipe_service import RecipeService
+from mosaic.core.storage.adapters.sqlite_adapter import SQLiteAdapter
 from tests.conftest import _build_minimal_schema_registry
 
 
@@ -81,7 +81,7 @@ def storage(db_path):
 
 @pytest.fixture
 def client(storage):
-    return HippoClient(
+    return MosaicClient(
         storage=storage,
         registry=_build_minimal_schema_registry(),
         bypass_validation=True,
@@ -89,7 +89,7 @@ def client(storage):
 
 
 @pytest.fixture
-def parent_recipe(client: HippoClient, tmp_path: Path) -> Path:
+def parent_recipe(client: MosaicClient, tmp_path: Path) -> Path:
     """Import an upstream recipe so it appears in installed_recipes."""
     recipe_dir = _make_recipe(
         tmp_path, recipe_id="org.example.parent", name="parent"
@@ -100,7 +100,7 @@ def parent_recipe(client: HippoClient, tmp_path: Path) -> Path:
 
 class TestExtendHappyPath:
     def test_writes_both_files(
-        self, client: HippoClient, parent_recipe: Path, tmp_path: Path
+        self, client: MosaicClient, parent_recipe: Path, tmp_path: Path
     ) -> None:
         out_dir = tmp_path / "child"
         result = client.recipe_extend("org.example.parent", out_dir)
@@ -109,7 +109,7 @@ class TestExtendHappyPath:
         assert (out_dir / "schema.yaml").is_file()
 
     def test_creates_missing_out_dir(
-        self, client: HippoClient, parent_recipe: Path, tmp_path: Path
+        self, client: MosaicClient, parent_recipe: Path, tmp_path: Path
     ) -> None:
         out_dir = tmp_path / "nested" / "child"
         assert not out_dir.exists()
@@ -117,7 +117,7 @@ class TestExtendHappyPath:
         assert out_dir.is_dir()
 
     def test_parent_field_populated_from_installed(
-        self, client: HippoClient, parent_recipe: Path, tmp_path: Path
+        self, client: MosaicClient, parent_recipe: Path, tmp_path: Path
     ) -> None:
         out_dir = tmp_path / "child"
         client.recipe_extend("org.example.parent", out_dir)
@@ -130,7 +130,7 @@ class TestExtendHappyPath:
         assert len(manifest["parent"]["digest"]) == len("sha256:") + 64
 
     def test_manifest_has_author_fillable_stubs(
-        self, client: HippoClient, parent_recipe: Path, tmp_path: Path
+        self, client: MosaicClient, parent_recipe: Path, tmp_path: Path
     ) -> None:
         out_dir = tmp_path / "child"
         client.recipe_extend("org.example.parent", out_dir)
@@ -145,7 +145,7 @@ class TestExtendHappyPath:
         assert manifest["created_at"]
 
     def test_schema_fragment_is_empty_but_valid_linkml(
-        self, client: HippoClient, parent_recipe: Path, tmp_path: Path
+        self, client: MosaicClient, parent_recipe: Path, tmp_path: Path
     ) -> None:
         out_dir = tmp_path / "child"
         client.recipe_extend("org.example.parent", out_dir)
@@ -159,7 +159,7 @@ class TestExtendHappyPath:
         assert "slots" not in fragment or not fragment["slots"]
 
     def test_extended_recipe_round_trips_through_inspect(
-        self, client: HippoClient, parent_recipe: Path, tmp_path: Path
+        self, client: MosaicClient, parent_recipe: Path, tmp_path: Path
     ) -> None:
         """Author replaces the TODO stubs → recipe is inspectable.
 
@@ -184,13 +184,13 @@ class TestExtendHappyPath:
 
 class TestExtendErrors:
     def test_unknown_installed_id_raises(
-        self, client: HippoClient, tmp_path: Path
+        self, client: MosaicClient, tmp_path: Path
     ) -> None:
         with pytest.raises(ValueError, match="not found in installed_recipes"):
             client.recipe_extend("org.example.nope", tmp_path / "child")
 
     def test_refuses_to_overwrite_recipe_yaml(
-        self, client: HippoClient, parent_recipe: Path, tmp_path: Path
+        self, client: MosaicClient, parent_recipe: Path, tmp_path: Path
     ) -> None:
         out_dir = tmp_path / "child"
         out_dir.mkdir()
@@ -199,7 +199,7 @@ class TestExtendErrors:
             client.recipe_extend("org.example.parent", out_dir)
 
     def test_refuses_to_overwrite_schema_yaml(
-        self, client: HippoClient, parent_recipe: Path, tmp_path: Path
+        self, client: MosaicClient, parent_recipe: Path, tmp_path: Path
     ) -> None:
         out_dir = tmp_path / "child"
         out_dir.mkdir()
@@ -208,7 +208,7 @@ class TestExtendErrors:
             client.recipe_extend("org.example.parent", out_dir)
 
     def test_rejects_non_directory_out_dir(
-        self, client: HippoClient, parent_recipe: Path, tmp_path: Path
+        self, client: MosaicClient, parent_recipe: Path, tmp_path: Path
     ) -> None:
         out_path = tmp_path / "child"
         out_path.write_text("I am a file, not a dir")
@@ -227,7 +227,7 @@ class TestExtendInvariant5:
     """
 
     def test_parent_is_always_set(
-        self, client: HippoClient, parent_recipe: Path, tmp_path: Path
+        self, client: MosaicClient, parent_recipe: Path, tmp_path: Path
     ) -> None:
         out_dir = tmp_path / "child"
         client.recipe_extend("org.example.parent", out_dir)

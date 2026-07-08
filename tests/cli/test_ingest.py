@@ -1,4 +1,4 @@
-"""Tests for ``hippo ingest`` — LinkML-native instance YAML ingest.
+"""Tests for ``mosaic ingest`` — LinkML-native instance YAML ingest.
 
 PR 3.3 retires the ``entities: [{type, data, external_id}]`` wrapper in
 favor of LinkML-native tree-root bundles. Each top-level key in the
@@ -14,7 +14,7 @@ import pytest
 import yaml
 from typer.testing import CliRunner
 
-from hippo.cli.main import app
+from mosaic.cli.main import app
 
 
 SCHEMA_YAML = """\
@@ -67,17 +67,17 @@ def schema_file(tmp_path: Path) -> Path:
 
 @pytest.fixture()
 def schema_registry(schema_file: Path):
-    from hippo.linkml_bridge import SchemaRegistry
+    from mosaic.linkml_bridge import SchemaRegistry
 
     return SchemaRegistry.from_path(schema_file)
 
 
 @pytest.fixture()
 def client(tmp_hippo: Path, schema_registry):
-    from hippo.core.client import HippoClient
-    from hippo.core.storage.adapters.sqlite_adapter import SQLiteAdapter
+    from mosaic.core.client import MosaicClient
+    from mosaic.core.storage.adapters.sqlite_adapter import SQLiteAdapter
 
-    return HippoClient(
+    return MosaicClient(
         storage=SQLiteAdapter(
             str(tmp_hippo / "test.db"), schema_registry=schema_registry
         )
@@ -109,7 +109,7 @@ class TestIngestLinkMLYAML:
             },
         )
 
-        from hippo.cli.commands.ingest import ingest_linkml_yaml
+        from mosaic.cli.commands.ingest import ingest_linkml_yaml
 
         result = ingest_linkml_yaml(bundle, client, schema_registry)
 
@@ -121,7 +121,7 @@ class TestIngestLinkMLYAML:
 
     def test_ingest_updates_existing_id(self, tmp_hippo, client, schema_registry):
         """Re-ingest with the same `id` updates the existing entity."""
-        from hippo.cli.commands.ingest import ingest_linkml_yaml
+        from mosaic.cli.commands.ingest import ingest_linkml_yaml
 
         v1 = _write_bundle(
             tmp_hippo,
@@ -145,7 +145,7 @@ class TestIngestLinkMLYAML:
 
     def test_ingest_multiple_classes(self, tmp_hippo, client, schema_registry):
         """A single bundle can carry instances of more than one class."""
-        from hippo.cli.commands.ingest import ingest_linkml_yaml
+        from mosaic.cli.commands.ingest import ingest_linkml_yaml
 
         bundle = _write_bundle(
             tmp_hippo,
@@ -168,7 +168,7 @@ class TestIngestLinkMLYAML:
         self, tmp_hippo, client, schema_registry
     ):
         """A bundle with a missing required field fails LinkML validation."""
-        from hippo.cli.commands.ingest import IngestError, ingest_linkml_yaml
+        from mosaic.cli.commands.ingest import IngestError, ingest_linkml_yaml
 
         bundle = _write_bundle(
             tmp_hippo,
@@ -181,7 +181,7 @@ class TestIngestLinkMLYAML:
     def test_ingest_unknown_top_level_slot_raises(
         self, tmp_hippo, client, schema_registry
     ):
-        from hippo.cli.commands.ingest import IngestError, ingest_linkml_yaml
+        from mosaic.cli.commands.ingest import IngestError, ingest_linkml_yaml
 
         bundle = _write_bundle(
             tmp_hippo,
@@ -194,7 +194,7 @@ class TestIngestLinkMLYAML:
     def test_ingest_not_a_mapping_raises(
         self, tmp_hippo, client, schema_registry
     ):
-        from hippo.cli.commands.ingest import IngestError, ingest_linkml_yaml
+        from mosaic.cli.commands.ingest import IngestError, ingest_linkml_yaml
 
         bad = tmp_hippo / "list.yaml"
         bad.write_text(yaml.dump(["item1", "item2"]))
@@ -203,7 +203,7 @@ class TestIngestLinkMLYAML:
             ingest_linkml_yaml(bad, client, schema_registry)
 
     def test_ingest_file_not_found_raises(self, tmp_hippo, client, schema_registry):
-        from hippo.cli.commands.ingest import IngestError, ingest_linkml_yaml
+        from mosaic.cli.commands.ingest import IngestError, ingest_linkml_yaml
 
         with pytest.raises(IngestError, match="not found"):
             ingest_linkml_yaml(
@@ -213,7 +213,7 @@ class TestIngestLinkMLYAML:
     def test_ingest_csv_file_rejected(self, tmp_hippo, client, schema_registry):
         """``ingest_linkml_yaml`` rejects CSV/JSON data files — they belong
         to Cappella."""
-        from hippo.cli.commands.ingest import IngestError, ingest_linkml_yaml
+        from mosaic.cli.commands.ingest import IngestError, ingest_linkml_yaml
 
         csv_file = tmp_hippo / "data.csv"
         csv_file.write_text("external_id,name\nBU0001,Alice\n")
@@ -228,7 +228,7 @@ class TestIngestLinkMLYAML:
 
 
 class TestIngestCLI:
-    """End-to-end ``hippo ingest`` CLI tests with ``--validate-schema``."""
+    """End-to-end ``mosaic ingest`` CLI tests with ``--validate-schema``."""
 
     def test_cli_file_with_validate_schema(
         self, runner, tmp_hippo, schema_file, monkeypatch
@@ -338,7 +338,7 @@ class TestIngestResult:
     """IngestResult carries counts and errors."""
 
     def test_result_defaults(self):
-        from hippo.cli.commands.ingest import IngestResult
+        from mosaic.cli.commands.ingest import IngestResult
 
         r = IngestResult(source_file="bundle.yaml")
         assert r.created == 0
@@ -347,7 +347,7 @@ class TestIngestResult:
         assert r.error_messages == []
 
     def test_result_to_dict(self):
-        from hippo.cli.commands.ingest import IngestResult
+        from mosaic.cli.commands.ingest import IngestResult
 
         r = IngestResult(source_file="bundle.yaml", created=2, errors=1)
         d = r.to_dict()

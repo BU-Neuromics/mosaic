@@ -1,12 +1,12 @@
-"""End-to-end integration tests for the full Hippo stack.
+"""End-to-end integration tests for the full Mosaic stack.
 
 These tests exercise the complete path from config → storage → SDK,
 using a real SQLite database in a temporary directory.  No mocking.
 
-Key observations about the actual HippoClient API (discovered during writing):
+Key observations about the actual MosaicClient API (discovered during writing):
 - create/get/update return a dict with keys: id, entity_type, data, version,
   created_at, updated_at.  User fields live under result["data"].
-- FTS search requires HippoClient to be initialised with _fts_table_metadata
+- FTS search requires MosaicClient to be initialised with _fts_table_metadata
   (a dict[str, list[FTSTableMetadata]]) so it knows which fields are indexed.
 - create_app() only mounts explicitly passed routers; built-in routers
   (health, entity, etc.) must be passed via the routers= kwarg.
@@ -21,14 +21,14 @@ import pytest
 import yaml
 from fastapi.testclient import TestClient
 
-from hippo.api.factory import create_app
-from hippo.core.client import HippoClient
-from hippo.core.exceptions import EntityNotFoundError, ValidationFailure
-from hippo.core.pipeline import ValidationPipeline
-from hippo.core.storage.adapters.sqlite_adapter import SQLiteAdapter
-from hippo.core.storage.fts import FTSTableMetadata, FTSFieldMetadata
-from hippo.core.validators.write_validator import CELWriteValidator
-from hippo.serve.routers.health import router as health_router
+from mosaic.api.factory import create_app
+from mosaic.core.client import MosaicClient
+from mosaic.core.exceptions import EntityNotFoundError, ValidationFailure
+from mosaic.core.pipeline import ValidationPipeline
+from mosaic.core.storage.adapters.sqlite_adapter import SQLiteAdapter
+from mosaic.core.storage.fts import FTSTableMetadata, FTSFieldMetadata
+from mosaic.core.validators.write_validator import CELWriteValidator
+from mosaic.serve.routers.health import router as health_router
 
 
 # ---------------------------------------------------------------------------
@@ -65,7 +65,7 @@ _VALIDATORS_YAML = {
 
 @pytest.fixture()
 def tmp_hippo(tmp_path: Path) -> Path:
-    """Create a minimal Hippo project in a temp directory."""
+    """Create a minimal Mosaic project in a temp directory."""
     from tests.support.linkml_schemas import write_schema_file
 
     schemas_dir = tmp_path / "schemas"
@@ -81,7 +81,7 @@ def tmp_hippo(tmp_path: Path) -> Path:
 
 
 def _fts_metadata_for_sample() -> dict[str, list[FTSTableMetadata]]:
-    """Build the FTS metadata dict that HippoClient needs for FTS search."""
+    """Build the FTS metadata dict that MosaicClient needs for FTS search."""
     field_meta = FTSFieldMetadata(
         field_name="notes",
         field_type="string",
@@ -104,9 +104,9 @@ def _make_client(
     *,
     validation: bool = False,
     fts: bool = False,
-) -> HippoClient:
-    """Instantiate a HippoClient backed by a real SQLite DB."""
-    from hippo.linkml_bridge import SchemaRegistry
+) -> MosaicClient:
+    """Instantiate a MosaicClient backed by a real SQLite DB."""
+    from mosaic.linkml_bridge import SchemaRegistry
 
     db_path = tmp_hippo / "hippo.db"
     registry = SchemaRegistry.from_path(tmp_hippo / "schemas")
@@ -118,7 +118,7 @@ def _make_client(
         cel = CELWriteValidator(validators_path=str(tmp_hippo / "validators.yaml"))
         pipeline.add_validator(cel)
 
-    client = HippoClient(storage=storage, pipeline=pipeline, registry=registry)
+    client = MosaicClient(storage=storage, pipeline=pipeline, registry=registry)
 
     if fts:
         import sqlite3

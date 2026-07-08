@@ -40,7 +40,7 @@ Stranded-field gate mechanism — doc-correction note (Doc 1 §7.3/§7.7):
 
 DDL scope note:
     These tests exercise the evolve/orchestrator/gate data path only. The DDL
-    tier (``hippo migrate`` add/drop columns for ``age_at_collection`` →
+    tier (``mosaic migrate`` add/drop columns for ``age_at_collection`` →
     ``age_value``/``age_unit``) is out of scope. The merged registry keeps
     ``age_at_collection`` as an optional slot so v1-shape records are
     readable; the migration transforms read it and produce the v2 shape.
@@ -68,32 +68,32 @@ import pytest
 import yaml
 from linkml_runtime.utils.schemaview import SchemaView
 
-from hippo.core.client import HippoClient
-from hippo.core.exceptions import MigrationGateError
-from hippo.core.loaders.bundle import Bundle
-from hippo.core.loaders.domain_module import (
+from mosaic.core.client import MosaicClient
+from mosaic.core.exceptions import MigrationGateError
+from mosaic.core.loaders.bundle import Bundle
+from mosaic.core.loaders.domain_module import (
     DomainModule,
     MigrationContext,
     MigrationStep,
 )
-from hippo.core.loaders.exposure import (
+from mosaic.core.loaders.exposure import (
     ExposureReport,
     SchemaElement,
     compute_write_set,
     exposure_report,
     extension_referenced_elements,
 )
-from hippo.core.loaders.orchestrator import migrate_to_bundle, topological_sort
-from hippo.core.loaders.schema_package import SchemaPackage
-from hippo.core.storage.adapters.sqlite_adapter import SQLiteAdapter
-from hippo.linkml_bridge import SchemaRegistry, _bundled_importmap
+from mosaic.core.loaders.orchestrator import migrate_to_bundle, topological_sort
+from mosaic.core.loaders.schema_package import SchemaPackage
+from mosaic.core.storage.adapters.sqlite_adapter import SQLiteAdapter
+from mosaic.linkml_bridge import SchemaRegistry, _bundled_importmap
 
 
 # ---------------------------------------------------------------------------
 # Merged test registry (v2.0.0 target shape)
 #
 # All packages' classes are merged into one flat schema so SchemaRegistry
-# can back the HippoClient.  ``age_at_collection`` is kept as an optional
+# can back the MosaicClient.  ``age_at_collection`` is kept as an optional
 # slot (not removed) so v1-shape records are readable by migration transforms.
 # ``age_value`` and ``age_unit`` are optional to avoid NOT NULL issues when
 # seeding v1-shape records with bypass_validation=True.
@@ -386,11 +386,11 @@ def client():
         storage = SQLiteAdapter(
             os.path.join(tmpdir, "brainbank.db"), schema_registry=reg
         )
-        yield HippoClient(storage=storage, registry=reg)
+        yield MosaicClient(storage=storage, registry=reg)
 
 
 def _seed_subject(
-    client: HippoClient,
+    client: MosaicClient,
     sid: str,
     *,
     external_id: str,
@@ -411,7 +411,7 @@ def _seed_subject(
 
 
 def _seed_brain_donor(
-    client: HippoClient,
+    client: MosaicClient,
     did: str,
     *,
     external_id: str,
@@ -443,7 +443,7 @@ def _seed_brain_donor(
 
 
 def _seed_brain_sample(
-    client: HippoClient,
+    client: MosaicClient,
     sid: str,
     *,
     external_id: str,
@@ -480,7 +480,7 @@ def _standard_bundle() -> Bundle:
 class TestQueryDisjoint:
     """query("Subject") does not sweep BrainDonor rows (type-exact per-class tables)."""
 
-    def test_subject_query_excludes_brain_donors(self, client: HippoClient) -> None:
+    def test_subject_query_excludes_brain_donors(self, client: MosaicClient) -> None:
         _seed_subject(client, "s1", external_id="VA-001", age=65.3)
         _seed_brain_donor(client, "bd1", external_id="VA-DON-001",
                           brain_bank_id="BB-001", age=72.5)
@@ -494,7 +494,7 @@ class TestQueryDisjoint:
         assert len(donors) == 1
         assert donors[0]["id"] == "bd1"
 
-    def test_brain_sample_query_excludes_base_samples(self, client: HippoClient) -> None:
+    def test_brain_sample_query_excludes_base_samples(self, client: MosaicClient) -> None:
         client.put("Sample",
                    {"id": "sa1", "external_id": "S-001", "tissue_type": "brain",
                     "is_available": True},
@@ -518,7 +518,7 @@ class TestQueryDisjoint:
 class TestSubjectChainResolver:
     """Chain resolver finds the v1.0→v1.1→v2.0 path when no shortcut edge exists."""
 
-    def test_two_hop_path_via_chain_resolver(self, client: HippoClient) -> None:
+    def test_two_hop_path_via_chain_resolver(self, client: MosaicClient) -> None:
         _seed_subject(client, "s1", external_id="VA-001", age=65.3)
         mod = _SubjectModule()
 
@@ -532,7 +532,7 @@ class TestSubjectChainResolver:
         assert final.get("age_value") == 65.3
         assert final.get("age_unit") == "years"
 
-    def test_intermediate_record_superseded(self, client: HippoClient) -> None:
+    def test_intermediate_record_superseded(self, client: MosaicClient) -> None:
         _seed_subject(client, "s1", external_id="VA-001", age=65.3)
         mod = _SubjectModule()
         mod.evolve(client, "1.0.0", "2.0.0")
@@ -561,7 +561,7 @@ class TestMultiHopUpgradeHappyPath:
         brain = _BrainBankModule(call_log=call_log)
         return [core, subj, brain], subj, brain
 
-    def test_committed_and_dependency_ordered(self, client: HippoClient) -> None:
+    def test_committed_and_dependency_ordered(self, client: MosaicClient) -> None:
         call_log: list[str] = []
         packages, _, _ = self._packages(call_log)
 
@@ -587,7 +587,7 @@ class TestMultiHopUpgradeHappyPath:
         # call_log: hop1=[subject], hop2=[subject, brainbank]
         assert call_log == ["subject", "subject", "brainbank"]
 
-    def test_brain_donor_age_migrated(self, client: HippoClient) -> None:
+    def test_brain_donor_age_migrated(self, client: MosaicClient) -> None:
         packages, _, _ = self._packages([])
 
         _seed_brain_donor(client, "bd1", external_id="VA-DON-001",
@@ -606,7 +606,7 @@ class TestMultiHopUpgradeHappyPath:
         assert data.get("age_value") == 72.5
         assert data.get("age_unit") == "years"
 
-    def test_extension_slots_intact_after_upgrade(self, client: HippoClient) -> None:
+    def test_extension_slots_intact_after_upgrade(self, client: MosaicClient) -> None:
         """BrainDonor-specific fields survive the migration unchanged (§9 S5 'intact')."""
         packages, _, _ = self._packages([])
 
@@ -632,7 +632,7 @@ class TestMultiHopUpgradeHappyPath:
         # is intentional: an un-decoded `1` would pass `== True` but fail this.
         assert data.get("neuropathology_confirmed") is True
 
-    def test_brain_sample_intact_no_migration(self, client: HippoClient) -> None:
+    def test_brain_sample_intact_no_migration(self, client: MosaicClient) -> None:
         """BrainSample is unchanged — no version bump, data survives end-to-end gate."""
         packages, _, _ = self._packages([])
 
@@ -650,7 +650,7 @@ class TestMultiHopUpgradeHappyPath:
         assert len(samples) == 1
         assert samples[0]["data"].get("brain_region") == "prefrontal cortex"
 
-    def test_provenance_supersession_lineage(self, client: HippoClient) -> None:
+    def test_provenance_supersession_lineage(self, client: MosaicClient) -> None:
         """Migrated records carry supersession events with package actor + reason (§7.8).
 
         Subject goes through 2 hops: s1 → s1' (hop1, actor=subject) → s1'' (hop2, actor=subject).
@@ -693,7 +693,7 @@ class TestMultiHopUpgradeHappyPath:
         assert len(client.query("Subject").items) == 1
         assert len(client.query("BrainDonor").items) == 1
 
-    def test_migration_result_records_three_entries(self, client: HippoClient) -> None:
+    def test_migration_result_records_three_entries(self, client: MosaicClient) -> None:
         """Orchestrator records one migration entry per (package, hop)."""
         packages, _, _ = self._packages([])
 
@@ -730,7 +730,7 @@ class TestStrandedFieldGateFailure:
     """
 
     def test_stranded_brain_donor_blocks_and_rolls_back(
-        self, client: HippoClient
+        self, client: MosaicClient
     ) -> None:
         core = _CorePackage()
         subj = _SubjectModule()
@@ -776,7 +776,7 @@ class TestStrandedFieldGateFailure:
         donors = client.query("BrainDonor").items
         assert len(donors) == 2
 
-    def test_valid_brain_donor_passes_gate(self, client: HippoClient) -> None:
+    def test_valid_brain_donor_passes_gate(self, client: MosaicClient) -> None:
         """When extension provides the complementary step, gate passes green."""
         core = _CorePackage()
         subj = _SubjectModule()

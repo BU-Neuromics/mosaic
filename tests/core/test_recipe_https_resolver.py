@@ -27,11 +27,11 @@ from unittest.mock import patch
 
 import pytest
 
-from hippo.core.exceptions import (
+from mosaic.core.exceptions import (
     RecipeDigestMismatchError,
     RecipeFetchError,
 )
-from hippo.core.recipe import (
+from mosaic.core.recipe import (
     HttpsResolver,
     canonical_content_hash,
     default_recipe_cache_dir,
@@ -289,7 +289,7 @@ class TestFileResolverDigestVerification:
     """``FileResolver`` honours ``expected_digest`` when callers pass one."""
 
     def test_matching_digest_passes(self, tmp_path: Path) -> None:
-        from hippo.core.recipe import FileResolver
+        from mosaic.core.recipe import FileResolver
 
         recipe_dir = _make_recipe(tmp_path)
         digest = canonical_content_hash(recipe_dir)
@@ -299,7 +299,7 @@ class TestFileResolverDigestVerification:
             assert (p / "recipe.yaml").is_file()
 
     def test_mismatch_raises(self, tmp_path: Path) -> None:
-        from hippo.core.recipe import FileResolver
+        from mosaic.core.recipe import FileResolver
 
         recipe_dir = _make_recipe(tmp_path)
         with pytest.raises(RecipeDigestMismatchError):
@@ -309,7 +309,7 @@ class TestFileResolverDigestVerification:
                 pass
 
     def test_no_digest_is_no_op(self, tmp_path: Path) -> None:
-        from hippo.core.recipe import FileResolver
+        from mosaic.core.recipe import FileResolver
 
         recipe_dir = _make_recipe(tmp_path)
         with FileResolver().resolve(str(recipe_dir)) as p:

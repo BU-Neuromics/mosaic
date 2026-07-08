@@ -6,7 +6,7 @@ from typing import Any
 
 import pytest
 
-from hippo.core.context import current_actor, get_current_actor, with_actor
+from mosaic.core.context import current_actor, get_current_actor, with_actor
 
 
 class TestContextVar:
@@ -55,7 +55,7 @@ class TestProvenanceStorePicksUpContextVar:
         return rows
 
     def test_actor_from_context_var_written_to_provenance(self, db_path: str):
-        from hippo.core.storage.adapters.sqlite_adapter import SQLiteAdapter, SQLiteEntity
+        from mosaic.core.storage.adapters.sqlite_adapter import SQLiteAdapter, SQLiteEntity
 
         adapter = SQLiteAdapter(db_path, wal_mode=True, schema_registry=_build_minimal_schema_registry())
         now = "2026-01-01T00:00:00"
@@ -76,7 +76,7 @@ class TestProvenanceStorePicksUpContextVar:
         adapter.close()
 
     def test_fallback_to_unknown_when_no_context(self, db_path: str):
-        from hippo.core.storage.adapters.sqlite_adapter import SQLiteAdapter, SQLiteEntity
+        from mosaic.core.storage.adapters.sqlite_adapter import SQLiteAdapter, SQLiteEntity
 
         adapter = SQLiteAdapter(db_path, wal_mode=True, schema_registry=_build_minimal_schema_registry())
         now = "2026-01-01T00:00:00"
@@ -95,7 +95,7 @@ class TestProvenanceStorePicksUpContextVar:
         adapter.close()
 
     def test_explicit_kwarg_overrides_context_var(self, db_path: str):
-        from hippo.core.storage.adapters.sqlite_adapter import (
+        from mosaic.core.storage.adapters.sqlite_adapter import (
             SQLiteAdapter,
             SQLiteEntity,
         )
@@ -143,7 +143,7 @@ class TestMiddlewareSetsContextVar:
     @pytest.fixture
     def app(self):
         from fastapi import FastAPI, Request
-        from hippo.core.middleware import PassThroughAuthMiddleware
+        from mosaic.core.middleware import PassThroughAuthMiddleware
 
         api = FastAPI()
         api.add_middleware(PassThroughAuthMiddleware)

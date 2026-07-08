@@ -25,18 +25,18 @@ from pathlib import Path
 import pytest
 from typer.testing import CliRunner
 
-import hippo.cli.commands.reference as refmod
-from hippo.cli.commands.reference import (
+import mosaic.cli.commands.reference as refmod
+from mosaic.cli.commands.reference import (
     META_KEY_VERSIONS,
     _find_installed_dependents,
     deprovision_reference,
     install_reference,
 )
-from hippo.cli.main import app
-from hippo.core.exceptions import DeprovisionRefusedError
-from hippo.core.loaders.domain_module import DomainModule
-from hippo.core.loaders.reference import LoadResult, ReferenceLoader
-from hippo.core.meta import get_meta
+from mosaic.cli.main import app
+from mosaic.core.exceptions import DeprovisionRefusedError
+from mosaic.core.loaders.domain_module import DomainModule
+from mosaic.core.loaders.reference import LoadResult, ReferenceLoader
+from mosaic.core.meta import get_meta
 
 
 @pytest.fixture

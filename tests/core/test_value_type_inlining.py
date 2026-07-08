@@ -20,11 +20,11 @@ import tempfile
 
 import pytest
 
-from hippo.core.client import HippoClient
-from hippo.core.schema_typing import SlotKind, build_type_model, exposed_class_names
-from hippo.core.storage.adapters.sqlite_adapter import SQLiteAdapter
-from hippo.core.storage.ddl_generator import DDLGenerator
-from hippo.linkml_bridge import SchemaRegistry, is_value_type
+from mosaic.core.client import MosaicClient
+from mosaic.core.schema_typing import SlotKind, build_type_model, exposed_class_names
+from mosaic.core.storage.adapters.sqlite_adapter import SQLiteAdapter
+from mosaic.core.storage.ddl_generator import DDLGenerator
+from mosaic.linkml_bridge import SchemaRegistry, is_value_type
 
 # Minimal reproduction from issue #90: an abstract Quantity, an
 # identifier-less Mass value object, and a Widget entity that inlines it.
@@ -69,9 +69,9 @@ def db_path():
 
 
 @pytest.fixture
-def client(registry, db_path) -> HippoClient:
+def client(registry, db_path) -> MosaicClient:
     storage = SQLiteAdapter(db_path, schema_registry=registry)
-    return HippoClient(storage=storage, registry=registry)
+    return MosaicClient(storage=storage, registry=registry)
 
 
 class TestDetection:

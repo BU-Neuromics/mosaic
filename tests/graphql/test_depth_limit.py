@@ -3,14 +3,14 @@
 Self-referential relationship fields (``parent: Sample``) make
 arbitrarily deep traversals expressible; the transport caps nesting via
 strawberry's ``QueryDepthLimiter`` (default
-``hippo.graphql.DEFAULT_MAX_QUERY_DEPTH``, configurable per mount).
+``mosaic.graphql.DEFAULT_MAX_QUERY_DEPTH``, configurable per mount).
 """
 
 from __future__ import annotations
 
 from fastapi.testclient import TestClient
 
-from hippo.graphql import DEFAULT_MAX_QUERY_DEPTH, create_graphql_router
+from mosaic.graphql import DEFAULT_MAX_QUERY_DEPTH, create_graphql_router
 from tests.graphql.conftest import AUTH
 
 
@@ -82,7 +82,7 @@ class TestConfigurableDepthLimit:
             assert _depth_errors(rejected), rejected
 
     def test_create_default_app_threads_the_depth_limit(self, hippo_client):
-        from hippo.serve import create_default_app
+        from mosaic.serve import create_default_app
 
         app = create_default_app(
             hippo_client=hippo_client, graphql=True, graphql_max_query_depth=3

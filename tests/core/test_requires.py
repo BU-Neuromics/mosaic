@@ -1,6 +1,6 @@
 """Tests for the schema-level ``requires:`` directive (PTS-227).
 
-Covers parsing (``hippo.requires.parse_requires`` /
+Covers parsing (``mosaic.requires.parse_requires`` /
 ``extract_requires``) and installation cross-checking
 (``check_requires``). The CLI integration is exercised separately in
 ``tests/cli/test_validate_requires.py``.
@@ -13,8 +13,8 @@ from pathlib import Path
 
 import pytest
 
-from hippo.core.exceptions import SchemaError
-from hippo.requires import (
+from mosaic.core.exceptions import SchemaError
+from mosaic.requires import (
     V1_RANGE_REJECT_MESSAGE,
     RequirePin,
     check_requires,
@@ -173,7 +173,7 @@ class TestCheckRequires:
 
     def test_exact_match_pass(self, monkeypatch: pytest.MonkeyPatch):
         monkeypatch.setattr(
-            "hippo.requires._dist_version", lambda name: "3.3"
+            "mosaic.requires._dist_version", lambda name: "3.3"
         )
         errors = check_requires(
             [RequirePin(package_name="hippo-reference-fma", version="3.3")]
@@ -186,7 +186,7 @@ class TestCheckRequires:
         def _missing(name: str) -> str:
             raise PackageNotFoundError(name)
 
-        monkeypatch.setattr("hippo.requires._dist_version", _missing)
+        monkeypatch.setattr("mosaic.requires._dist_version", _missing)
         errors = check_requires(
             [RequirePin(package_name="hippo-reference-fma", version="3.3")]
         )
@@ -194,13 +194,13 @@ class TestCheckRequires:
         msg = errors[0]
         assert "requires hippo-reference-fma" in msg
         assert "is not installed" in msg
-        assert "hippo reference install fma --version 3.3" in msg
+        assert "mosaic reference install fma --version 3.3" in msg
 
     def test_version_mismatch_gives_install_hint(
         self, monkeypatch: pytest.MonkeyPatch
     ):
         monkeypatch.setattr(
-            "hippo.requires._dist_version", lambda name: "3.2"
+            "mosaic.requires._dist_version", lambda name: "3.2"
         )
         errors = check_requires(
             [RequirePin(package_name="hippo-reference-fma", version="3.3")]
@@ -209,7 +209,7 @@ class TestCheckRequires:
         msg = errors[0]
         assert "requires hippo-reference-fma==3.3" in msg
         assert "but version 3.2 is installed" in msg
-        assert "hippo reference install fma --version 3.3" in msg
+        assert "mosaic reference install fma --version 3.3" in msg
 
     def test_pure_schema_package_pins_like_any_other(
         self, monkeypatch: pytest.MonkeyPatch
@@ -218,7 +218,7 @@ class TestCheckRequires:
         # requires:*. The version-pin gate is package-name agnostic — a
         # schema package (no ``hippo-reference-`` prefix) resolves
         # identically to a reference loader once installed.
-        monkeypatch.setattr("hippo.requires._dist_version", lambda name: "1.0")
+        monkeypatch.setattr("mosaic.requires._dist_version", lambda name: "1.0")
         ok = check_requires(
             [RequirePin(package_name="hippo-schema-fake", version="1.0")]
         )
@@ -226,7 +226,7 @@ class TestCheckRequires:
 
         # A mismatch on the same pure-schema package still fails loud with
         # an install hint, proving the gate is live for it.
-        monkeypatch.setattr("hippo.requires._dist_version", lambda name: "0.9")
+        monkeypatch.setattr("mosaic.requires._dist_version", lambda name: "0.9")
         errors = check_requires(
             [RequirePin(package_name="hippo-schema-fake", version="1.0")]
         )
@@ -242,7 +242,7 @@ class TestCheckRequires:
                 return "wrong"  # mismatch
             raise PackageNotFoundError(name)  # missing
 
-        monkeypatch.setattr("hippo.requires._dist_version", _per_pkg)
+        monkeypatch.setattr("mosaic.requires._dist_version", _per_pkg)
         errors = check_requires(
             [
                 RequirePin(package_name="hippo-reference-fma", version="3.3"),

@@ -10,7 +10,7 @@ from pathlib import Path
 
 import pytest
 
-from hippo.core.storage.adapters import SQLiteAdapter
+from mosaic.core.storage.adapters import SQLiteAdapter
 
 
 class TestWALModeConcurrentAccess:

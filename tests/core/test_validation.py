@@ -2,7 +2,7 @@
 
 import pytest
 
-from hippo.core.validation import (
+from mosaic.core.validation import (
     ValidationResult,
     WriteOperation,
     WriteValidator,
@@ -146,7 +146,7 @@ class TestValidatorRegistry:
                 return []
 
         with patch(
-            "hippo.core.validation.validators.entry_points",
+            "mosaic.core.validation.validators.entry_points",
             return_value=MockEntryPoints(),
         ):
             registry = ValidatorRegistry()
@@ -196,7 +196,7 @@ class TestValidatorRegistry:
         from unittest.mock import patch
 
         with patch(
-            "hippo.core.validation.validators.entry_points",
+            "mosaic.core.validation.validators.entry_points",
             return_value=MockEntryPoints(),
         ):
             registry = ValidatorRegistry()

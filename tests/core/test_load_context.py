@@ -1,4 +1,4 @@
-"""End-to-end tests for ``HippoClient.load_context()`` (sec2 §2.14.9 /
+"""End-to-end tests for ``MosaicClient.load_context()`` (sec2 §2.14.9 /
 Decision 2.14.J).
 
 The context manager is the only sanctioned way to enter reference write-log
@@ -27,9 +27,9 @@ from unittest.mock import patch
 
 import pytest
 
-from hippo.core.client import HippoClient
-from hippo.core.storage.adapters.sqlite_adapter import SQLiteAdapter
-from hippo.linkml_bridge import SchemaRegistry
+from mosaic.core.client import MosaicClient
+from mosaic.core.storage.adapters.sqlite_adapter import SQLiteAdapter
+from mosaic.linkml_bridge import SchemaRegistry
 from tests.support.linkml_schemas import build_registry
 
 
@@ -59,9 +59,9 @@ def db_path() -> Iterator[str]:
 
 
 @pytest.fixture
-def client(db_path: str) -> Iterator[HippoClient]:
+def client(db_path: str) -> Iterator[MosaicClient]:
     storage = SQLiteAdapter(db_path, schema_registry=_registry())
-    yield HippoClient(
+    yield MosaicClient(
         storage=storage,
         registry=storage.schema_registry,
         bypass_validation=True,
@@ -83,7 +83,7 @@ def _select_log(db_path: str) -> list[sqlite3.Row]:
 
 
 def test_load_context_outside_block_no_op(
-    client: HippoClient, db_path: str
+    client: MosaicClient, db_path: str
 ) -> None:
     """``client.put()`` outside any ``load_context`` does not write to
     the log — user data writes, REST handlers, and ingestion CLI calls
@@ -96,7 +96,7 @@ def test_load_context_outside_block_no_op(
 
 
 def test_load_context_inside_block_logs_row(
-    client: HippoClient, db_path: str
+    client: MosaicClient, db_path: str
 ) -> None:
     """A single put inside the block records exactly one row keyed by
     ``(loader_name, version, entity_id, entity_type)``.
@@ -114,7 +114,7 @@ def test_load_context_inside_block_logs_row(
 
 
 def test_load_context_exception_rolls_back(
-    client: HippoClient, db_path: str
+    client: MosaicClient, db_path: str
 ) -> None:
     """A failure inside a ``put()`` rolls back BOTH the entity write and
     the would-be log row in the same SQL transaction (sec2 §2.14.9).
@@ -150,7 +150,7 @@ def test_load_context_exception_rolls_back(
     assert client._storage.read("s2") is None
 
 
-def test_load_context_nested_raises(client: HippoClient) -> None:
+def test_load_context_nested_raises(client: MosaicClient) -> None:
     """Entering a ``load_context`` inside another raises — overlapping
     loads are intentionally unsupported in v2.
     """
@@ -165,7 +165,7 @@ def test_load_context_nested_raises(client: HippoClient) -> None:
 
 
 def test_load_context_multi_class(
-    client: HippoClient, db_path: str
+    client: MosaicClient, db_path: str
 ) -> None:
     """Heterogeneous puts in one block produce rows with the right
     ``entity_type`` per row — the log keys on entity class, not just id.
@@ -187,7 +187,7 @@ def test_load_context_multi_class(
 
 
 def test_load_context_duplicate_put_collapsed(
-    client: HippoClient, db_path: str
+    client: MosaicClient, db_path: str
 ) -> None:
     """Re-writing the same ``(loader_name, version, entity_id)`` within
     a single load collapses to one row — the composite PK on
@@ -207,7 +207,7 @@ def test_load_context_duplicate_put_collapsed(
 
 
 def test_load_context_clears_state_after_normal_exit(
-    client: HippoClient, db_path: str
+    client: MosaicClient, db_path: str
 ) -> None:
     """The context manager clears ``_loader_context`` on normal exit so
     subsequent puts revert to the no-op log behavior.
@@ -222,7 +222,7 @@ def test_load_context_clears_state_after_normal_exit(
 
 
 def test_load_context_clears_state_after_exception(
-    client: HippoClient,
+    client: MosaicClient,
 ) -> None:
     """``_loader_context`` must reset even when the block raises so the
     client doesn't stay wedged in logging mode.

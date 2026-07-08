@@ -1,18 +1,18 @@
-"""Integration tests for HippoClient external ID methods."""
+"""Integration tests for MosaicClient external ID methods."""
 
 import os
 import tempfile
 
 import pytest
 
-from hippo.core.client import HippoClient
-from hippo.core.exceptions import EntityNotFoundError
-from hippo.core.storage.adapters.sqlite_adapter import SQLiteAdapter
+from mosaic.core.client import MosaicClient
+from mosaic.core.exceptions import EntityNotFoundError
+from mosaic.core.storage.adapters.sqlite_adapter import SQLiteAdapter
 from tests.conftest import _build_minimal_schema_registry
 
 
-class TestHippoClientExternalId:
-    """Tests for HippoClient external ID methods."""
+class TestMosaicClientExternalId:
+    """Tests for MosaicClient external ID methods."""
 
     @pytest.fixture
     def db_path(self) -> str:
@@ -21,12 +21,12 @@ class TestHippoClientExternalId:
             yield os.path.join(tmpdir, "test_external_id_client.db")
 
     @pytest.fixture
-    def client(self, db_path: str) -> HippoClient:
-        """Create a HippoClient with SQLite storage."""
+    def client(self, db_path: str) -> MosaicClient:
+        """Create a MosaicClient with SQLite storage."""
         storage = SQLiteAdapter(db_path, schema_registry=_build_minimal_schema_registry())
-        return HippoClient(storage=storage, bypass_validation=True)
+        return MosaicClient(storage=storage, bypass_validation=True)
 
-    def test_register_external_id(self, client: HippoClient) -> None:
+    def test_register_external_id(self, client: MosaicClient) -> None:
         """Test registering an external ID for an entity."""
         entity = client.put("Sample", {"id": "test-1", "name": "test"})
 
@@ -36,12 +36,12 @@ class TestHippoClientExternalId:
         assert result["external_id"] == "EXT-001"
         assert result["superseded_at"] is None
 
-    def test_register_external_id_invalid_entity(self, client: HippoClient) -> None:
+    def test_register_external_id_invalid_entity(self, client: MosaicClient) -> None:
         """Test that registering external ID for non-existent entity raises error."""
         with pytest.raises(EntityNotFoundError):
             client.register_external_id("non-existent", "EXT-001")
 
-    def test_get_by_external_id(self, client: HippoClient) -> None:
+    def test_get_by_external_id(self, client: MosaicClient) -> None:
         """Test getting an entity by external ID."""
         entity = client.put("Sample", {"id": "test-1", "name": "test"})
         client.register_external_id(entity["id"], "EXT-001")
@@ -52,12 +52,12 @@ class TestHippoClientExternalId:
         assert result["data"]["name"] == "test"
         assert result["external_id"] == "EXT-001"
 
-    def test_get_by_external_id_not_found(self, client: HippoClient) -> None:
+    def test_get_by_external_id_not_found(self, client: MosaicClient) -> None:
         """Test that get_by_external_id raises error for non-existent ID."""
         with pytest.raises(EntityNotFoundError):
             client.get_by_external_id("NON-EXISTENT")
 
-    def test_supersede_external_id(self, client: HippoClient) -> None:
+    def test_supersede_external_id(self, client: MosaicClient) -> None:
         """Test superseding an external ID."""
         entity = client.put("Sample", {"id": "test-1", "name": "test"})
         client.register_external_id(entity["id"], "EXT-001")
@@ -67,12 +67,12 @@ class TestHippoClientExternalId:
         assert result["external_id"] == "EXT-002"
         assert result["superseded_at"] is None
 
-    def test_supersede_invalid_entity(self, client: HippoClient) -> None:
+    def test_supersede_invalid_entity(self, client: MosaicClient) -> None:
         """Test that superseding for non-existent entity raises error."""
         with pytest.raises(EntityNotFoundError):
             client.supersede("non-existent", "OLD", "NEW")
 
-    def test_list_external_ids(self, client: HippoClient) -> None:
+    def test_list_external_ids(self, client: MosaicClient) -> None:
         """Test listing external IDs for an entity."""
         entity = client.put("Sample", {"id": "test-1", "name": "test"})
         client.register_external_id(entity["id"], "EXT-001")
@@ -84,7 +84,7 @@ class TestHippoClientExternalId:
         external_ids = {r["external_id"] for r in results}
         assert external_ids == {"EXT-001", "EXT-002"}
 
-    def test_list_external_ids_excludes_superseded(self, client: HippoClient) -> None:
+    def test_list_external_ids_excludes_superseded(self, client: MosaicClient) -> None:
         """Test that list_external_ids excludes superseded by default."""
         entity = client.put("Sample", {"id": "test-1", "name": "test"})
         client.register_external_id(entity["id"], "EXT-001")
@@ -95,7 +95,7 @@ class TestHippoClientExternalId:
         assert len(results) == 1
         assert results[0]["external_id"] == "EXT-002"
 
-    def test_list_external_ids_include_superseded(self, client: HippoClient) -> None:
+    def test_list_external_ids_include_superseded(self, client: MosaicClient) -> None:
         """Test that list_external_ids includes superseded when requested."""
         entity = client.put("Sample", {"id": "test-1", "name": "test"})
         client.register_external_id(entity["id"], "EXT-001")
@@ -105,7 +105,7 @@ class TestHippoClientExternalId:
 
         assert len(results) == 2
 
-    def test_get_by_external_id_returns_latest(self, client: HippoClient) -> None:
+    def test_get_by_external_id_returns_latest(self, client: MosaicClient) -> None:
         """Two entities may share an external-id value across distinct source
         systems; the most recently registered active mapping wins.
 
@@ -128,7 +128,7 @@ class TestHippoClientExternalId:
         assert result["id"] == entity2["id"]
 
     def test_register_external_id_duplicate_in_source_system(
-        self, client: HippoClient
+        self, client: MosaicClient
     ) -> None:
         """``(source_system, value)`` is unique among active mappings —
         registering the same pair twice raises an IntegrityError."""
@@ -141,7 +141,7 @@ class TestHippoClientExternalId:
         with pytest.raises(sqlite3.IntegrityError, match="UNIQUE constraint"):
             client.register_external_id(entity2["id"], "DUP-EXT")
 
-    def test_get_by_external_id_archived_entity(self, client: HippoClient) -> None:
+    def test_get_by_external_id_archived_entity(self, client: MosaicClient) -> None:
         """Test get_by_external_id with archived entities."""
         entity = client.put("Sample", {"id": "test-1", "name": "test"})
         client.register_external_id(entity["id"], "EXT-001")

@@ -3,14 +3,14 @@
 import pytest
 from unittest.mock import Mock, MagicMock
 
-from hippo.core.batch_fetcher import (
+from mosaic.core.batch_fetcher import (
     BatchFetcher,
     EntityQuery,
     ExpandableField,
     FetchResult,
     fetch_expanded,
 )
-from hippo.core.expand_path_parser import ExpandPathParser, ParseResult, PathNode
+from mosaic.core.expand_path_parser import ExpandPathParser, ParseResult, PathNode
 
 
 class TestBatchFetcher:

@@ -14,23 +14,23 @@ import pytest
 import yaml
 from linkml_runtime.utils.schemaview import SchemaView
 
-from hippo.core.client import HippoClient
-from hippo.core.exceptions import (
+from mosaic.core.client import MosaicClient
+from mosaic.core.exceptions import (
     DeprovisionRefusedError,
     EntityNotFoundError,
     MigrationFloorError,
     MigrationGateError,
     MigrationStepNotFoundError,
 )
-from hippo.core.loaders.domain_module import (
+from mosaic.core.loaders.domain_module import (
     DomainModule,
     MigrationContext,
     MigrationStep,
 )
-from hippo.core.loaders.reference import LoadResult, ReferenceLoader
-from hippo.core.loaders.schema_package import MigratableData, SchemaPackage
-from hippo.core.storage.adapters.sqlite_adapter import SQLiteAdapter
-from hippo.linkml_bridge import SchemaRegistry, _bundled_importmap
+from mosaic.core.loaders.reference import LoadResult, ReferenceLoader
+from mosaic.core.loaders.schema_package import MigratableData, SchemaPackage
+from mosaic.core.storage.adapters.sqlite_adapter import SQLiteAdapter
+from mosaic.linkml_bridge import SchemaRegistry, _bundled_importmap
 
 
 # ---------------------------------------------------------------------------
@@ -138,12 +138,12 @@ def registry() -> SchemaRegistry:
 
 
 @pytest.fixture
-def client(db_path: str, registry: SchemaRegistry) -> HippoClient:
+def client(db_path: str, registry: SchemaRegistry) -> MosaicClient:
     storage = SQLiteAdapter(db_path, schema_registry=registry)
-    return HippoClient(storage=storage, registry=registry)
+    return MosaicClient(storage=storage, registry=registry)
 
 
-def _seed_v1(client: HippoClient, n: int) -> list[str]:
+def _seed_v1(client: MosaicClient, n: int) -> list[str]:
     """Seed `n` v1-shape Widget records (label only); return their ids."""
     ids = []
     for i in range(n):
@@ -189,11 +189,11 @@ class TestContract:
 
         assert not isinstance(_Ref(), MigratableData)
 
-    def test_provision_is_genus_noop(self, client: HippoClient) -> None:
+    def test_provision_is_genus_noop(self, client: MosaicClient) -> None:
         module = _WidgetModule(_v1_to_v2_set_kind)
         assert module.provision(client, "v2") is None
 
-    def test_deprovision_noop_when_no_live_data(self, client: HippoClient) -> None:
+    def test_deprovision_noop_when_no_live_data(self, client: MosaicClient) -> None:
         # With no live rows in any populates_types class there is nothing
         # to retire, so deprovision returns quietly (S3 refuse-by-default
         # only fires when the module owns live data — see TestDeprovision).
@@ -208,7 +208,7 @@ class TestContract:
 
 class TestSingleHopEvolve:
     def test_migrates_v1_to_v2_writing_new_superseding_old(
-        self, client: HippoClient
+        self, client: MosaicClient
     ) -> None:
         old_ids = _seed_v1(client, 3)
         module = _WidgetModule(_v1_to_v2_set_kind)
@@ -235,7 +235,7 @@ class TestSingleHopEvolve:
             assert superseded["superseded_by"] is not None
 
     def test_writes_supersede_provenance_tagged_as_migration(
-        self, client: HippoClient
+        self, client: MosaicClient
     ) -> None:
         _seed_v1(client, 1)
         module = _WidgetModule(_v1_to_v2_set_kind)
@@ -253,7 +253,7 @@ class TestSingleHopEvolve:
         assert event["state_snapshot"]["reason"] == "widget migration v1→v2"
 
     def test_new_record_has_create_event_and_superseded_by_edge(
-        self, client: HippoClient
+        self, client: MosaicClient
     ) -> None:
         _seed_v1(client, 1)
         module = _WidgetModule(_v1_to_v2_set_kind)
@@ -278,7 +278,7 @@ class TestSingleHopEvolve:
         assert len(rels) == 1
 
     def test_migrates_all_records_not_just_first_page(
-        self, client: HippoClient
+        self, client: MosaicClient
     ) -> None:
         # client.query applies no default page limit; guard that evolve
         # migrates the whole set, not page one (advisor caution).
@@ -302,7 +302,7 @@ class TestSingleHopEvolve:
 
 class TestValidationGate:
     def test_gate_blocks_commit_and_leaves_db_untouched(
-        self, client: HippoClient
+        self, client: MosaicClient
     ) -> None:
         old_ids = _seed_v1(client, 2)
         module = _WidgetModule(_v1_to_v2_bad_type)
@@ -322,7 +322,7 @@ class TestValidationGate:
         assert len(client.query("Widget").items) == 2
 
     def test_gate_error_carries_validation_messages(
-        self, client: HippoClient
+        self, client: MosaicClient
     ) -> None:
         _seed_v1(client, 1)
         module = _WidgetModule(_v1_to_v2_bad_type)
@@ -338,7 +338,7 @@ class TestValidationGate:
         assert any("integer" in m for m in err.errors)
 
     def test_gate_blocks_record_for_undefined_class(
-        self, client: HippoClient
+        self, client: MosaicClient
     ) -> None:
         _seed_v1(client, 1)
         module = _WidgetModule(_v1_to_v2_unknown_class)
@@ -375,7 +375,7 @@ class TestValidationGate:
         reg = SchemaRegistry(
             SchemaView(yaml.safe_dump(overlay), importmap=_bundled_importmap())
         )
-        client = HippoClient(
+        client = MosaicClient(
             storage=SQLiteAdapter(db_path, schema_registry=reg), registry=reg
         )
 
@@ -392,7 +392,7 @@ class TestValidationGate:
     def test_gate_requires_a_schema_backed_client(self) -> None:
         # No registry ⇒ the gate cannot run; evolve refuses rather than
         # committing unvalidated writes.
-        client = HippoClient()
+        client = MosaicClient()
 
         def _stage(ctx: MigrationContext) -> None:
             ctx.plan.put("Widget", {"label": "x"})
@@ -408,13 +408,13 @@ class TestValidationGate:
 
 
 class TestStepResolution:
-    def test_unknown_hop_fails_loud(self, client: HippoClient) -> None:
+    def test_unknown_hop_fails_loud(self, client: MosaicClient) -> None:
         module = _WidgetModule(_v1_to_v2_set_kind)
         with pytest.raises(MigrationStepNotFoundError) as exc_info:
             module.evolve(client, "v2", "v3")
         assert exc_info.value.available_steps == [("v1", "v2")]
 
-    def test_duplicate_step_fails_loud(self, client: HippoClient) -> None:
+    def test_duplicate_step_fails_loud(self, client: MosaicClient) -> None:
         module = _WidgetModule(_v1_to_v2_set_kind, duplicate=True)
         with pytest.raises(MigrationStepNotFoundError):
             module.evolve(client, "v1", "v2")
@@ -486,7 +486,7 @@ class _ChainModule(DomainModule):
 
 class TestMultiHopChain:
     def test_three_hop_composes_intermediate_steps(
-        self, client: HippoClient
+        self, client: MosaicClient
     ) -> None:
         # v1 ─► v2 ─► v3 ─► v4, evolved in one call. Each hop must run
         # exactly once over the 3 live records — never re-touching the
@@ -530,7 +530,7 @@ class TestMultiHopChain:
             assert seen_available
             assert chain_len == 3
 
-    def test_single_hop_is_a_one_edge_path(self, client: HippoClient) -> None:
+    def test_single_hop_is_a_one_edge_path(self, client: MosaicClient) -> None:
         # The resolver has no special-case for single-hop: v1→v2 on the
         # same chain runs exactly one hop.
         _seed_v1(client, 2)
@@ -546,7 +546,7 @@ class TestMultiHopChain:
         assert {w["data"]["kind"] for w in client.query("Widget").items} == {"v2"}
 
     def test_shortcut_edge_is_preferred_over_chain(
-        self, client: HippoClient
+        self, client: MosaicClient
     ) -> None:
         # A direct v1→v4 shortcut alongside the step chain: the BFS path
         # finder picks the one-edge shortcut, so only its transform runs.
@@ -563,7 +563,7 @@ class TestMultiHopChain:
         assert reads == {"v4": 2}
         assert {w["data"]["kind"] for w in client.query("Widget").items} == {"v4"}
 
-    def test_no_op_when_already_at_target(self, client: HippoClient) -> None:
+    def test_no_op_when_already_at_target(self, client: MosaicClient) -> None:
         _seed_v1(client, 2)
         reads: dict[str, int] = {}
         module = _ChainModule([("v1", "v2"), ("v2", "v3")], reads)
@@ -573,7 +573,7 @@ class TestMultiHopChain:
         assert result.created == 0
         assert reads == {}  # no transform ran
 
-    def test_below_floor_fails_loud(self, client: HippoClient) -> None:
+    def test_below_floor_fails_loud(self, client: MosaicClient) -> None:
         # Current version is older than the oldest shipped step (not a node
         # anywhere in the DAG) ⇒ MigrationFloorError naming the floor.
         reads: dict[str, int] = {}
@@ -588,7 +588,7 @@ class TestMultiHopChain:
         assert err.package == "chain"
         assert "v1" in str(err)
 
-    def test_unreachable_target_fails_loud(self, client: HippoClient) -> None:
+    def test_unreachable_target_fails_loud(self, client: MosaicClient) -> None:
         # Target is not reachable from a known current node ⇒ not-found,
         # carrying the declared edges for diagnosis.
         reads: dict[str, int] = {}
@@ -606,7 +606,7 @@ class TestMultiHopChain:
 
 class TestDeprovision:
     def test_refuses_when_module_owns_live_data(
-        self, client: HippoClient
+        self, client: MosaicClient
     ) -> None:
         _seed_v1(client, 3)
         module = _WidgetModule(_v1_to_v2_set_kind)
@@ -621,7 +621,7 @@ class TestDeprovision:
         # Refused ⇒ nothing retired: the live rows are untouched.
         assert len(client.query("Widget").items) == 3
 
-    def test_force_soft_deletes_live_rows(self, client: HippoClient) -> None:
+    def test_force_soft_deletes_live_rows(self, client: MosaicClient) -> None:
         ids = _seed_v1(client, 3)
         module = _WidgetModule(_v1_to_v2_set_kind)
 
@@ -637,7 +637,7 @@ class TestDeprovision:
             assert archived is not None
 
     def test_noop_when_no_live_data_even_without_force(
-        self, client: HippoClient
+        self, client: MosaicClient
     ) -> None:
         module = _WidgetModule(_v1_to_v2_set_kind)
         # No rows seeded ⇒ nothing to refuse, returns quietly.
