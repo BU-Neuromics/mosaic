@@ -3,7 +3,7 @@ the one-time backfill from ``hippo_meta.reference_entity_ids``
 (sec2 §2.14.9, Decision 2.14.J).
 
 Mirrors ``tests/core/test_reference_write_log.py``. Requires a running
-PostgreSQL instance — set ``HIPPO_DATABASE_URL`` (see
+PostgreSQL instance — set ``MOSAIC_DATABASE_URL`` (see
 ``docker-compose.test.yml``).
 """
 
@@ -20,11 +20,13 @@ psycopg = pytest.importorskip("psycopg")
 
 from mosaic.core.meta import set_meta as sqlite_set_meta  # noqa: E402
 
-POSTGRES_URL = os.environ.get("HIPPO_DATABASE_URL")
+POSTGRES_URL = os.environ.get("MOSAIC_DATABASE_URL") or os.environ.get(
+    "HIPPO_DATABASE_URL"
+)
 
 pytestmark = pytest.mark.skipif(
     not POSTGRES_URL,
-    reason="HIPPO_DATABASE_URL not set — skipping PostgreSQL tests",
+    reason="MOSAIC_DATABASE_URL not set — skipping PostgreSQL tests",
 )
 
 

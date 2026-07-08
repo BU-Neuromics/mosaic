@@ -4,7 +4,7 @@ Decision 2.14.J).
 
 Covers the SQLite adapter unconditionally. Postgres parity is covered by
 ``tests/integration/test_reference_write_log_postgres.py`` (gated on
-``HIPPO_DATABASE_URL``).
+``MOSAIC_DATABASE_URL``).
 """
 
 from __future__ import annotations

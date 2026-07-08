@@ -1,12 +1,12 @@
 """As-of reconstruction parity on the PostgreSQL adapter — sec6 §6.8 / ADR-0001
 increment 5.
 
-Gated on a live PostgreSQL (``HIPPO_DATABASE_URL``); skipped otherwise and in
+Gated on a live PostgreSQL (``MOSAIC_DATABASE_URL``); skipped otherwise and in
 ``.[dev]``-only CI, exactly like ``test_postgres_adapter.py``. These mirror the
 SQLite as-of tests (tests/core/test_asof_reconstruction.py) and exist so the
 Postgres parity is covered whenever a real PostgreSQL is available.
 
-    HIPPO_DATABASE_URL=postgresql://hippo_test:hippo_test@localhost:5433/hippo_test \
+    MOSAIC_DATABASE_URL=postgresql://hippo_test:hippo_test@localhost:5433/hippo_test \
         pytest tests/integration/test_postgres_asof.py
 """
 
@@ -16,10 +16,12 @@ import uuid
 import pytest
 
 psycopg = pytest.importorskip("psycopg")
-POSTGRES_URL = os.environ.get("HIPPO_DATABASE_URL")
+POSTGRES_URL = os.environ.get("MOSAIC_DATABASE_URL") or os.environ.get(
+    "HIPPO_DATABASE_URL"
+)
 pytestmark = pytest.mark.skipif(
     not POSTGRES_URL,
-    reason="HIPPO_DATABASE_URL not set — skipping PostgreSQL tests",
+    reason="MOSAIC_DATABASE_URL not set — skipping PostgreSQL tests",
 )
 
 PAST = "2000-01-01T00:00:00+00:00"

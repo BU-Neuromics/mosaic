@@ -1,8 +1,8 @@
 """Integration tests for PostgreSQL storage adapter.
 
-Requires a running PostgreSQL instance. Set HIPPO_DATABASE_URL to connect:
+Requires a running PostgreSQL instance. Set MOSAIC_DATABASE_URL to connect:
 
-    HIPPO_DATABASE_URL=postgresql://hippo_test:hippo_test@localhost:5433/hippo_test pytest tests/integration/test_postgres_adapter.py
+    MOSAIC_DATABASE_URL=postgresql://hippo_test:hippo_test@localhost:5433/hippo_test pytest tests/integration/test_postgres_adapter.py
 
 Use docker-compose.test.yml to start a test PostgreSQL instance:
 
@@ -18,11 +18,13 @@ import pytest
 # Skip all tests if psycopg is not installed or no database URL is set
 psycopg = pytest.importorskip("psycopg")
 
-POSTGRES_URL = os.environ.get("HIPPO_DATABASE_URL")
+POSTGRES_URL = os.environ.get("MOSAIC_DATABASE_URL") or os.environ.get(
+    "HIPPO_DATABASE_URL"
+)
 
 pytestmark = pytest.mark.skipif(
     not POSTGRES_URL,
-    reason="HIPPO_DATABASE_URL not set — skipping PostgreSQL tests",
+    reason="MOSAIC_DATABASE_URL not set — skipping PostgreSQL tests",
 )
 
 

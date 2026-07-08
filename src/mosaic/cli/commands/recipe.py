@@ -141,7 +141,7 @@ def recipe_import(
     db_path: str = typer.Option(
         None,
         "--db-path",
-        help="SQLite database path (default: data/hippo.db).",
+        help="SQLite database path (default: data/mosaic.db).",
     ),
     schema_dir: str = typer.Option(
         None,
@@ -232,7 +232,7 @@ def recipe_export(
     db_path: str = typer.Option(
         None,
         "--db-path",
-        help="SQLite database path (default: data/hippo.db).",
+        help="SQLite database path (default: data/mosaic.db).",
     ),
     schema_dir: str = typer.Option(
         None,
@@ -325,7 +325,7 @@ def recipe_extend(
     db_path: str = typer.Option(
         None,
         "--db-path",
-        help="SQLite database path (default: data/hippo.db).",
+        help="SQLite database path (default: data/mosaic.db).",
     ),
     schema_dir: str = typer.Option(
         None,
@@ -437,7 +437,7 @@ def recipe_export_lockfile(
     db_path: str = typer.Option(
         None,
         "--db-path",
-        help="SQLite database path (default: data/hippo.db).",
+        help="SQLite database path (default: data/mosaic.db).",
     ),
     schema_dir: str = typer.Option(
         None,
@@ -474,7 +474,7 @@ def recipe_install_from_lockfile(
     db_path: str = typer.Option(
         None,
         "--db-path",
-        help="SQLite database path (default: data/hippo.db).",
+        help="SQLite database path (default: data/mosaic.db).",
     ),
     schema_dir: str = typer.Option(
         None,

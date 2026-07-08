@@ -50,12 +50,15 @@ _FILTER_SCAN_LIMIT = 1000
 def _resolve_token(token: str | None) -> str:
     """Resolve the auth token.
 
-    Priority: explicit *token* argument > ``HIPPO_TUI_TOKEN`` env variable >
-    ``dev-token``.
+    Priority: explicit *token* argument > ``MOSAIC_TUI_TOKEN`` env variable
+    (legacy ``HIPPO_TUI_TOKEN`` honored with a ``DeprecationWarning`` —
+    ADR-0004) > ``dev-token``.
     """
     if token is not None:
         return token
-    env_token = os.environ.get("HIPPO_TUI_TOKEN")
+    from mosaic.config.env import get_env
+
+    env_token = get_env("TUI_TOKEN")
     if env_token:
         return env_token
     return _DEFAULT_TOKEN
@@ -83,7 +86,8 @@ class RESTBackend:
 
     Args:
         url: Base URL of the REST API server.
-        token: Bearer token. Falls back to ``HIPPO_TUI_TOKEN`` env var, then
+        token: Bearer token. Falls back to ``MOSAIC_TUI_TOKEN`` (legacy
+            ``HIPPO_TUI_TOKEN``) env var, then
             ``dev-token``.
         status_callback: Optional ``callable(message: str)`` invoked on
             connection errors so the UI can display an error without crashing.

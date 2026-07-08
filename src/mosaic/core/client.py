@@ -167,12 +167,17 @@ class MosaicClient:
     def _reference_cache_root() -> Path:
         """Resolve the root directory holding per-loader reference caches.
 
-        ``$HIPPO_CACHE_DIR`` wins when set (the deployment opts into a
-        custom location, e.g. a CI mount); otherwise we default to
-        ``~/.cache/hippo/references/``. The directory is NOT created
-        here — :meth:`cache_dir_for` handles per-loader mkdir.
+        ``$MOSAIC_CACHE_DIR`` wins when set (the deployment opts into a
+        custom location, e.g. a CI mount; the legacy ``$HIPPO_CACHE_DIR``
+        spelling is honored with a ``DeprecationWarning`` — ADR-0004);
+        otherwise we default to ``~/.cache/hippo/references/`` (the
+        pre-rename on-disk location, kept so installed references stay
+        found). The directory is NOT created here —
+        :meth:`cache_dir_for` handles per-loader mkdir.
         """
-        env = os.environ.get("HIPPO_CACHE_DIR")
+        from mosaic.config.env import get_env
+
+        env = get_env("CACHE_DIR")
         if env:
             return Path(env)
         return Path.home() / ".cache" / "hippo" / "references"
@@ -180,7 +185,7 @@ class MosaicClient:
     def cache_dir_for(self, loader_name: str) -> Path:
         """Return the per-loader cache directory, creating it on demand.
 
-        Resolves to ``$HIPPO_CACHE_DIR/<loader_name>/`` when the env var
+        Resolves to ``$MOSAIC_CACHE_DIR/<loader_name>/`` when the env var
         is set, else ``~/.cache/hippo/references/<loader_name>/``. The
         accessor is stateless: per-loader scoping happens via the
         ``loader_name`` argument so a single ``MosaicClient`` instance can

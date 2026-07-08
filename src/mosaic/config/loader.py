@@ -1,11 +1,13 @@
 """Mosaic runtime-config loader.
 
 Entity schemas are loaded via ``mosaic.linkml_bridge.SchemaRegistry.from_path``;
-this module only handles the top-level ``hippo.yaml`` runtime config.
+this module only handles the top-level ``mosaic.yaml`` runtime config
+(legacy ``hippo.yaml`` is still honored — ADR-0004).
 """
 
+import warnings
 from pathlib import Path
-from typing import Union
+from typing import Optional, Union
 
 import yaml
 from pydantic import ValidationError as PydanticValidationError
@@ -17,8 +19,42 @@ from .core import (
 )
 from .models import MosaicConfig
 
+#: Config filenames auto-detected in a directory, in priority order.
+CONFIG_FILENAMES = ("config.json", "mosaic.yaml", "mosaic.yml")
+#: Legacy filenames (ADR-0004) — still detected, with a DeprecationWarning.
+LEGACY_CONFIG_FILENAMES = ("hippo.yaml", "hippo.yml")
 
-def load_hippo_config(config_path: Union[str, Path]) -> MosaicConfig:
+
+def find_config_file(directory: Optional[Union[str, Path]] = None) -> Optional[Path]:
+    """Return the runtime-config file in *directory* (default: the cwd).
+
+    The single place the config filename convention lives (ADR-0004 /
+    WP-H4): scans :data:`CONFIG_FILENAMES` first — so ``mosaic.yaml`` wins
+    silently over a co-present ``hippo.yaml`` — then falls back to
+    :data:`LEGACY_CONFIG_FILENAMES` with one ``DeprecationWarning`` naming
+    the path that was found. Returns ``None`` when nothing matches.
+    """
+    base = Path(directory) if directory is not None else Path(".")
+    for name in CONFIG_FILENAMES:
+        candidate = base / name
+        if candidate.exists():
+            return candidate
+    for name in LEGACY_CONFIG_FILENAMES:
+        candidate = base / name
+        if candidate.exists():
+            warnings.warn(
+                f"Found legacy config {candidate}; rename it to "
+                "'mosaic.yaml' (the component was renamed to Mosaic, "
+                "ADR-0004). The 'hippo.yaml' fallback will be removed in "
+                "a future release.",
+                DeprecationWarning,
+                stacklevel=2,
+            )
+            return candidate
+    return None
+
+
+def load_mosaic_config(config_path: Union[str, Path]) -> MosaicConfig:
     config_path = Path(config_path)
 
     if not config_path.exists():
@@ -58,3 +94,7 @@ def load_hippo_config(config_path: Union[str, Path]) -> MosaicConfig:
             expected_type=None,
             actual_value=None,
         )
+
+
+# Deprecated alias (ADR-0004): the loader was renamed with the component.
+load_hippo_config = load_mosaic_config  # deprecated

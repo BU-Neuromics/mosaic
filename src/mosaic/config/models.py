@@ -1,4 +1,4 @@
-"""Pydantic models for Mosaic runtime configuration (``hippo.yaml``).
+"""Pydantic models for Mosaic runtime configuration (``mosaic.yaml``).
 
 Entity/class schemas are no longer modeled here — those live in LinkML YAML
 and are accessed via ``mosaic.linkml_bridge.SchemaRegistry``.
@@ -11,7 +11,7 @@ from pydantic import BaseModel, ConfigDict, field_validator
 
 
 class ValidatorDefinition(BaseModel):
-    """Definition of a validator in the hippo.yaml config."""
+    """Definition of a validator in the mosaic.yaml config."""
 
     model_config = ConfigDict(str_strip_whitespace=True)
 
@@ -23,7 +23,7 @@ class ValidatorDefinition(BaseModel):
 
 
 class MosaicConfig(BaseModel):
-    """Top-level hippo.yaml runtime config."""
+    """Top-level mosaic.yaml runtime config."""
 
     model_config = ConfigDict(
         extra="forbid",

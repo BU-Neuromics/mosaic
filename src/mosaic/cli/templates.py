@@ -93,7 +93,7 @@ def get_template_file_content(file_key: str) -> str | None:
         "bibliography_config": """{
   "schema_path": "schema.yaml",
   "storage_backend": "sqlite",
-  "database_url": "data/hippo.db",
+  "database_url": "data/mosaic.db",
   "validation_enabled": true
 }
 """,
@@ -125,7 +125,7 @@ mosaic validate --schema schema.yaml --data path/to/bundle.yaml
 ## Project layout
 
 - `schema.yaml` — LinkML schema (edit to model your own domain)
-- `hippo.yaml` — Mosaic runtime config
+- `mosaic.yaml` — Mosaic runtime config
 - `config.json` — legacy project config
 - `data/` — runtime data and SQLite database
 """,
@@ -133,7 +133,7 @@ mosaic validate --schema schema.yaml --data path/to/bundle.yaml
   "version": "0.1",
   "storage": {
     "type": "sqlite",
-    "path": "hippo.db"
+    "path": "mosaic.db"
   },
   "schema": {
     "type": "linkml"
@@ -144,7 +144,7 @@ mosaic validate --schema schema.yaml --data path/to/bundle.yaml
   "version": "0.1",
   "storage": {
     "type": "sqlite",
-    "path": "hippo.db"
+    "path": "mosaic.db"
   }
 }
 """,
@@ -154,7 +154,7 @@ mosaic validate --schema schema.yaml --data path/to/bundle.yaml
   "description": "Mosaic Metadata Tracking Service Project",
   "storage": {
     "type": "sqlite",
-    "path": "hippo.db"
+    "path": "mosaic.db"
   },
   "schema": {
     "type": "linkml",

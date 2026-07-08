@@ -40,9 +40,17 @@ def test_config_json_db_path_used_when_no_explicit(tmp_path, monkeypatch):
     assert resolved == Path(str(tmp_path / "from_config.db"))
 
 
-def test_default_hippo_db_when_no_config(tmp_path, monkeypatch):
-    """Falls back to hippo.db when config.json is absent."""
+def test_default_mosaic_db_when_no_config(tmp_path, monkeypatch):
+    """Falls back to mosaic.db when config.json is absent."""
     monkeypatch.chdir(tmp_path)
+    resolved = _resolve_db_path(None)
+    assert resolved == Path("mosaic.db")
+
+
+def test_legacy_hippo_db_still_found(tmp_path, monkeypatch):
+    """An existing legacy hippo.db is still picked up (ADR-0004)."""
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "hippo.db").touch()
     resolved = _resolve_db_path(None)
     assert resolved == Path("hippo.db")
 

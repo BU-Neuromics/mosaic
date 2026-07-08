@@ -148,8 +148,8 @@ class InitCommand:
             raise typer.Exit(1)
 
     def _generate_config(self) -> None:
-        """Generate hippo.yaml config file with storage backend settings."""
-        config_path = self.target_path / "hippo.yaml"
+        """Generate mosaic.yaml config file with storage backend settings."""
+        config_path = self.target_path / "mosaic.yaml"
         if config_path.exists() and not self.force:
             return
 
@@ -158,14 +158,14 @@ class InitCommand:
                 "# Mosaic configuration\n"
                 "schema_path: schema.yaml\n"
                 "storage_backend: postgres\n"
-                "database_url: ${HIPPO_DATABASE_URL:-postgresql://localhost:5432/hippo}\n"
+                "database_url: ${MOSAIC_DATABASE_URL:-postgresql://localhost:5432/mosaic}\n"
             )
         else:
             config_content = (
                 "# Mosaic configuration\n"
                 "schema_path: schema.yaml\n"
                 "storage_backend: sqlite\n"
-                "# database_url: data/hippo.db\n"
+                "# database_url: data/mosaic.db\n"
             )
 
         try:

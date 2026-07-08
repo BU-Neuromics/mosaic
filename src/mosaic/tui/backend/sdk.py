@@ -40,7 +40,9 @@ def _resolve_db_path(db_path: str | Path | None) -> Path:
     """Resolve the SQLite database path.
 
     Priority: explicit *db_path* argument > ``config.json`` in cwd >
-    ``data/hippo.db`` (the CLI convention) when it exists > ``hippo.db``.
+    ``data/mosaic.db`` (the CLI convention) when it exists > the legacy
+    ``data/hippo.db`` / ``hippo.db`` when they exist (ADR-0004) >
+    ``mosaic.db``.
     """
     if db_path is not None:
         return Path(db_path)
@@ -55,11 +57,15 @@ def _resolve_db_path(db_path: str | Path | None) -> Path:
         except (json.JSONDecodeError, OSError):
             pass
 
-    cli_default = Path("data/hippo.db")
-    if cli_default.exists():
-        return cli_default
+    for candidate in (
+        Path("data/mosaic.db"),
+        Path("data/hippo.db"),  # legacy (ADR-0004)
+        Path("hippo.db"),  # legacy (ADR-0004)
+    ):
+        if candidate.exists():
+            return candidate
 
-    return Path("hippo.db")
+    return Path("mosaic.db")
 
 
 def _resolve_schema_path(schema_path: str | Path | None) -> Path | None:
@@ -132,8 +138,9 @@ class SDKBackend:
 
     Args:
         db_path: Path/URL of the database. If omitted, falls back to
-            ``config.json`` in the cwd, then ``data/hippo.db``, then
-            ``hippo.db``.
+            ``config.json`` in the cwd, then ``data/mosaic.db``, then
+            the legacy ``data/hippo.db`` / ``hippo.db``, then
+            ``mosaic.db``.
         schema_path: Path to a LinkML schema file or directory. If omitted,
             falls back to ``schemas/`` in the cwd, then the bundled
             ``hippo_core`` schema (framework classes only).

@@ -30,14 +30,50 @@ DEFAULT_BACKEND = "sqlite"
 STORAGE_ADAPTERS_GROUPS = ("mosaic.storage_adapters", "hippo.storage_adapters")
 #: Canonical group name (kept for backwards compatibility).
 STORAGE_ADAPTERS_GROUP = STORAGE_ADAPTERS_GROUPS[0]
-#: Where a SQLite deployment lands when config gives no ``database_url``.
-DEFAULT_SQLITE_PATH = "data/hippo.db"
-#: Config filenames auto-detected in the cwd, in priority order.
-CONFIG_CANDIDATES = ("config.json", "hippo.yaml", "hippo.yml")
+#: Where a *new* SQLite deployment lands when config gives no
+#: ``database_url`` (ADR-0004: renamed from ``data/hippo.db``; an existing
+#: legacy database is still picked up — see :func:`default_sqlite_path`).
+DEFAULT_SQLITE_PATH = "data/mosaic.db"
+#: Legacy default database path (pre-rename deployments).
+LEGACY_SQLITE_PATH = "data/hippo.db"
+#: Config filenames auto-detected in the cwd, in priority order (kept for
+#: backwards compatibility; the lookup itself is centralized in
+#: :func:`mosaic.config.loader.find_config_file`).
+CONFIG_CANDIDATES = (
+    "config.json",
+    "mosaic.yaml",
+    "mosaic.yml",
+    "hippo.yaml",  # legacy (ADR-0004)
+    "hippo.yml",  # legacy (ADR-0004)
+)
 #: Backends whose import failure should hint at an optional extra.
 _BACKEND_EXTRA = {"postgres": "postgres"}
 
 PathLike = Union[str, Path]
+
+
+def default_sqlite_path() -> str:
+    """Resolve the default SQLite database path for a config-less deployment.
+
+    New deployments land at :data:`DEFAULT_SQLITE_PATH` (``data/mosaic.db``).
+    A pre-rename deployment whose database still lives at the legacy
+    ``data/hippo.db`` keeps working: when the new default does not exist
+    but the legacy file does, the legacy path is used and a
+    ``DeprecationWarning`` is emitted (ADR-0004).
+    """
+    import warnings
+
+    if not Path(DEFAULT_SQLITE_PATH).exists() and Path(LEGACY_SQLITE_PATH).exists():
+        warnings.warn(
+            f"Using legacy default database {LEGACY_SQLITE_PATH}; new "
+            f"deployments default to {DEFAULT_SQLITE_PATH} (ADR-0004). "
+            "Set database_url explicitly (or rename the file) to silence "
+            "this warning.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        return LEGACY_SQLITE_PATH
+    return DEFAULT_SQLITE_PATH
 
 
 def build_schema_registry(
@@ -161,7 +197,7 @@ def create_storage_adapter(
     backend = storage_backend or DEFAULT_BACKEND
     if not database_url:
         if backend == "sqlite":
-            database_url = DEFAULT_SQLITE_PATH
+            database_url = default_sqlite_path()
         else:
             raise AdapterError(
                 f"Storage backend {backend!r} requires a database_url.",
@@ -221,17 +257,20 @@ def load_config_autodetect(config_path: Optional[PathLike] = None) -> Any:
     """Load a ``MosaicConfig`` from *config_path*, or auto-detect one in the cwd.
 
     When *config_path* is given it is loaded directly (errors propagate).
-    Otherwise the cwd is scanned for :data:`CONFIG_CANDIDATES`; the first
-    match is loaded. Returns ``None`` when nothing is given and nothing is
-    found, so callers can fall back to built-in defaults.
+    Otherwise the cwd is scanned via
+    :func:`mosaic.config.loader.find_config_file` — ``config.json`` /
+    ``mosaic.yaml`` / ``mosaic.yml`` first, then the legacy ``hippo.yaml``
+    / ``hippo.yml`` spellings with a ``DeprecationWarning`` (ADR-0004).
+    Returns ``None`` when nothing is given and nothing is found, so
+    callers can fall back to built-in defaults.
     """
-    from mosaic.config import load_hippo_config
+    from mosaic.config import find_config_file, load_mosaic_config
 
     if config_path is not None:
-        return load_hippo_config(config_path)
-    for candidate in CONFIG_CANDIDATES:
-        if Path(candidate).exists():
-            return load_hippo_config(candidate)
+        return load_mosaic_config(config_path)
+    found = find_config_file()
+    if found is not None:
+        return load_mosaic_config(found)
     return None
 
 

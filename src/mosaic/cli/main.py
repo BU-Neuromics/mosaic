@@ -64,7 +64,8 @@ def serve(
         "--config",
         "-c",
         help=(
-            "Path to a Mosaic config (config.json / hippo.yaml). If omitted, "
+            "Path to a Mosaic config (config.json / mosaic.yaml; legacy "
+            "hippo.yaml honored). If omitted, "
             "one is auto-detected in the current directory; otherwise the "
             "server falls back to a default SQLite database."
         ),
@@ -96,7 +97,7 @@ def serve(
 
     Usage:
       mosaic serve                       # Auto-detect config in the cwd
-      mosaic serve --config hippo.yaml   # Explicit config
+      mosaic serve --config mosaic.yaml  # Explicit config
       mosaic serve --port 9000           # Start on custom port
       mosaic serve --log-level debug     # Start with debug logging
       mosaic serve --graphql             # Also serve GraphQL at /graphql
@@ -176,7 +177,7 @@ def migrate(
         None, "--schema-dir", help="Path to schema directory (default: schemas/)"
     ),
     db_path: str = typer.Option(
-        None, "--db-path", help="Path to SQLite database (default: data/hippo.db)"
+        None, "--db-path", help="Path to SQLite database (default: data/mosaic.db)"
     ),
 ) -> None:
     """Run schema migrations based on YAML schema definitions."""
@@ -201,7 +202,9 @@ def migrate(
     if db_path:
         database_path = Path(db_path)
     else:
-        database_path = Path("data/hippo.db")
+        from mosaic.core.factory import default_sqlite_path
+
+        database_path = Path(default_sqlite_path())
 
     if not database_path.exists():
         typer.echo(f"Error: Database not found: {database_path}", err=True)
@@ -478,7 +481,8 @@ def _build_schema_registry(schema_path: str | None = None):
 def _get_client(db_path: str | None = None, schema_path: str | None = None):
     """Construct a MosaicClient via the shared config-driven factory.
 
-    Looks for the database at --db-path, then data/hippo.db. When
+    Looks for the database at --db-path, then data/mosaic.db (legacy
+    data/hippo.db). When
     ``schema_path`` is provided, the storage adapter is wired to a
     SchemaRegistry built from that path so writes of user-domain classes
     validate correctly; otherwise only the bundled hippo_core classes
@@ -727,7 +731,7 @@ def schema_safe_deploy(
         None, "--schema-dir", help="Path to schema directory (default: schemas/)"
     ),
     db_path: str = typer.Option(
-        None, "--db-path", help="Path to SQLite database (default: data/hippo.db)"
+        None, "--db-path", help="Path to SQLite database (default: data/mosaic.db)"
     ),
 ) -> None:
     """Validate that schema changes are backward-compatible before deploying.
@@ -747,7 +751,9 @@ def schema_safe_deploy(
         typer.echo(f"Error: Schema directory not found: {schemas_path}", err=True)
         raise typer.Exit(1)
 
-    database_path = Path(db_path) if db_path else Path("data/hippo.db")
+    from mosaic.core.factory import default_sqlite_path
+
+    database_path = Path(db_path) if db_path else Path(default_sqlite_path())
     if not database_path.exists():
         typer.echo("No existing database found — all changes are safe (fresh deploy).")
         return
@@ -826,7 +832,7 @@ def schema_migrate(
         None, "--schema-dir", help="Path to schema directory (default: schemas/)"
     ),
     db_path: str = typer.Option(
-        None, "--db-path", help="Path to SQLite database (default: data/hippo.db)"
+        None, "--db-path", help="Path to SQLite database (default: data/mosaic.db)"
     ),
     dry_run: bool = typer.Option(
         False, "--dry-run", "--preview", help="Preview migrations without applying"
@@ -853,7 +859,9 @@ def schema_migrate(
         typer.echo(f"Error: Schema directory not found: {schemas_path}", err=True)
         raise typer.Exit(1)
 
-    database_path = Path(db_path) if db_path else Path("data/hippo.db")
+    from mosaic.core.factory import default_sqlite_path
+
+    database_path = Path(db_path) if db_path else Path(default_sqlite_path())
     if not database_path.exists():
         typer.echo(f"Error: Database not found: {database_path}", err=True)
         raise typer.Exit(1)
@@ -955,7 +963,7 @@ def reference_install(
         None, "--version", help="Loader-defined version slug (e.g. v1, test)."
     ),
     db_path: str = typer.Option(
-        None, "--db-path", help="SQLite database path (default: data/hippo.db)"
+        None, "--db-path", help="SQLite database path (default: data/mosaic.db)"
     ),
     schema_dir: str = typer.Option(
         None, "--schema-dir", help="Schema directory (default: schemas/)"
@@ -977,7 +985,9 @@ def reference_install(
         render_breakdown,
     )
 
-    db = db_path or "data/hippo.db"
+    from mosaic.core.factory import default_sqlite_path
+
+    db = db_path or default_sqlite_path()
     sd = schema_dir or "schemas"
     try:
         info = find_loader(name)
@@ -1019,7 +1029,7 @@ def reference_upgrade(
         None, "--version", help="Loader-defined target version slug."
     ),
     db_path: str = typer.Option(
-        None, "--db-path", help="SQLite database path (default: data/hippo.db)"
+        None, "--db-path", help="SQLite database path (default: data/mosaic.db)"
     ),
     schema_dir: str = typer.Option(
         None, "--schema-dir", help="Schema directory (default: schemas/)"
@@ -1047,7 +1057,9 @@ def reference_upgrade(
         upgrade_reference,
     )
 
-    db = db_path or "data/hippo.db"
+    from mosaic.core.factory import default_sqlite_path
+
+    db = db_path or default_sqlite_path()
     sd = schema_dir or "schemas"
     try:
         info = find_loader(name)
@@ -1092,7 +1104,7 @@ def reference_migrate_bundle(
         ..., help="Path to a bundle manifest (YAML) pinning the target coordinate."
     ),
     db_path: str = typer.Option(
-        None, "--db-path", help="SQLite database path (default: data/hippo.db)"
+        None, "--db-path", help="SQLite database path (default: data/mosaic.db)"
     ),
     schema_dir: str = typer.Option(
         None, "--schema-dir", help="Schema directory (default: schemas/)"
@@ -1109,7 +1121,9 @@ def reference_migrate_bundle(
     """
     from mosaic.cli.commands.reference import migrate_bundle
 
-    db = db_path or "data/hippo.db"
+    from mosaic.core.factory import default_sqlite_path
+
+    db = db_path or default_sqlite_path()
     sd = schema_dir or "schemas"
     try:
         result = migrate_bundle(manifest, db_path=db, schema_dir=sd)
@@ -1199,7 +1213,7 @@ def reference_exposure(
 def reference_deprovision(
     name: str = typer.Argument(..., help="Schema-package name (entry-point key)"),
     db_path: str = typer.Option(
-        None, "--db-path", help="SQLite database path (default: data/hippo.db)"
+        None, "--db-path", help="SQLite database path (default: data/mosaic.db)"
     ),
     schema_dir: str = typer.Option(
         None, "--schema-dir", help="Schema directory (default: schemas/)"
@@ -1222,7 +1236,9 @@ def reference_deprovision(
     """
     from mosaic.cli.commands.reference import deprovision_reference
 
-    db = db_path or "data/hippo.db"
+    from mosaic.core.factory import default_sqlite_path
+
+    db = db_path or default_sqlite_path()
     sd = schema_dir or "schemas"
     try:
         result = deprovision_reference(
@@ -1243,7 +1259,7 @@ def reference_deprovision(
 @reference_app.command(name="list")
 def reference_list(
     db_path: str = typer.Option(
-        None, "--db-path", help="SQLite database path (default: data/hippo.db)"
+        None, "--db-path", help="SQLite database path (default: data/mosaic.db)"
     ),
 ) -> None:
     """List discoverable reference loaders + installed versions."""
@@ -1493,12 +1509,12 @@ def tui(
     token: Optional[str] = typer.Option(
         None,
         "--token",
-        help="Bearer token for REST backend (rest mode only; falls back to HIPPO_TUI_TOKEN env)",
+        help="Bearer token for REST backend (rest mode only; falls back to MOSAIC_TUI_TOKEN env (legacy HIPPO_TUI_TOKEN))",
     ),
     db: Optional[str] = typer.Option(
         None,
         "--db",
-        help="Path to SQLite database (sdk mode only; falls back to config.json then hippo.db)",
+        help="Path to SQLite database (sdk mode only; falls back to config.json then mosaic.db)",
     ),
     schema: Optional[str] = typer.Option(
         None,

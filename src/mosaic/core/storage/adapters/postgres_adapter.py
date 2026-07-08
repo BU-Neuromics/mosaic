@@ -1009,7 +1009,8 @@ class PostgresAdapter(EntityStore):
 
     Args:
         database_url: PostgreSQL connection string (e.g. postgresql://user:pass@host:5432/db).
-            Can also be set via HIPPO_DATABASE_URL environment variable.
+            Can also be set via the MOSAIC_DATABASE_URL environment variable
+            (legacy HIPPO_DATABASE_URL honored — ADR-0004).
         schema_registry: LinkML schema registry for schema introspection
             and validation. Required for LinkML-native storage operations.
         min_pool_size: Minimum number of connections in the pool (default: 2).

@@ -95,10 +95,14 @@ def reference_cache_root() -> Path:
 
     Mirrors :meth:`MosaicClient._reference_cache_root` so the CLI can
     operate without instantiating a full client (sec2 §2.14.3,
-    decision D2.14.E). ``$HIPPO_CACHE_DIR`` wins when set; otherwise
-    ``~/.cache/hippo/references/``.
+    decision D2.14.E). ``$MOSAIC_CACHE_DIR`` wins when set (legacy
+    ``$HIPPO_CACHE_DIR`` honored with a ``DeprecationWarning`` —
+    ADR-0004); otherwise ``~/.cache/hippo/references/`` (the pre-rename
+    on-disk location, kept so installed references stay found).
     """
-    env = os.environ.get("HIPPO_CACHE_DIR")
+    from mosaic.config.env import get_env
+
+    env = get_env("CACHE_DIR")
     if env:
         return Path(env)
     return Path.home() / ".cache" / "hippo" / "references"
