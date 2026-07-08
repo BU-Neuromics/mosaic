@@ -1330,6 +1330,37 @@ class PostgresAdapter(EntityStore):
 
             self._migrate_reference_entity_ids(cur)
 
+            self._ensure_fts_tables(conn)
+
+    def _ensure_fts_tables(self, conn: "psycopg.Connection") -> None:
+        """Create FTS shadow tables for every ``hippo_search`` slot.
+
+        SQLite creates FTS tables alongside its per-class typed tables, so
+        a fresh deployment searches out of the box; the Postgres adapter's
+        generic ``entities`` storage never did — ``search()`` crashed with
+        ``relation "fts_<type>_<slot>" does not exist`` on any deployment
+        that hadn't created them explicitly (first real DataHelix
+        certification boot, datahelix#45). Idempotent: ``CREATE TABLE IF
+        NOT EXISTS`` throughout. Content is synced by the ingestion
+        service on write, which skips tables that don't exist — so these
+        must exist from the start for search to ever see anything.
+        """
+        if self.schema_registry is None:
+            return
+        from hippo.core.storage.fts import FTSTableMetadata
+
+        sv = self.schema_registry.schema_view
+        fts = PostgresFTSStore(conn)
+        for class_name in self.schema_registry.class_names():
+            cls = sv.get_class(class_name)
+            if cls is None or cls.abstract:
+                continue
+            for slot, _mode in self.schema_registry.searchable_slots(class_name):
+                fts.create_fts_table(
+                    FTSTableMetadata.generate_table_name(class_name, slot.name),
+                    [slot.name],
+                )
+
     _REFERENCE_WRITE_LOG_MIGRATION_KEY = "_reference_write_log_v1_migrated"
 
     def _migrate_reference_entity_ids(self, cur: "psycopg.Cursor") -> None:

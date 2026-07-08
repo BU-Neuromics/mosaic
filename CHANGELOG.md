@@ -2,6 +2,20 @@
 
 ## [Unreleased]
 
+## v0.10.5 — 2026-07-08 (Postgres FTS parity at init)
+
+### Fixed
+
+- **Search works on a fresh postgres deployment.** SQLite creates FTS
+  shadow tables alongside its typed tables, but the postgres adapter never
+  created them, so `search()` (and the GraphQL `search<T>s` fields) crashed
+  with `relation "fts_<type>_<slot>" does not exist` on any deployment
+  that had not created them explicitly. `_init_database` now creates the
+  shadow tables for every `hippo_search` slot from the schema registry
+  (idempotent), so ingestion syncs content from the first write and search
+  works out of the box. Found by the DataHelix certification golden path
+  (datahelix#45).
+
 ## v0.10.4 — 2026-07-08 (String slots round-trip verbatim)
 
 ### Fixed

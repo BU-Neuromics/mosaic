@@ -457,12 +457,25 @@ class TestPostgresClientFTSWrites:
                 cur.execute(f'DROP TABLE IF EXISTS "{row["tablename"]}" CASCADE')
         adapter.close()
 
-    def test_put_succeeds_when_fts_table_absent(self, fts_client):
+    def test_put_succeeds_with_fts_schema(self, fts_client):
         created = fts_client.put(
             "Sample",
             {"id": str(uuid.uuid4()), "name": "n1", "notes": "searchable text"},
         )
         assert fts_client._storage.read(created["id"]) is not None
+
+    def test_search_finds_seeded_content_on_fresh_deployment(self, fts_client):
+        """No manual FTS-table creation: _init_database creates the shadow
+        tables from the schema (parity with SQLite's typed-table DDL), the
+        ingestion service syncs content on write, and search works out of
+        the box — the certification boot's failure mode (datahelix#45,
+        'relation "fts_sample_notes" does not exist')."""
+        created = fts_client.put(
+            "Sample",
+            {"id": str(uuid.uuid4()), "name": "n2", "notes": "korokke recipe"},
+        )
+        results = fts_client.search("Sample", "korokke")
+        assert [r["id"] for r in results] == [created["id"]]
 
     def test_put_syncs_content_when_fts_table_exists(self, fts_client):
         meta = fts_client._fts_table_metadata["Sample"][0]
