@@ -2,6 +2,23 @@
 
 ## [Unreleased]
 
+## v0.10.6 — 2026-07-08 (Postgres write parity: updates, availability, boolean filters)
+
+### Fixed
+
+- **Updates and availability changes work on postgres.** The ingestion
+  service calls `storage.update_data` / `storage.set_availability` /
+  `storage.mark_superseded` on any adapter; the postgres adapter had none
+  of them, so every SDK/transport update, `set<T>Availability`, and
+  supersede crashed with AttributeError. All three now mirror the SQLite
+  semantics over the generic `entities` table (document update + version
+  bump + provenance; availability flip + `availability_change` record).
+- **Boolean equality filters match on postgres.** `data->>field` yields
+  JSON literals (`true`/`false`) but the filter compared against
+  `str(False) == "False"`, silently matching nothing — boolean facets
+  returned empty sets. Filter values are now rendered as JSONB text.
+  Both found by the DataHelix certification golden path (datahelix#45).
+
 ## v0.10.5 — 2026-07-08 (Postgres FTS parity at init)
 
 ### Fixed

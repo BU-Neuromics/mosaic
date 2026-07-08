@@ -496,3 +496,60 @@ class TestPostgresClientFTSWrites:
             )
             row = cur.fetchone()
         assert row is not None and "korokke" in row["content"]
+
+
+class TestPostgresWriteParity:
+    """Postgres mirrors of SQLite's mutation surface (datahelix#45).
+
+    The ingestion service's update path calls ``storage.update_data`` and the
+    availability service calls ``storage.set_availability`` on ANY adapter —
+    Postgres previously had neither, so every SDK/transport update or
+    availability change crashed with AttributeError. Boolean filters also
+    matched nothing: ``data->>field`` yields ``true``/``false`` while the
+    filter compared against ``str(False) == "False"``.
+    """
+
+    @pytest.fixture
+    def parity_client(self, adapter):
+        from hippo.core.client import HippoClient
+
+        return HippoClient(storage=adapter, bypass_validation=True)
+
+    def test_update_existing_entity(self, parity_client):
+        created = parity_client.put(
+            "Sample", {"id": str(uuid.uuid4()), "name": "before"}
+        )
+        updated = parity_client.put(
+            "Sample", {"name": "after"}, created["id"]
+        )
+        assert updated["version"] == 2
+        got = parity_client.get("Sample", created["id"])
+        assert got["data"]["name"] == "after"
+
+    def test_set_availability_bulk(self, parity_client):
+        created = parity_client.put(
+            "Sample", {"id": str(uuid.uuid4()), "name": "to-retire"}
+        )
+        result = parity_client.set_availability_bulk(
+            "Sample", [created["id"]], False, reason="parity test"
+        )
+        assert result["succeeded"] == 1 and result["failed"] == 0
+        from hippo.core.exceptions import EntityNotFoundError
+
+        with pytest.raises(EntityNotFoundError):
+            parity_client.get("Sample", created["id"])
+
+    def test_boolean_filter_matches_jsonb_literals(self, parity_client):
+        from hippo.core.storage import Query
+
+        flagged = parity_client.put(
+            "Sample", {"id": str(uuid.uuid4()), "name": "flagged", "in_print": False}
+        )
+        parity_client.put(
+            "Sample", {"id": str(uuid.uuid4()), "name": "unflagged", "in_print": True}
+        )
+        q = Query()
+        q.entity_type = "Sample"
+        q.filters = [{"field": "in_print", "value": False}]
+        ids = [e.id for e in parity_client._storage.find(q)]
+        assert ids == [flagged["id"]]

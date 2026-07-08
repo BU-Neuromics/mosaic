@@ -1556,6 +1556,113 @@ class PostgresAdapter(EntityStore):
 
         return entity
 
+    @staticmethod
+    def _jsonb_text(value: Any) -> str:
+        """Render a filter value the way ``data->>field`` renders it.
+
+        JSONB text extraction yields JSON literals for scalars —
+        ``true``/``false`` for booleans — while ``str(False)`` is
+        ``"False"``, which silently matches nothing (boolean facets on the
+        DataHelix certification golden path, datahelix#45).
+        """
+        if isinstance(value, bool):
+            return "true" if value else "false"
+        return str(value)
+
+    def update_data(
+        self,
+        entity_id: str,
+        entity_type: str,
+        data: dict[str, Any],
+        new_version: int,
+        actor: Optional[str] = None,
+        operation: str = "update",
+        loader_context: Optional[tuple[str, str]] = None,
+    ) -> None:
+        """Update the stored document and record provenance.
+
+        Postgres mirror of ``SQLiteAdapter.update_data`` — the ingestion
+        service's update path calls this on any adapter, and Postgres
+        previously didn't have it, so every SDK/transport update crashed
+        (datahelix#45 golden path).
+        """
+        with self._transaction() as conn:
+            cur = conn.cursor()
+            cur.execute(
+                "UPDATE entities SET data = %s, version = %s WHERE id = %s",
+                (json.dumps(data), new_version, entity_id),
+            )
+
+            provenance = PostgresProvenanceStore(conn, self._schema_version)
+            provenance.record(
+                entity_id=entity_id,
+                entity_type=entity_type,
+                operation=operation,
+                actor_id=actor,
+                patch=data,
+            )
+
+            if loader_context is not None:
+                loader_name, version = loader_context
+                cur.execute(
+                    "INSERT INTO reference_write_log "
+                    "(loader_name, version, entity_id, entity_type) "
+                    "VALUES (%s, %s, %s, %s) "
+                    "ON CONFLICT (loader_name, version, entity_id) DO NOTHING",
+                    (loader_name, version, entity_id, entity_type),
+                )
+
+    def set_availability(
+        self,
+        entity_id: str,
+        entity_type: str,
+        is_available: bool,
+        actor: Optional[str] = None,
+        reason: Optional[str] = None,
+    ) -> None:
+        """Flip ``is_available`` and record an ``availability_change``.
+
+        Postgres mirror of the SQLite method; does not raise on missing
+        rows so bulk loops can report per-entity success/failure.
+        """
+        with self._transaction() as conn:
+            cur = conn.cursor()
+            cur.execute(
+                "UPDATE entities SET is_available = %s WHERE id = %s",
+                (is_available, entity_id),
+            )
+
+            patch: dict[str, Any] = {"is_available": is_available}
+            if reason is not None:
+                patch["reason"] = reason
+            provenance = PostgresProvenanceStore(conn, self._schema_version)
+            provenance.record(
+                entity_id=entity_id,
+                entity_type=entity_type,
+                operation="availability_change",
+                actor_id=actor,
+                patch=patch,
+            )
+
+    def mark_superseded(
+        self,
+        entity_id: str,
+        entity_type: str,
+        replacement_id: str,
+    ) -> None:
+        """Mark an entity superseded (Postgres mirror of the SQLite method).
+
+        Provenance is the caller's responsibility, matching SQLite.
+        """
+        del entity_type  # storage is generic; kept for interface parity.
+        with self._transaction() as conn:
+            cur = conn.cursor()
+            cur.execute(
+                "UPDATE entities "
+                "SET is_available = FALSE, superseded_by = %s WHERE id = %s",
+                (replacement_id, entity_id),
+            )
+
     def read(self, entity_id: str) -> Optional[PostgresEntity]:
         """Read an entity by its ID (available entities only)."""
         with self._transaction() as conn:
@@ -1689,12 +1796,12 @@ class PostgresAdapter(EntityStore):
                         value = f["value"]
                         filter_clauses.append("data->>%s = %s")
                         params.append(field)
-                        params.append(str(value))
+                        params.append(self._jsonb_text(value))
                     else:
                         for key, value in f.items():
                             filter_clauses.append("data->>%s = %s")
                             params.append(key)
-                            params.append(str(value))
+                            params.append(self._jsonb_text(value))
                 if filter_clauses:
                     sql += " AND (" + joiner.join(filter_clauses) + ")"
 
