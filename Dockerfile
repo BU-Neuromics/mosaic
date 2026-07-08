@@ -1,22 +1,33 @@
 # Hippo — DataHelix metadata tracking service
 # Multi-stage build: install deps -> slim runtime
+#
+# The image carries the graphql and postgres extras: the DataHelix
+# certification compose runs `hippo serve --graphql` against Postgres
+# (certification/compose/docker-compose.certify.yml).
 
 FROM python:3.12-slim AS builder
 
 WORKDIR /build
-COPY pyproject.toml ./
-RUN pip install --no-cache-dir --prefix=/install .
+COPY pyproject.toml README.md ./
+COPY src/ ./src/
+RUN pip install --no-cache-dir --prefix=/install ".[graphql,postgres]"
 
 FROM python:3.12-slim
 
-LABEL org.opencontainers.image.title="hippo" \
-      org.opencontainers.image.description="DataHelix metadata tracking service"
+ARG VERSION=dev
+ARG REVISION=unknown
 
-RUN groupadd -r datahelix && useradd -r -g datahelix -d /app datahelix
+LABEL org.opencontainers.image.title="hippo" \
+      org.opencontainers.image.description="Hippo — LinkML runtime for the DataHelix platform" \
+      org.opencontainers.image.source="https://github.com/BU-Neuromics/hippo" \
+      org.opencontainers.image.licenses="MIT" \
+      org.opencontainers.image.version="${VERSION}" \
+      org.opencontainers.image.revision="${REVISION}"
+
+RUN groupadd -r hippo && useradd -r -g hippo -d /app hippo
 WORKDIR /app
 
 COPY --from=builder /install /usr/local
-COPY src/ ./src/
 
 # Default data and config directories
 RUN mkdir -p /data/hippo-db /app/schemas && chown -R datahelix:datahelix /data /app

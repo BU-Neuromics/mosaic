@@ -2,6 +2,79 @@
 
 ## [Unreleased]
 
+## v0.10.6 — 2026-07-08 (Postgres write parity: updates, availability, boolean filters)
+
+### Fixed
+
+- **Updates and availability changes work on postgres.** The ingestion
+  service calls `storage.update_data` / `storage.set_availability` /
+  `storage.mark_superseded` on any adapter; the postgres adapter had none
+  of them, so every SDK/transport update, `set<T>Availability`, and
+  supersede crashed with AttributeError. All three now mirror the SQLite
+  semantics over the generic `entities` table (document update + version
+  bump + provenance; availability flip + `availability_change` record).
+- **Boolean equality filters match on postgres.** `data->>field` yields
+  JSON literals (`true`/`false`) but the filter compared against
+  `str(False) == "False"`, silently matching nothing — boolean facets
+  returned empty sets. Filter values are now rendered as JSONB text.
+  Both found by the DataHelix certification golden path (datahelix#45).
+
+## v0.10.5 — 2026-07-08 (Postgres FTS parity at init)
+
+### Fixed
+
+- **Search works on a fresh postgres deployment.** SQLite creates FTS
+  shadow tables alongside its typed tables, but the postgres adapter never
+  created them, so `search()` (and the GraphQL `search<T>s` fields) crashed
+  with `relation "fts_<type>_<slot>" does not exist` on any deployment
+  that had not created them explicitly. `_init_database` now creates the
+  shadow tables for every `hippo_search` slot from the schema registry
+  (idempotent), so ingestion syncs content from the first write and search
+  works out of the box. Found by the DataHelix certification golden path
+  (datahelix#45).
+
+## v0.10.4 — 2026-07-08 (String slots round-trip verbatim)
+
+### Fixed
+
+- **Scalar `range: string` slots no longer JSON-decode on read (SQLite
+  adapter).** `_decode_column_value` decoded any stored text that parsed
+  as a JSON container, so a string slot carrying serialized JSON (e.g.
+  Aperture's control-plane `payload` envelopes) came back as a dict and
+  the GraphQL `String` type refused to serialize it, nulling the whole
+  page. The decode is now schema-driven via the new
+  `SchemaRegistry.string_slot_names()` (mirroring the boolean reversal):
+  scalar string slots pass through verbatim; multivalued string slots
+  still decode their JSON arrays. Found by the aperture#15 live-seam
+  reconciliation (datahelix#45).
+
+## v0.10.3 — 2026-07-07 (Postgres FTS write fix)
+
+### Fixed
+
+- **Writes on a postgres deployment no longer crash when the schema declares
+  `hippo_search` slots (#108).** `IngestionService._sync_entity_to_fts`
+  checked FTS-table existence with the SQLite helper (`sqlite_master` + `?`
+  placeholder), which psycopg rejects as "the query has 0 placeholders but 1
+  parameters were passed" — every `put()` failed. The check now goes through
+  the storage adapter's own FTS store. Found by the first real DataHelix
+  certification boot (datahelix#45).
+
+## v0.10.2 — 2026-07-07 (Release pipeline + polymorphic-base reference fix)
+
+### Added
+
+- **Release pipeline (issue #97, DataHelix 1.0 epic P1.1).** Pushing a
+  `vX.Y.Z` tag now builds and publishes a wheel/sdist and a digest-addressed
+  image at `ghcr.io/bu-neuromics/hippo`, attaching the digest as an
+  `image-digest.json` release asset for the DataHelix certification ledger
+  (`composition.lock.json`). PyPI publishing is gated behind the
+  `PYPI_PUBLISH` repository variable pending the distribution-name decision
+  (`hippo` is taken on PyPI). The Dockerfile now actually builds (the old
+  builder stage never copied `src/`) and carries the `graphql` and `postgres`
+  extras the certification compose requires. Process documented in
+  `RELEASING.md`.
+
 ### Fixed
 
 - **References ranged on a polymorphic base class no longer fail their foreign

@@ -403,3 +403,153 @@ class TestPostgresBatchPut:
         assert len(result.relationships) == 1
         assert client._storage.read("pg-donor") is not None
         assert client._storage.read("pg-sample") is not None
+
+
+class TestPostgresClientFTSWrites:
+    """Regression: client writes on postgres with hippo_search schemas.
+
+    The first real DataHelix certification boot (datahelix#45) failed on
+    every write: ``IngestionService._sync_entity_to_fts`` checked FTS-table
+    existence with the SQLite helper (``sqlite_master`` + ``?`` placeholder),
+    which psycopg rejects as "the query has 0 placeholders but 1 parameters
+    were passed". The check must go through the adapter's own FTS store.
+    """
+
+    @pytest.fixture
+    def fts_client(self):
+        from hippo.core.client import HippoClient
+        from hippo.core.storage.adapters.postgres_adapter import PostgresAdapter
+        from tests.support.linkml_schemas import build_registry
+
+        registry = build_registry(
+            {
+                "Sample": {
+                    "attributes": {
+                        "id": {"identifier": True},
+                        "name": {"range": "string", "required": True},
+                        "notes": {
+                            "range": "string",
+                            "annotations": {"hippo_search": "fts5"},
+                        },
+                    }
+                }
+            }
+        )
+        adapter = PostgresAdapter(
+            database_url=POSTGRES_URL,
+            schema_registry=registry,
+            min_pool_size=1,
+            max_pool_size=5,
+        )
+        client = HippoClient(storage=adapter, registry=registry)
+        yield client
+        with adapter._transaction() as conn:
+            cur = conn.cursor()
+            cur.execute('ALTER TABLE "ProvenanceRecord" DISABLE TRIGGER ALL')
+            cur.execute('DELETE FROM "ProvenanceRecord"')
+            cur.execute('ALTER TABLE "ProvenanceRecord" ENABLE TRIGGER ALL')
+            cur.execute("DELETE FROM entities")
+            cur.execute(
+                "SELECT tablename FROM pg_tables "
+                "WHERE schemaname = 'public' AND tablename LIKE 'fts_%'"
+            )
+            for row in cur.fetchall():
+                cur.execute(f'DROP TABLE IF EXISTS "{row["tablename"]}" CASCADE')
+        adapter.close()
+
+    def test_put_succeeds_with_fts_schema(self, fts_client):
+        created = fts_client.put(
+            "Sample",
+            {"id": str(uuid.uuid4()), "name": "n1", "notes": "searchable text"},
+        )
+        assert fts_client._storage.read(created["id"]) is not None
+
+    def test_search_finds_seeded_content_on_fresh_deployment(self, fts_client):
+        """No manual FTS-table creation: _init_database creates the shadow
+        tables from the schema (parity with SQLite's typed-table DDL), the
+        ingestion service syncs content on write, and search works out of
+        the box — the certification boot's failure mode (datahelix#45,
+        'relation "fts_sample_notes" does not exist')."""
+        created = fts_client.put(
+            "Sample",
+            {"id": str(uuid.uuid4()), "name": "n2", "notes": "korokke recipe"},
+        )
+        results = fts_client.search("Sample", "korokke")
+        assert [r["id"] for r in results] == [created["id"]]
+
+    def test_put_syncs_content_when_fts_table_exists(self, fts_client):
+        meta = fts_client._fts_table_metadata["Sample"][0]
+        adapter = fts_client._storage
+        with adapter._transaction() as conn:
+            adapter._get_fts_store(conn).create_fts_table(
+                meta.table_name, meta.get_fts_columns()
+            )
+        created = fts_client.put(
+            "Sample",
+            {"id": str(uuid.uuid4()), "name": "n2", "notes": "korokke recipe"},
+        )
+        with adapter._transaction() as conn:
+            cur = conn.cursor()
+            cur.execute(
+                f"SELECT content FROM {meta.table_name} WHERE entity_id = %s",
+                (created["id"],),
+            )
+            row = cur.fetchone()
+        assert row is not None and "korokke" in row["content"]
+
+
+class TestPostgresWriteParity:
+    """Postgres mirrors of SQLite's mutation surface (datahelix#45).
+
+    The ingestion service's update path calls ``storage.update_data`` and the
+    availability service calls ``storage.set_availability`` on ANY adapter —
+    Postgres previously had neither, so every SDK/transport update or
+    availability change crashed with AttributeError. Boolean filters also
+    matched nothing: ``data->>field`` yields ``true``/``false`` while the
+    filter compared against ``str(False) == "False"``.
+    """
+
+    @pytest.fixture
+    def parity_client(self, adapter):
+        from hippo.core.client import HippoClient
+
+        return HippoClient(storage=adapter, bypass_validation=True)
+
+    def test_update_existing_entity(self, parity_client):
+        created = parity_client.put(
+            "Sample", {"id": str(uuid.uuid4()), "name": "before"}
+        )
+        updated = parity_client.put(
+            "Sample", {"name": "after"}, created["id"]
+        )
+        assert updated["version"] == 2
+        got = parity_client.get("Sample", created["id"])
+        assert got["data"]["name"] == "after"
+
+    def test_set_availability_bulk(self, parity_client):
+        created = parity_client.put(
+            "Sample", {"id": str(uuid.uuid4()), "name": "to-retire"}
+        )
+        result = parity_client.set_availability_bulk(
+            "Sample", [created["id"]], False, reason="parity test"
+        )
+        assert result["succeeded"] == 1 and result["failed"] == 0
+        from hippo.core.exceptions import EntityNotFoundError
+
+        with pytest.raises(EntityNotFoundError):
+            parity_client.get("Sample", created["id"])
+
+    def test_boolean_filter_matches_jsonb_literals(self, parity_client):
+        from hippo.core.storage import Query
+
+        flagged = parity_client.put(
+            "Sample", {"id": str(uuid.uuid4()), "name": "flagged", "in_print": False}
+        )
+        parity_client.put(
+            "Sample", {"id": str(uuid.uuid4()), "name": "unflagged", "in_print": True}
+        )
+        q = Query()
+        q.entity_type = "Sample"
+        q.filters = [{"field": "in_print", "value": False}]
+        ids = [e.id for e in parity_client._storage.find(q)]
+        assert ids == [flagged["id"]]

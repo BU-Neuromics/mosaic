@@ -1272,6 +1272,23 @@ class SchemaRegistry:
             if s.range == "boolean" and not s.multivalued
         }
 
+    def string_slot_names(self, class_name: str) -> set[str]:
+        """Names of scalar slots whose range is ``string``.
+
+        A string slot's stored value must round-trip verbatim; the read
+        side must never JSON-decode it, even when the text happens to
+        parse as a JSON container (e.g. Aperture's control-plane
+        ``payload`` slots carry serialized ``{"v": …, "data": …}``
+        envelopes — see the SQLite adapter's ``_decode_column_value``).
+        Multivalued string slots are excluded: they are stored as JSON
+        arrays and DO need decoding.
+        """
+        return {
+            s.name
+            for s in self.induced_slots(class_name)
+            if s.range == "string" and not s.multivalued
+        }
+
     def reference_loaders(self) -> list[str]:
         """Names of concrete classes that are subclasses of ``ReferenceLoader``.
 
