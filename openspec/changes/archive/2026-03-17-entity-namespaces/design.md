@@ -2,7 +2,7 @@
 
 ## Context
 
-Hippo's schema system currently loads entity definitions from a single flat file (`schema.yaml`). Entity type names are globally unqualified strings (e.g., `"Sample"`, `"Donor"`). As BASS grows and multiple teams evolve independent subsystems, this model breaks down: names collide, files become too large to manage, and there's no structural way to scope ownership or deployment.
+Hippo's schema system currently loads entity definitions from a single flat file (`schema.yaml`). Entity type names are globally unqualified strings (e.g., `"Sample"`, `"Donor"`). As DataHelix grows and multiple teams evolve independent subsystems, this model breaks down: names collide, files become too large to manage, and there's no structural way to scope ownership or deployment.
 
 This design introduces **namespaces** — a first-class concept in the schema loader that partitions entity types into named scopes. It is strictly additive: existing deployments with no `namespace:` key in their schemas continue to work unchanged.
 

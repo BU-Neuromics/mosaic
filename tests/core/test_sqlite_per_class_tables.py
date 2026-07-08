@@ -389,3 +389,86 @@ class TestBooleanRoundTrip:
         assert decode(1) == 1
         # The flag does not disturb JSON-container decoding.
         assert decode('[1, 2]', is_boolean=True) == [1, 2]
+
+
+def _string_payload_registry():
+    return build_registry(
+        {
+            "Document": {
+                "attributes": {
+                    "id": {"identifier": True},
+                    "name": {"range": "string"},
+                    "payload": {"range": "string"},
+                    "tags": {"range": "string", "multivalued": True},
+                }
+            }
+        }
+    )
+
+
+class TestStringRoundTrip:
+    """A scalar string slot's text round-trips verbatim — never JSON-decoded.
+
+    Aperture's control-plane documents store serialized ``{"v": …,
+    "data": …}`` envelopes in a ``range: string`` ``payload`` slot; the
+    read side used to JSON-decode any text that parsed as a container,
+    corrupting the string into a dict that GraphQL's String type then
+    refused to serialize (aperture#15 live-seam finding, datahelix#45).
+    Multivalued string slots still decode: they are stored as JSON arrays.
+    """
+
+    @pytest.fixture
+    def string_db_path(self) -> str:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            yield os.path.join(tmpdir, "strings.db")
+
+    @pytest.fixture
+    def string_client(self, string_db_path: str) -> HippoClient:
+        adapter = SQLiteAdapter(
+            string_db_path, schema_registry=_string_payload_registry()
+        )
+        return HippoClient(
+            storage=adapter,
+            registry=adapter.schema_registry,
+            bypass_validation=True,
+        )
+
+    @pytest.mark.parametrize(
+        "payload",
+        ['{"v": 1, "data": []}', "[1, 2, 3]", "plain text", "{not json"],
+    )
+    def test_json_looking_string_round_trips_verbatim(
+        self, string_client: HippoClient, payload: str
+    ) -> None:
+        result = string_client.put(
+            "Document", {"name": "d1", "payload": payload}
+        )
+        entity_id = result["id"]
+
+        # read()/get() path (_read_per_class).
+        got = string_client.get("Document", entity_id)
+        assert got["data"]["payload"] == payload
+        assert isinstance(got["data"]["payload"], str)
+
+        # find()/query() path (_find_per_class).
+        items = string_client.query("Document").items
+        assert len(items) == 1
+        assert items[0]["data"]["payload"] == payload
+        assert isinstance(items[0]["data"]["payload"], str)
+
+    def test_multivalued_string_slot_still_decodes(
+        self, string_client: HippoClient
+    ) -> None:
+        result = string_client.put(
+            "Document", {"name": "d2", "tags": ["alpha", "beta"]}
+        )
+        got = string_client.get("Document", result["id"])
+        assert got["data"]["tags"] == ["alpha", "beta"]
+
+    def test_decode_column_value_string_flag(self) -> None:
+        decode = SQLiteAdapter._decode_column_value
+        # With the string flag, JSON-looking text passes through verbatim.
+        assert decode('{"v": 1}', is_string=True) == '{"v": 1}'
+        assert decode("[1, 2]", is_string=True) == "[1, 2]"
+        # Without it, containers still decode (multivalued / value types).
+        assert decode("[1, 2]") == [1, 2]

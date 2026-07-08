@@ -35,18 +35,34 @@ _BACKEND_EXTRA = {"postgres": "postgres"}
 PathLike = Union[str, Path]
 
 
-def build_schema_registry(schema_path: Optional[PathLike] = None) -> Any:
+def build_schema_registry(
+    schema_path: Optional[PathLike] = None,
+    *,
+    merge_requires: bool = False,
+) -> Any:
     """Build a ``SchemaRegistry`` from *schema_path* or the bundled hippo_core.
 
     The bundled schema declares only Hippo's framework classes (``Entity``,
     ``ProvenanceRecord``, ``ExternalID``, ...). Callers needing user-domain
     classes (``Sample``, ``Project``, ...) must pass an explicit
     *schema_path*.
+
+    When *merge_requires* is true and *schema_path* declares a ``requires:``
+    block, every installed reference loader it pins is resolved and its
+    schema fragment is merged into the registry, so the result spans the
+    user schema *and* its reference loaders (issue #67). Resolution applies
+    the same installed-version gate as ``hippo validate`` and raises
+    :class:`~hippo.core.exceptions.SchemaError` when a pinned loader is
+    missing or its version disagrees with the pin. A schema with no
+    ``requires:`` is unaffected.
     """
     from hippo.linkml_bridge import SchemaRegistry
 
     if schema_path:
-        return SchemaRegistry.from_path(schema_path)
+        registry = SchemaRegistry.from_path(schema_path)
+        if merge_requires:
+            registry = _merge_required_loaders(registry, schema_path)
+        return registry
 
     import importlib.resources
 
@@ -56,6 +72,21 @@ def build_schema_registry(schema_path: Optional[PathLike] = None) -> Any:
         "hippo_core.yaml"
     )
     return SchemaRegistry(SchemaView(str(hippo_core_path)))
+
+
+def _merge_required_loaders(registry: Any, schema_path: PathLike) -> Any:
+    """Merge the schema's installed ``requires:`` loader fragments into *registry*.
+
+    Returns the original registry unchanged when the schema declares no
+    ``requires:``. The import is function-local to keep module load cheap
+    (discovery walks entry points); it stays within the core layer.
+    """
+    from hippo.core.loaders.discovery import fragment_specs_for_requires
+
+    specs = fragment_specs_for_requires(schema_path)
+    if specs:
+        return registry.with_loader_fragments(specs)
+    return registry
 
 
 def resolve_storage_adapter_class(backend: str) -> type[EntityStore]:
@@ -133,16 +164,25 @@ def create_client(
     schema_path: Optional[PathLike] = None,
     validators_path: Optional[PathLike] = None,
     validation_enabled: bool = True,
+    merge_requires: bool = True,
 ) -> Any:
     """Assemble a configured ``HippoClient``.
 
     The single construction path shared by every transport: builds the
     schema registry, resolves and constructs the storage adapter, wires the
     CEL write-validation pipeline, and returns the client.
+
+    *merge_requires* defaults to true so a deployment whose schema declares
+    ``requires:`` gets a registry that spans its reference loaders with no
+    extra wiring (issue #67) — every transport (CLI, ``hippo serve``, TUI)
+    opens the same spanning deployment the same way. A schema that declares
+    a loader it has not installed fails fast here, mirroring
+    ``hippo validate``. Pass ``merge_requires=False`` to build a registry
+    from the user schema alone.
     """
     from hippo.core.client import HippoClient
 
-    registry = build_schema_registry(schema_path)
+    registry = build_schema_registry(schema_path, merge_requires=merge_requires)
     storage = create_storage_adapter(
         storage_backend=storage_backend,
         database_url=database_url,

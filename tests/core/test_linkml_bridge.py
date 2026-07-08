@@ -673,6 +673,45 @@ class TestAppendOnlyClassesHelper:
         assert "AbstractLog" not in reg.append_only_classes()
 
 
+class TestIsPolymorphicBase:
+    """SchemaRegistry.is_polymorphic_base() — drives FK stripping in the DDL
+    generators so a reference ranged on a base whose subtype instances live in
+    their own tables is stored as plain TEXT rather than a failing FK (#93)."""
+
+    def _reg(self) -> SchemaRegistry:
+        return SchemaRegistry.from_yaml(
+            "id: https://example.org/t\n"
+            "name: t\n"
+            "prefixes: {linkml: 'https://w3id.org/linkml/'}\n"
+            "default_range: string\n"
+            "imports: [linkml:types]\n"
+            "classes:\n"
+            "  AbstractBase:\n"
+            "    abstract: true\n"
+            "    attributes: {id: {identifier: true}}\n"
+            "  ConcreteBase:\n"
+            "    attributes: {id: {identifier: true}}\n"
+            "  Sub:\n"
+            "    is_a: ConcreteBase\n"
+            "  Leaf:\n"
+            "    attributes: {id: {identifier: true}}\n"
+        )
+
+    def test_abstract_base_is_polymorphic(self):
+        assert self._reg().is_polymorphic_base("AbstractBase") is True
+
+    def test_concrete_base_with_subclass_is_polymorphic(self):
+        assert self._reg().is_polymorphic_base("ConcreteBase") is True
+
+    def test_concrete_leaf_is_not_polymorphic(self):
+        # A leaf's instances all live in its own table — its FK is safe.
+        assert self._reg().is_polymorphic_base("Leaf") is False
+        assert self._reg().is_polymorphic_base("Sub") is False
+
+    def test_unknown_class_is_not_polymorphic(self):
+        assert self._reg().is_polymorphic_base("Nope") is False
+
+
 class TestHippoCoreExternalID:
     """ExternalID class shipped in hippo_core (sec3 §3.4, β-refactor PR 1.1).
     First-class lifecycle-tracked entity for cross-system ID mapping. The

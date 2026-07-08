@@ -55,6 +55,7 @@ async def list_entities(
     limit: int = Query(100, ge=1, le=1000, description="Maximum number of results"),
     offset: int = Query(0, ge=0, description="Number of results to skip"),
     filter_mode: str = Query("and", description="Filter composition: 'and' (all match) or 'or' (any match)"),
+    as_of: Optional[str] = Query(None, description="ISO-8601 transaction-time; reconstruct results as the graph stood at this time (sec6 §6.8 / ADR-0001). Omitted = current state."),
     auth: dict = Depends(require_auth),
 ) -> dict[str, Any]:
     """List entities with optional filtering and pagination.
@@ -65,6 +66,7 @@ async def list_entities(
         limit: Maximum number of results to return.
         offset: Number of results to skip.
         filter_mode: How to combine filters — "and" or "or".
+        as_of: Optional ISO-8601 transaction-time for as-of reconstruction.
         auth: Authentication context.
 
     Returns:
@@ -78,6 +80,7 @@ async def list_entities(
         limit=limit,
         offset=offset,
         filter_mode=filter_mode,
+        as_of=as_of,
     )
 
     return {

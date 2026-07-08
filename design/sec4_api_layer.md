@@ -225,6 +225,11 @@ Auto-generated docs available at `/docs` (Swagger UI) and `/redoc`. OpenAPI JSON
 | `POST` | `/entities/{entity_type}/{entity_id}/supersede` | Supersede with another entity |
 | `GET` | `/entities/{entity_type}/{entity_id}/relationships` | List relationships |
 
+> **As-of reads (Proposed — ADR-0001 / sec6 §6.8).** Read endpoints will accept an additive
+> `?as_of=<ISO-8601>` query parameter that reconstructs the response (entity set, state,
+> relationships, schema version) as the graph stood at that transaction-time; omitted = current
+> state. Semantics and reconstruction model in sec6 §6.8.
+
 #### Search endpoints
 
 | Method | Path | Description |
@@ -665,6 +670,11 @@ in `failures` and never roll back sibling successes (the GraphQL analogue of RES
 `hippoSchema` / `hippoEntityType` are Hippo's *domain* schema introspection — the LinkML
 type model the GraphQL surface itself is generated from — distinct from GraphQL's own
 `__schema` introspection.
+
+> **As-of reads (Proposed — ADR-0001 / sec6 §6.8).** Generated query and resolved-traversal
+> fields will gain an additive `asOf: DateTime` argument that reconstructs the result as the
+> graph stood at that transaction-time (omitted = current state). DataLoader batch/cache keys
+> include `asOf` so per-request batching stays correct. Semantics in sec6 §6.8.
 
 `updateX` is a **partial update**: `HippoClient.update` has full-replace (PUT) semantics, so
 the resolver composes the SDK's read and write — the patch is merged over the stored data.

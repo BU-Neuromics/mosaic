@@ -2,15 +2,20 @@
 
 ### 1.1 What Is Hippo?
 
-Hippo is an open source, configurable metadata tracking service. It provides a unified,
-queryable registry of entities, their fields, and their relationships — enabling downstream
-systems, analysis pipelines, and data portals to reliably locate and filter metadata without
-manually managing spreadsheets or bespoke file manifests.
+Hippo is an open source **LinkML runtime**: point it at a LinkML schema and it *becomes* the
+typed, queryable **knowledge graph** that schema describes — its classes, fields, and
+relationships instantiated as storage, validation, API, and query semantics. In a DataHelix
+deployment Hippo is the platform's **structured domain graph** (see the platform
+[`domain-graph.md`](../../platform/design/domain-graph.md)); every query returns a knowledge
+subgraph, enabling downstream systems, analysis pipelines, and portals to reliably locate and
+filter records without manually managing spreadsheets or bespoke file manifests.
 
-Hippo is designed as the first module of a larger platform. It tracks *where data lives*
-and *what it describes* — not the data itself. Raw data files remain in place (e.g., S3,
-local filesystem); Hippo stores the metadata and file locations needed to find and interpret
-them.
+Hippo is designed as the first module of a larger platform. **Metadata tracking** — recording
+*where data lives* and *what it describes*, not the data itself — is Hippo's reference
+application: **one role** it plays (file cataloging), not its defining essence. Raw bulk files
+remain in place (e.g., S3, local filesystem); Hippo holds the structured records and file
+locations needed to find and interpret them. (The intrinsic boundary is structured records vs.
+bulk payloads, not "metadata vs. data" — see the platform domain-graph model.)
 
 Hippo is domain-agnostic: the entity types, fields, and relationships it tracks are defined
 entirely by a schema config file authored for each deployment. For example, an omics research
@@ -45,7 +50,7 @@ Hippo itself has no dependencies on those future modules. They will depend on Hi
 │                                                      │
 │  ┌─────────┐  ┌──────────┐  ┌──────────────────┐    │
 │  │  Hippo  │  │ Module B │  │  Module C        │    │
-│  │  (MTS)  │  │ (future) │  │  (future)        │    │
+│  │(runtime)│  │ (future) │  │  (future)        │    │
 │  │  ◄ HERE │  │          │  │                  │    │
 │  └────┬────┘  └──────────┘  └──────────────────┘    │
 │       │                                              │

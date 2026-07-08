@@ -74,9 +74,21 @@ class ValidatingEntityStore(EntityStore):
         """Delete an entity by its ID."""
         return self._store.delete(entity_id)
 
-    def find(self, query: Any) -> Any:
+    def find(self, query: Any, *, as_of: Any = None) -> Any:
         """Find entities matching a query."""
-        return self._store.find(query)
+        return self._store.find(query, as_of=as_of)
+
+    def history(self, entity_id: str) -> Any:
+        """Delegate provenance history to the wrapped store (sec6 §6.7)."""
+        return self._store.history(entity_id)
+
+    def state_at(self, entity_id: str, timestamp: str) -> Any:
+        """Delegate as-of state reconstruction to the wrapped store (sec6 §6.8)."""
+        return self._store.state_at(entity_id, timestamp)
+
+    def get_temporal(self, entity_ids: List[str], *, as_of: Any = None) -> Any:
+        """Delegate temporal-field derivation to the wrapped store (sec6 §6.8)."""
+        return self._store.get_temporal(entity_ids, as_of=as_of)
 
     def findAll(self) -> Any:
         """Find all entities."""

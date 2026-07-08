@@ -42,11 +42,18 @@ HIPPO_EXTERNAL_XREF = "hippo_external_xref"
 #: Name of the framework-provided external-reference value type (issue #48).
 EXTERNAL_REFERENCE_CLASS = "ExternalReference"
 
-#: hippo_core classes that are structured VALUE types, not entities: they
-#: have no ``id``/lifecycle, get no table or typed-client accessor, and are
-#: stored inline (JSON TEXT) on the entity slot that ranges them. Distinct
-#: from the transport-level INFRASTRUCTURE_CLASSES set in
-#: ``hippo.core.schema_typing`` (which re-uses this constant).
+#: Framework-provided value type that is *always* treated as inline,
+#: independent of schema shape. ``ExternalReference`` is identifier-less so
+#: schema-driven detection (:func:`is_value_type`) already classifies it as a
+#: value type, but it is listed here as a documented baseline and so callers
+#: that lack a ``SchemaView`` can still recognise the built-in.
+#:
+#: As of issue #90 value-type detection is **schema-driven**, not a hardcoded
+#: allowlist: any non-tree-root class with no identifier slot is a value type
+#: (see :func:`is_value_type` / :meth:`SchemaRegistry.value_type_classes`).
+#: This constant is the framework floor; the authoritative per-schema set is
+#: computed from the schema. Distinct from the transport-level
+#: INFRASTRUCTURE_CLASSES set in ``hippo.core.schema_typing``.
 VALUE_TYPE_CLASSES: frozenset[str] = frozenset({EXTERNAL_REFERENCE_CLASS})
 
 HIPPO_ANNOTATION_PREFIX = "hippo_"
@@ -350,6 +357,67 @@ def _flatten_for_validator(sv: SchemaView) -> dict[str, Any]:
     return flat
 
 
+def _has_type_designator(sv: SchemaView, class_name: str) -> bool:
+    """True if ``class_name`` has an induced slot marked ``designates_type``.
+
+    Identifies an explicit polymorphic dispatch base (issue #80). Uses
+    ``class_induced_slots`` so a designator declared on a base is seen on the
+    base itself (and would be on subclasses too).
+    """
+    try:
+        slots = sv.class_induced_slots(class_name)
+    except Exception:
+        return False
+    return any(getattr(s, "designates_type", False) for s in slots)
+
+
+def is_value_type(sv: SchemaView, class_name: str) -> bool:
+    """True if ``class_name`` is an inline VALUE type rather than an entity.
+
+    Schema-driven definition (issue #90): a class is a value type when it
+    has **no identifier slot** (neither ``identifier`` nor ``key``) and is
+    **not a tree-root**. Such a class has no ``id``/lifecycle, gets no table
+    or typed-client accessor, and is stored inline (one JSON TEXT column) on
+    the entity slot that ranges it.
+
+    This replaces the former hardcoded allowlist of one class
+    (``ExternalReference``). The framework's ``ExternalReference`` is
+    identifier-less and so still classifies as a value type, but any
+    identifier-less domain value object — e.g. ``Mass``/``Volume``/
+    ``Concentration`` modeled as subclasses of an abstract ``Quantity`` —
+    now round-trips identically instead of being reified into its own table
+    with a synthetic FK (which silently dropped the inline value on ingest).
+
+    A polymorphic dispatch *base* (a class declaring a ``designates_type``
+    slot, e.g. ``Sample``) is never a value type even if it were
+    identifier-less: its concrete subclasses carry identity and get tables
+    (issue #80). In practice such bases are ``is_a: Entity`` and so have an
+    ``id`` anyway; the guard is belt-and-suspenders.
+    """
+    cls = sv.get_class(class_name)
+    if cls is None:
+        return False
+    if getattr(cls, "tree_root", False):
+        return False
+    if _has_type_designator(sv, class_name):
+        return False
+    try:
+        return sv.get_identifier_slot(class_name, use_key=True) is None
+    except Exception:
+        # A malformed class may throw during identifier resolution; treat it
+        # as a non-value-type and let LinkML's own validation surface it.
+        return False
+
+
+def value_type_class_names(sv: SchemaView) -> frozenset[str]:
+    """Names of every value type in ``sv`` (see :func:`is_value_type`)."""
+    return frozenset(
+        name
+        for name in sv.all_classes(imports=True)
+        if is_value_type(sv, name)
+    )
+
+
 def _build_tree_root_class(sv: SchemaView) -> ClassDefinition:
     """Construct the synthesized ``_HippoInstanceBundle`` tree-root class.
 
@@ -359,6 +427,13 @@ def _build_tree_root_class(sv: SchemaView) -> ClassDefinition:
     snake_case-pluralized class name, overridable via the ``hippo_accessor``
     class annotation. This keeps the wire format aligned with the
     typed-client accessor surface (sec9 §9.8).
+
+    Abstract classes get no accessor, with one exception (issue #80): an
+    explicit polymorphic *base* — an abstract class declaring a
+    ``designates_type`` slot (e.g. ``Sample``) — gets a base-ranged accessor
+    so its inlined collection is ingestable, with instances dispatched to
+    their concrete subclass by the discriminator at ingest time. Plain
+    abstract roots such as ``Entity`` carry no designator and stay excluded.
 
     The returned class is NOT added to ``sv``. ``SchemaRegistry`` injects
     it only into the validator's flat schema so the DDL generator,
@@ -382,13 +457,23 @@ def _build_tree_root_class(sv: SchemaView) -> ClassDefinition:
     attributes: dict[str, SlotDefinition] = {}
     seen_slots: dict[str, str] = {}
     for cls_name, cls in existing.items():
+        # Value types (e.g. ExternalReference, or any identifier-less domain
+        # value object like Mass/Volume) are stored inline on entity slots —
+        # they are not independently ingestable, so they get no tree-root
+        # slot in the instance bundle (issue #90).
+        if is_value_type(sv, cls_name):
+            continue
         if cls.abstract:
-            continue
-        # Value types (e.g. ExternalReference) are stored inline on entity
-        # slots — they are not independently ingestable, so they get no
-        # tree-root slot in the instance bundle.
-        if cls_name in VALUE_TYPE_CLASSES:
-            continue
+            # Abstract classes normally get no accessor — except an explicit
+            # polymorphic *base* (one declaring a `designates_type` slot, e.g.
+            # `Sample`), which gets a base-ranged accessor so its inlined
+            # collection is ingestable; instances dispatch to their concrete
+            # subclass by the discriminator (issue #80). Plain abstract roots
+            # like `Entity` carry no designator and stay excluded.
+            if _has_type_designator(sv, cls_name):
+                pass
+            else:
+                continue
         slot_name = class_accessor_name(cls_name, cls)
         if slot_name in seen_slots:
             from hippo.core.exceptions import SchemaError
@@ -714,6 +799,80 @@ def merge_loader_fragment(
     return _merge_prepared_fragment(deployed_sv, prepared)
 
 
+def _loader_prefix_of(element: Any) -> Optional[str]:
+    """Loader prefix that provided ``element`` (from ``provided_by``), or None.
+
+    ``provided_by`` is injected as ``<loader_name>@<version>`` (Rule 3); the
+    loader name equals the loader's ``default_prefix`` (Rule 1), so the part
+    before ``@`` is exactly the prefix a consumer would use in a CURIE range.
+    """
+    val = annotation_value(element, PROVIDED_BY_ANNOTATION)
+    if isinstance(val, str) and "@" in val:
+        return val.split("@", 1)[0]
+    return None
+
+
+def _resolve_loader_prefixed_ranges(sv: SchemaView) -> SchemaView:
+    """Rewrite consumer slot ranges of the form ``<loader>:<Class>`` to ``<Class>``.
+
+    After a consumer schema is merged with its ``requires:`` loader fragments
+    (issue #67), a slot that referenced a loader class through the documented
+    loader-prefixed CURIE form (e.g. ``range: ensembl:Gene``) is rewritten to
+    the bare merged class name (``Gene``) — but only when a class of that name
+    exists *and* was provided by exactly that loader (matched via the injected
+    ``provided_by`` attribution). The rewrite turns an otherwise-advisory
+    opaque range into a recognized cross-loader reference, so the slot
+    participates in joins/expansion and is validated against the merged class.
+
+    Loader-owned slots/classes (those carrying ``provided_by``) are left
+    untouched: loader-to-loader cross-references stay advisory in v1
+    (decision D2.14.H, spec §2.14.6). Returns ``sv`` unchanged when nothing
+    resolves.
+    """
+    classes = sv.all_classes(imports=True)
+
+    def _resolve(rng: Any) -> Any:
+        if not (isinstance(rng, str) and ":" in rng and "//" not in rng):
+            return rng
+        prefix, _, cname = rng.partition(":")
+        target = classes.get(cname)
+        if target is not None and _loader_prefix_of(target) == prefix:
+            return cname
+        return rng
+
+    schema = sv.schema
+    changed = False
+
+    for slot in (schema.slots or {}).values():
+        if _loader_prefix_of(slot) is not None:
+            continue  # loader-owned top-level slot — advisory (D2.14.H)
+        new = _resolve(slot.range)
+        if new != slot.range:
+            slot.range = new
+            changed = True
+
+    for cls in (schema.classes or {}).values():
+        if _loader_prefix_of(cls) is not None:
+            continue  # loader-owned class — its attribute ranges stay advisory
+        for attr in (cls.attributes or {}).values():
+            new = _resolve(attr.range)
+            if new != attr.range:
+                attr.range = new
+                changed = True
+        for usage in (cls.slot_usage or {}).values():
+            new = _resolve(usage.range)
+            if new != usage.range:
+                usage.range = new
+                changed = True
+
+    if not changed:
+        return sv
+
+    from linkml_runtime.dumpers import yaml_dumper
+
+    return SchemaView(yaml_dumper.dumps(schema), importmap=_bundled_importmap())
+
+
 def merge_loader_fragments(
     deployed_sv: SchemaView,
     specs: list[LoaderFragmentSpec],
@@ -749,6 +908,12 @@ class SchemaRegistry:
     def __init__(self, schema_view: SchemaView) -> None:
         _validate_hippo_annotations(schema_view)
         self._sv = schema_view
+        # Schema-driven set of inline value types (issue #90): identifier-less,
+        # non-tree-root classes stored inline as JSON TEXT rather than reified
+        # into their own table. Computed once — the SchemaView is immutable
+        # after construction. Authoritative over the static VALUE_TYPE_CLASSES
+        # baseline.
+        self._value_type_classes = value_type_class_names(schema_view)
         # Synthesize the wire-format tree-root class once at construction.
         # Kept off the SchemaView so DDL generation, schema-diff, and the
         # typed-client surface stay unaware of it; the validator's flat
@@ -848,11 +1013,28 @@ class SchemaRegistry:
         merged_sv = merge_loader_fragments(
             self._sv, specs, installed_loader_names=installed_loader_names
         )
+        # Resolve consumer `range: <loader>:<Class>` CURIEs against the now-
+        # merged loader classes so cross-loader references are non-advisory
+        # (issue #67, layer 3). No-op when the consumer used bare class names.
+        merged_sv = _resolve_loader_prefixed_ranges(merged_sv)
         return SchemaRegistry(merged_sv)
 
     @property
     def schema_view(self) -> SchemaView:
         return self._sv
+
+    def value_type_classes(self) -> frozenset[str]:
+        """Names of classes that are inline VALUE types, not entities.
+
+        Schema-driven (issue #90): a class is a value type when it has no
+        identifier slot and is not a tree-root — it has no ``id``/lifecycle,
+        gets no table or typed-client accessor, and is stored inline (one
+        JSON TEXT column) on the slot that ranges it. ``ExternalReference``
+        is the framework's built-in example; identifier-less domain value
+        objects (``Mass``, ``Volume``, ``Concentration``) qualify too and
+        round-trip identically. See :func:`is_value_type`.
+        """
+        return self._value_type_classes
 
     def tree_root_class_name(self) -> str:
         """Name of the synthesized tree-root class (``_HippoInstanceBundle``).
@@ -917,6 +1099,122 @@ class SchemaRegistry:
                 refs.append((slot.name, rng))
         return refs
 
+    def multivalued_reference_slots(
+        self, class_name: str
+    ) -> list[tuple[str, str]]:
+        """(slot_name, target_class) for multivalued slots ranged on an entity class.
+
+        These slots get neither a per-class column nor a junction table (the
+        DDL generator filters LinkML's linktables), so Hippo persists them as
+        relationships keyed by the slot name (issue #79 / ADR-0002). Value
+        types (``ExternalReference`` and any identifier-less value object) are
+        excluded — they store inline as JSON TEXT regardless of cardinality.
+        """
+        known = set(self._sv.all_classes().keys())
+        value_types = self.value_type_classes()
+        refs: list[tuple[str, str]] = []
+        for slot in self.induced_slots(class_name):
+            rng = slot.range
+            if (
+                slot.multivalued
+                and rng
+                and rng in known
+                and rng not in value_types
+            ):
+                refs.append((slot.name, rng))
+        return refs
+
+    def has_subclasses(self, class_name: str) -> bool:
+        """True if ``class_name`` has any proper descendant class.
+
+        Marks a class as a polymorphic *base* — instances under its tree-root
+        accessor may be subtype instances that must be dispatched to a concrete
+        subclass rather than stored as the base (issue #80).
+        """
+        return bool(self._sv.class_descendants(class_name, reflexive=False))
+
+    def concrete_subclasses(self, class_name: str) -> list[str]:
+        """Names of concrete (non-abstract) proper descendants of ``class_name``.
+
+        The set of classes an instance under a ``class_name`` collection could
+        legitimately be — surfaced in remediation messages so authors see the
+        valid type-designator values (issue #80).
+        """
+        out: list[str] = []
+        for name in self._sv.class_descendants(class_name, reflexive=False):
+            cls = self._sv.get_class(name)
+            if cls is not None and not getattr(cls, "abstract", False):
+                out.append(name)
+        return out
+
+    def is_polymorphic_base(self, class_name: str) -> bool:
+        """True if a reference *ranged on* ``class_name`` cannot be a plain FK.
+
+        A slot's declared range is a polymorphic base when its instances do not
+        all live in one table an FK could point at:
+
+        * an **abstract** base has no SQL table of its own (the DDL generators
+          emit none), so an FK to it references a non-existent table; and
+        * a **concrete base with concrete subclasses** scatters subtype
+          instances into their own per-subclass tables — ``hippo ingest``
+          dispatches a subtype instance to its own table via the
+          ``designates_type`` discriminator (issue #80), so the base table is
+          never populated for those referents and an FK to it fails
+          ``FOREIGN KEY constraint`` for any subtype referent (issue #93).
+
+        In both cases the reference is stored as a plain TEXT id column instead
+        of a foreign key; the id is resolved across the subtype tables at read
+        time. A concrete leaf class (no subclasses) is *not* a polymorphic base
+        — its FK is safe and kept.
+        """
+        cls = self._sv.get_class(class_name)
+        if cls is None:
+            return False
+        if getattr(cls, "abstract", False):
+            return True
+        return bool(self.concrete_subclasses(class_name))
+
+    def type_designator_slot(self, class_name: str) -> Optional[SlotDefinition]:
+        """The induced slot marked ``designates_type: true`` on ``class_name``.
+
+        This is the polymorphism discriminator (e.g. ``category``): an
+        instance's value for this slot names the concrete subclass it should
+        be instantiated as (issue #80). ``None`` when the class declares no
+        type designator — i.e. it is not a polymorphic dispatch base.
+        Inherited from a base via ``induced_slots`` so subclasses see it too.
+        """
+        for slot in self.induced_slots(class_name):
+            if getattr(slot, "designates_type", False):
+                return slot
+        return None
+
+    def resolve_designated_class(
+        self, base_class: str, value: str
+    ) -> Optional[str]:
+        """Resolve a ``designates_type`` value to a class under ``base_class``.
+
+        Returns the name of the class (``base_class`` itself or one of its
+        descendants) that ``value`` designates, or ``None`` if no candidate
+        matches. Per LinkML the designator value may be the class name, its
+        ``class_uri``, or the CURIE/short form of either — matched in that
+        order (issue #80). Concreteness is the caller's check.
+        """
+        if value is None:
+            return None
+        candidates = self._sv.class_descendants(base_class, reflexive=True)
+        for cand in candidates:
+            cls = self._sv.get_class(cand)
+            if cls is None:
+                continue
+            if cand == value:
+                return cand
+            class_uri = getattr(cls, "class_uri", None)
+            if class_uri and (
+                class_uri == value or class_uri.split(":")[-1] == value
+            ):
+                return cand
+        return None
+
     def external_xref_slots(self, class_name: str) -> list[SlotDefinition]:
         """Slots annotated ``hippo_external_xref: true`` on ``class_name``.
 
@@ -972,6 +1270,23 @@ class SchemaRegistry:
             s.name
             for s in self.induced_slots(class_name)
             if s.range == "boolean" and not s.multivalued
+        }
+
+    def string_slot_names(self, class_name: str) -> set[str]:
+        """Names of scalar slots whose range is ``string``.
+
+        A string slot's stored value must round-trip verbatim; the read
+        side must never JSON-decode it, even when the text happens to
+        parse as a JSON container (e.g. Aperture's control-plane
+        ``payload`` slots carry serialized ``{"v": …, "data": …}``
+        envelopes — see the SQLite adapter's ``_decode_column_value``).
+        Multivalued string slots are excluded: they are stored as JSON
+        arrays and DO need decoding.
+        """
+        return {
+            s.name
+            for s in self.induced_slots(class_name)
+            if s.range == "string" and not s.multivalued
         }
 
     def reference_loaders(self) -> list[str]:

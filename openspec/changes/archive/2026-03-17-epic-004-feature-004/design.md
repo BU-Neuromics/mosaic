@@ -1,6 +1,6 @@
 ## Context
 
-Hippo is the Metadata Tracking Service (MTS) for the BASS platform. Currently, the system tracks entity state but lacks historical tracking and point-in-time query capabilities. Users need to query entity state at specific points in time and view the complete change history for audit and debugging purposes.
+Hippo is the Metadata Tracking Service (MTS) for the DataHelix platform. Currently, the system tracks entity state but lacks historical tracking and point-in-time query capabilities. Users need to query entity state at specific points in time and view the complete change history for audit and debugging purposes.
 
 The implementation affects the Core SDK layer (`hippo/core/`) and requires changes to the data model and query engine.
 

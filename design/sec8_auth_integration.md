@@ -95,8 +95,8 @@ Bridge strips the original `Authorization` header and injects two verified heade
 
 | Header | Content | Example |
 |---|---|---|
-| `X-Bass-Actor` | Authenticated actor identity from the JWT `bass:actor` claim | `alice@uni.edu` |
-| `X-Bass-Roles` | Comma-separated RBAC roles from the JWT `bass:roles` claim | `analyst,viewer` |
+| `X-DataHelix-Actor` | Authenticated actor identity from the JWT `datahelix:actor` claim | `alice@uni.edu` |
+| `X-DataHelix-Roles` | Comma-separated RBAC roles from the JWT `datahelix:roles` claim | `analyst,viewer` |
 
 `BridgeAuthMiddleware` reads these headers and maps them to Hippo's auth model:
 
@@ -120,16 +120,16 @@ _ROLE_PERMISSIONS: dict[str, set[str]] = {
 class BridgeAuthMiddleware(AuthMiddleware):
     """
     Auth middleware for Hippo deployments running behind Bridge.
-    Trusts X-Bass-Actor and X-Bass-Roles headers injected by Bridge.
+    Trusts X-DataHelix-Actor and X-DataHelix-Roles headers injected by Bridge.
     Never validates JWT signatures — that is Bridge's responsibility.
     """
 
     def authenticate(self, request: Request) -> str:
-        actor = request.headers.get("X-Bass-Actor")
+        actor = request.headers.get("X-DataHelix-Actor")
         if not actor:
             raise HTTPException(
                 status_code=401,
-                detail="Missing X-Bass-Actor header. "
+                detail="Missing X-DataHelix-Actor header. "
                        "Requests must be routed through Bridge.",
             )
         return actor
@@ -155,22 +155,22 @@ class BridgeAuthMiddleware(AuthMiddleware):
 
 #### 8.3.1 Header Trust Boundary
 
-`X-Bass-Actor` and `X-Bass-Roles` are only trusted when they arrive from Bridge's internal
+`X-DataHelix-Actor` and `X-DataHelix-Roles` are only trusted when they arrive from Bridge's internal
 network:
 
 - Bridge strips and rewrites these headers on all proxied requests
-- If Hippo receives a request directly (bypassing Bridge) that contains `X-Bass-Actor`,
+- If Hippo receives a request directly (bypassing Bridge) that contains `X-DataHelix-Actor`,
   it must be rejected with `403 Forbidden` — components must not be exposed on the public
   network when Bridge auth is expected
 - The `hippo.yaml` `bridge.trust_proxy` configuration key (CIDR list) controls which source
   IPs are allowed to set these headers; requests from outside this range that carry
-  `X-Bass-Actor` are rejected
+  `X-DataHelix-Actor` are rejected
 
 #### 8.3.2 Backwards Compatibility: `X-Hippo-Actor` Header
 
 The v0.1 `X-Hippo-Actor` header (caller-supplied actor) is superseded when Bridge auth is
 active. `BridgeAuthMiddleware.authenticate()` ignores `X-Hippo-Actor` entirely and reads only
-`X-Bass-Actor`. This prevents actor spoofing — a caller behind Bridge cannot override the
+`X-DataHelix-Actor`. This prevents actor spoofing — a caller behind Bridge cannot override the
 authenticated identity by setting `X-Hippo-Actor`.
 
 In `PassThroughAuthMiddleware` (standalone mode), `X-Hippo-Actor` continues to be read as
@@ -186,7 +186,7 @@ The FastAPI app registers auth middleware as a startup-time dependency:
 # hippo.yaml (relevant keys)
 bridge:
   enabled: true                        # Activates BridgeAuthMiddleware
-  trust_proxy: ["10.0.0.0/8"]         # CIDRs allowed to set X-Bass-* headers
+  trust_proxy: ["10.0.0.0/8"]         # CIDRs allowed to set X-DataHelix-* headers
 ```
 
 At request time the middleware pipeline runs:
@@ -199,7 +199,7 @@ Incoming request
 │  BridgeTrustFilter              │
 │  Verify source IP is in         │
 │  trust_proxy CIDR list          │
-│  → 403 if X-Bass-* set from     │
+│  → 403 if X-DataHelix-* set from     │
 │    untrusted source             │
 └──────────────┬──────────────────┘
                │
@@ -237,7 +237,7 @@ Every Hippo write operation accepts `actor` as an explicit parameter:
   "event_type": "EntityCreated",
   "entity_id": "ent-uuid",
   "entity_type": "Sample",
-  "actor": "alice@uni.edu",          # ← value from X-Bass-Actor (Bridge-verified)
+  "actor": "alice@uni.edu",          # ← value from X-DataHelix-Actor (Bridge-verified)
   "timestamp": "2026-09-14T10:32:11Z",
   "schema_version": "2.1",
   "context": {
@@ -319,7 +319,7 @@ When Bridge proxies a request it may inject an additional header:
 
 | Header | Content |
 |---|---|
-| `X-Bass-Projects` | Comma-separated list of project IDs the actor may access |
+| `X-DataHelix-Projects` | Comma-separated list of project IDs the actor may access |
 
 Route handlers for entity queries pass this list as a filter to the SDK. Entities whose
 `project` field does not appear in the list are excluded from query results.
@@ -337,10 +337,10 @@ appropriate role.
 
 bridge:
   enabled: false                     # Default: standalone mode (PassThroughAuthMiddleware)
-  trust_proxy:                       # Source CIDRs allowed to inject X-Bass-* headers
+  trust_proxy:                       # Source CIDRs allowed to inject X-DataHelix-* headers
     - "127.0.0.1/32"                 # loopback (local dev)
     - "10.0.0.0/8"                   # internal network (production)
-  reject_direct_bass_headers: true   # Reject X-Bass-* from untrusted sources (default: true)
+  reject_direct_datahelix_headers: true   # Reject X-DataHelix-* from untrusted sources (default: true)
 ```
 
 Deployment tiers:
@@ -348,7 +348,7 @@ Deployment tiers:
 | Tier | `bridge.enabled` | Auth middleware | Actor source |
 |---|---|---|---|
 | **Local dev (standalone)** | `false` | `PassThroughAuthMiddleware` | `X-Hippo-Actor` header or `"anonymous"` |
-| **Team server (Bridge-enabled)** | `true` | `BridgeAuthMiddleware` | `X-Bass-Actor` from Bridge |
+| **Team server (Bridge-enabled)** | `true` | `BridgeAuthMiddleware` | `X-DataHelix-Actor` from Bridge |
 | **SDK direct** | N/A | None | `actor=` parameter on SDK calls |
 
 ---
@@ -358,5 +358,5 @@ Deployment tiers:
 | Question | Priority | Notes |
 |---|---|---|
 | Should Hippo validate JWT signatures independently (offline mode)? | Low | Bridge injects actor via header — component JWT validation is redundant. Document the offline-capable pattern if needed. |
-| `X-Bass-Projects` enforcement in SDK — should SDK expose a project filter API? | Medium | Currently enforced at REST route level; SDK has no native project concept. |
+| `X-DataHelix-Projects` enforcement in SDK — should SDK expose a project filter API? | Medium | Currently enforced at REST route level; SDK has no native project concept. |
 | Auth event fan-out — should Bridge push auth events into Hippo's provenance via a webhook? | Medium | Current design keeps logs separate; cross-log correlation via `request_id` is sufficient for v1.0. Revisit if compliance requirements demand a single audit stream. |

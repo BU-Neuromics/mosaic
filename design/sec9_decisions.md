@@ -438,7 +438,7 @@ Review this file before sec9 is considered approved. If any decision is unwelcom
 
 ## 2.14 Reference Loader Contract
 
-Decisions D1–D9 were locked by the Director of Bioinformatics in [PTS-215](/PTS/issues/PTS-215) in response to [GitHub issue #6](https://github.com/VA-NCPTSDBB-Bioinformatics/drylims/issues/6), which identified nine unresolved contract gaps before the downstream `hippo-reference-ensembl` package could ship. The full rationale is in the [PTS-215 plan document](/PTS/issues/PTS-215#document-plan).
+Decisions D1–D9 were locked by the Director of Bioinformatics in [PTS-215](/PTS/issues/PTS-215) in response to [GitHub issue #6](https://github.com/VA-NCPTSDBB-Bioinformatics/DataHelix/issues/6), which identified nine unresolved contract gaps before the downstream `hippo-reference-ensembl` package could ship. The full rationale is in the [PTS-215 plan document](/PTS/issues/PTS-215#document-plan).
 
 ### Decision 2.14.A — Loader-specific sub-commands: entry-point-registered Typer sub-app
 
@@ -507,7 +507,7 @@ Decisions D1–D9 were locked by the Director of Bioinformatics in [PTS-215](/PT
 
 ## 2.14 Reference Loader v2 (PTS-243)
 
-Decisions J–L lock the v2 ReferenceLoader contract in response to [GitHub #15](https://github.com/VA-NCPTSDBB-Bioinformatics/drylims/issues/15) (`--prune-old` opt-in undependable at production scale) and [GitHub #16](https://github.com/VA-NCPTSDBB-Bioinformatics/drylims/issues/16) (`EntityRef` shape). The two issues describe one design surface; the author explicitly asked for a coherent joint decision (#16 §"Relationship to drylims#15"). The full rationale is in this issue ([PTS-243](/PTS/issues/PTS-243)) and the v2 spec sits at [sec2 §2.14.8](sec2_architecture.md) and [§2.14.9](sec2_architecture.md).
+Decisions J–L lock the v2 ReferenceLoader contract in response to [GitHub #15](https://github.com/VA-NCPTSDBB-Bioinformatics/DataHelix/issues/15) (`--prune-old` opt-in undependable at production scale) and [GitHub #16](https://github.com/VA-NCPTSDBB-Bioinformatics/DataHelix/issues/16) (`EntityRef` shape). The two issues describe one design surface; the author explicitly asked for a coherent joint decision (#16 §"Relationship to DataHelix#15"). The full rationale is in this issue ([PTS-243](/PTS/issues/PTS-243)) and the v2 spec sits at [sec2 §2.14.8](sec2_architecture.md) and [§2.14.9](sec2_architecture.md).
 
 ### Decision 2.14.J — `--prune-old` substrate: Hippo-side write log with explicit `load_context` plumbing [NEW 2026-05-22]
 

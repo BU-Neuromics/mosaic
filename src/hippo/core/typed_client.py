@@ -50,6 +50,7 @@ SDK_RESERVED_NAMES: frozenset[str] = frozenset(
         # Core HippoClient attributes currently on the class (verified
         # by TestReservedNamesGuard)
         "add_validator",
+        "batch_put",
         "cache_dir_for",
         "cached_fetch",
         "create",
@@ -87,6 +88,7 @@ SDK_RESERVED_NAMES: frozenset[str] = frozenset(
         "supersede_entity",
         "update",
         "validate",
+        "validate_batch",
         # sec9 §9.8 forward-reserved names — protect against future
         # HippoClient surface additions that callers could already
         # anticipate

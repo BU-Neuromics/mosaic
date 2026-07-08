@@ -15,7 +15,7 @@ This design covers the Write Operation Validation Pipeline for the Hippo Metadat
 - Validation failures must be logged with full context for debugging
 
 ### Stakeholders
-- SDK users (internal BASS platform services)
+- SDK users (internal DataHelix platform services)
 - Integration teams connecting STARLIMS, HALO, Donor DB
 
 ## Goals / Non-Goals

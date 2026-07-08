@@ -218,9 +218,13 @@ def migrate(
 
         from hippo.core.storage.schema_diff import diff_registry_against_database
         from hippo.core.storage.migration import MigrationPlanner, MigrationExecutor
-        from hippo.linkml_bridge import SchemaRegistry
+        from hippo.core.factory import build_schema_registry
 
-        registry = SchemaRegistry.from_path(schemas_path)
+        # merge_requires=True spans the registry over the schema's installed
+        # `requires:` loaders, so a slot ranged on a loader class is planned
+        # correctly and the `requires:` gate runs before any DDL (closes the
+        # docs' "hippo migrate also checks requires:" claim — issue #67).
+        registry = build_schema_registry(schemas_path, merge_requires=True)
         engine, schema_diff = diff_registry_against_database(registry, cursor)
 
         if (
@@ -405,6 +409,14 @@ def validate(
             typer.echo(
                 f"`requires:` satisfied — {len(pins)} reference loader(s) pinned."
             )
+            # Span the registry over the pinned loaders so a `--data` bundle
+            # validates against loader-provided classes too (issue #67). The
+            # version gate already passed above, so skip re-checking here.
+            from hippo.core.loaders.discovery import fragment_specs_for_requires
+
+            specs = fragment_specs_for_requires(schema, check_versions=False)
+            if specs:
+                registry = registry.with_loader_fragments(specs)
 
     if data:
         assert registry is not None
@@ -453,10 +465,14 @@ def _build_schema_registry(schema_path: str | None = None):
     The bundled schema only declares Hippo's framework classes (Entity,
     ProvenanceRecord, ExternalID, ...). Callers that need user-domain
     classes (Sample, Project, ...) must pass an explicit ``schema_path``.
+
+    The registry spans the schema's installed ``requires:`` loaders so an
+    ingested bundle validates against loader-provided classes too (issue
+    #67); a schema with no ``requires:`` is unaffected.
     """
     from hippo.core.factory import build_schema_registry
 
-    return build_schema_registry(schema_path)
+    return build_schema_registry(schema_path, merge_requires=True)
 
 
 def _get_client(db_path: str | None = None, schema_path: str | None = None):
@@ -849,9 +865,11 @@ def schema_migrate(
 
         from hippo.core.storage.schema_diff import diff_registry_against_database
         from hippo.core.storage.migration import MigrationPlanner, MigrationExecutor
-        from hippo.linkml_bridge import SchemaRegistry
+        from hippo.core.factory import build_schema_registry
 
-        registry = SchemaRegistry.from_path(schemas_path)
+        # Span the registry over installed `requires:` loaders (issue #67);
+        # the `requires:` gate runs here before any compat check or DDL.
+        registry = build_schema_registry(schemas_path, merge_requires=True)
         engine, schema_diff = diff_registry_against_database(registry, cursor)
 
         # Backward-compatibility check unless overridden

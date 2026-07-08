@@ -18,6 +18,7 @@ immutability at the database level, mirroring the SQLite adapter's guarantees:
 
 import json
 import hashlib
+import threading
 import uuid
 from contextlib import contextmanager
 from datetime import datetime, timezone
@@ -215,35 +216,55 @@ class PostgresProvenanceStore:
         return results
 
     def get_state_at(self, entity_id: str, timestamp: str) -> Optional[dict[str, Any]]:
+        """Reconstruct entity state as of ``timestamp`` — Postgres mirror of the
+        SQLite path (sec6 §6.8.2): data state = the most recent ``create`` /
+        ``update`` full post-image with ``timestamp <= T``; availability decided
+        by the most recent ``availability_change <= T``. Non-state-replacing
+        records (availability/external_id/supersede) carry deltas and never
+        define the returned state. Same known limitations as the SQLite path."""
         cur = self._conn.cursor()
         cur.execute(
             """SELECT patch, timestamp, operation
                FROM "ProvenanceRecord"
                WHERE entity_id = %s AND timestamp <= %s
-               ORDER BY timestamp DESC
-               LIMIT 1""",
+               ORDER BY timestamp DESC""",
             (entity_id, timestamp),
         )
 
-        row = cur.fetchone()
-        if row is None:
-            return None
+        data_state: Optional[dict[str, Any]] = None
+        data_ts: Optional[Any] = None
+        availability_resolved = False
+        deleted = False
 
-        patch_val = row["patch"]
-        if isinstance(patch_val, str):
-            patch_val = json.loads(patch_val) if patch_val else None
-
-        if row["operation"] == "availability_change" and isinstance(patch_val, dict):
+        for row in cur.fetchall():  # newest first
+            patch_val = row["patch"]
+            if isinstance(patch_val, str):
+                patch_val = json.loads(patch_val) if patch_val else None
+            op = row["operation"]
             if (
-                patch_val.get("status") == "deleted"
-                or patch_val.get("is_available") is False
+                not availability_resolved
+                and op == "availability_change"
+                and isinstance(patch_val, dict)
             ):
-                return None
+                availability_resolved = True
+                if (
+                    patch_val.get("status") == "deleted"
+                    or patch_val.get("is_available") is False
+                ):
+                    deleted = True
+            if data_state is None and op in ("create", "update"):
+                data_state = patch_val
+                data_ts = row["timestamp"]
+            if availability_resolved and data_state is not None:
+                break
+
+        if deleted or data_state is None:
+            return None
 
         return {
             "entity_id": entity_id,
-            "state": patch_val,
-            "timestamp": row["timestamp"],
+            "state": data_state,
+            "timestamp": data_ts,
         }
 
     def get_entity_creation_time(self, entity_id: str) -> Optional[str]:
@@ -269,21 +290,27 @@ class PostgresProvenanceStore:
         return {"created_at": rec.created_at, "updated_at": rec.updated_at}
 
     def get_temporal(
-        self, entity_ids: list[str]
+        self, entity_ids: list[str], *, as_of: Optional[str] = None
     ) -> "dict[str, TemporalRecord]":
-        """Batch sec9 §9.7 temporal derivation (Postgres mirror of the SQLite path)."""
+        """Batch sec9 §9.7 temporal derivation (Postgres mirror of the SQLite path).
+
+        ``as_of`` bounds derivation to ``timestamp <= as_of`` (sec6 §6.8)."""
         from hippo.core.types import TemporalRecord
 
         if not entity_ids:
             return {}
 
+        as_of_clause = " AND timestamp <= %s" if as_of else ""
+        params: tuple[Any, ...] = (
+            (list(entity_ids), as_of) if as_of else (list(entity_ids),)
+        )
         cur = self._conn.cursor()
         cur.execute(
-            """WITH target AS (
+            f"""WITH target AS (
                     SELECT entity_id, operation, timestamp, actor_id,
                            schema_version, patch
                     FROM "ProvenanceRecord"
-                    WHERE entity_id = ANY(%s)
+                    WHERE entity_id = ANY(%s){as_of_clause}
                 ),
                 agg AS (
                     SELECT
@@ -318,7 +345,7 @@ class PostgresProvenanceStore:
                        AND t.timestamp = agg.updated_at
                      LIMIT 1) AS schema_version
                 FROM agg""",
-            (list(entity_ids),),
+            params,
         )
 
         result: dict[str, TemporalRecord] = {}
@@ -332,6 +359,39 @@ class PostgresProvenanceStore:
                 updated_by=row["updated_by"] or None,
             )
         return result
+
+    def entities_created_by(
+        self, as_of: str, entity_type: Optional[str] = None
+    ) -> list[tuple[str, str]]:
+        """Candidate (entity_id, entity_type) set for an as-of query (sec6
+        §6.8.2) — Postgres mirror of the SQLite path."""
+        cur = self._conn.cursor()
+        if entity_type is not None:
+            cur.execute(
+                """SELECT DISTINCT entity_id, entity_type FROM "ProvenanceRecord"
+                   WHERE operation = 'create' AND entity_type = %s
+                     AND timestamp <= %s""",
+                (entity_type, as_of),
+            )
+        else:
+            cur.execute(
+                """SELECT DISTINCT entity_id, entity_type FROM "ProvenanceRecord"
+                   WHERE operation = 'create' AND timestamp <= %s""",
+                (as_of,),
+            )
+        return [(row["entity_id"], row["entity_type"]) for row in cur.fetchall()]
+
+    def state_version_at(self, entity_id: str, as_of: str) -> int:
+        """Entity version as of T — count of create/update records <= as_of."""
+        cur = self._conn.cursor()
+        cur.execute(
+            """SELECT COUNT(*) AS n FROM "ProvenanceRecord"
+               WHERE entity_id = %s AND operation IN ('create', 'update')
+                 AND timestamp <= %s""",
+            (entity_id, as_of),
+        )
+        row = cur.fetchone()
+        return int(row["n"]) if row and row["n"] else 1
 
 
 class PostgresRelationshipRecord:
@@ -473,7 +533,13 @@ class PostgresRelationshipStore:
         source_id: str,
         relationship_type: Optional[str] = None,
         max_depth: int = 10,
+        *,
+        as_of: Optional[str] = None,
     ) -> list[dict[str, Any]]:
+        if as_of is not None:
+            return self._traverse_as_of(
+                source_id, relationship_type, max_depth, as_of
+            )
         cur = self._conn.cursor()
 
         if relationship_type:
@@ -518,6 +584,72 @@ class PostgresRelationshipStore:
                     "depth": row["depth"],
                 }
             )
+        return results
+
+    def _live_edges_at(self, as_of: str) -> list[dict[str, Any]]:
+        """Edges live at as_of (sec6 §6.8.2) — Postgres mirror: replay
+        relationship_add/remove provenance events <= as_of; an edge keyed by
+        (source, target, type) is live iff its latest such event is an add."""
+        cur = self._conn.cursor()
+        cur.execute(
+            """SELECT operation,
+                      patch::jsonb->>'source_id'         AS s,
+                      patch::jsonb->>'target_id'         AS t,
+                      patch::jsonb->>'relationship_type' AS rt,
+                      patch::jsonb->>'relationship_id'   AS rid
+               FROM "ProvenanceRecord"
+               WHERE operation IN ('relationship_add', 'relationship_remove')
+                 AND timestamp <= %s
+               ORDER BY timestamp ASC""",
+            (as_of,),
+        )
+        live: dict[tuple[Any, Any, Any], Optional[str]] = {}
+        for row in cur.fetchall():
+            key = (row["s"], row["t"], row["rt"])
+            if row["operation"] == "relationship_add":
+                live[key] = row["rid"]
+            else:
+                live.pop(key, None)
+        return [
+            {"id": rid, "source_id": s, "target_id": t, "relationship_type": rt}
+            for (s, t, rt), rid in live.items()
+        ]
+
+    def _traverse_as_of(
+        self,
+        source_id: str,
+        relationship_type: Optional[str],
+        max_depth: int,
+        as_of: str,
+    ) -> list[dict[str, Any]]:
+        """Depth-bounded traversal over edges live at as_of (Postgres mirror of
+        the SQLite path; same recursive-CTE semantics)."""
+        from collections import defaultdict, deque
+
+        adjacency: dict[str, list[dict[str, Any]]] = defaultdict(list)
+        for edge in self._live_edges_at(as_of):
+            adjacency[edge["source_id"]].append(edge)
+
+        results: list[dict[str, Any]] = []
+        queue: deque[tuple[dict[str, Any], int]] = deque()
+        for edge in adjacency.get(source_id, []):
+            if relationship_type and edge["relationship_type"] != relationship_type:
+                continue
+            queue.append((edge, 1))
+        while queue:
+            edge, depth = queue.popleft()
+            results.append(
+                {
+                    "id": edge["id"],
+                    "source_id": edge["source_id"],
+                    "target_id": edge["target_id"],
+                    "relationship_type": edge["relationship_type"],
+                    "depth": depth,
+                }
+            )
+            if depth < max_depth:
+                for nxt in adjacency.get(edge["target_id"], []):
+                    queue.append((nxt, depth + 1))
         return results
 
     def _row_to_relationship(self, row: dict) -> PostgresRelationshipRecord:
@@ -898,6 +1030,11 @@ class PostgresAdapter(EntityStore):
         self.max_pool_size = max_pool_size
         self._schema_version = schema_version or ""
         self._provenance_store: Optional[PostgresProvenanceStore] = None
+        # Per-thread staged-transaction state (mirrors SQLiteAdapter): when a
+        # ``staged_transaction`` scope is active, inner ``_transaction`` calls
+        # reuse the pinned connection and defer commit to the outer scope so a
+        # whole batch commits or rolls back as one unit.
+        self._local = threading.local()
 
         try:
             self._pool = ConnectionPool(
@@ -930,7 +1067,21 @@ class PostgresAdapter(EntityStore):
 
     @contextmanager
     def _transaction(self) -> Generator[psycopg.Connection, None, None]:
-        """Get a connection with explicit transaction management."""
+        """Get a connection with explicit transaction management.
+
+        When a :meth:`staged_transaction` scope is active on this thread, inner
+        writes **defer** their commit to that outer scope: this yields the
+        pinned staged connection without committing, so a whole batch (entity
+        rows, provenance, relationships) commits or rolls back as one unit.
+        Reads on the same connection observe the staged (uncommitted) writes,
+        so an intra-batch relationship to an entity created earlier in the same
+        batch resolves.
+        """
+        if getattr(self._local, "staging_depth", 0) > 0:
+            # Inside an outer staged scope: defer commit/rollback to it. On
+            # error, propagate so the staged scope rolls everything back.
+            yield self._local.staged_conn
+            return
         with self._connection() as conn:
             try:
                 yield conn
@@ -938,6 +1089,41 @@ class PostgresAdapter(EntityStore):
             except Exception:
                 conn.rollback()
                 raise
+
+    @contextmanager
+    def staged_transaction(self) -> Generator[psycopg.Connection, None, None]:
+        """Outer commit-or-rollback scope spanning many writes (issue #84).
+
+        Pins one pooled connection for the scope; every inner
+        :meth:`_transaction` defers its commit (see above). All writes commit
+        together on clean exit or roll back together if any exception escapes —
+        the guarantee ``HippoClient.batch_put`` relies on. Nesting is
+        reference-counted: only the outermost scope commits. Mirrors
+        :meth:`SQLiteAdapter.staged_transaction`.
+        """
+        depth = getattr(self._local, "staging_depth", 0)
+        if depth > 0:
+            # Already staging on this thread — join the existing scope.
+            self._local.staging_depth = depth + 1
+            try:
+                yield self._local.staged_conn
+            finally:
+                self._local.staging_depth -= 1
+            return
+        # Outermost scope: check out a dedicated connection. ``_connection``
+        # (the pool context) commits on clean exit and rolls back on exception,
+        # so the whole staged write-set is atomic.
+        with self._connection() as conn:
+            self._local.staged_conn = conn
+            self._local.staging_depth = 1
+            try:
+                yield conn
+            except Exception:
+                conn.rollback()
+                raise
+            finally:
+                self._local.staging_depth = 0
+                self._local.staged_conn = None
 
     def _init_database(self) -> None:
         """Initialize database schema and extensions."""
@@ -1026,6 +1212,11 @@ class PostgresAdapter(EntityStore):
             cur.execute("""
                 CREATE INDEX IF NOT EXISTS idx_ProvenanceRecord_entity_timestamp
                 ON "ProvenanceRecord"(entity_id, timestamp)
+            """)
+            # Type-scoped as-of set selection (sec6 §6.8.4) — Postgres parity.
+            cur.execute("""
+                CREATE INDEX IF NOT EXISTS idx_ProvenanceRecord_type_timestamp
+                ON "ProvenanceRecord"(entity_type, timestamp, entity_id)
             """)
 
             cur.execute("""
@@ -1138,6 +1329,37 @@ class PostgresAdapter(EntityStore):
                 )
 
             self._migrate_reference_entity_ids(cur)
+
+            self._ensure_fts_tables(conn)
+
+    def _ensure_fts_tables(self, conn: "psycopg.Connection") -> None:
+        """Create FTS shadow tables for every ``hippo_search`` slot.
+
+        SQLite creates FTS tables alongside its per-class typed tables, so
+        a fresh deployment searches out of the box; the Postgres adapter's
+        generic ``entities`` storage never did — ``search()`` crashed with
+        ``relation "fts_<type>_<slot>" does not exist`` on any deployment
+        that hadn't created them explicitly (first real DataHelix
+        certification boot, datahelix#45). Idempotent: ``CREATE TABLE IF
+        NOT EXISTS`` throughout. Content is synced by the ingestion
+        service on write, which skips tables that don't exist — so these
+        must exist from the start for search to ever see anything.
+        """
+        if self.schema_registry is None:
+            return
+        from hippo.core.storage.fts import FTSTableMetadata
+
+        sv = self.schema_registry.schema_view
+        fts = PostgresFTSStore(conn)
+        for class_name in self.schema_registry.class_names():
+            cls = sv.get_class(class_name)
+            if cls is None or cls.abstract:
+                continue
+            for slot, _mode in self.schema_registry.searchable_slots(class_name):
+                fts.create_fts_table(
+                    FTSTableMetadata.generate_table_name(class_name, slot.name),
+                    [slot.name],
+                )
 
     _REFERENCE_WRITE_LOG_MIGRATION_KEY = "_reference_write_log_v1_migrated"
 
@@ -1334,6 +1556,113 @@ class PostgresAdapter(EntityStore):
 
         return entity
 
+    @staticmethod
+    def _jsonb_text(value: Any) -> str:
+        """Render a filter value the way ``data->>field`` renders it.
+
+        JSONB text extraction yields JSON literals for scalars —
+        ``true``/``false`` for booleans — while ``str(False)`` is
+        ``"False"``, which silently matches nothing (boolean facets on the
+        DataHelix certification golden path, datahelix#45).
+        """
+        if isinstance(value, bool):
+            return "true" if value else "false"
+        return str(value)
+
+    def update_data(
+        self,
+        entity_id: str,
+        entity_type: str,
+        data: dict[str, Any],
+        new_version: int,
+        actor: Optional[str] = None,
+        operation: str = "update",
+        loader_context: Optional[tuple[str, str]] = None,
+    ) -> None:
+        """Update the stored document and record provenance.
+
+        Postgres mirror of ``SQLiteAdapter.update_data`` — the ingestion
+        service's update path calls this on any adapter, and Postgres
+        previously didn't have it, so every SDK/transport update crashed
+        (datahelix#45 golden path).
+        """
+        with self._transaction() as conn:
+            cur = conn.cursor()
+            cur.execute(
+                "UPDATE entities SET data = %s, version = %s WHERE id = %s",
+                (json.dumps(data), new_version, entity_id),
+            )
+
+            provenance = PostgresProvenanceStore(conn, self._schema_version)
+            provenance.record(
+                entity_id=entity_id,
+                entity_type=entity_type,
+                operation=operation,
+                actor_id=actor,
+                patch=data,
+            )
+
+            if loader_context is not None:
+                loader_name, version = loader_context
+                cur.execute(
+                    "INSERT INTO reference_write_log "
+                    "(loader_name, version, entity_id, entity_type) "
+                    "VALUES (%s, %s, %s, %s) "
+                    "ON CONFLICT (loader_name, version, entity_id) DO NOTHING",
+                    (loader_name, version, entity_id, entity_type),
+                )
+
+    def set_availability(
+        self,
+        entity_id: str,
+        entity_type: str,
+        is_available: bool,
+        actor: Optional[str] = None,
+        reason: Optional[str] = None,
+    ) -> None:
+        """Flip ``is_available`` and record an ``availability_change``.
+
+        Postgres mirror of the SQLite method; does not raise on missing
+        rows so bulk loops can report per-entity success/failure.
+        """
+        with self._transaction() as conn:
+            cur = conn.cursor()
+            cur.execute(
+                "UPDATE entities SET is_available = %s WHERE id = %s",
+                (is_available, entity_id),
+            )
+
+            patch: dict[str, Any] = {"is_available": is_available}
+            if reason is not None:
+                patch["reason"] = reason
+            provenance = PostgresProvenanceStore(conn, self._schema_version)
+            provenance.record(
+                entity_id=entity_id,
+                entity_type=entity_type,
+                operation="availability_change",
+                actor_id=actor,
+                patch=patch,
+            )
+
+    def mark_superseded(
+        self,
+        entity_id: str,
+        entity_type: str,
+        replacement_id: str,
+    ) -> None:
+        """Mark an entity superseded (Postgres mirror of the SQLite method).
+
+        Provenance is the caller's responsibility, matching SQLite.
+        """
+        del entity_type  # storage is generic; kept for interface parity.
+        with self._transaction() as conn:
+            cur = conn.cursor()
+            cur.execute(
+                "UPDATE entities "
+                "SET is_available = FALSE, superseded_by = %s WHERE id = %s",
+                (replacement_id, entity_id),
+            )
+
     def read(self, entity_id: str) -> Optional[PostgresEntity]:
         """Read an entity by its ID (available entities only)."""
         with self._transaction() as conn:
@@ -1434,8 +1763,18 @@ class PostgresAdapter(EntityStore):
 
             return True
 
-    def find(self, query: Query) -> Iterator[PostgresEntity]:
-        """Find entities matching a query."""
+    def find(
+        self, query: Query, *, as_of: Optional[str] = None
+    ) -> Iterator[PostgresEntity]:
+        """Find entities matching a query.
+
+        When ``as_of`` (ISO-8601) is given, the result is reconstructed from the
+        provenance log as the graph stood at that transaction-time (sec6 §6.8 /
+        ADR-0001) — Postgres parity with the SQLite adapter. Omitted = current.
+        """
+        if as_of is not None:
+            yield from self._find_as_of(query, as_of)
+            return
         with self._transaction() as conn:
             cur = conn.cursor()
 
@@ -1457,12 +1796,12 @@ class PostgresAdapter(EntityStore):
                         value = f["value"]
                         filter_clauses.append("data->>%s = %s")
                         params.append(field)
-                        params.append(str(value))
+                        params.append(self._jsonb_text(value))
                     else:
                         for key, value in f.items():
                             filter_clauses.append("data->>%s = %s")
                             params.append(key)
-                            params.append(str(value))
+                            params.append(self._jsonb_text(value))
                 if filter_clauses:
                     sql += " AND (" + joiner.join(filter_clauses) + ")"
 
@@ -1479,6 +1818,71 @@ class PostgresAdapter(EntityStore):
             cur.execute(sql, params)
             for row in cur.fetchall():
                 yield self._row_to_entity(row)
+
+    def _find_as_of(
+        self, query: Query, as_of: str
+    ) -> Iterator[PostgresEntity]:
+        """Query-spanning as-of reconstruction (sec6 §6.8) — Postgres mirror of
+        the SQLite path: candidates created <= as_of, reconstructed via
+        get_state_at, equality filters in Python, offset/limit last."""
+        with self._transaction() as conn:
+            prov = PostgresProvenanceStore(conn, self._schema_version)
+            candidates = prov.entities_created_by(
+                as_of, entity_type=query.entity_type
+            )
+
+            matched: list[PostgresEntity] = []
+            for entity_id, entity_type in candidates:
+                reconstructed = prov.get_state_at(entity_id, as_of)
+                if reconstructed is None:
+                    continue
+                data = reconstructed.get("state")
+                if not isinstance(data, dict):
+                    continue
+                if not self._matches_filters(data, entity_id, query):
+                    continue
+                matched.append(
+                    PostgresEntity(
+                        id=entity_id,
+                        entity_type=entity_type,
+                        is_available=True,
+                        version=prov.state_version_at(entity_id, as_of),
+                        data=data,
+                    )
+                )
+
+        offset = query.offset or 0
+        sliced = matched[offset:]
+        if query.limit:
+            sliced = sliced[: query.limit]
+        yield from sliced
+
+    @staticmethod
+    def _matches_filters(
+        data: dict[str, Any], entity_id: str, query: Query
+    ) -> bool:
+        """Equality-match query.filters against reconstructed data (honoring
+        filter_mode). Mirrors the SQLite as-of path; ``id`` resolves to
+        ``entity_id``."""
+        filters = query.filters or []
+        if not filters:
+            return True
+
+        def one(field: str, value: Any) -> bool:
+            actual = entity_id if field == "id" else data.get(field)
+            return actual == value
+
+        checks: list[bool] = []
+        for f in filters:
+            if "field" in f and "value" in f:
+                checks.append(one(f["field"], f["value"]))
+            else:
+                for key, value in f.items():
+                    checks.append(one(key, value))
+        if not checks:
+            return True
+        mode = getattr(query, "filter_mode", "and")
+        return any(checks) if mode == "or" else all(checks)
 
     def findAll(self) -> Iterator[PostgresEntity]:
         """Find all entities."""
@@ -1695,12 +2099,14 @@ class PostgresAdapter(EntityStore):
             return provenance.get_history(entity_id)
 
     def get_temporal(
-        self, entity_ids: list[str]
+        self, entity_ids: list[str], *, as_of: Optional[str] = None
     ) -> "dict[str, TemporalRecord]":
-        """Batch sec9 §9.7 temporal-field derivation. One SQL round-trip."""
+        """Batch sec9 §9.7 temporal-field derivation. One SQL round-trip.
+
+        ``as_of`` bounds the derivation to ``timestamp <= as_of`` (sec6 §6.8)."""
         with self._transaction() as conn:
             provenance = PostgresProvenanceStore(conn, self._schema_version)
-            return provenance.get_temporal(entity_ids)
+            return provenance.get_temporal(entity_ids, as_of=as_of)
 
     def state_at(self, entity_id: str, timestamp: str) -> Optional[dict[str, Any]]:
         with self._transaction() as conn:

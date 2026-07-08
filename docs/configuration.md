@@ -1,6 +1,6 @@
 # Hippo Configuration Reference
 
-Complete reference for configuring Hippo, the Metadata Tracking Service (MTS) for the BASS platform.
+Complete reference for configuring Hippo, the LinkML runtime for the DataHelix platform (the platform's structured domain graph; metadata tracking is one application).
 
 ## Overview
 
@@ -67,7 +67,7 @@ The `full` template includes additional sections:
 {
   "version": "0.1",
   "name": "hippo-project",
-  "description": "Hippo Metadata Tracking Service Project",
+  "description": "Hippo Project",
   "storage": {
     "type": "sqlite",
     "path": "hippo.db"

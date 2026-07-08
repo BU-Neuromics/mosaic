@@ -274,35 +274,67 @@ class ProvenanceStore:
         return results
 
     def get_state_at(self, entity_id: str, timestamp: str) -> Optional[dict[str, Any]]:
-        """Get the entity state at a specific point in time."""
+        """Reconstruct entity state as of ``timestamp`` (transaction-time as-of).
+
+        Per sec6 §6.8.2, an entity's data state at ``T`` is the **full
+        post-image** carried by its most recent *state-replacing* record
+        (``create`` / ``update``) with ``timestamp <= T`` — verified: the
+        ``create`` and ``update_data`` paths both record the full entity data
+        as the ``patch``. Non-state-replacing records (``availability_change``,
+        ``external_id_add``, ``supersede``) carry *deltas*, not entity state, so
+        they never define the returned state. The most recent
+        ``availability_change`` with ``timestamp <= T`` decides availability: if
+        it marks the entity deleted/unavailable, the entity is absent at ``T``
+        and ``None`` is returned.
+
+        Known limitation (flagged for a later increment, sec6 §6.8.2): the
+        supersede path records an ``operation='update'`` *annotation* patch on
+        the replacement entity (not a full post-image), and source-entity
+        availability via ``supersede`` is not yet reflected here.
+        """
         cursor = self._conn.cursor()
         cursor.execute(
             """SELECT patch, timestamp, operation
                FROM "ProvenanceRecord"
                WHERE entity_id = ? AND timestamp <= ?
-               ORDER BY timestamp DESC
-               LIMIT 1""",
+               ORDER BY timestamp DESC""",
             (entity_id, timestamp),
         )
 
-        row = cursor.fetchone()
-        if row is None:
-            return None
+        data_state: Optional[dict[str, Any]] = None
+        data_ts: Optional[str] = None
+        availability_resolved = False
+        deleted = False
 
-        # availability_change with status=deleted supersedes the old
-        # SOFT_DELETE operation (Decision 9.6.B) — treat as unavailable.
-        if row["operation"] == "availability_change":
-            patch_obj = json.loads(row["patch"]) if row["patch"] else {}
+        for row in cursor.fetchall():  # newest first
+            patch_obj = json.loads(row["patch"]) if row["patch"] else None
+            op = row["operation"]
+            # First (newest) availability_change <= T decides availability.
             if (
-                patch_obj.get("status") == "deleted"
-                or patch_obj.get("is_available") is False
+                not availability_resolved
+                and op == "availability_change"
+                and isinstance(patch_obj, dict)
             ):
-                return None
+                availability_resolved = True
+                if (
+                    patch_obj.get("status") == "deleted"
+                    or patch_obj.get("is_available") is False
+                ):
+                    deleted = True
+            # Newest state-replacing record carries the full post-image.
+            if data_state is None and op in ("create", "update"):
+                data_state = patch_obj
+                data_ts = row["timestamp"]
+            if availability_resolved and data_state is not None:
+                break
+
+        if deleted or data_state is None:
+            return None
 
         return {
             "entity_id": entity_id,
-            "state": json.loads(row["patch"]) if row["patch"] else None,
-            "timestamp": row["timestamp"],
+            "state": data_state,
+            "timestamp": data_ts,
         }
 
     def get_entity_creation_time(self, entity_id: str) -> Optional[str]:
@@ -317,6 +349,42 @@ class ProvenanceStore:
         )
         row = cursor.fetchone()
         return row["timestamp"] if row else None
+
+    def entities_created_by(
+        self, as_of: str, entity_type: Optional[str] = None
+    ) -> list[tuple[str, str]]:
+        """Candidate ``(entity_id, entity_type)`` set for an as-of query: entities
+        with a ``create`` record at-or-before ``as_of`` (sec6 §6.8.2 entity-set
+        selection), optionally scoped to ``entity_type``. Per-entity availability
+        at ``as_of`` is decided downstream by ``get_state_at``."""
+        cursor = self._conn.cursor()
+        if entity_type is not None:
+            cursor.execute(
+                """SELECT DISTINCT entity_id, entity_type FROM "ProvenanceRecord"
+                   WHERE operation = 'create' AND entity_type = ?
+                     AND timestamp <= ?""",
+                (entity_type, as_of),
+            )
+        else:
+            cursor.execute(
+                """SELECT DISTINCT entity_id, entity_type FROM "ProvenanceRecord"
+                   WHERE operation = 'create' AND timestamp <= ?""",
+                (as_of,),
+            )
+        return [(row["entity_id"], row["entity_type"]) for row in cursor.fetchall()]
+
+    def state_version_at(self, entity_id: str, as_of: str) -> int:
+        """Entity version as of ``T`` — the count of state-replacing
+        (``create``/``update``) records at-or-before ``as_of``."""
+        cursor = self._conn.cursor()
+        cursor.execute(
+            """SELECT COUNT(*) AS n FROM "ProvenanceRecord"
+               WHERE entity_id = ? AND operation IN ('create', 'update')
+                 AND timestamp <= ?""",
+            (entity_id, as_of),
+        )
+        row = cursor.fetchone()
+        return int(row["n"]) if row and row["n"] else 1
 
     def get_provenance_timestamps(
         self, entity_id: str
@@ -334,9 +402,15 @@ class ProvenanceStore:
         }
 
     def get_temporal(
-        self, entity_ids: list[str]
+        self, entity_ids: list[str], *, as_of: Optional[str] = None
     ) -> "dict[str, TemporalRecord]":
         """Batch-derive sec9 §9.7 temporal fields for the given entities.
+
+        When ``as_of`` (an ISO-8601 timestamp) is given, the derivation is
+        bounded to provenance records with ``timestamp <= as_of`` — the
+        transaction-time as-of view (sec6 §6.8): ``created_at`` / ``updated_at``
+        / ``schema_version`` reflect the graph as it stood at ``as_of``.
+
 
         Returns a dict mapping ``entity_id`` → ``TemporalRecord``. An
         ``entity_id`` that has no ``ProvenanceRecord`` rows is absent from
@@ -360,13 +434,15 @@ class ProvenanceStore:
             return {}
 
         placeholders = ",".join("?" for _ in entity_ids)
+        as_of_clause = " AND timestamp <= ?" if as_of else ""
+        params = (*entity_ids, as_of) if as_of else tuple(entity_ids)
         cursor = self._conn.cursor()
         cursor.execute(
             f"""WITH target AS (
                     SELECT entity_id, operation, timestamp, actor_id,
                            schema_version, patch
                     FROM "ProvenanceRecord"
-                    WHERE entity_id IN ({placeholders})
+                    WHERE entity_id IN ({placeholders}){as_of_clause}
                 ),
                 agg AS (
                     SELECT
@@ -401,7 +477,7 @@ class ProvenanceStore:
                        AND t.timestamp = agg.updated_at
                      LIMIT 1) AS schema_version
                 FROM agg""",
-            tuple(entity_ids),
+            params,
         )
 
         result: dict[str, TemporalRecord] = {}
@@ -561,8 +637,20 @@ class RelationshipStore:
         source_id: str,
         relationship_type: Optional[str] = None,
         max_depth: int = 10,
+        *,
+        as_of: Optional[str] = None,
     ) -> list[dict[str, Any]]:
-        """Traverse relationships using recursive CTE."""
+        """Traverse relationships using a recursive CTE over the current graph.
+
+        When ``as_of`` is given, traversal instead walks only edges live at that
+        transaction-time, reconstructed from relationship_add/remove provenance
+        events (sec6 §6.8.2) — the relationships table's ``is_available`` flag is
+        not consulted (it carries no per-edge change timestamp).
+        """
+        if as_of is not None:
+            return self._traverse_as_of(
+                source_id, relationship_type, max_depth, as_of
+            )
         cursor = self._conn.cursor()
 
         if relationship_type:
@@ -607,6 +695,75 @@ class RelationshipStore:
                     "depth": row["depth"],
                 }
             )
+        return results
+
+    def _live_edges_at(self, as_of: str) -> list[dict[str, Any]]:
+        """Edges live at ``as_of`` (sec6 §6.8.2): replay ``relationship_add`` /
+        ``relationship_remove`` provenance events with ``timestamp <= as_of`` in
+        order; an edge keyed by (source, target, type) is live iff its latest
+        such event is an add. The relationships table is NOT consulted."""
+        cursor = self._conn.cursor()
+        cursor.execute(
+            """SELECT operation,
+                      json_extract(patch, '$.source_id')         AS s,
+                      json_extract(patch, '$.target_id')         AS t,
+                      json_extract(patch, '$.relationship_type') AS rt,
+                      json_extract(patch, '$.relationship_id')   AS rid
+               FROM "ProvenanceRecord"
+               WHERE operation IN ('relationship_add', 'relationship_remove')
+                 AND timestamp <= ?
+               ORDER BY timestamp ASC""",
+            (as_of,),
+        )
+        live: dict[tuple[Any, Any, Any], Optional[str]] = {}
+        for row in cursor.fetchall():
+            key = (row["s"], row["t"], row["rt"])
+            if row["operation"] == "relationship_add":
+                live[key] = row["rid"]
+            else:
+                live.pop(key, None)
+        return [
+            {"id": rid, "source_id": s, "target_id": t, "relationship_type": rt}
+            for (s, t, rt), rid in live.items()
+        ]
+
+    def _traverse_as_of(
+        self,
+        source_id: str,
+        relationship_type: Optional[str],
+        max_depth: int,
+        as_of: str,
+    ) -> list[dict[str, Any]]:
+        """Depth-bounded traversal over the edges live at ``as_of``. Mirrors the
+        recursive-CTE semantics: the anchor filters by ``relationship_type`` (if
+        given); deeper hops follow live edges of any type. ``id`` is the original
+        relationship id when the add event recorded it, else ``None``."""
+        from collections import defaultdict, deque
+
+        adjacency: dict[str, list[dict[str, Any]]] = defaultdict(list)
+        for edge in self._live_edges_at(as_of):
+            adjacency[edge["source_id"]].append(edge)
+
+        results: list[dict[str, Any]] = []
+        queue: deque[tuple[dict[str, Any], int]] = deque()
+        for edge in adjacency.get(source_id, []):
+            if relationship_type and edge["relationship_type"] != relationship_type:
+                continue
+            queue.append((edge, 1))
+        while queue:
+            edge, depth = queue.popleft()
+            results.append(
+                {
+                    "id": edge["id"],
+                    "source_id": edge["source_id"],
+                    "target_id": edge["target_id"],
+                    "relationship_type": edge["relationship_type"],
+                    "depth": depth,
+                }
+            )
+            if depth < max_depth:
+                for nxt in adjacency.get(edge["target_id"], []):
+                    queue.append((nxt, depth + 1))
         return results
 
     def _row_to_relationship(self, row: sqlite3.Row) -> RelationshipRecord:
@@ -779,6 +936,8 @@ class SQLiteAdapter(EntityStore):
         self._fts_store: Optional[FTSStore] = None
         # Per-class cache of hippo_external_xref slot names (issue #48).
         self._xref_slots_cache: dict[str, list[str]] = {}
+        # Per-class cache of multivalued reference slot names (issue #79).
+        self._mv_ref_slots_cache: dict[str, list[str]] = {}
         self._init_database()
 
     def _get_connection(self) -> sqlite3.Connection:
@@ -938,6 +1097,12 @@ class SQLiteAdapter(EntityStore):
             cursor.execute("""
                 CREATE INDEX IF NOT EXISTS idx_ProvenanceRecord_entity_timestamp
                 ON "ProvenanceRecord"(entity_id, timestamp)
+            """)
+            # Type-scoped as-of set selection (sec6 §6.8.4): "entities of type X
+            # present at T" scans creates by (entity_type, timestamp).
+            cursor.execute("""
+                CREATE INDEX IF NOT EXISTS idx_ProvenanceRecord_type_timestamp
+                ON "ProvenanceRecord"(entity_type, timestamp, entity_id)
             """)
 
             cursor.execute("""
@@ -1111,12 +1276,11 @@ class SQLiteAdapter(EntityStore):
         cls = registry.get_class(entity_type)
         if cls is None or getattr(cls, "abstract", False):
             return False
-        # Value types (ExternalReference) are concrete LinkML classes but
-        # have no entity table — they are stored inline (JSON TEXT) on
-        # the slot that ranges them (issue #48).
-        from hippo.linkml_bridge import VALUE_TYPE_CLASSES
-
-        if entity_type in VALUE_TYPE_CLASSES:
+        # Value types (ExternalReference, or any identifier-less value
+        # object) are concrete LinkML classes but have no entity table —
+        # they are stored inline (JSON TEXT) on the slot that ranges them
+        # (issue #48 / #90). Detection is schema-driven via the registry.
+        if entity_type in registry.value_type_classes():
             return False
         # ProvenanceRecord is hand-coded with its own write path; the
         # adapter's CRUD never targets it as a per-class typed table.
@@ -1173,6 +1337,150 @@ class SQLiteAdapter(EntityStore):
         if isinstance(value, (list, dict)):
             return json.dumps(value)
         return value
+
+    # -- multivalued reference slots → relationships (issue #79 / ADR-0002) ---
+
+    def _multivalued_ref_slot_names(self, entity_type: str) -> list[str]:
+        """Names of multivalued reference slots for a class (issue #79).
+
+        Cached per class. Empty when the registry is absent or the class
+        declares no multivalued slot ranged on an entity type. These slots
+        get no per-class column; their values persist as relationships keyed
+        by the slot name.
+        """
+        cached = self._mv_ref_slots_cache.get(entity_type)
+        if cached is None:
+            registry = self.schema_registry
+            if registry is None or not registry.has_class(entity_type):
+                cached = []
+            else:
+                cached = [
+                    name
+                    for name, _target in registry.multivalued_reference_slots(
+                        entity_type
+                    )
+                ]
+            self._mv_ref_slots_cache[entity_type] = cached
+        return cached
+
+    @staticmethod
+    def _normalize_ref_list(value: Any) -> list[str]:
+        """Normalize a multivalued reference slot value to a list of ids.
+
+        Tolerates a bare scalar (treated as a single-element list) and drops
+        ``None`` entries. Non-string ids are coerced to ``str`` so they match
+        the ``relationships`` table's TEXT columns.
+        """
+        if value is None:
+            return []
+        items = value if isinstance(value, (list, tuple)) else [value]
+        return [str(v) for v in items if v is not None]
+
+    def _materialize_multivalued_refs(
+        self,
+        conn: sqlite3.Connection,
+        entity_type: str,
+        entity_id: str,
+        data: dict[str, Any],
+        *,
+        reconcile: bool,
+        actor: Optional[str] = None,
+    ) -> None:
+        """Persist multivalued reference slots as relationships (issue #79).
+
+        One relationship per target id, keyed by the slot name, written in
+        the caller's transaction. On ``reconcile`` (update/replace) the
+        existing live edges of every such slot for this source are
+        soft-deleted first, then rebuilt from ``data`` — matching
+        ``_update_per_class``'s replace-every-user-slot semantics (an omitted
+        slot clears its edges, just as it nulls its column).
+
+        Target existence is NOT checked: single-valued reference ids persist
+        as opaque strings, and this matches that, so forward references during
+        bulk ingest are preserved. Each add/remove records a
+        ``relationship_add`` / ``relationship_remove`` ProvenanceRecord so
+        as-of edge replay (ADR-0001) stays consistent.
+        """
+        slot_names = self._multivalued_ref_slot_names(entity_type)
+        if not slot_names:
+            return
+
+        rel_store = self._get_relationship_store(conn)
+        prov = self._get_provenance_store(conn)
+
+        for slot in slot_names:
+            if reconcile:
+                for rel in list(
+                    rel_store.find_by_source(entity_id, relationship_type=slot)
+                ):
+                    rel_store.delete(entity_id, rel.target_id, slot)
+                    prov.record(
+                        entity_id=entity_id,
+                        entity_type="relationship",
+                        operation="relationship_remove",
+                        actor_id=actor,
+                        patch={
+                            "source_id": entity_id,
+                            "target_id": rel.target_id,
+                            "relationship_type": slot,
+                        },
+                    )
+
+            if slot not in data:
+                continue
+            for target_id in self._normalize_ref_list(data[slot]):
+                rel = rel_store.create(
+                    source_id=entity_id,
+                    target_id=target_id,
+                    relationship_type=slot,
+                    created_by=actor,
+                )
+                prov.record(
+                    entity_id=entity_id,
+                    entity_type="relationship",
+                    operation="relationship_add",
+                    actor_id=actor,
+                    patch={
+                        "relationship_id": rel.id,
+                        "source_id": entity_id,
+                        "target_id": target_id,
+                        "relationship_type": slot,
+                    },
+                )
+
+    def _hydrate_multivalued_refs_batch(
+        self,
+        conn: sqlite3.Connection,
+        entity_type: str,
+        entity_ids: list[str],
+    ) -> dict[str, dict[str, list[str]]]:
+        """Read multivalued reference slot edges for a set of entities.
+
+        Returns ``{entity_id: {slot_name: [target_id, ...]}}`` in a single
+        round-trip (no N+1). Target ids preserve insertion order (``rowid``).
+        Only currently-live edges are returned.
+        """
+        slot_names = self._multivalued_ref_slot_names(entity_type)
+        if not slot_names or not entity_ids:
+            return {}
+
+        cursor = conn.cursor()
+        id_ph = ",".join("?" for _ in entity_ids)
+        slot_ph = ",".join("?" for _ in slot_names)
+        cursor.execute(
+            "SELECT source_id, relationship_type, target_id FROM relationships "
+            f"WHERE source_id IN ({id_ph}) "
+            f"AND relationship_type IN ({slot_ph}) "
+            "AND is_available = 1 "
+            "ORDER BY rowid",
+            (*entity_ids, *slot_names),
+        )
+        out: dict[str, dict[str, list[str]]] = {}
+        for row in cursor.fetchall():
+            out.setdefault(row["source_id"], {}).setdefault(
+                row["relationship_type"], []
+            ).append(row["target_id"])
+        return out
 
     def _init_triggers(self, cursor: sqlite3.Cursor) -> None:
         """Initialize provenance immutability triggers."""
@@ -1524,6 +1832,15 @@ class SQLiteAdapter(EntityStore):
                 operation="create",
                 actor_id=user_context,
                 patch=entity_data,
+            )
+
+            self._materialize_multivalued_refs(
+                conn,
+                entity_type,
+                entity_id,
+                entity_data,
+                reconcile=False,
+                actor=user_context,
             )
 
             if loader_context is not None:
@@ -1900,17 +2217,30 @@ class SQLiteAdapter(EntityStore):
             if row is None:
                 return None
             version = self._compute_version(cursor, entity_id)
+            mv_refs = self._hydrate_multivalued_refs_batch(
+                conn, entity_type, [entity_id]
+            ).get(entity_id, {})
 
         boolean_cols = (
             self.schema_registry.boolean_slot_names(entity_type)
             if self.schema_registry is not None
             else set()
         )
+        string_cols = (
+            self.schema_registry.string_slot_names(entity_type)
+            if self.schema_registry is not None
+            else set()
+        )
         data = {
-            c: self._decode_column_value(row[c], is_boolean=c in boolean_cols)
+            c: self._decode_column_value(
+                    row[c],
+                    is_boolean=c in boolean_cols,
+                    is_string=c in string_cols,
+                )
             for c in slot_columns
             if row[c] is not None
         }
+        data.update(mv_refs)
         return SQLiteEntity(
             id=row["id"],
             entity_type=entity_type,
@@ -1994,6 +2324,15 @@ class SQLiteAdapter(EntityStore):
                 operation=operation,
                 actor_id=actor,
                 patch=data,
+            )
+
+            self._materialize_multivalued_refs(
+                conn,
+                entity_type,
+                entity_id,
+                data,
+                reconcile=True,
+                actor=actor,
             )
 
             if loader_context is not None:
@@ -2096,7 +2435,9 @@ class SQLiteAdapter(EntityStore):
 
             return True
 
-    def find(self, query: Query) -> Iterator[SQLiteEntity]:
+    def find(
+        self, query: Query, *, as_of: Optional[str] = None
+    ) -> Iterator[SQLiteEntity]:
         """Find entities matching a query.
 
         When ``query.entity_type`` is set the query targets the
@@ -2105,7 +2446,14 @@ class SQLiteAdapter(EntityStore):
         Without ``entity_type``, the adapter scans every concrete
         per-class table in the schema and merges results (cross-class
         scan).
+
+        When ``as_of`` (ISO-8601) is given, the result is reconstructed from the
+        provenance log as the graph stood at that transaction-time — query-spanning
+        as-of reconstruction (sec6 §6.8 / ADR-0001). Omitted = current state.
         """
+        if as_of is not None:
+            yield from self._find_as_of(query, as_of)
+            return
         if query.entity_type:
             if not self._per_class_table_exists(query.entity_type):
                 return
@@ -2119,6 +2467,81 @@ class SQLiteAdapter(EntityStore):
             if not self._per_class_table_exists(class_name):
                 continue
             yield from self._find_per_class(class_name, query)
+
+    def _find_as_of(
+        self, query: Query, as_of: str
+    ) -> Iterator[SQLiteEntity]:
+        """Query-spanning as-of reconstruction (sec6 §6.8).
+
+        Candidate entities are those created at-or-before ``as_of`` (optionally
+        scoped to ``query.entity_type``); each is reconstructed to its state at
+        ``as_of`` via the provenance log (``get_state_at`` — ``None`` if it was
+        unavailable/deleted then); equality filters apply to the reconstructed
+        data; offset/limit are applied last.
+
+        Filters and pagination run in Python over the reconstructed records
+        (correctness-first; the §6.8.4 indexed/cached fast path is a later
+        optimization). Relationship-existence filters and cross-class temporal
+        joins are out of scope for this increment (BU-Neuromics/hippo#71).
+        """
+        with self._transaction() as conn:
+            prov = self._get_provenance_store(conn)
+            candidates = prov.entities_created_by(
+                as_of, entity_type=query.entity_type
+            )
+
+            matched: list[SQLiteEntity] = []
+            for entity_id, entity_type in candidates:
+                reconstructed = prov.get_state_at(entity_id, as_of)
+                if reconstructed is None:
+                    continue  # not created yet, or unavailable/deleted at as_of
+                data = reconstructed.get("state")
+                if not isinstance(data, dict):
+                    continue
+                if not self._matches_filters(data, entity_id, query):
+                    continue
+                matched.append(
+                    SQLiteEntity(
+                        id=entity_id,
+                        entity_type=entity_type,
+                        is_available=True,
+                        version=prov.state_version_at(entity_id, as_of),
+                        data=data,
+                    )
+                )
+
+        offset = query.offset or 0
+        sliced = matched[offset:]
+        if query.limit:
+            sliced = sliced[: query.limit]
+        yield from sliced
+
+    @staticmethod
+    def _matches_filters(
+        data: dict[str, Any], entity_id: str, query: Query
+    ) -> bool:
+        """Equality-match ``query.filters`` against a reconstructed ``data`` dict,
+        honoring ``filter_mode`` — the as-of (Python-side) analogue of
+        ``_find_per_class``'s column predicates. ``id`` resolves to ``entity_id``."""
+        filters = query.filters or []
+        if not filters:
+            return True
+
+        def one(field: str, value: Any) -> bool:
+            actual = entity_id if field == "id" else data.get(field)
+            return actual == value
+
+        checks: list[bool] = []
+        for f in filters:
+            if "field" in f and "value" in f:
+                checks.append(one(f["field"], f["value"]))
+            else:
+                for key, value in f.items():
+                    checks.append(one(key, value))
+        if not checks:
+            return True
+        mode = getattr(query, "filter_mode", "and")
+        return any(checks) if mode == "or" else all(checks)
 
     def _find_per_class(
         self, entity_type: str, query: Query
@@ -2191,17 +2614,31 @@ class SQLiteAdapter(EntityStore):
                     r["entity_id"]: int(r["c"]) for r in cursor.fetchall()
                 }
 
+            mv_refs_map = self._hydrate_multivalued_refs_batch(
+                conn, entity_type, row_ids
+            )
+
         boolean_cols = (
             self.schema_registry.boolean_slot_names(entity_type)
             if self.schema_registry is not None
             else set()
         )
+        string_cols = (
+            self.schema_registry.string_slot_names(entity_type)
+            if self.schema_registry is not None
+            else set()
+        )
         for row in rows:
             data = {
-                c: self._decode_column_value(row[c], is_boolean=c in boolean_cols)
+                c: self._decode_column_value(
+                    row[c],
+                    is_boolean=c in boolean_cols,
+                    is_string=c in string_cols,
+                )
                 for c in slot_columns
                 if row[c] is not None
             }
+            data.update(mv_refs_map.get(row["id"], {}))
             yield SQLiteEntity(
                 id=row["id"],
                 entity_type=entity_type,
@@ -2212,7 +2649,9 @@ class SQLiteAdapter(EntityStore):
             )
 
     @staticmethod
-    def _decode_column_value(value: Any, is_boolean: bool = False) -> Any:
+    def _decode_column_value(
+        value: Any, is_boolean: bool = False, is_string: bool = False
+    ) -> Any:
         """Best-effort reverse of ``_coerce_for_column`` for query results.
 
         SQLite stores JSON-encoded containers and 0/1 booleans as text /
@@ -2227,9 +2666,19 @@ class SQLiteAdapter(EntityStore):
         rejects the raw integer for a boolean slot (PTS-349). The integer
         guard leaves multivalued booleans untouched: they arrive as JSON
         strings and fall through to the JSON branch with native ``bool``s.
+
+        ``is_string`` must be set for columns backing a scalar
+        ``range: string`` slot: their text is user data that must
+        round-trip verbatim, even when it happens to parse as a JSON
+        container (Aperture's control-plane ``payload`` carries serialized
+        ``{"v": …, "data": …}`` envelopes that the JSON branch would
+        otherwise corrupt into dicts, which the GraphQL String type then
+        refuses to serialize).
         """
         if is_boolean and isinstance(value, int) and not isinstance(value, bool):
             return bool(value)
+        if is_string:
+            return value
         if isinstance(value, str) and value and value[0] in "[{":
             try:
                 return json.loads(value)
@@ -2329,11 +2778,17 @@ class SQLiteAdapter(EntityStore):
             provenance = self._get_provenance_store(conn)
             return provenance.get_history(entity_id)
 
-    def get_temporal(self, entity_ids: list[str]) -> "dict[str, TemporalRecord]":
-        """Batch sec9 §9.7 temporal-field derivation. One SQL round-trip."""
+    def get_temporal(
+        self, entity_ids: list[str], *, as_of: Optional[str] = None
+    ) -> "dict[str, TemporalRecord]":
+        """Batch sec9 §9.7 temporal-field derivation. One SQL round-trip.
+
+        ``as_of`` (ISO-8601) bounds the derivation to ``timestamp <= as_of``
+        (transaction-time as-of, sec6 §6.8).
+        """
         with self._transaction() as conn:
             provenance = self._get_provenance_store(conn)
-            return provenance.get_temporal(entity_ids)
+            return provenance.get_temporal(entity_ids, as_of=as_of)
 
     def state_at(self, entity_id: str, timestamp: str) -> Optional[dict[str, Any]]:
         """Get the entity state at a specific point in time.

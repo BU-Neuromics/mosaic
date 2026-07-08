@@ -9,6 +9,221 @@
   but was never added to `create_default_app()`, so `hippo serve` silently
   omitted it. It is now mounted in the default router set.
 
+## v0.10.6 — 2026-07-08 (Postgres write parity: updates, availability, boolean filters)
+
+### Fixed
+
+- **Updates and availability changes work on postgres.** The ingestion
+  service calls `storage.update_data` / `storage.set_availability` /
+  `storage.mark_superseded` on any adapter; the postgres adapter had none
+  of them, so every SDK/transport update, `set<T>Availability`, and
+  supersede crashed with AttributeError. All three now mirror the SQLite
+  semantics over the generic `entities` table (document update + version
+  bump + provenance; availability flip + `availability_change` record).
+- **Boolean equality filters match on postgres.** `data->>field` yields
+  JSON literals (`true`/`false`) but the filter compared against
+  `str(False) == "False"`, silently matching nothing — boolean facets
+  returned empty sets. Filter values are now rendered as JSONB text.
+  Both found by the DataHelix certification golden path (datahelix#45).
+
+## v0.10.5 — 2026-07-08 (Postgres FTS parity at init)
+
+### Fixed
+
+- **Search works on a fresh postgres deployment.** SQLite creates FTS
+  shadow tables alongside its typed tables, but the postgres adapter never
+  created them, so `search()` (and the GraphQL `search<T>s` fields) crashed
+  with `relation "fts_<type>_<slot>" does not exist` on any deployment
+  that had not created them explicitly. `_init_database` now creates the
+  shadow tables for every `hippo_search` slot from the schema registry
+  (idempotent), so ingestion syncs content from the first write and search
+  works out of the box. Found by the DataHelix certification golden path
+  (datahelix#45).
+
+## v0.10.4 — 2026-07-08 (String slots round-trip verbatim)
+
+### Fixed
+
+- **Scalar `range: string` slots no longer JSON-decode on read (SQLite
+  adapter).** `_decode_column_value` decoded any stored text that parsed
+  as a JSON container, so a string slot carrying serialized JSON (e.g.
+  Aperture's control-plane `payload` envelopes) came back as a dict and
+  the GraphQL `String` type refused to serialize it, nulling the whole
+  page. The decode is now schema-driven via the new
+  `SchemaRegistry.string_slot_names()` (mirroring the boolean reversal):
+  scalar string slots pass through verbatim; multivalued string slots
+  still decode their JSON arrays. Found by the aperture#15 live-seam
+  reconciliation (datahelix#45).
+
+## v0.10.3 — 2026-07-07 (Postgres FTS write fix)
+
+### Fixed
+
+- **Writes on a postgres deployment no longer crash when the schema declares
+  `hippo_search` slots (#108).** `IngestionService._sync_entity_to_fts`
+  checked FTS-table existence with the SQLite helper (`sqlite_master` + `?`
+  placeholder), which psycopg rejects as "the query has 0 placeholders but 1
+  parameters were passed" — every `put()` failed. The check now goes through
+  the storage adapter's own FTS store. Found by the first real DataHelix
+  certification boot (datahelix#45).
+
+## v0.10.2 — 2026-07-07 (Release pipeline + polymorphic-base reference fix)
+
+### Added
+
+- **Release pipeline (issue #97, DataHelix 1.0 epic P1.1).** Pushing a
+  `vX.Y.Z` tag now builds and publishes a wheel/sdist and a digest-addressed
+  image at `ghcr.io/bu-neuromics/hippo`, attaching the digest as an
+  `image-digest.json` release asset for the DataHelix certification ledger
+  (`composition.lock.json`). PyPI publishing is gated behind the
+  `PYPI_PUBLISH` repository variable pending the distribution-name decision
+  (`hippo` is taken on PyPI). The Dockerfile now actually builds (the old
+  builder stage never copied `src/`) and carries the `graphql` and `postgres`
+  extras the certification compose requires. Process documented in
+  `RELEASING.md`.
+
+### Fixed
+
+- **References ranged on a polymorphic base class no longer fail their foreign
+  key on ingest (issue #93).** `hippo migrate` emitted a foreign key against
+  the base-class table for any single-valued reference whose declared range is
+  a polymorphic base (a class with `designates_type` and/or concrete
+  subclasses), but `hippo ingest` dispatches a subtype instance into its own
+  per-subclass table (issue #80) and never populates the base table — so every
+  such reference failed with `FOREIGN KEY constraint failed` and no amount of
+  re-ingest could resolve it. The DDL generators now recognize a **polymorphic
+  base** (abstract, or concrete-with-concrete-subclasses) and store references
+  to it as a plain TEXT id column instead of a foreign key, matching how
+  references to an abstract base already behaved. References to a concrete leaf
+  class (no subclasses) keep their foreign key unchanged. New
+  `SchemaRegistry.is_polymorphic_base()` exposes the classification.
+
+## v0.10.1 — 2026-07-01 (Schema-driven inline value types)
+
+Patch release fixing an ingest data-loss bug: inline value-type objects
+(identifier-less LinkML classes used as a slot range) were reified into their
+own table with a synthetic FK that ingest never populated, so the value was
+dropped silently. Value-type detection is now schema-driven — any
+identifier-less, non-tree-root class is stored inline as JSON TEXT, exactly as
+the built-in `ExternalReference` already was (issue #90).
+
+### Fixed
+
+- **Inlined value-type objects (identifier-less LinkML classes) no longer
+  silently dropped on ingest (issue #90).** Value-type detection is now
+  **schema-driven** rather than a hardcoded allowlist of one class
+  (`ExternalReference`): any non-tree-root class with no identifier slot is
+  treated as an inline value type — stored as one JSON TEXT column on the
+  owning entity, never reified into its own table with a synthetic FK. Domain
+  value objects such as `Mass`/`Volume`/`Concentration` (identifier-less
+  subclasses of an abstract `Quantity`) now round-trip exactly as
+  `ExternalReference` does; previously `hippo migrate` gave them their own
+  table, `hippo ingest` could not populate the resulting `_id` FK from the
+  inline dict, and the value vanished while ingest reported `errors=0`. New
+  `SchemaRegistry.value_type_classes()` / `is_value_type()` expose the
+  schema-driven set.
+
+## v0.10.0 — 2026-06-30 (Graph-level as-of reconstruction + batch unit-of-work + polymorphic ingest)
+
+This release adds **graph-level / query-spanning as-of reconstruction** (time-travel
+queries over the whole subgraph, ADR-0001) and a **batch unit-of-work** (whole-set
+validation + atomic multi-entity writes, issue #84), and fixes two ingest data-loss bugs
+(multivalued slots #79, polymorphic tree-root collections #80).
+
+> **Behavior change (issue #80).** `hippo ingest` no longer silently downcasts a subtype
+> instance to a polymorphic base that declares no `designates_type` discriminator — it now
+> raises an actionable error instead of dropping the subtype's fields. Bundles that
+> previously "succeeded" by discarding those fields will now error; add a `designates_type`
+> slot or ingest under the concrete-subclass accessor (see `docs/polymorphic-ingest.md`).
+
+### Added
+
+- **Graph-level / query-spanning as-of reconstruction (ADR-0001, sec6 §6.8;
+  issue #71, increments #73–#77).** Queries can now be evaluated as the graph
+  stood at a transaction-time `T`, reconstructed from the append-only
+  provenance log (no materialized snapshots; transaction-time only, valid-time
+  deferred). `HippoClient.query(as_of=...)` reconstructs the matching entity
+  set as of `T` (candidates created `<= T`, each rebuilt via `get_state_at`,
+  filters/pagination applied to the reconstructed data) and binds the computed
+  temporal fields to `T`; `client.relationships.traverse(..., as_of=T)` walks
+  only edges live at `T`, replayed from `relationship_add`/`remove` events
+  rather than the relationships table's current flag. Exposed additively on the
+  read transports — REST `GET /entities?as_of=<ISO-8601>` and GraphQL
+  `asOf: String` on generated list queries (omitted = current state). Backed by
+  a new `idx_ProvenanceRecord_type_timestamp` index, and brought to parity on
+  both the SQLite and PostgreSQL adapters. As-of resolution of nested
+  resolved-relationship fields and a `client.snapshot()` handle remain
+  follow-ups (sec6 §6.8.6).
+
+- **Batch unit-of-work: whole-set validation + atomic multi-entity write
+  (issue #84, increments #85–#87).** Commit a set of related entities
+  all-or-nothing, or dry-run validate the whole set first.
+  `HippoClient.validate_batch(operations, *, assign_ids=True)` runs the standard
+  per-entity pipeline (LinkML → CEL → Python) over every operation and
+  **aggregates** per-entity outcomes (not fail-fast), assigning provisional ids
+  on copies and writing nothing (`BatchValidationResult`).
+  `HippoClient.batch_put(operations, *, relationships=None, dry_run=False)`
+  assigns real ids up front (caller data untouched), validates the whole set,
+  and wraps all entity writes — then relationships — in one
+  `staged_transaction()` so the group commits or rolls back together
+  (`BatchWriteResult`); intra-batch relationship forward references resolve
+  naturally because staged reads observe staged writes. Exposed over the
+  transports for non-SDK clients: REST `POST /ingest/validate` (always 200 with
+  the batch envelope, never writes) and `POST /ingest/batch` (422 on validation
+  failure, 200 on dry-run plan or commit); GraphQL `validateBatch` /
+  `ingestBatch` root mutations with tier-annotated failure types.
+
+### Fixed
+
+- **Multivalued slots no longer silently dropped on ingest (issue #79 /
+  [ADR-0002](design/decisions/ADR-0002-multivalued-reference-slots-as-relationships.md)).**
+  `HippoClient.put` — and therefore `hippo ingest` — previously discarded
+  any multivalued slot with no error: it was persisted neither inline nor
+  as relationships, because multivalued slots get no per-class column and
+  the DDL generator filters out LinkML's linktables. Two storage rules now
+  close the gap, both materialized inside the entity-write transaction so a
+  failure rolls the whole write back: (1) a multivalued slot whose range is
+  an **entity class** persists as relationships keyed by the slot name —
+  visible to `find_relationships`/`traverse` and as-of edge replay — and is
+  hydrated back into `entity["data"][slot]` on `get`/`query`; reference
+  targets are not existence-checked, so forward references during bulk
+  ingest are preserved, and `put`/`replace`/`update` reconcile edges
+  (an omitted slot clears them, mirroring the typed-column NULL semantics);
+  (2) a multivalued slot whose range is a **scalar/enum** stores inline as a
+  single JSON TEXT column. SQLite backend; PostgreSQL parity is a follow-up.
+
+- **Polymorphic tree-root collections now ingest with subtype dispatch (issue #80 /
+  [ADR-0003](design/decisions/ADR-0003-polymorphic-tree-root-ingest.md)).**
+  `hippo ingest` previously skipped abstract bases when building the bundle, so a
+  collection ranged on an abstract base (e.g. `samples:` → abstract `Sample`) had no
+  accessor and the bundle hard-failed validation; and it ignored the `designates_type`
+  discriminator, so an instance under a base-class accessor (e.g. `assays:` → `Assay`) was
+  silently stored as the base — subclass-specific fields dropped, not queryable as the
+  subclass. Now an abstract class that declares a `designates_type` slot gets a base-ranged
+  tree-root accessor (plain abstract roots like `Entity` are still excluded), and ingest
+  dispatches each instance under a base accessor to the concrete subclass its discriminator
+  names, storing it as that subclass so its fields persist and it is queryable as its real
+  type. Concrete-subclass accessors keep working alongside base accessors. The synthesized
+  `_HippoInstanceBundle` remains the (hidden, table-less) wire contract. To close the
+  related silent-loss hole, a polymorphic base that declares *no* `designates_type` slot no
+  longer downcasts a subtype instance to the base (dropping its fields) — ingest now raises
+  an actionable error naming the dropped fields, the valid subclasses, and the fix
+  (add a `designates_type` discriminator, or use the concrete accessor), with a new guide at
+  `docs/polymorphic-ingest.md`. This is a behavior change: bundles that previously
+  "succeeded" by discarding subtype fields now error.
+
+## v0.9.0 — 2026-06-16 (Autogenerated REST/GraphQL transports + config-driven serving + consumer spanning client)
+
+This release builds the **shared LinkML schema-typing core** (issue #47) and
+projects it into two autogenerated transports — **LinkML-derived OpenAPI
+components** (issue #46) and a full **GraphQL transport** (issue #45) — makes
+`hippo serve` persist through a **config-driven storage/client factory**
+(issue #42, with REST get/delete-by-id type resolution, issue #44), introduces
+the **`ExternalReference` value type + `hippo_external_xref`** cross-system
+identifier model (issue #48, deprecating the `ExternalID` entity), and adds a
+**public spanning client** so a consumer package can link its own entities to an
+installed reference loader through public APIs alone (issue #67).
+
 ### Added
 
 - **`ExternalReference` value type + `hippo_external_xref` annotation
@@ -86,6 +301,25 @@
   design: sec4 §4.7.
 - `hippo.core.schema_typing.SlotModel` gained `has_default` (LinkML `ifabsent`
   present), so transports can derive nullability without re-walking the schema.
+- **Public spanning client for consumer schema + installed reference loaders
+  (issue #67).** A consumer package can now obtain a client/registry that spans
+  **its own schema + the reference loaders it declares in `requires:`** using
+  only public APIs — no hand-assembled registry code. New top-level
+  `hippo.client_for_schema(schema_path, database_url=...)` and
+  `hippo.registry_for_schema(schema_path)` resolve the schema's `requires:`
+  block, merge the installed loaders' fragments, and return a ready
+  client/registry; the same merge is now wired into `create_client` (default
+  on), so the CLI, `hippo serve`, and the TUI span loaders automatically. A
+  declared-but-uninstalled loader fails fast at construction, mirroring
+  `hippo validate`. `hippo migrate` / `hippo schema migrate` now apply the
+  `requires:` gate before any DDL (the documented behavior), and a consumer
+  slot ranged on a loader class — either the bare class name or the documented
+  loader-prefixed CURIE form `range: ensembl:Gene` — is now a recognized,
+  validated cross-loader reference rather than an opaque value (loader-to-loader
+  references stay advisory per D2.14.H). Schema-package discovery and `requires:`
+  resolution were relocated from the CLI layer into the new core module
+  `hippo.core.loaders.discovery` (re-exported from `hippo.cli.commands.reference`
+  for back-compat). Docs: `docs/reference-loaders.md`.
 
 ### Deprecated
 

@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Component Overview
 
-**Hippo** is the Metadata Tracking Service (MTS) for the BASS platform. It tracks *where data lives* and *what it describes* — not the data itself. See the root `../CLAUDE.md` for repo-wide conventions.
+**Hippo** is the **LinkML runtime** for the DataHelix platform — the engine that reads a LinkML schema and *becomes* the typed knowledge graph it describes. In a deployment it is the platform's **structured domain graph** (see the platform `../platform/design/domain-graph.md`): every query returns a knowledge subgraph whose semantics are the schema's. Tracking *where data lives* and *what it describes* is **one role** it plays (file cataloging), not its essence — Hippo is not a "metadata store," it runs whatever schema you give it. See the root `../CLAUDE.md` for repo-wide conventions.
 
 ## Spec Structure
 
@@ -41,4 +41,5 @@ Adapters are registered via entry points: `hippo.storage_adapters`, `hippo.exter
 - When drafting new spec sections (sec4–sec7), follow the structure of sec1–sec3: numbered subsections, tables for structured data, ASCII diagrams for architecture.
 - Keep the **SDK-first** principle consistent: business logic in SDK, transport layers are thin wrappers.
 - Update `design/INDEX.md` whenever a section's status changes or a new key decision is made.
+- **Design decisions are recorded as ADRs** per the platform-wide convention (root `../CLAUDE.md`; canonical process in `../platform/design/decisions/README.md`). New/non-trivial decisions get an ADR in `design/decisions/`; the Key Decisions Log in `design/INDEX.md` remains the scannable index (forward-only/hybrid adoption — no mass backfill). See `design/decisions/README.md`.
 - The `images/` directory holds diagrams referenced by spec documents.

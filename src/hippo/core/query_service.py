@@ -157,6 +157,7 @@ class QueryService:
         limit: Optional[int] = None,
         offset: Optional[int] = None,
         filter_mode: str = "and",
+        as_of: Optional[str] = None,
     ) -> "PaginatedResult":
         """Query entities with filter criteria.
 
@@ -165,6 +166,10 @@ class QueryService:
                 queries across all types.
             filter_mode: How to combine filters — "and" (all must match,
                 default) or "or" (any may match).
+            as_of: Optional ISO-8601 transaction-time. When given, results are
+                reconstructed as the graph stood at that time (sec6 §6.8 /
+                ADR-0001): entity set, per-entity state, and the computed
+                temporal fields are all bound to ``as_of``. Omitted = current.
         """
         from hippo.core.types import PaginatedResult
 
@@ -182,7 +187,12 @@ class QueryService:
             filter_mode=filter_mode,
         )
 
-        all_results = list(self._storage.find(query))
+        # Pass as_of only when set, so adapters whose find() predates the as-of
+        # contract (e.g. the LinkML spike) keep working on the current-state path.
+        if as_of is not None:
+            all_results = list(self._storage.find(query, as_of=as_of))
+        else:
+            all_results = list(self._storage.find(query))
 
         # sec9 §9.7: one batch aggregation round-trip for the result set,
         # not N+1. The adapter's get_temporal returns TemporalRecord
@@ -193,7 +203,7 @@ class QueryService:
         entity_ids = [entity.id for entity in all_results]
         temporal_map: dict[str, Any] = {}
         if entity_ids and hasattr(self._storage, "get_temporal"):
-            temporal_map = self._storage.get_temporal(entity_ids)
+            temporal_map = self._storage.get_temporal(entity_ids, as_of=as_of)
 
         filtered = []
         for entity in all_results:

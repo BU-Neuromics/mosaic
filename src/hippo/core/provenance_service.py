@@ -314,12 +314,18 @@ class ProvenanceService:
                 metadata={"reason": reason} if reason else None,
             )
 
+            # Record a full post-image patch (the replacement's current data),
+            # NOT a sparse annotation — so the "update patch = full post-image"
+            # invariant holds universally and as-of state reconstruction
+            # (sec6 §6.8.2) returns the replacement's real data, not an
+            # annotation. The audit note moves to ``context``.
             prov_store.record(
                 entity_id=replacement_id,
                 entity_type=replacement_entity.entity_type,
                 operation="update",
                 actor_id=actor,
-                patch={
+                patch=dict(replacement_entity.data),
+                context={
                     "note": f"Now the active replacement for superseded entity {entity_id}",
                     "supersedes": entity_id,
                 },
