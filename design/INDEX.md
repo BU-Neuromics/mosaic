@@ -24,6 +24,7 @@
 | `sec8_auth_integration.md` | 8. Authentication & Authorization Integration | ✅ Draft v0.1 | Bridge-aware `AuthMiddleware` impl, actor propagation, audit trail split |
 | `sec9_linkml_redesign.md` | 9. LinkML-Centric Redesign | ✅ Approved 2026-04-18 | Three-layer schema stack, first-class `Process`, PROV-O-aligned `ProvenanceRecord`, UUID identity model, namespace-aware typed client |
 | `sec9_decisions.md` | 9. (Companion) Decisions Log | ✅ Approved 2026-04-18 | Drafting decisions with alternatives, rationale, revert paths |
+| `sec9_handoff_mosaic_rename.md` | 9. (Handoff) Mosaic rename execution plan | 🟠 Ready for implementation | ADR-0004 execution: WP-H1–H6 (rename, shims, dual entry-point groups, config/env fallback, docs, verification); data-contract carve-out (`hippo_core`/`hippo_ext`/`hippo_meta` unchanged); tracked in #113 |
 | `sec10_recipes.md` | 10. Recipe Subsystem | 📝 Draft v0.1 | RecipeService facade, install pipeline, lockfile reproducibility model, override/extension rules |
 | `sec11_schema_packages.md` | 11. SchemaPackage Abstraction | 📝 Draft v0.1 | Genus/species split (SchemaPackage → ReferenceLoader + DomainModule), ExternalData/MigratableData protocols, migration DAG, deprovision asymmetry, orchestrator, coherence tools |
 | `appendix_a_example_schema_omics.md` | Appendix A. Example Schema (Omics) | ✅ Draft v0.1 | Complete LinkML schema with `search:`, polymorphic extension example |
