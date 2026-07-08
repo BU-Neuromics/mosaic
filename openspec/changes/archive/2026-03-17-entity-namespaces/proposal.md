@@ -2,7 +2,7 @@
 
 ## Why
 
-As BASS grows, a single `schema.yaml` becomes unwieldy. Different subsystems (Subject, Tissue, Omics, Compute) need to evolve independently, be owned by different teams, and potentially be deployed in subsets. Without namespacing, entity type names are globally flat, cross-team naming collisions are inevitable, and there is no structural way to express that `tissue.Sample` is a different concept from `omics.Sample`.
+As DataHelix grows, a single `schema.yaml` becomes unwieldy. Different subsystems (Subject, Tissue, Omics, Compute) need to evolve independently, be owned by different teams, and potentially be deployed in subsets. Without namespacing, entity type names are globally flat, cross-team naming collisions are inevitable, and there is no structural way to express that `tissue.Sample` is a different concept from `omics.Sample`.
 
 ## What Changes
 

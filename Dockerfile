@@ -1,4 +1,4 @@
-# Hippo — LinkML runtime for the DataHelix platform
+# Hippo — DataHelix metadata tracking service
 # Multi-stage build: install deps -> slim runtime
 #
 # The image carries the graphql and postgres extras: the DataHelix
@@ -30,9 +30,9 @@ WORKDIR /app
 COPY --from=builder /install /usr/local
 
 # Default data and config directories
-RUN mkdir -p /data/hippo-db /app/schemas && chown -R hippo:hippo /data /app
+RUN mkdir -p /data/hippo-db /app/schemas && chown -R datahelix:datahelix /data /app
 
-USER hippo
+USER datahelix
 
 EXPOSE 8001
 

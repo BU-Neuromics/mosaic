@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Component Overview
 
-**Hippo** is the **LinkML runtime** for the BASS platform — the engine that reads a LinkML schema and *becomes* the typed knowledge graph it describes. In a deployment it is the platform's **structured domain graph** (see the platform `../platform/design/domain-graph.md`): every query returns a knowledge subgraph whose semantics are the schema's. Tracking *where data lives* and *what it describes* is **one role** it plays (file cataloging), not its essence — Hippo is not a "metadata store," it runs whatever schema you give it. See the root `../CLAUDE.md` for repo-wide conventions.
+**Hippo** is the **LinkML runtime** for the DataHelix platform — the engine that reads a LinkML schema and *becomes* the typed knowledge graph it describes. In a deployment it is the platform's **structured domain graph** (see the platform `../platform/design/domain-graph.md`): every query returns a knowledge subgraph whose semantics are the schema's. Tracking *where data lives* and *what it describes* is **one role** it plays (file cataloging), not its essence — Hippo is not a "metadata store," it runs whatever schema you give it. See the root `../CLAUDE.md` for repo-wide conventions.
 
 ## Spec Structure
 

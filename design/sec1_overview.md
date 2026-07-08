@@ -4,7 +4,7 @@
 
 Hippo is an open source **LinkML runtime**: point it at a LinkML schema and it *becomes* the
 typed, queryable **knowledge graph** that schema describes — its classes, fields, and
-relationships instantiated as storage, validation, API, and query semantics. In a BASS
+relationships instantiated as storage, validation, API, and query semantics. In a DataHelix
 deployment Hippo is the platform's **structured domain graph** (see the platform
 [`domain-graph.md`](../../platform/design/domain-graph.md)); every query returns a knowledge
 subgraph, enabling downstream systems, analysis pipelines, and portals to reliably locate and

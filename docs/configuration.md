@@ -1,6 +1,6 @@
 # Hippo Configuration Reference
 
-Complete reference for configuring Hippo, the LinkML runtime for the BASS platform (the platform's structured domain graph; metadata tracking is one application).
+Complete reference for configuring Hippo, the LinkML runtime for the DataHelix platform (the platform's structured domain graph; metadata tracking is one application).
 
 ## Overview
 
