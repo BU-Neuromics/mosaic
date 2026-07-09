@@ -2090,6 +2090,24 @@ class PostgresAdapter(EntityStore):
         """PostgreSQL adapter supports FTS and trigram fuzzy search."""
         return {"fts", "trigram"}
 
+    def entity_counts(self) -> dict[str, int]:
+        """Count stored entities per entity type.
+
+        Because Hippo never hard-deletes, the count for a type includes
+        unavailable (soft-deleted / superseded) entities.
+
+        Returns:
+            Mapping of entity type name → total entity count, for types
+            with at least one entity.
+        """
+        with self._transaction() as conn:
+            cur = conn.cursor()
+            cur.execute(
+                "SELECT entity_type, COUNT(*) AS c FROM entities "
+                "GROUP BY entity_type ORDER BY entity_type"
+            )
+            return {row["entity_type"]: row["c"] for row in cur.fetchall()}
+
     # ------------------------------------------------------------------
     # Temporal queries
     # ------------------------------------------------------------------

@@ -84,6 +84,7 @@ SDK_RESERVED_NAMES: frozenset[str] = frozenset(
         "set_availability_bulk",
         "staged_transaction",
         "state_at",
+        "status",
         "storage",
         "supersede",
         "supersede_entity",

@@ -4,6 +4,24 @@
 
 ### Added
 
+- **Status introspection across SDK / REST / CLI (sec4 system
+  endpoints).** `MosaicClient.status()` owns a single status summary —
+  Mosaic version, active storage adapter, schema version, declared entity
+  types, per-type entity counts, and adapter capability declarations
+  (`search` modes, `staged_transaction`). Both storage adapters gain
+  `entity_counts()` (SQLite via the `_entity_registry` shadow table,
+  PostgreSQL via the `entities` table); counts include unavailable
+  (soft-deleted / superseded) entities since Mosaic never hard-deletes.
+  The REST `GET /status` route is a thin wrapper over the SDK and is
+  authenticated (it describes the deployment's data); `/health` stays an
+  open liveness probe. A new read-only CLI surface mirrors the SDK query
+  layer: `mosaic entity get/query/search/history` and a top-level
+  `mosaic status` verb, both built through the shared core factory and
+  defaulting to YAML (`--json` for machine output). The API root and
+  OpenAPI metadata now report the installed package version instead of a
+  hardcoded `0.1.0`. Also fixes `docker-compose.test.yml`, which mounted
+  both a named volume and a tmpfs at the PostgreSQL data directory and
+  refused to start.
 - **Ship `py.typed` (PEP 561) + package metadata (issue #56).** Mosaic now
   advertises inline type information to downstream type-checkers via a
   `py.typed` marker (`src/mosaic/py.typed`), and `pyproject.toml` gains

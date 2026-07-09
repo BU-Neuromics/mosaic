@@ -70,7 +70,7 @@ def create_app(
     routers: Optional[list] = None,
     hippo_client: Optional[MosaicClient] = None,
     title: str = "Mosaic API",
-    version: str = "0.1.0",
+    version: Optional[str] = None,
     description: str = (
         "A runtime for LinkML schemas. Generates a typed SDK, REST API, "
         "append-only provenance store, and dynamic validation from a "
@@ -87,7 +87,8 @@ def create_app(
                  Defaults to empty list.
         hippo_client: Optional MosaicClient instance for the application.
         title: API title for OpenAPI documentation.
-        version: API version for OpenAPI documentation.
+        version: API version for OpenAPI documentation. Defaults to the
+            installed Mosaic package version.
         description: API description for OpenAPI documentation.
         docs_url: URL path for Swagger UI documentation.
         redoc_url: URL path for ReDoc documentation.
@@ -96,6 +97,11 @@ def create_app(
     Returns:
         Configured FastAPI application instance.
     """
+    if version is None:
+        from mosaic import __version__
+
+        version = __version__
+
     app = FastAPI(
         title=title,
         version=version,

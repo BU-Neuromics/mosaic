@@ -1080,6 +1080,57 @@ class MosaicClient:
         """Get the entity state at a specific point in time."""
         return self._provenance_service.state_at(entity_id, timestamp)
 
+    def status(self) -> dict[str, Any]:
+        """Service status summary (sec4 system endpoints).
+
+        Reports the Mosaic version, active storage adapter, schema
+        version, declared entity types, per-type entity counts, and the
+        adapter's capability declarations. Entity counts include
+        unavailable (soft-deleted / superseded) entities — Mosaic never
+        hard-deletes.
+
+        Returns:
+            Status dict with ``service``, ``version``, ``adapter``,
+            ``schema_version``, ``entity_types``, ``entity_counts``, and
+            ``capabilities`` keys. Storage- and registry-derived fields
+            are ``None``/empty when the client has no storage adapter or
+            schema registry attached.
+        """
+        from mosaic import __version__
+
+        adapter_name: Optional[str] = None
+        entity_counts: dict[str, int] = {}
+        capabilities: dict[str, Any] = {}
+        if self._storage is not None:
+            adapter_name = type(self._storage).__name__
+            if hasattr(self._storage, "search_capabilities"):
+                capabilities["search"] = sorted(
+                    self._storage.search_capabilities()
+                )
+            capabilities["staged_transaction"] = hasattr(
+                self._storage, "staged_transaction"
+            )
+            if hasattr(self._storage, "entity_counts"):
+                entity_counts = self._storage.entity_counts()
+
+        schema_version: Optional[str] = None
+        entity_types: list[str] = []
+        if self._registry is not None:
+            schema_version = (
+                self._registry.schema_view.schema.version or "unversioned"
+            )
+            entity_types = sorted(self._registry.class_names())
+
+        return {
+            "service": "mosaic",
+            "version": __version__,
+            "adapter": adapter_name,
+            "schema_version": schema_version,
+            "entity_types": entity_types,
+            "entity_counts": entity_counts,
+            "capabilities": capabilities,
+        }
+
     # -- RecipeService delegations (sec10 §10.2.1) --
 
     def recipe_list(self) -> list[InstalledRecipe]:

@@ -231,6 +231,78 @@ mosaic ingest --type csv --file donors.csv --config donors_mapping.yaml
 
 ---
 
+## entity
+
+Read-only inspection of stored entities. All subcommands default to YAML
+output; pass `--json` for machine-readable JSON. A missing database is an
+error — these verbs never create one.
+
+### Usage
+
+```bash
+mosaic entity <subcommand> [OPTIONS]
+```
+
+### Subcommands
+
+| Subcommand | Description |
+|------------|-------------|
+| `get TYPE ID` | Fetch a single entity by type and id (`--expand` for related entities) |
+| `query TYPE` | List entities; `--filter field=value` (repeatable, AND), `--limit`/`--offset` |
+| `search TYPE QUERY` | Full-text search over fields declared with `hippo_search` |
+| `history ID` | Provenance trail for an entity, oldest first |
+
+### Common Options
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `--db-path` | `string` | `data/mosaic.db` | Path to the SQLite database |
+| `--schema` | `string` | `None` | LinkML schema file or directory (required to recognize user-domain classes) |
+| `--json` | `boolean` | `false` | Emit JSON instead of YAML |
+
+### Example
+
+```bash
+# Fetch one entity
+mosaic entity get Sample 6f1a... --schema schemas/ --json
+
+# All brain samples
+mosaic entity query Sample --filter tissue_type=brain --schema schemas/
+
+# Who touched this entity, and when?
+mosaic entity history 6f1a... --schema schemas/
+```
+
+---
+
+## status
+
+Show deployment status: Mosaic version, storage adapter, schema version,
+per-type entity counts, and adapter capability declarations. Mirrors the
+REST `GET /status` endpoint and the SDK's `client.status()`.
+
+### Usage
+
+```bash
+mosaic status [OPTIONS]
+```
+
+### Options
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `--db-path` | `string` | `data/mosaic.db` | Path to the SQLite database |
+| `--schema` | `string` | `None` | LinkML schema file or directory |
+| `--json` | `boolean` | `false` | Emit JSON instead of YAML |
+
+### Example
+
+```bash
+mosaic status --schema schemas/ --json
+```
+
+---
+
 ## reference
 
 Manage reference data loader packages.
