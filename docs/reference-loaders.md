@@ -127,10 +127,12 @@ Add a `requires:` block to `schema.yaml` to declare which reference loaders your
 # schema.yaml
 requires:
   - hippo-reference-fma==3.3
-  - hippo-reference-ensembl==mus_musculus.GRCm39.115
+  - hippo-reference-ensembl==0.1.0
 ```
 
 Only exact-match pins (`==`) are supported in v1. If you need a minimum version, pin the lowest acceptable release and upgrade explicitly with `hippo reference upgrade`.
+
+**Pin against the installed pip package version, not a data-version slug.** In v1 the `requires:` check matches the pin's RHS against `importlib.metadata.version(<package>)` — the version of the loader's pip distribution (e.g. `0.1.0`), not the loader's data-version slug (e.g. `mouse-115`, `mus_musculus.GRCm39.115`). A pin written as a data-version slug always fails with `HIPPO_REQUIRES_UNSATISFIED`, even when that data version is installed. A future release will match against the data-version slug recorded at install time instead; until then, pin the pip version.
 
 `hippo validate` and `hippo migrate` both check `requires:` before doing anything else — each fails fast with a clear install suggestion if a required loader is missing or its installed version disagrees with the pin.
 
@@ -160,7 +162,7 @@ Reference a loader-provided class from your own schema using the loader-prefixed
 ```yaml
 # schema.yaml
 requires:
-  - hippo-reference-ensembl==mus_musculus.GRCm39.115
+  - hippo-reference-ensembl==0.1.0
 classes:
   SampleAnnotation:
     attributes:

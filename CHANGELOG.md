@@ -33,6 +33,12 @@
   family). Previously all of these fell through to an anonymous generic
   500. Fixes #62.
 
+### Docs
+
+- **`docs/reference-loaders.md`** — corrected the `requires:` pin example
+  to use the installed pip package version rather than a data-version
+  slug, matching the v1 `hippo/requires.py` matching behavior. Fixes #78.
+
 ## v0.10.6 — 2026-07-08 (Postgres write parity: updates, availability, boolean filters)
 
 ### Fixed
