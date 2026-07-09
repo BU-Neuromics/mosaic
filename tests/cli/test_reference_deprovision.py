@@ -274,5 +274,13 @@ class TestDeprovisionCli:
             ],
         )
         assert result.exit_code != 0
-        # Errors are echoed to stderr (Typer ``err=True``).
-        assert "not installed" in result.stderr
+        # Errors are echoed to stderr (Typer ``err=True``). Whether stderr
+        # is captured separately from stdout is a CliRunner default that
+        # changed across click versions (merged pre-8.2, separate 8.2+),
+        # so read whichever stream(s) are actually available instead of
+        # assuming one shape.
+        try:
+            stderr = result.stderr
+        except ValueError:
+            stderr = ""
+        assert "not installed" in result.output + stderr
