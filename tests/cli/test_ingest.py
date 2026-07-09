@@ -354,3 +354,149 @@ class TestIngestResult:
         assert d["created"] == 2
         assert d["errors"] == 1
         assert "source_file" in d
+
+
+# ---------------------------------------------------------------------------
+# Cyclic / self-referential references (issue #95)
+# ---------------------------------------------------------------------------
+
+#: A schema with a self-referential reference slot (``Node.part_of -> Node``).
+#: Schema-valid data can form reference cycles (``A -> B -> A``) or self-loops
+#: (``A -> A``) that no per-row insertion order can satisfy under immediately
+#: enforced foreign keys.
+CYCLIC_SCHEMA_YAML = """\
+id: https://example.org/hippo/test/cyclic
+name: cyclic_schema
+description: Schema with a self-referential reference slot.
+
+prefixes:
+  linkml: https://w3id.org/linkml/
+
+imports:
+  - linkml:types
+  - hippo_core
+
+default_range: string
+
+classes:
+  Node:
+    is_a: Entity
+    attributes:
+      name:
+        required: true
+      part_of:
+        range: Node
+"""
+
+
+class TestCyclicSelfReferentialIngest:
+    """A bundle whose instances reference each other cyclically ingests
+    atomically: foreign-key checks are deferred to the single commit that
+    wraps the whole bundle (issue #95)."""
+
+    @pytest.fixture()
+    def cyclic_registry(self, tmp_path: Path):
+        from mosaic.linkml_bridge import SchemaRegistry
+
+        schema = tmp_path / "cyclic.yaml"
+        schema.write_text(CYCLIC_SCHEMA_YAML)
+        return SchemaRegistry.from_path(schema)
+
+    @pytest.fixture()
+    def cyclic_client(self, tmp_path: Path, cyclic_registry):
+        from mosaic.core.client import MosaicClient
+        from mosaic.core.storage.adapters.sqlite_adapter import SQLiteAdapter
+
+        return MosaicClient(
+            storage=SQLiteAdapter(
+                str(tmp_path / "cyclic.db"), schema_registry=cyclic_registry
+            )
+        )
+
+    def test_two_node_cycle_ingests(
+        self, tmp_path, cyclic_client, cyclic_registry
+    ):
+        """``A -> B -> A`` — the reproduction from issue #95."""
+        from mosaic.cli.commands.ingest import ingest_linkml_yaml
+
+        bundle = _write_bundle(
+            tmp_path,
+            {
+                "nodes": [
+                    {"id": "N-1", "name": "one", "part_of": "N-2", "is_available": True},
+                    {"id": "N-2", "name": "two", "part_of": "N-1", "is_available": True},
+                ]
+            },
+        )
+
+        result = ingest_linkml_yaml(bundle, cyclic_client, cyclic_registry)
+
+        assert result.errors == 0, result.error_messages
+        assert result.created == 2
+        assert cyclic_client.get("Node", "N-1")["data"]["part_of"] == "N-2"
+        assert cyclic_client.get("Node", "N-2")["data"]["part_of"] == "N-1"
+
+    def test_self_loop_ingests(self, tmp_path, cyclic_client, cyclic_registry):
+        """A single node referencing itself (``A -> A``)."""
+        from mosaic.cli.commands.ingest import ingest_linkml_yaml
+
+        bundle = _write_bundle(
+            tmp_path,
+            {"nodes": [{"id": "N-1", "name": "self", "part_of": "N-1", "is_available": True}]},
+        )
+
+        result = ingest_linkml_yaml(bundle, cyclic_client, cyclic_registry)
+
+        assert result.errors == 0, result.error_messages
+        assert result.created == 1
+        assert cyclic_client.get("Node", "N-1")["data"]["part_of"] == "N-1"
+
+    def test_forward_reference_is_order_independent(
+        self, tmp_path, cyclic_client, cyclic_registry
+    ):
+        """An instance may reference another declared *later* in the bundle;
+        deferral removes any need to hand-order the file."""
+        from mosaic.cli.commands.ingest import ingest_linkml_yaml
+
+        bundle = _write_bundle(
+            tmp_path,
+            {
+                "nodes": [
+                    {"id": "N-1", "name": "child", "part_of": "N-2", "is_available": True},
+                    {"id": "N-2", "name": "parent", "is_available": True},
+                ]
+            },
+        )
+
+        result = ingest_linkml_yaml(bundle, cyclic_client, cyclic_registry)
+
+        assert result.errors == 0, result.error_messages
+        assert result.created == 2
+
+    def test_dangling_reference_rolls_back_whole_bundle(
+        self, tmp_path, cyclic_client, cyclic_registry
+    ):
+        """A reference to an id present in neither the bundle nor the database
+        fails the deferred check at commit; the whole bundle rolls back and
+        nothing is persisted (atomic ingest)."""
+        from mosaic.cli.commands.ingest import IngestError, ingest_linkml_yaml
+
+        bundle = _write_bundle(
+            tmp_path,
+            {
+                "nodes": [
+                    {"id": "N-1", "name": "one", "part_of": "GHOST", "is_available": True},
+                    {"id": "N-2", "name": "two", "is_available": True},
+                ]
+            },
+        )
+
+        with pytest.raises(IngestError, match="rolled back"):
+            ingest_linkml_yaml(bundle, cyclic_client, cyclic_registry)
+
+        # Nothing from the bundle survived the rollback.
+        from mosaic.core.exceptions import EntityNotFoundError
+
+        for node_id in ("N-1", "N-2"):
+            with pytest.raises(EntityNotFoundError):
+                cyclic_client.get("Node", node_id)
