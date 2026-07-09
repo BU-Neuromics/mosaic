@@ -492,6 +492,31 @@ def _get_client(db_path: str | None = None, schema_path: str | None = None):
     )
 
 
+def _resolve_ingest_db_path(db_path: str | None) -> str | None:
+    """Resolve the ``ingest`` target db path.
+
+    Explicit ``--db-path`` wins; otherwise fall back to the
+    ``database_url`` of an auto-detected ``config.json``/``hippo.yaml`` so
+    ``ingest`` targets the same store as other config-aware commands
+    (e.g. ``hippo serve``) instead of always defaulting to
+    ``data/hippo.db``.
+    """
+    if db_path:
+        return db_path
+
+    from hippo.config import ConfigError
+    from hippo.config import ValidationError as ConfigValidationError
+    from hippo.core.factory import load_config_autodetect
+
+    try:
+        cfg = load_config_autodetect()
+    except (ConfigError, ConfigValidationError):
+        return None
+    if cfg is not None and cfg.database_url:
+        return cfg.database_url
+    return None
+
+
 @app.command()
 def ingest(
     file: str = typer.Option(
@@ -517,6 +542,14 @@ def ingest(
             "validated against this schema's tree-root before any writes; "
             "the same schema backs the storage adapter so user-domain "
             "classes are recognized."
+        ),
+    ),
+    db_path: str = typer.Option(
+        None,
+        "--db-path",
+        help=(
+            "Path to SQLite database (default: data/hippo.db, or the "
+            "database_url from an auto-detected config.json/hippo.yaml)."
         ),
     ),
     dry_run: bool = typer.Option(
@@ -585,7 +618,7 @@ def ingest(
             typer.echo(f"[dry-run] {file_path.name}: bundle validates.")
             return
 
-        client = _get_client(schema_path=validate_schema)
+        client = _get_client(db_path=_resolve_ingest_db_path(db_path), schema_path=validate_schema)
         try:
             result = ingest_linkml_yaml(file_path, client, registry)
         except IngestError as e:

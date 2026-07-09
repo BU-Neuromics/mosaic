@@ -1022,6 +1022,18 @@ class SQLiteAdapter(EntityStore):
         if any exception escapes the scope (e.g. the end-to-end validation
         gate raising :class:`~hippo.core.exceptions.MigrationGateError`).
         Nesting is reference-counted: only the outermost scope commits.
+
+        Foreign-key enforcement is deferred to that final commit
+        (``PRAGMA defer_foreign_keys=ON``, scoped to this transaction by
+        SQLite and auto-reset on commit/rollback), so a self-referential or
+        cyclic write set within the scope — no insertion order can satisfy
+        immediate per-row enforcement — still succeeds as long as the whole
+        set is consistent by commit time (issue #95). The pragma only takes
+        effect for the *current* transaction, and SQLite scopes "current"
+        to a transaction already opened by ``BEGIN`` — setting it first and
+        letting ``sqlite3``'s implicit pre-DML ``BEGIN`` follow silently
+        drops it — so the transaction is opened explicitly before the
+        pragma is set.
         """
         conn = self._get_connection()
         depth = getattr(self._local, "staging_depth", 0)
@@ -1034,6 +1046,8 @@ class SQLiteAdapter(EntityStore):
                 self._local.staging_depth -= 1
             return
         self._local.staging_depth = 1
+        conn.execute("BEGIN")
+        conn.execute("PRAGMA defer_foreign_keys=ON")
         try:
             yield conn
             conn.commit()

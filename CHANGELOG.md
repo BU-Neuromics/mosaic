@@ -2,6 +2,20 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- **`hippo ingest` now honors `--db-path` and config.** The command
+  ignored `--db-path` (which it didn't even accept) and never consulted
+  `config.json`/`hippo.yaml`, always writing to the factory default
+  `data/hippo.db`. It now mirrors `migrate`/`query` by accepting
+  `--db-path` and falling back to `create_client_from_config`. Fixes #89.
+- **Self-referential / cyclic reference slots can now be ingested.**
+  `hippo ingest` enforced FK constraints per-row during a single insertion
+  pass, so a reference cycle (`A → B → A`, or a self-loop) could never be
+  satisfied by any insertion order. Cyclic writes within one bundle are
+  now deferred (FK enforcement relaxed for the duration of the bundle
+  transaction) so the whole set commits atomically. Fixes #95.
+
 ## v0.10.6 — 2026-07-08 (Postgres write parity: updates, availability, boolean filters)
 
 ### Fixed

@@ -111,41 +111,47 @@ def ingest_linkml_yaml(
 
     result = IngestResult(source_file=str(path))
 
-    for slot_name, instances in parsed.items():
-        declared_range = slot_to_class.get(slot_name)
-        if declared_range is None:
-            # Tree-root validation already rejects unknown slots in
-            # closed-schema mode; guard against schema drift just in case.
-            result.errors += 1
-            result.error_messages.append(
-                f"Unknown tree-root slot {slot_name!r}"
-            )
-            continue
-        if not isinstance(instances, list):
-            result.errors += 1
-            result.error_messages.append(
-                f"Slot {slot_name!r}: expected a list, got "
-                f"{type(instances).__name__}"
-            )
-            continue
-        for idx, instance in enumerate(instances):
-            if not isinstance(instance, dict):
+    # One staged scope for the whole bundle: on a backend that supports it
+    # (SQLite), this also defers foreign-key enforcement to the final
+    # commit, so a self-referential or cyclic reference between two
+    # instances in the same bundle (A -> B -> A) can be written in any
+    # order instead of failing every row in the cycle (issue #95).
+    with client.staged_transaction():
+        for slot_name, instances in parsed.items():
+            declared_range = slot_to_class.get(slot_name)
+            if declared_range is None:
+                # Tree-root validation already rejects unknown slots in
+                # closed-schema mode; guard against schema drift just in case.
                 result.errors += 1
                 result.error_messages.append(
-                    f"{slot_name}[{idx}]: expected a mapping, got "
-                    f"{type(instance).__name__}"
+                    f"Unknown tree-root slot {slot_name!r}"
                 )
                 continue
-            try:
-                target_class = _dispatch_class(
-                    registry, declared_range, instance
-                )
-                _upsert_instance(client, target_class, instance, result)
-            except Exception as exc:
+            if not isinstance(instances, list):
                 result.errors += 1
                 result.error_messages.append(
-                    f"{slot_name}[{idx}] ({declared_range}): {exc}"
+                    f"Slot {slot_name!r}: expected a list, got "
+                    f"{type(instances).__name__}"
                 )
+                continue
+            for idx, instance in enumerate(instances):
+                if not isinstance(instance, dict):
+                    result.errors += 1
+                    result.error_messages.append(
+                        f"{slot_name}[{idx}]: expected a mapping, got "
+                        f"{type(instance).__name__}"
+                    )
+                    continue
+                try:
+                    target_class = _dispatch_class(
+                        registry, declared_range, instance
+                    )
+                    _upsert_instance(client, target_class, instance, result)
+                except Exception as exc:
+                    result.errors += 1
+                    result.error_messages.append(
+                        f"{slot_name}[{idx}] ({declared_range}): {exc}"
+                    )
 
     return result
 

@@ -223,6 +223,110 @@ class TestIngestLinkMLYAML:
 
 
 # ---------------------------------------------------------------------------
+# Self-referential / cyclic reference slots (issue #95)
+# ---------------------------------------------------------------------------
+
+CYCLIC_SCHEMA_YAML = """\
+id: https://example.org/hippo/test/ingest_cli_cyclic
+name: ingest_cli_cyclic_schema
+description: Self-referential slot for cyclic-reference ingest tests.
+
+prefixes:
+  linkml: https://w3id.org/linkml/
+
+imports:
+  - linkml:types
+  - hippo_core
+
+default_range: string
+
+classes:
+  Node:
+    is_a: Entity
+    attributes:
+      name:
+        required: true
+      part_of:
+        range: Node
+"""
+
+
+@pytest.fixture()
+def cyclic_schema_file(tmp_path: Path) -> Path:
+    p = tmp_path / "cyclic_schema.yaml"
+    p.write_text(CYCLIC_SCHEMA_YAML)
+    return p
+
+
+@pytest.fixture()
+def cyclic_schema_registry(cyclic_schema_file: Path):
+    from hippo.linkml_bridge import SchemaRegistry
+
+    return SchemaRegistry.from_path(cyclic_schema_file)
+
+
+@pytest.fixture()
+def cyclic_client(tmp_hippo: Path, cyclic_schema_registry):
+    from hippo.core.client import HippoClient
+    from hippo.core.storage.adapters.sqlite_adapter import SQLiteAdapter
+
+    return HippoClient(
+        storage=SQLiteAdapter(
+            str(tmp_hippo / "cyclic.db"), schema_registry=cyclic_schema_registry
+        )
+    )
+
+
+class TestIngestCyclicReferences:
+    """A reference cycle within one bundle must not fail every row in it."""
+
+    def test_two_node_cycle_ingests(
+        self, tmp_hippo, cyclic_client, cyclic_schema_registry
+    ):
+        """A -> B -> A: no insertion order satisfies immediate FK checks,
+        so this only ingests cleanly with FK enforcement deferred to commit."""
+        from hippo.cli.commands.ingest import ingest_linkml_yaml
+
+        bundle = _write_bundle(
+            tmp_hippo,
+            {
+                "nodes": [
+                    {"id": "n1", "name": "one", "part_of": "n2", "is_available": True},
+                    {"id": "n2", "name": "two", "part_of": "n1", "is_available": True},
+                ]
+            },
+        )
+
+        result = ingest_linkml_yaml(bundle, cyclic_client, cyclic_schema_registry)
+
+        assert result.errors == 0
+        assert result.created == 2
+        items = {item["id"]: item for item in cyclic_client.query("Node").items}
+        assert items["n1"]["data"]["part_of"] == "n2"
+        assert items["n2"]["data"]["part_of"] == "n1"
+
+    def test_self_loop_ingests(self, tmp_hippo, cyclic_client, cyclic_schema_registry):
+        """A -> A: an instance referencing itself in the same bundle."""
+        from hippo.cli.commands.ingest import ingest_linkml_yaml
+
+        bundle = _write_bundle(
+            tmp_hippo,
+            {
+                "nodes": [
+                    {"id": "n1", "name": "self", "part_of": "n1", "is_available": True},
+                ]
+            },
+        )
+
+        result = ingest_linkml_yaml(bundle, cyclic_client, cyclic_schema_registry)
+
+        assert result.errors == 0
+        assert result.created == 1
+        item = cyclic_client.get("Node", "n1")
+        assert item["data"]["part_of"] == "n1"
+
+
+# ---------------------------------------------------------------------------
 # CLI surface
 # ---------------------------------------------------------------------------
 
@@ -327,6 +431,74 @@ class TestIngestCLI:
         )
         assert result.exit_code == 1
         assert "not found" in result.output
+
+    def test_cli_db_path_option_targets_explicit_store(
+        self, runner, tmp_hippo, schema_file, monkeypatch
+    ):
+        """``--db-path`` writes to the named store, not ``data/hippo.db`` (issue #89)."""
+        import sqlite3
+
+        bundle = _write_bundle(
+            tmp_hippo,
+            {"projects": [{"id": "p1", "name": "Project One", "is_available": True}]},
+        )
+        monkeypatch.chdir(tmp_hippo)
+        (tmp_hippo / "data").mkdir()
+        target_db = tmp_hippo / "store-0" / "hippo.db"
+        target_db.parent.mkdir()
+        sqlite3.connect(str(target_db)).close()
+
+        result = runner.invoke(
+            app,
+            [
+                "ingest",
+                "--file",
+                str(bundle),
+                "--validate-schema",
+                str(schema_file),
+                "--db-path",
+                str(target_db),
+            ],
+        )
+        assert result.exit_code == 0, result.output
+        assert "created=1" in result.output
+        assert not (tmp_hippo / "data" / "hippo.db").exists()
+
+        from hippo.core.client import HippoClient
+        from hippo.core.storage.adapters.sqlite_adapter import SQLiteAdapter
+        from hippo.linkml_bridge import SchemaRegistry
+
+        registry = SchemaRegistry.from_path(schema_file)
+        client = HippoClient(storage=SQLiteAdapter(str(target_db), schema_registry=registry))
+        assert len(list(client.query("Project").items)) == 1
+
+    def test_cli_ingest_falls_back_to_config_db_path(
+        self, runner, tmp_hippo, schema_file, monkeypatch
+    ):
+        """With no ``--db-path``, ingest consults ``config.json`` (issue #89)."""
+        bundle = _write_bundle(
+            tmp_hippo,
+            {"projects": [{"id": "p1", "name": "Project One", "is_available": True}]},
+        )
+        configured_db = tmp_hippo / "configured.db"
+        (tmp_hippo / "config.json").write_text(
+            yaml.dump(
+                {
+                    "schema_path": str(schema_file),
+                    "database_url": str(configured_db),
+                }
+            )
+        )
+        monkeypatch.chdir(tmp_hippo)
+
+        result = runner.invoke(
+            app,
+            ["ingest", "--file", str(bundle), "--validate-schema", str(schema_file)],
+        )
+        assert result.exit_code == 0, result.output
+        assert "created=1" in result.output
+        assert configured_db.exists()
+        assert not (tmp_hippo / "data" / "hippo.db").exists()
 
 
 # ---------------------------------------------------------------------------
