@@ -2379,6 +2379,94 @@
 <a id="__codelineno-13-22" name="__codelineno-13-22" href="#__codelineno-13-22"></a>    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;  Rule:    </span><span class="si">{</span><span class="n">e</span><span class="o">.</span><span class="n">rule_id</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
 <a id="__codelineno-13-23" name="__codelineno-13-23" href="#__codelineno-13-23"></a>    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;  Context: </span><span class="si">{</span><span class="n">e</span><span class="o">.</span><span class="n">input_context</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
 </code></pre></div>
+<p><strong>HTTP status mapping (REST layer):</strong></p>
+<p>When an SDK exception escapes a REST handler, the API factory maps it to a
+meaningful HTTP status with the standard error body (<code>{"error": ..., "detail":
+...}</code>), so clients can distinguish causes rather than seeing an anonymous 500
+(sec4 §4.3). Status codes are resolved by the exception's class hierarchy
+(most-specific match wins):</p>
+<table>
+<thead>
+<tr>
+<th>Exception</th>
+<th>HTTP status</th>
+<th><code>error</code></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>EntityNotFoundError</code></td>
+<td>404</td>
+<td><code>Entity Not Found</code></td>
+</tr>
+<tr>
+<td><code>EntityAlreadySupersededError</code></td>
+<td>409</td>
+<td><code>Entity Already Superseded</code></td>
+</tr>
+<tr>
+<td><code>ConfigError</code> (e.g. adapter conflict)</td>
+<td>409</td>
+<td><code>Configuration Error</code></td>
+</tr>
+<tr>
+<td><code>ValidationError</code></td>
+<td>422</td>
+<td><code>Validation Error</code></td>
+</tr>
+<tr>
+<td><code>ValidationFailed</code></td>
+<td>422</td>
+<td><code>Validation Failed</code> (tier-tagged envelope, sec9 §9.9)</td>
+</tr>
+<tr>
+<td><code>ValidationFailure</code></td>
+<td>422</td>
+<td><code>Validation Failed</code></td>
+</tr>
+<tr>
+<td><code>IngestionError</code> (incl. <code>IngestionValidationError</code>)</td>
+<td>400</td>
+<td><code>Ingestion Error</code></td>
+</tr>
+<tr>
+<td><code>SearchCapabilityError</code></td>
+<td>400</td>
+<td><code>Search Capability Error</code></td>
+</tr>
+<tr>
+<td><code>TemporalQueryError</code></td>
+<td>400</td>
+<td><code>Temporal Query Error</code></td>
+</tr>
+<tr>
+<td><code>SchemaError</code></td>
+<td>400</td>
+<td><code>Schema Error</code></td>
+</tr>
+<tr>
+<td><code>AdapterError</code></td>
+<td>500</td>
+<td><code>Storage Adapter Error</code></td>
+</tr>
+<tr>
+<td><code>ProvenanceIntegrityError</code></td>
+<td>500</td>
+<td><code>Provenance Integrity Error</code></td>
+</tr>
+<tr>
+<td>Any other <code>HippoError</code> (recipe/migration/...)</td>
+<td>500</td>
+<td>The exception class name</td>
+</tr>
+<tr>
+<td>Any non-Hippo exception</td>
+<td>500</td>
+<td><code>Internal Server Error</code> (detail withheld)</td>
+</tr>
+</tbody>
+</table>
+<p>All 5xx responses are logged server-side with full tracebacks.</p>
 <h2 id="rest-api">REST API<a class="headerlink" href="#rest-api" title="Permanent link">&para;</a></h2>
 <p>All REST endpoints (except health checks) require authentication via Bearer token header:</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-14-1" name="__codelineno-14-1" href="#__codelineno-14-1"></a>Authorization: Bearer &lt;token&gt;
