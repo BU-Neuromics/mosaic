@@ -22,6 +22,8 @@
 
 ### Added
 
+- Shipped `py.typed` (PEP 561) marker and `keywords`/`classifiers`
+  metadata in `pyproject.toml`. Fixes #56.
 - **REST layer maps the full SDK exception hierarchy to HTTP statuses**
   (sec4 §4.3): `EntityAlreadySupersededError`/`ConfigError` → 409,
   `ValidationFailure` → 422, `IngestionError`/`SearchCapabilityError`/
