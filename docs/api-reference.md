@@ -283,6 +283,33 @@ except ValidationFailure as e:
     print(f"  Context: {e.input_context}")
 ```
 
+**HTTP status mapping (REST layer):**
+
+When an SDK exception escapes a REST handler, the API factory maps it to a
+meaningful HTTP status with the standard error body (`{"error": ..., "detail":
+...}`), so clients can distinguish causes rather than seeing an anonymous 500
+(sec4 §4.3). Status codes are resolved by the exception's class hierarchy
+(most-specific match wins):
+
+| Exception | HTTP status | `error` |
+|-----------|-------------|---------|
+| `EntityNotFoundError` | 404 | `Entity Not Found` |
+| `EntityAlreadySupersededError` | 409 | `Entity Already Superseded` |
+| `ConfigError` (e.g. adapter conflict) | 409 | `Configuration Error` |
+| `ValidationError` | 422 | `Validation Error` |
+| `ValidationFailed` | 422 | `Validation Failed` (tier-tagged envelope, sec9 §9.9) |
+| `ValidationFailure` | 422 | `Validation Failed` |
+| `IngestionError` (incl. `IngestionValidationError`) | 400 | `Ingestion Error` |
+| `SearchCapabilityError` | 400 | `Search Capability Error` |
+| `TemporalQueryError` | 400 | `Temporal Query Error` |
+| `SchemaError` | 400 | `Schema Error` |
+| `AdapterError` | 500 | `Storage Adapter Error` |
+| `ProvenanceIntegrityError` | 500 | `Provenance Integrity Error` |
+| Any other `HippoError` (recipe/migration/...) | 500 | The exception class name |
+| Any non-Hippo exception | 500 | `Internal Server Error` (detail withheld) |
+
+All 5xx responses are logged server-side with full tracebacks.
+
 ## REST API
 
 All REST endpoints (except health checks) require authentication via Bearer token header:
