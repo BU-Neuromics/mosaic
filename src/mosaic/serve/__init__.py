@@ -5,6 +5,7 @@ from mosaic.core.client import MosaicClient
 
 from mosaic.serve.routers import (
     availability,
+    drs,
     entity,
     external_id,
     health,
@@ -21,6 +22,7 @@ __all__ = [
     "create_app",
     "MosaicClient",
     "availability",
+    "drs",
     "entity",
     "external_id",
     "health",
@@ -72,6 +74,7 @@ def create_default_app(
         external_id.router,
         xref.router,
         schema.router,
+        drs.router,
     ]
 
     app = create_app(routers=routers, hippo_client=hippo_client)

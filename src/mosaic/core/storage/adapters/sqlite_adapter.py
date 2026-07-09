@@ -1022,6 +1022,15 @@ class SQLiteAdapter(EntityStore):
         if any exception escapes the scope (e.g. the end-to-end validation
         gate raising :class:`~mosaic.core.exceptions.MigrationGateError`).
         Nesting is reference-counted: only the outermost scope commits.
+
+        Foreign-key checks are **deferred to commit** for the duration of the
+        scope (``PRAGMA defer_foreign_keys=ON``, issue #95): with the whole
+        write-set landing in one transaction, rows may reference each other in
+        any order — self-referential and cyclic references (``A → B → A``, a
+        self-loop) that no per-row insertion order can satisfy now insert and
+        are validated together at commit. The pragma auto-resets at the next
+        commit/rollback, so it only affects this scope; genuinely dangling
+        references still fail the commit and roll the whole set back.
         """
         conn = self._get_connection()
         depth = getattr(self._local, "staging_depth", 0)
@@ -1034,6 +1043,20 @@ class SQLiteAdapter(EntityStore):
                 self._local.staging_depth -= 1
             return
         self._local.staging_depth = 1
+        # Defer FK enforcement to commit for the whole staged write-set so
+        # cyclic / self-referential references can be inserted (issue #95).
+        #
+        # ``defer_foreign_keys`` is a per-transaction flag that SQLite clears
+        # at the next COMMIT/ROLLBACK. In sqlite3's legacy autocommit mode each
+        # bare SELECT runs (and auto-commits) in its own implicit transaction,
+        # so a flag set in autocommit is wiped by the first read the write path
+        # does before any INSERT. We therefore open the scope's transaction
+        # explicitly *first*, then set the flag inside it: it now survives every
+        # interleaved read until the single staged commit. A genuinely dangling
+        # reference still fails that commit and rolls the whole set back.
+        if not conn.in_transaction:
+            conn.execute("BEGIN")
+        conn.execute("PRAGMA defer_foreign_keys=ON")
         try:
             yield conn
             conn.commit()

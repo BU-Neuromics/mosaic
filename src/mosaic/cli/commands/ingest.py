@@ -111,41 +111,65 @@ def ingest_linkml_yaml(
 
     result = IngestResult(source_file=str(path))
 
-    for slot_name, instances in parsed.items():
-        declared_range = slot_to_class.get(slot_name)
-        if declared_range is None:
-            # Tree-root validation already rejects unknown slots in
-            # closed-schema mode; guard against schema drift just in case.
-            result.errors += 1
-            result.error_messages.append(
-                f"Unknown tree-root slot {slot_name!r}"
-            )
-            continue
-        if not isinstance(instances, list):
-            result.errors += 1
-            result.error_messages.append(
-                f"Slot {slot_name!r}: expected a list, got "
-                f"{type(instances).__name__}"
-            )
-            continue
-        for idx, instance in enumerate(instances):
-            if not isinstance(instance, dict):
-                result.errors += 1
-                result.error_messages.append(
-                    f"{slot_name}[{idx}]: expected a mapping, got "
-                    f"{type(instance).__name__}"
-                )
-                continue
-            try:
-                target_class = _dispatch_class(
-                    registry, declared_range, instance
-                )
-                _upsert_instance(client, target_class, instance, result)
-            except Exception as exc:
-                result.errors += 1
-                result.error_messages.append(
-                    f"{slot_name}[{idx}] ({declared_range}): {exc}"
-                )
+    # Write the whole bundle inside one staged transaction so foreign-key
+    # checks are deferred to commit (issue #95). This lets instances reference
+    # each other in any order — forward references, and self-referential /
+    # cyclic references (``A → B → A``, a self-loop) that no per-row insertion
+    # order can satisfy — insert now and validate together at commit. On a
+    # backend without staging this is a transparent no-op (each write commits
+    # as before). A genuinely dangling reference still fails the commit and
+    # rolls the whole bundle back.
+    try:
+        with client.staged_transaction():
+            for slot_name, instances in parsed.items():
+                declared_range = slot_to_class.get(slot_name)
+                if declared_range is None:
+                    # Tree-root validation already rejects unknown slots in
+                    # closed-schema mode; guard against schema drift just in case.
+                    result.errors += 1
+                    result.error_messages.append(
+                        f"Unknown tree-root slot {slot_name!r}"
+                    )
+                    continue
+                if not isinstance(instances, list):
+                    result.errors += 1
+                    result.error_messages.append(
+                        f"Slot {slot_name!r}: expected a list, got "
+                        f"{type(instances).__name__}"
+                    )
+                    continue
+                for idx, instance in enumerate(instances):
+                    if not isinstance(instance, dict):
+                        result.errors += 1
+                        result.error_messages.append(
+                            f"{slot_name}[{idx}]: expected a mapping, got "
+                            f"{type(instance).__name__}"
+                        )
+                        continue
+                    try:
+                        target_class = _dispatch_class(
+                            registry, declared_range, instance
+                        )
+                        _upsert_instance(client, target_class, instance, result)
+                    except Exception as exc:
+                        result.errors += 1
+                        result.error_messages.append(
+                            f"{slot_name}[{idx}] ({declared_range}): {exc}"
+                        )
+    except IngestError:
+        raise
+    except Exception as exc:
+        # Deferred foreign-key checks (issue #95) run when the staged
+        # transaction commits, so a reference that points at an id absent from
+        # both the bundle and the database surfaces here — after the per-row
+        # loop — and rolls the whole bundle back. Deferral trades per-row
+        # attribution for the ability to insert cycles; report it as a
+        # bundle-level failure so nothing is left partially written.
+        raise IngestError(
+            f"Bundle write failed and was rolled back: {exc}. A reference "
+            f"likely points to an id that is not present in the bundle or the "
+            f"database."
+        ) from exc
 
     return result
 

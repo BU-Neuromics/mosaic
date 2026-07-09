@@ -22,6 +22,17 @@
   hardcoded `0.1.0`. Also fixes `docker-compose.test.yml`, which mounted
   both a named volume and a tmpfs at the PostgreSQL data directory and
   refused to start.
+- **Ship `py.typed` (PEP 561) + package metadata (issue #56).** Mosaic now
+  advertises inline type information to downstream type-checkers via a
+  `py.typed` marker (`src/mosaic/py.typed`), and `pyproject.toml` gains
+  `keywords` and trove `classifiers` (including `Typing :: Typed`).
+
+### Fixed
+
+- **Mount the GA4GH DRS router in the default serve app (issue #55).** The DRS
+  read-only router (`GET /ga4gh/drs/v1/objects/{object_id}`) shipped with tests
+  but was never added to `create_default_app()`, so `mosaic serve` silently
+  omitted it. It is now mounted in the default router set.
 
 ## v0.11.0 — 2026-07-08 (Hippo is now Mosaic)
 
@@ -140,6 +151,19 @@
 
 ### Fixed
 
+- **Self-referential / cyclic reference slots can now be ingested (issue #95).**
+  `hippo ingest` inserted entities one row at a time with foreign keys enforced
+  immediately, so instances forming a reference cycle (`A → B → A`, or a
+  self-loop `A → A`) failed with `FOREIGN KEY constraint failed` under every
+  insertion order — no ordering or number of passes could satisfy a cycle. The
+  whole bundle now writes inside a single staged transaction with foreign-key
+  checks **deferred to commit** (SQLite `PRAGMA defer_foreign_keys`), so rows
+  may reference each other in any order — cycles, self-loops, and plain forward
+  references all resolve and are validated together at commit. Ingest is now
+  atomic: a genuinely dangling reference fails the commit and rolls the whole
+  bundle back rather than leaving a partial write. Deferral is enabled for the
+  `staged_transaction` scope generally, so `batch_put` gains the same cyclic
+  support.
 - **References ranged on a polymorphic base class no longer fail their foreign
   key on ingest (issue #93).** `hippo migrate` emitted a foreign key against
   the base-class table for any single-valued reference whose declared range is
@@ -281,6 +305,37 @@ identifier model (issue #48, deprecating the `ExternalID` entity), and adds a
 installed reference loader through public APIs alone (issue #67).
 
 ### Added
+
+- **`query_updated_since` incremental polling (sec4 §4.5).**
+  `MosaicClient.query_updated_since(entity_type=None, since, ...)` returns
+  entities whose provenance-derived `updated_at` is strictly greater than the
+  `since` watermark, ordered by `updated_at` ascending so polling callers (e.g.
+  Cappella's `hippo_poll` trigger) can advance their watermark incrementally.
+  `entity_type` is optional and composes with the issue #44/#49 cross-class
+  scan (`None` polls across all types). Exposed over REST as
+  `GET /entities?updated_since=<ISO8601>`; an unparseable watermark raises
+  `TemporalQueryError`, mapped to HTTP 400 "Temporal Query Error". Comparison
+  uses Hippo's server-side provenance timestamps (UTC) to avoid clock skew.
+  Re-derived from an unsanctioned `feat/maturity` experiment with no original
+  spec; reconciled against sec4 §4.5.
+- **Full SDK exception → HTTP status mapping in the REST layer (sec4 §4.3).**
+  Previously only `EntityNotFoundError` (404) and the validation errors (422)
+  had dedicated REST handlers; every other `HippoError` (supersession
+  conflicts, config/adapter failures, provenance-integrity violations,
+  ingestion / search-capability / temporal-query / schema errors, recipe and
+  migration errors, ...) collapsed to an anonymous `500 Internal Server
+  Error`, leaving clients unable to distinguish causes. The API factory now
+  maps the hierarchy via a `_make_hippo_handler(status, title)` factory: 409
+  for `EntityAlreadySupersededError` and `ConfigError` (adapter conflict),
+  422 for `ValidationFailure`, 400 for `IngestionError` (and its subclass
+  `IngestionValidationError`) / `SearchCapabilityError` / `TemporalQueryError`
+  / `SchemaError`, named-and-logged 500s for `AdapterError` and
+  `ProvenanceIntegrityError`, and a named-500 `HippoError` fallback (using the
+  concrete class name) for any other SDK error. Non-Hippo exceptions still
+  return an opaque 500 with the detail withheld. All responses reuse the
+  existing `ErrorResponse` body, and the tier-tagged `ValidationFailed`
+  envelope handler (sec9 §9.9) is unchanged. Documented in
+  `docs/api-reference.md`.
 
 - **`ExternalReference` value type + `hippo_external_xref` annotation
   (issue #48, non-breaking phase).** Cross-system identifiers are now a

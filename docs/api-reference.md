@@ -283,6 +283,33 @@ except ValidationFailure as e:
     print(f"  Context: {e.input_context}")
 ```
 
+**HTTP status mapping (REST layer):**
+
+When an SDK exception escapes a REST handler, the API factory maps it to a
+meaningful HTTP status with the standard error body (`{"error": ..., "detail":
+...}`), so clients can distinguish causes rather than seeing an anonymous 500
+(sec4 §4.3). Status codes are resolved by the exception's class hierarchy
+(most-specific match wins):
+
+| Exception | HTTP status | `error` |
+|-----------|-------------|---------|
+| `EntityNotFoundError` | 404 | `Entity Not Found` |
+| `EntityAlreadySupersededError` | 409 | `Entity Already Superseded` |
+| `ConfigError` (e.g. adapter conflict) | 409 | `Configuration Error` |
+| `ValidationError` | 422 | `Validation Error` |
+| `ValidationFailed` | 422 | `Validation Failed` (tier-tagged envelope, sec9 §9.9) |
+| `ValidationFailure` | 422 | `Validation Failed` |
+| `IngestionError` (incl. `IngestionValidationError`) | 400 | `Ingestion Error` |
+| `SearchCapabilityError` | 400 | `Search Capability Error` |
+| `TemporalQueryError` | 400 | `Temporal Query Error` |
+| `SchemaError` | 400 | `Schema Error` |
+| `AdapterError` | 500 | `Storage Adapter Error` |
+| `ProvenanceIntegrityError` | 500 | `Provenance Integrity Error` |
+| Any other `HippoError` (recipe/migration/...) | 500 | The exception class name |
+| Any non-Hippo exception | 500 | `Internal Server Error` (detail withheld) |
+
+All 5xx responses are logged server-side with full tracebacks.
+
 ## REST API
 
 All REST endpoints (except health checks) require authentication via Bearer token header:
@@ -449,6 +476,7 @@ List entities with optional filtering and pagination.
 | `offset` | int | Results to skip (default: 0) |
 | `tissue_type` | string | Filter by field value (repeat for OR: `?tissue_type=brain&tissue_type=liver`) |
 | `filter` | string | CEL filter expression (URL-encoded). Example: `?filter=data.age_at_collection%20%3E%2018` |
+| `updated_since` | string | ISO 8601 watermark for polling: only entities whose provenance-derived `updated_at` is strictly greater are returned, ordered by `updated_at` ascending. Invalid timestamps return `400 Temporal Query Error` |
 
 *Multi-value parameters (OR within a field):*
 
@@ -477,6 +505,27 @@ The CEL expression context provides the following variables:
 | `is_available` | bool | The entity's availability status |
 | `created_at` | timestamp | When the entity was created |
 | `updated_at` | timestamp | When the entity was last modified |
+
+*Polling for changes (`updated_since`):*
+
+Pass an ISO 8601 watermark to fetch only entities modified after it. Results
+are ordered by `updated_at` ascending; persist the `updated_at` of the last
+entity processed as the watermark for the next poll. The comparison uses
+Hippo's server-side provenance timestamps (UTC), so callers never need to
+trust their own clock. Omit `entity_type` to poll across all entity types:
+
+```
+GET /entities?entity_type=Sample&updated_since=2024-01-01T00:00:00Z&limit=500
+```
+
+```python
+# SDK equivalent
+recent = client.query_updated_since(
+    entity_type="Sample",
+    since="2024-01-01T00:00:00Z",
+    limit=500,
+)
+```
 
 *SDK equivalents:*
 
