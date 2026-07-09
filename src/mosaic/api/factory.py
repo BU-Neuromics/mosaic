@@ -152,6 +152,11 @@ def create_app(
         ),
     )
 
+    # sec4 §4.5: an unparseable updated_since watermark surfaces as a 400
+    # Temporal Query Error — now covered by the MosaicError→status table
+    # above (TemporalQueryError, 400), landed via #64. No separate handler
+    # needed here.
+
     # sec9 §9.9: ValidationFailed carries the full tier-tagged envelope.
     # REST response body includes `passed`, `failures[].tier`,
     # `failures[].rule`, `failures[].field`, `failures[].message`,
