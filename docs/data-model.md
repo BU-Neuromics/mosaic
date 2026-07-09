@@ -1,6 +1,6 @@
-# Hippo Data Model
+# Mosaic Data Model
 
-This document describes Hippo's data model for users of the SDK. For the full engineering specification, see [Data Model design spec](../design/sec3_data_model.md).
+This document describes Mosaic's data model for users of the SDK. For the full engineering specification, see [Data Model design spec](../design/sec3_data_model.md).
 
 ---
 
@@ -8,12 +8,12 @@ This document describes Hippo's data model for users of the SDK. For the full en
 
 ### Entities
 
-An **entity** is a typed data object in Hippo. Every entity has:
+An **entity** is a typed data object in Mosaic. Every entity has:
 
 - A unique internal identifier (UUID)
 - An entity type (e.g., `Sample`, `Subject`, `Datafile`)
 - User-defined fields as declared in the schema
-- System fields managed automatically by Hippo
+- System fields managed automatically by Mosaic
 
 Entity types (called **classes** in LinkML) and their attributes are defined in the schema configuration (LinkML YAML or JSON), not hardcoded in the SDK.
 
@@ -38,7 +38,7 @@ The `created_at`, `updated_at`, and `schema_version` fields are derived at read 
 
 ## Availability Semantics
 
-Hippo uses **soft deletes** — there are no hard deletes. Every entity carries an `is_available` boolean field:
+Mosaic uses **soft deletes** — there are no hard deletes. Every entity carries an `is_available` boolean field:
 
 - `is_available = true`: Entity appears in default query results
 - `is_available = false`: Entity is hidden from default queries but retained in storage
@@ -65,7 +65,7 @@ entity = client.get_by_external_id("EXT-123", include_archived=True)
 
 ## Entity Namespaces (FQNs)
 
-Entity type strings in Hippo are optionally namespace-qualified. Namespaces allow multiple subsystems to define their own `Sample` or `Subject` types without collision.
+Entity type strings in Mosaic are optionally namespace-qualified. Namespaces allow multiple subsystems to define their own `Sample` or `Subject` types without collision.
 
 ### Namespace Syntax
 
@@ -121,7 +121,7 @@ Existing schemas with no `default_prefix` are unaffected. All unqualified entity
 
 ## External References
 
-External references connect Hippo entities to identifiers from upstream
+External references connect Mosaic entities to identifiers from upstream
 systems (LIMS, lab databases, registries, etc.). They are modeled with the
 framework-provided `ExternalReference` **value type**: a structured value
 (`system`, `value`, optional `retrieved_at` / `version`) stored *inline* on
@@ -209,7 +209,7 @@ when no available entity holds the pair). Over GraphQL:
 
 ### Legacy External IDs (deprecated)
 
-Earlier Hippo versions modeled external identifiers as a separate
+Earlier Mosaic versions modeled external identifiers as a separate
 `ExternalID` *entity* with dedicated APIs
 (`client.register_external_id`, `client.get_by_external_id`,
 `client.list_external_ids`, mapping-level `client.supersede`, and the
@@ -463,14 +463,14 @@ Both the SQLite adapter (`sqlite_adapter.py:1634`) and the Postgres adapter (`po
 
 ## SDK Types Reference
 
-This section documents the user-facing types exported from `hippo.core.types`.
+This section documents the user-facing types exported from `mosaic.core.types`.
 
 ### FilterCondition
 
 A single filter condition for queries.
 
 ```python
-from hippo.core.types import FilterCondition, FilterOperator
+from mosaic.core.types import FilterCondition, FilterOperator
 
 condition = FilterCondition(
     field="tissue_type",
@@ -484,7 +484,7 @@ condition = FilterCondition(
 A group of conditions combined with a logical operator. Supports nested groups via the `groups` field.
 
 ```python
-from hippo.core.types import FilterGroup, FilterCondition, FilterOperator, LogicalOperator
+from mosaic.core.types import FilterGroup, FilterCondition, FilterOperator, LogicalOperator
 
 group = FilterGroup(
     conditions=[
@@ -500,7 +500,7 @@ group = FilterGroup(
 Top-level filter container supporting nested groups.
 
 ```python
-from hippo.core.types import Filter, FilterGroup
+from mosaic.core.types import Filter, FilterGroup
 
 filter_obj = Filter(root=FilterGroup(conditions=[...]))
 ```
@@ -510,7 +510,7 @@ filter_obj = Filter(root=FilterGroup(conditions=[...]))
 Enum of supported comparison operators.
 
 ```python
-from hippo.core.types import FilterOperator
+from mosaic.core.types import FilterOperator
 
 # EQ, NE, GT, GTE, LT, LTE, IN, NOT_IN, CONTAINS, STARTS_WITH, ENDS_WITH, IS_NULL, IS_NOT_NULL
 ```
@@ -520,7 +520,7 @@ from hippo.core.types import FilterOperator
 Enum for combining filter conditions.
 
 ```python
-from hippo.core.types import LogicalOperator
+from mosaic.core.types import LogicalOperator
 
 # AND, OR
 ```
@@ -537,7 +537,7 @@ Paginated query result returned by `client.query()`.
 | `offset` | `int` | Number of items skipped |
 
 ```python
-from hippo.core.types import PaginatedResult
+from mosaic.core.types import PaginatedResult
 
 result = client.query("Sample", limit=50, offset=0)
 
@@ -558,7 +558,7 @@ Search result with relevance scoring. Returned by search operations.
 | `matched_fields` | `list[str]` | Fields that matched the query |
 
 ```python
-from hippo.core.types import ScoredMatch
+from mosaic.core.types import ScoredMatch
 
 match = ScoredMatch(
     score=0.95,
@@ -580,7 +580,7 @@ Represents a write operation result.
 | `metadata` | `dict[str, Any]` | Additional operation metadata |
 
 ```python
-from hippo.core.types import WriteOperation
+from mosaic.core.types import WriteOperation
 
 operation = WriteOperation(
     success=True,
@@ -606,11 +606,11 @@ A single record in the provenance log.
 | `payload` | `dict[str, Any]` | Complete entity state as JSON |
 
 ```python
-from hippo.core.types import ProvenanceRecord
+from mosaic.core.types import ProvenanceRecord
 from datetime import datetime
 
 record = ProvenanceRecord(
-    source="hippo-sdk",
+    source="mosaic-sdk",
     timestamp=datetime.now(),
     operation="create",
     entity_type="Sample",
@@ -625,7 +625,7 @@ record = ProvenanceRecord(
 Status enum for bulk ingestion operations.
 
 ```python
-from hippo.core.types import IngestStatus
+from mosaic.core.types import IngestStatus
 
 # IngestStatus.SUCCESS  — all items processed successfully
 # IngestStatus.PARTIAL  — some items failed
@@ -646,7 +646,7 @@ Result of a bulk ingestion operation.
 | `metadata` | `dict[str, Any]` | Additional result metadata |
 
 ```python
-from hippo.core.types import IngestResult, IngestStatus
+from mosaic.core.types import IngestResult, IngestStatus
 
 result = IngestResult(
     status=IngestStatus.PARTIAL,

@@ -2,8 +2,8 @@
 
 import pytest
 
-from hippo.core.storage.ddl_generator import FTSMigrationPlanner
-from hippo.core.storage.migration import MigrationExecutor, MigrationPlanner
+from mosaic.core.storage.ddl_generator import FTSMigrationPlanner
+from mosaic.core.storage.migration import MigrationExecutor, MigrationPlanner
 from tests.support.linkml_schemas import build_registry
 
 
@@ -103,7 +103,7 @@ class TestMigrationPlannerFromDiff:
         # ``DDLGenerator._build_table`` (removed in PTS-169) and crashed
         # with AttributeError. Exercise the diff path end-to-end against
         # a fresh DB so every concrete class lands in ``new_tables``.
-        from hippo.core.storage.schema_diff import diff_registry_against_database
+        from mosaic.core.storage.schema_diff import diff_registry_against_database
 
         reg = build_registry(
             {
@@ -159,7 +159,7 @@ class TestMigrationPlannerFromDiff:
                 }
             }
         )
-        from hippo.core.storage.schema_diff import diff_registry_against_database
+        from mosaic.core.storage.schema_diff import diff_registry_against_database
 
         _engine, schema_diff = diff_registry_against_database(reg, cursor)
         assert "Sample" not in schema_diff.new_tables
@@ -206,17 +206,17 @@ class TestMigrationExecutor:
 
 class TestBatchedFunction:
     def test_batched_basic(self):
-        from hippo.core.storage.migration import batched
+        from mosaic.core.storage.migration import batched
 
         assert list(batched([1, 2, 3, 4, 5], 2)) == [[1, 2], [3, 4], [5]]
 
     def test_batched_exact_batch(self):
-        from hippo.core.storage.migration import batched
+        from mosaic.core.storage.migration import batched
 
         assert list(batched([1, 2, 3, 4], 2)) == [[1, 2], [3, 4]]
 
     def test_batched_single_item(self):
-        from hippo.core.storage.migration import batched
+        from mosaic.core.storage.migration import batched
 
         assert list(batched([1], 2)) == [[1]]
 

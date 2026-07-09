@@ -12,8 +12,8 @@ from pathlib import Path
 import pytest
 from linkml_runtime.utils.schemaview import SchemaView
 
-from hippo.core.exceptions import ConfigError
-from hippo.linkml_bridge import (
+from mosaic.core.exceptions import ConfigError
+from mosaic.linkml_bridge import (
     LOADER_DEPENDS_ON_ANNOTATION,
     PROVIDED_BY_ANNOTATION,
     LoaderFragmentSpec,
@@ -259,13 +259,13 @@ class TestFakeReferenceLoaderIntegration:
     ):
         from importlib.metadata import version
 
-        from hippo.testing.fake_reference_loader import FakeReferenceLoader
+        from mosaic.testing.fake_reference_loader import FakeReferenceLoader
 
         loader = FakeReferenceLoader()
-        pkg_version = version("hippo")
+        pkg_version = version("datahelix-mosaic")
         spec = LoaderFragmentSpec(
             loader_name=loader.name,
-            package_name="hippo",
+            package_name="mosaic",
             package_version=pkg_version,
             fragment=loader.schema_fragment(),
         )

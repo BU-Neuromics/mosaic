@@ -1,18 +1,18 @@
-"""Tests for Hippo API factory."""
+"""Tests for Mosaic API factory."""
 
 from fastapi import APIRouter, FastAPI, HTTPException
 from fastapi.testclient import TestClient
 from fastapi.exceptions import RequestValidationError
 
-from hippo.api import create_app, EntityNotFoundError
-from hippo.core.exceptions import ValidationError as HippoValidationError
+from mosaic.api import create_app, EntityNotFoundError
+from mosaic.core.exceptions import ValidationError as MosaicValidationError
 
 
 def test_factory_creates_app_without_routers():
     """Test that factory creates app without routers."""
     app = create_app()
     assert isinstance(app, FastAPI)
-    assert app.title == "Hippo API"
+    assert app.title == "Mosaic API"
 
 
 def test_factory_creates_app_with_routers():
@@ -85,12 +85,12 @@ def test_generic_exception_handler_returns_500():
 
 
 def test_hippo_validation_error_handler_returns_422():
-    """Test that HippoValidationError handler returns 422."""
+    """Test that MosaicValidationError handler returns 422."""
     app = create_app()
 
     @app.get("/hippo-validate")
     def hippo_validate():
-        raise HippoValidationError(
+        raise MosaicValidationError(
             message="Invalid input",
             expected_type="string",
             actual_value=123,

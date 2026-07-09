@@ -1,7 +1,7 @@
-"""Regression tests for ``hippo serve`` client wiring (issue #42).
+"""Regression tests for ``mosaic serve`` client wiring (issue #42).
 
 Before the fix, ``serve`` called ``create_default_app()`` with no client, so
-every request fell back to a no-arg ``HippoClient()`` with ``storage=None`` —
+every request fell back to a no-arg ``MosaicClient()`` with ``storage=None`` —
 a non-persistent echo stub. These tests pin that ``serve`` now builds a
 configured client from config (or a default) and injects it into the app.
 """
@@ -12,7 +12,7 @@ from pathlib import Path
 
 from typer.testing import CliRunner
 
-from hippo.cli.main import app
+from mosaic.cli.main import app
 
 runner = CliRunner()
 

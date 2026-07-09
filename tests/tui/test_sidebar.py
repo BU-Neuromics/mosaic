@@ -7,11 +7,11 @@ import asyncio
 import pytest
 
 pytest.importorskip(
-    "textual", reason="textual not installed; run: pip install hippo[tui]"
+    "textual", reason="textual not installed; run: pip install datahelix-mosaic[tui]"
 )
 
-from hippo.tui.backend.protocol import EntityTypeSummary
-from hippo.tui.widgets.sidebar import EntityTypeSidebar, _SCHEMA_EXPLORER_LABEL
+from mosaic.tui.backend.protocol import EntityTypeSummary
+from mosaic.tui.widgets.sidebar import EntityTypeSidebar, _SCHEMA_EXPLORER_LABEL
 
 
 class MockBackend:
@@ -25,17 +25,17 @@ class MockBackend:
         return self._entity_types
 
     async def list_entities(self, *a, **kw):
-        from hippo.tui.backend.protocol import PagedResult
+        from mosaic.tui.backend.protocol import PagedResult
 
         return PagedResult(items=[], page=1, total_pages=1, total_items=0)
 
     async def get_entity(self, *a, **kw):
-        from hippo.tui.backend.protocol import EntityDetail
+        from mosaic.tui.backend.protocol import EntityDetail
 
         return EntityDetail(id="x", entity_type="Sample", fields={}, relationships=[])
 
     async def get_schema(self):
-        from hippo.tui.backend.protocol import SchemaView
+        from mosaic.tui.backend.protocol import SchemaView
 
         return SchemaView()
 
@@ -63,10 +63,10 @@ def test_sidebar_schema_explorer_selected_message():
 
 def test_sidebar_pilot_schema_explorer_last():
     """Schema Explorer entry is the last item in the sidebar after loading."""
-    from hippo.tui.app import HippoTUIApp
+    from mosaic.tui.app import MosaicTUIApp
 
     backend = MockBackend()
-    app = HippoTUIApp(backend=backend)
+    app = MosaicTUIApp(backend=backend)
 
     async def run():
         async with app.run_test(headless=True, size=(80, 24)) as pilot:
@@ -83,10 +83,10 @@ def test_sidebar_pilot_schema_explorer_last():
 
 def test_sidebar_pilot_entity_type_selection():
     """Selecting an entity type in the sidebar emits EntityTypeSelected."""
-    from hippo.tui.app import HippoTUIApp
+    from mosaic.tui.app import MosaicTUIApp
 
     backend = MockBackend()
-    app = HippoTUIApp(backend=backend)
+    app = MosaicTUIApp(backend=backend)
     received: list = []
 
     async def run():

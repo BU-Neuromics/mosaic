@@ -1,6 +1,6 @@
 """REST-parity coverage (issue #45 "should close" list).
 
-Full-text search, Hippo schema introspection (the LinkML type model,
+Full-text search, Mosaic schema introspection (the LinkML type model,
 distinct from GraphQL's own ``__schema``), the supersession query, and
 the bulk availability mutation — each mirroring its REST counterpart.
 """
@@ -44,11 +44,11 @@ class TestFullTextSearch:
         assert body["data"]["searchDonors"] == []
 
 
-class TestHippoSchemaIntrospection:
+class TestMosaicSchemaIntrospection:
     """Mirrors REST GET /schemas and GET /schemas/{type}/references."""
 
     def test_hippo_schema_lists_exposed_entity_types(self, gql, registry):
-        from hippo.core.schema_typing import exposed_class_names
+        from mosaic.core.schema_typing import exposed_class_names
 
         body = gql("{ hippoSchema { name accessorName } }")
         names = [item["name"] for item in body["data"]["hippoSchema"]]

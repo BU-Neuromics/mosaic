@@ -18,9 +18,9 @@ from textwrap import dedent
 
 import pytest
 
-from hippo.core.client import HippoClient
-from hippo.core.recipe import RecipeExport
-from hippo.core.storage.adapters.sqlite_adapter import SQLiteAdapter
+from mosaic.core.client import MosaicClient
+from mosaic.core.recipe import RecipeExport
+from mosaic.core.storage.adapters.sqlite_adapter import SQLiteAdapter
 from tests.conftest import _build_minimal_schema_registry
 
 
@@ -77,7 +77,7 @@ def storage(db_path):
 
 @pytest.fixture
 def client(storage):
-    return HippoClient(
+    return MosaicClient(
         storage=storage,
         registry=_build_minimal_schema_registry(),
         bypass_validation=True,
@@ -85,15 +85,15 @@ def client(storage):
 
 
 class TestExportSelectivity:
-    def test_framework_classes_excluded(self, client: HippoClient) -> None:
-        """Hippo core's ``Entity``/``ProvenanceRecord`` MUST NOT appear."""
+    def test_framework_classes_excluded(self, client: MosaicClient) -> None:
+        """Mosaic core's ``Entity``/``ProvenanceRecord`` MUST NOT appear."""
         result = client.recipe_export()
         classes = result.schema_fragment.get("classes") or {}
         assert "Entity" not in classes
         assert "ProvenanceRecord" not in classes
         assert "Process" not in classes
 
-    def test_local_user_classes_included(self, client: HippoClient) -> None:
+    def test_local_user_classes_included(self, client: MosaicClient) -> None:
         """The minimal-registry user classes (Sample, Donor, …) ARE exported."""
         result = client.recipe_export()
         classes = result.schema_fragment.get("classes") or {}
@@ -101,7 +101,7 @@ class TestExportSelectivity:
         assert "Donor" in classes
 
     def test_imported_recipe_classes_excluded(
-        self, client: HippoClient, tmp_path: Path
+        self, client: MosaicClient, tmp_path: Path
     ) -> None:
         """Acceptance test (issue): import a recipe, export, recipe's
         classes do NOT re-appear in the export."""
@@ -119,7 +119,7 @@ class TestExportSelectivity:
 
 
 class TestExportProvidedByStripped:
-    def test_no_provided_by_annotation_in_export(self, client: HippoClient) -> None:
+    def test_no_provided_by_annotation_in_export(self, client: MosaicClient) -> None:
         result = client.recipe_export()
         for body in (result.schema_fragment.get("classes") or {}).values():
             anns = body.get("annotations") or {}
@@ -128,7 +128,7 @@ class TestExportProvidedByStripped:
 
 
 class TestExportManifestStub:
-    def test_manifest_carries_required_fields(self, client: HippoClient) -> None:
+    def test_manifest_carries_required_fields(self, client: MosaicClient) -> None:
         result = client.recipe_export()
         m = result.manifest
         assert "id" in m
@@ -137,14 +137,14 @@ class TestExportManifestStub:
         assert "created_at" in m
         assert "hippo_version" in m
 
-    def test_manifest_stubs_marked_TODO(self, client: HippoClient) -> None:
+    def test_manifest_stubs_marked_TODO(self, client: MosaicClient) -> None:
         result = client.recipe_export()
         m = result.manifest
         assert "TODO" in m["id"]
         assert "TODO" in m["name"]
 
     def test_manifest_omits_parent_when_not_requested(
-        self, client: HippoClient
+        self, client: MosaicClient
     ) -> None:
         result = client.recipe_export()
         assert "parent" not in result.manifest
@@ -152,7 +152,7 @@ class TestExportManifestStub:
 
 class TestExportParent:
     def test_explicit_parent_populated_from_installed(
-        self, client: HippoClient, tmp_path: Path
+        self, client: MosaicClient, tmp_path: Path
     ) -> None:
         upstream = _make_upstream_recipe(
             tmp_path, recipe_id="org.example.parent", name="parent"
@@ -164,14 +164,14 @@ class TestExportParent:
         assert result.manifest["parent"]["id"] == "org.example.parent"
         assert result.manifest["parent"]["version"] == "0.1.0"
 
-    def test_unknown_parent_raises(self, client: HippoClient) -> None:
+    def test_unknown_parent_raises(self, client: MosaicClient) -> None:
         with pytest.raises(ValueError, match="not found in installed_recipes"):
             client.recipe_export(parent="org.example.nope")
 
 
 class TestExportRequiresAutoPopulation:
     def test_no_requires_when_no_upstream_referenced(
-        self, client: HippoClient
+        self, client: MosaicClient
     ) -> None:
         """A clean instance exports with empty requires.recipes."""
         result = client.recipe_export()
@@ -180,7 +180,7 @@ class TestExportRequiresAutoPopulation:
 
 
 class TestExportReturnShape:
-    def test_returns_recipe_export(self, client: HippoClient) -> None:
+    def test_returns_recipe_export(self, client: MosaicClient) -> None:
         result = client.recipe_export()
         assert isinstance(result, RecipeExport)
         assert isinstance(result.manifest, dict)
@@ -189,6 +189,6 @@ class TestExportReturnShape:
 
 
 class TestExportScopeRestriction:
-    def test_unknown_scope_rejected(self, client: HippoClient) -> None:
+    def test_unknown_scope_rejected(self, client: MosaicClient) -> None:
         with pytest.raises(ValueError, match="scope='schema'"):
             client.recipe_export(scope="data")

@@ -6,12 +6,12 @@ import tempfile
 import pytest
 from fastapi.testclient import TestClient
 
-from hippo.core.client import HippoClient
-from hippo.core.storage.adapters.sqlite_adapter import SQLiteAdapter
-from hippo.graphql.resolvers import build_graphql_schema
-from hippo.graphql.schema_builder import GraphQLTypeBuilder
-from hippo.linkml_bridge import SchemaRegistry
-from hippo.serve import create_default_app
+from mosaic.core.client import MosaicClient
+from mosaic.core.storage.adapters.sqlite_adapter import SQLiteAdapter
+from mosaic.graphql.resolvers import build_graphql_schema
+from mosaic.graphql.schema_builder import GraphQLTypeBuilder
+from mosaic.linkml_bridge import SchemaRegistry
+from mosaic.serve import create_default_app
 
 XREF_GRAPHQL_SCHEMA = """
 id: https://example.org/hippo/test_xref_graphql
@@ -56,7 +56,7 @@ def hippo_client(registry):
     with tempfile.TemporaryDirectory() as tmpdir:
         db_path = os.path.join(tmpdir, "xref_graphql.db")
         storage = SQLiteAdapter(db_path, schema_registry=registry)
-        yield HippoClient(storage=storage, registry=registry)
+        yield MosaicClient(storage=storage, registry=registry)
 
 
 @pytest.fixture

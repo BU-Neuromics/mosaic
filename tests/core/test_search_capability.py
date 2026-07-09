@@ -5,9 +5,9 @@ import tempfile
 
 import pytest
 
-from hippo.core.client import HippoClient
-from hippo.core.exceptions import SearchCapabilityError
-from hippo.core.storage.adapters.sqlite_adapter import SQLiteAdapter
+from mosaic.core.client import MosaicClient
+from mosaic.core.exceptions import SearchCapabilityError
+from mosaic.core.storage.adapters.sqlite_adapter import SQLiteAdapter
 from tests.conftest import _build_minimal_schema_registry
 from tests.support.linkml_schemas import build_registry
 
@@ -21,7 +21,7 @@ class TestSearchCapabilities:
             adapter.close()
 
     def test_entity_store_abc_has_search_capabilities_method(self) -> None:
-        from hippo.core.storage import EntityStore
+        from mosaic.core.storage import EntityStore
 
         assert hasattr(EntityStore, "search_capabilities")
 
@@ -44,7 +44,7 @@ class TestStartupValidation:
                     }
                 }
             )
-            client = HippoClient(
+            client = MosaicClient(
                 storage=storage, registry=registry, bypass_validation=True
             )
             assert client is not None
@@ -68,7 +68,7 @@ class TestStartupValidation:
                 }
             )
             with pytest.raises(SearchCapabilityError) as exc_info:
-                HippoClient(
+                MosaicClient(
                     storage=storage, registry=registry, bypass_validation=True
                 )
             assert "embedding" in str(exc_info.value)
@@ -88,13 +88,13 @@ class TestStartupValidation:
                 }
             }
         )
-        client = HippoClient(storage=None, registry=registry, bypass_validation=True)
+        client = MosaicClient(storage=None, registry=registry, bypass_validation=True)
         assert client is not None
 
     def test_startup_succeeds_without_schemas(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             db_path = os.path.join(tmpdir, "test.db")
             storage = SQLiteAdapter(db_path, schema_registry=_build_minimal_schema_registry())
-            client = HippoClient(storage=storage, registry=None, bypass_validation=True)
+            client = MosaicClient(storage=storage, registry=None, bypass_validation=True)
             assert client is not None
             storage.close()

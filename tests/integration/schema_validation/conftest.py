@@ -6,13 +6,13 @@ from typing import Any
 
 import pytest
 
-from hippo.core.client import HippoClient
-from hippo.core.pipeline import ValidationPipeline
-from hippo.core.validation.schema_validator import (
+from mosaic.core.client import MosaicClient
+from mosaic.core.pipeline import ValidationPipeline
+from mosaic.core.validation.schema_validator import (
     SchemaValidationConfig,
     SchemaValidator,
 )
-from hippo.linkml_bridge import SchemaRegistry
+from mosaic.linkml_bridge import SchemaRegistry
 from tests.support.linkml_schemas import build_registry
 
 
@@ -121,7 +121,7 @@ def hippo_client_with_validation(sample_registry, in_memory_storage):
     pipeline = ValidationPipeline()
     pipeline.add_validator(validator)
 
-    class ValidatedHippoClient(HippoClient):
+    class ValidatedMosaicClient(MosaicClient):
         def __init__(self, storage, pipeline):
             super().__init__(pipeline=pipeline)
             self._storage = storage
@@ -142,12 +142,12 @@ def hippo_client_with_validation(sample_registry, in_memory_storage):
                 return True
             return False
 
-    return ValidatedHippoClient(in_memory_storage, pipeline)
+    return ValidatedMosaicClient(in_memory_storage, pipeline)
 
 
 @pytest.fixture
 def hippo_client_without_validation():
-    return HippoClient(bypass_validation=True)
+    return MosaicClient(bypass_validation=True)
 
 
 @pytest.fixture

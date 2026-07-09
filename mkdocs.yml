@@ -1,5 +1,5 @@
-site_name: Hippo
-site_description: A LinkML runtime engine — typed SDK, REST API, append-only provenance, and dynamic validation from a schema definition.
+site_name: Mosaic
+site_description: Mosaic (formerly Hippo) — a LinkML runtime engine — typed SDK, REST API, append-only provenance, and dynamic validation from a schema definition.
 site_url: https://bu-neuromics.github.io/hippo/
 repo_url: https://github.com/BU-Neuromics/hippo
 repo_name: BU-Neuromics/hippo
@@ -64,11 +64,12 @@ validation:
 
 nav:
   - Home: index.md
-  - Why Hippo?: why-hippo.md
+  - Why Mosaic?: why-mosaic.md
   - Introduction: introduction.md
   - Installation: installation.md
   - Quick Start: quickstart.md
   - Schema Guide: schema-guide.md
+  - Polymorphic Ingest: polymorphic-ingest.md
   - Data Model: data-model.md
   - Configuration: configuration.md
   - CLI Reference: cli-reference.md

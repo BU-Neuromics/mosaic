@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from hippo.core.schema_typing import (
+from mosaic.core.schema_typing import (
     INFRASTRUCTURE_CLASSES,
     SYSTEM_FIELDS,
     EntityTypeModel,
@@ -13,7 +13,7 @@ from hippo.core.schema_typing import (
     build_type_model,
     exposed_class_names,
 )
-from hippo.linkml_bridge import SchemaRegistry
+from mosaic.linkml_bridge import SchemaRegistry
 
 _FIXTURE_SCHEMA = (
     Path(__file__).parents[1] / "fixtures" / "schemas" / "sample_schema.yaml"

@@ -2,7 +2,7 @@
 
 import pytest
 
-from hippo.core.validation import (
+from mosaic.core.validation import (
     PresetConfig,
     RefCheckPreset,
     CountConstraintPreset,

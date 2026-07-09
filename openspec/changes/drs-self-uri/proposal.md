@@ -25,7 +25,7 @@ Every entity response gains a computed `self` field:
 {
   "id": "abc-123",
   "entity_type": "AlignmentFile",
-  "self": "drs://bass.brainbank-a.org/abc-123",
+  "self": "drs://datahelix.brainbank-a.org/abc-123",
   "data": { ... },
   "version": 3,
   "created_at": "...",
@@ -59,7 +59,7 @@ is empty — the DRS object resolves to JSON metadata only.
 # hippo.yaml
 drs:
   enabled: true
-  base_url: "https://bass.brainbank-a.org"  # used to construct drs:// URIs
+  base_url: "https://datahelix.brainbank-a.org"  # used to construct drs:// URIs
   auth: bearer                               # passport_visa: deferred to v0.3
   public: false                              # if true, no auth required for DRS endpoints
 ```

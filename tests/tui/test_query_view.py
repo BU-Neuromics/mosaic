@@ -7,12 +7,12 @@ import asyncio
 import pytest
 
 pytest.importorskip(
-    "textual", reason="textual not installed; run: pip install hippo[tui]"
+    "textual", reason="textual not installed; run: pip install datahelix-mosaic[tui]"
 )
 
 from textual.widgets import DataTable, Input, Label, Select
 
-from hippo.tui.views.query import QueryView, parse_filters
+from mosaic.tui.views.query import QueryView, parse_filters
 
 
 # ---------------------------------------------------------------------------
@@ -62,10 +62,10 @@ async def _open_query(app, pilot) -> QueryView:
 
 
 def test_query_filters_run_and_render(seeded_fake_backend):
-    from hippo.tui.app import HippoTUIApp
+    from mosaic.tui.app import MosaicTUIApp
 
     backend = seeded_fake_backend
-    app = HippoTUIApp(backend=backend)
+    app = MosaicTUIApp(backend=backend)
 
     async def run():
         async with app.run_test(headless=True, size=(120, 40)) as pilot:
@@ -96,10 +96,10 @@ def test_query_filters_run_and_render(seeded_fake_backend):
 
 
 def test_query_or_mode_is_passed_through(seeded_fake_backend):
-    from hippo.tui.app import HippoTUIApp
+    from mosaic.tui.app import MosaicTUIApp
 
     backend = seeded_fake_backend
-    app = HippoTUIApp(backend=backend)
+    app = MosaicTUIApp(backend=backend)
 
     async def run():
         async with app.run_test(headless=True, size=(120, 40)) as pilot:
@@ -124,10 +124,10 @@ def test_query_or_mode_is_passed_through(seeded_fake_backend):
 
 
 def test_query_fts_runs_search(seeded_fake_backend):
-    from hippo.tui.app import HippoTUIApp
+    from mosaic.tui.app import MosaicTUIApp
 
     backend = seeded_fake_backend
-    app = HippoTUIApp(backend=backend)
+    app = MosaicTUIApp(backend=backend)
 
     async def run():
         async with app.run_test(headless=True, size=(120, 40)) as pilot:
@@ -152,11 +152,11 @@ def test_query_fts_runs_search(seeded_fake_backend):
 
 def test_query_capability_gating_hides_filters(seeded_fake_backend):
     """Backends without filter support show a hint instead of the input."""
-    from hippo.tui.app import HippoTUIApp
+    from mosaic.tui.app import MosaicTUIApp
 
     backend = seeded_fake_backend
     backend.supports_filters = False
-    app = HippoTUIApp(backend=backend)
+    app = MosaicTUIApp(backend=backend)
 
     async def run():
         async with app.run_test(headless=True, size=(120, 40)) as pilot:
@@ -172,11 +172,11 @@ def test_query_capability_gating_hides_filters(seeded_fake_backend):
 def test_query_bad_filter_reports_error_without_calling_backend(
     seeded_fake_backend,
 ):
-    from hippo.tui.app import HippoTUIApp
-    from hippo.tui.widgets.status_bar import StatusBar
+    from mosaic.tui.app import MosaicTUIApp
+    from mosaic.tui.widgets.status_bar import StatusBar
 
     backend = seeded_fake_backend
-    app = HippoTUIApp(backend=backend)
+    app = MosaicTUIApp(backend=backend)
 
     async def run():
         async with app.run_test(headless=True, size=(120, 40)) as pilot:
@@ -199,11 +199,11 @@ def test_query_bad_filter_reports_error_without_calling_backend(
 
 
 def test_query_result_row_opens_detail(seeded_fake_backend):
-    from hippo.tui.app import HippoTUIApp
-    from hippo.tui.views.entity_detail import EntityDetailScreen
+    from mosaic.tui.app import MosaicTUIApp
+    from mosaic.tui.views.entity_detail import EntityDetailScreen
 
     backend = seeded_fake_backend
-    app = HippoTUIApp(backend=backend)
+    app = MosaicTUIApp(backend=backend)
 
     async def run():
         async with app.run_test(headless=True, size=(120, 40)) as pilot:

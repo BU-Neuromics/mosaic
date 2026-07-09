@@ -6,11 +6,11 @@ from pathlib import Path
 
 import pytest
 
-from hippo.core.exceptions import (
+from mosaic.core.exceptions import (
     IngestionError,
     IngestionValidationError,
 )
-from hippo.core.ingestion import (
+from mosaic.core.ingestion import (
     IngestionPipeline,
     IngestResult,
     flatten_dict,
@@ -360,7 +360,7 @@ class TestIngestionPipelineJSONL:
 
 
 # ---------------------------------------------------------------------------
-# Idempotency tests with real HippoClient + SQLiteAdapter
+# Idempotency tests with real MosaicClient + SQLiteAdapter
 # These are RED tests for the bug: _upsert_records uses string matching
 # "not found" to detect EntityNotFoundError, but the actual exception message
 # is "No entity found" — so the substring never matches and entities are never
@@ -368,20 +368,20 @@ class TestIngestionPipelineJSONL:
 # ---------------------------------------------------------------------------
 
 class TestIngestionIdempotency:
-    """Idempotency tests for IngestionPipeline using a real HippoClient.
+    """Idempotency tests for IngestionPipeline using a real MosaicClient.
 
     TDD RED phase: these tests exercise the full upsert-by-ExternalID flow
-    with a real in-process HippoClient. They fail before the fix because
+    with a real in-process MosaicClient. They fail before the fix because
     _upsert_records incorrectly uses string matching instead of catching
     EntityNotFoundError explicitly.
     """
 
     @pytest.fixture()
     def real_client(self, tmp_path, minimal_schema_registry):
-        from hippo.core.client import HippoClient
-        from hippo.core.storage.adapters.sqlite_adapter import SQLiteAdapter
+        from mosaic.core.client import MosaicClient
+        from mosaic.core.storage.adapters.sqlite_adapter import SQLiteAdapter
         storage = SQLiteAdapter(str(tmp_path / "test.db"), schema_registry=minimal_schema_registry)
-        return HippoClient(storage=storage)
+        return MosaicClient(storage=storage)
 
     @pytest.fixture()
     def pipeline(self, real_client):

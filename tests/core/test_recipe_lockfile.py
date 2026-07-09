@@ -28,16 +28,16 @@ from textwrap import dedent
 import pytest
 import yaml
 
-from hippo.core.client import HippoClient
-from hippo.core.exceptions import (
+from mosaic.core.client import MosaicClient
+from mosaic.core.exceptions import (
     RecipeDigestMismatchError,
 )
-from hippo.core.meta import get_meta
-from hippo.core.recipe_service import (
+from mosaic.core.meta import get_meta
+from mosaic.core.recipe_service import (
     META_KEY_INSTALLED_RECIPES,
     RecipeService,
 )
-from hippo.core.storage.adapters.sqlite_adapter import SQLiteAdapter
+from mosaic.core.storage.adapters.sqlite_adapter import SQLiteAdapter
 from tests.conftest import _build_minimal_schema_registry
 
 
@@ -99,19 +99,19 @@ def storage(db_path):
 
 @pytest.fixture
 def client(storage):
-    return HippoClient(
+    return MosaicClient(
         storage=storage,
         registry=_build_minimal_schema_registry(),
         bypass_validation=True,
     )
 
 
-def _fresh_client_at(db_path: str) -> HippoClient:
-    """Open a fresh HippoClient over a brand-new SQLite DB at ``db_path``."""
+def _fresh_client_at(db_path: str) -> MosaicClient:
+    """Open a fresh MosaicClient over a brand-new SQLite DB at ``db_path``."""
     storage = SQLiteAdapter(
         db_path, schema_registry=_build_minimal_schema_registry()
     )
-    return HippoClient(
+    return MosaicClient(
         storage=storage,
         registry=_build_minimal_schema_registry(),
         bypass_validation=True,
@@ -120,7 +120,7 @@ def _fresh_client_at(db_path: str) -> HippoClient:
 
 class TestExportLockfileShape:
     def test_writes_yaml_with_lockfile_version_1(
-        self, client: HippoClient, tmp_path: Path
+        self, client: MosaicClient, tmp_path: Path
     ) -> None:
         recipe = _make_recipe(
             tmp_path, recipe_id="org.example.solo", name="solo"
@@ -135,7 +135,7 @@ class TestExportLockfileShape:
         assert "org.example.solo" in data["installed_recipes"]
 
     def test_empty_instance_writes_empty_entries(
-        self, client: HippoClient, tmp_path: Path
+        self, client: MosaicClient, tmp_path: Path
     ) -> None:
         out = tmp_path / "recipe.lock.yaml"
         client.recipe_export_lockfile(out)
@@ -144,7 +144,7 @@ class TestExportLockfileShape:
         assert data["installed_recipes"] == {}
 
     def test_digest_is_sha256_prefixed(
-        self, client: HippoClient, tmp_path: Path
+        self, client: MosaicClient, tmp_path: Path
     ) -> None:
         """Lockfile digests carry the ``sha256:`` prefix for portability."""
         recipe = _make_recipe(
@@ -160,7 +160,7 @@ class TestExportLockfileShape:
         assert len(entry["digest"]) == len("sha256:") + 64
 
     def test_parent_preserved(
-        self, client: HippoClient, tmp_path: Path
+        self, client: MosaicClient, tmp_path: Path
     ) -> None:
         parent_recipe = _make_recipe(
             tmp_path, recipe_id="org.example.parent", name="parent"
@@ -206,7 +206,7 @@ class TestExportLockfileShape:
 
 class TestInstallFromLockfileVersionGate:
     def test_rejects_missing_version(
-        self, client: HippoClient, tmp_path: Path
+        self, client: MosaicClient, tmp_path: Path
     ) -> None:
         bad = tmp_path / "bad.yaml"
         bad.write_text(yaml.safe_dump({"installed_recipes": {}}))
@@ -214,7 +214,7 @@ class TestInstallFromLockfileVersionGate:
             client.recipe_install_from_lockfile(bad)
 
     def test_rejects_unknown_version(
-        self, client: HippoClient, tmp_path: Path
+        self, client: MosaicClient, tmp_path: Path
     ) -> None:
         bad = tmp_path / "bad.yaml"
         bad.write_text(
@@ -224,7 +224,7 @@ class TestInstallFromLockfileVersionGate:
             client.recipe_install_from_lockfile(bad)
 
     def test_rejects_non_mapping_top_level(
-        self, client: HippoClient, tmp_path: Path
+        self, client: MosaicClient, tmp_path: Path
     ) -> None:
         bad = tmp_path / "bad.yaml"
         bad.write_text("- one\n- two\n")
@@ -235,13 +235,13 @@ class TestInstallFromLockfileVersionGate:
 class TestRoundTrip:
     """The PHASE-4 acceptance test from PTS-292:
 
-    `hippo recipe import` (a real recipe) + add a local extension class +
-    `hippo recipe export-lockfile` + wipe instance +
-    `hippo recipe install-from-lockfile` reproduces digests.
+    `mosaic recipe import` (a real recipe) + add a local extension class +
+    `mosaic recipe export-lockfile` + wipe instance +
+    `mosaic recipe install-from-lockfile` reproduces digests.
     """
 
     def test_roundtrip_single_recipe(
-        self, client: HippoClient, storage: SQLiteAdapter, tmp_path: Path
+        self, client: MosaicClient, storage: SQLiteAdapter, tmp_path: Path
     ) -> None:
         recipe = _make_recipe(
             tmp_path, recipe_id="org.example.solo", name="solo"
@@ -269,7 +269,7 @@ class TestRoundTrip:
             assert before[rid]["version"] == after[rid]["version"]
 
     def test_roundtrip_parent_child(
-        self, client: HippoClient, storage: SQLiteAdapter, tmp_path: Path
+        self, client: MosaicClient, storage: SQLiteAdapter, tmp_path: Path
     ) -> None:
         """Parent + extended child round-trip preserves both digests."""
         parent_recipe = _make_recipe(
@@ -323,7 +323,7 @@ class TestRoundTrip:
 
 class TestInstallOrderParentFirst:
     def test_parent_installs_before_child(
-        self, client: HippoClient, tmp_path: Path
+        self, client: MosaicClient, tmp_path: Path
     ) -> None:
         """Topological sort by parent: parents land first regardless of
         lockfile key order."""
@@ -367,7 +367,7 @@ class TestInstallOrderParentFirst:
 
 class TestInstallFromLockfileDigestVerification:
     def test_digest_mismatch_raises(
-        self, client: HippoClient, tmp_path: Path
+        self, client: MosaicClient, tmp_path: Path
     ) -> None:
         recipe = _make_recipe(
             tmp_path, recipe_id="org.example.solo", name="solo"
@@ -392,7 +392,7 @@ class TestInstallFromLockfileDigestVerification:
 
 class TestInstallFromLockfileIdempotence:
     def test_replay_on_existing_instance_is_noop(
-        self, client: HippoClient, tmp_path: Path
+        self, client: MosaicClient, tmp_path: Path
     ) -> None:
         recipe = _make_recipe(
             tmp_path, recipe_id="org.example.solo", name="solo"
@@ -420,7 +420,7 @@ class TestRelativeSourceResolvesAgainstLockfile:
     against the lockfile's directory."""
 
     def test_relative_source_path(
-        self, client: HippoClient, tmp_path: Path
+        self, client: MosaicClient, tmp_path: Path
     ) -> None:
         recipe = _make_recipe(
             tmp_path / "lockdir", recipe_id="org.example.solo", name="solo"

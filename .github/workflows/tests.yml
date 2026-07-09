@@ -14,7 +14,7 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  hippo:
+  mosaic:
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -34,7 +34,7 @@ jobs:
       - name: Run tests (SQLite)
         run: pytest -v --ignore=tests/integration/test_postgres_adapter.py
 
-  hippo-postgres:
+  mosaic-postgres:
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -67,5 +67,5 @@ jobs:
 
       - name: Run PostgreSQL integration tests
         env:
-          HIPPO_DATABASE_URL: postgresql://hippo_test:hippo_test@localhost:5432/hippo_test
+          MOSAIC_DATABASE_URL: postgresql://hippo_test:hippo_test@localhost:5432/hippo_test
         run: pytest tests/integration/test_postgres_adapter.py -v

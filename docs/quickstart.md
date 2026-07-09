@@ -1,6 +1,6 @@
-# Hippo Quickstart
+# Mosaic Quickstart
 
-Hippo is a **LinkML runtime engine** — you bring a LinkML schema and Hippo gives you a queryable entity store with full provenance tracking.
+Mosaic is a **LinkML runtime engine** — you bring a LinkML schema and Mosaic gives you a queryable entity store with full provenance tracking.
 
 This guide uses a bibliography citation-graph: authors, publications, and the citation edges between them. By the end you will have entities stored and retrieved via both the Python SDK and the REST API.
 
@@ -9,15 +9,15 @@ This guide uses a bibliography citation-graph: authors, publications, and the ci
 ## Prerequisites
 
 - Python 3.11+
-- `pip install hippo`
+- `pip install datahelix-mosaic`
 - `curl` for the REST example
 
 ## Step 1: Initialize a Project
 
-Create a new Hippo project directory:
+Create a new Mosaic project directory:
 
 ```bash
-hippo init --path biblio_qs
+mosaic init --path biblio_qs
 ```
 
 Expected output:
@@ -30,11 +30,11 @@ Created biblio_qs/config.json
 Created biblio_qs/README.md
 Created biblio_qs/.gitignore
 
-Hippo project initialized at biblio_qs
+Mosaic project initialized at biblio_qs
 Template: bibliography
 Storage: sqlite
-Run 'hippo serve' to start the server
-Created biblio_qs/hippo.yaml
+Run 'mosaic serve' to start the server
+Created biblio_qs/mosaic.yaml
 ```
 
 Project layout:
@@ -44,7 +44,7 @@ biblio_qs/
 ├── data/         ← SQLite database lives here
 ├── schema.yaml   ← LinkML schema (edit or replace this)
 ├── config.json
-├── hippo.yaml
+├── mosaic.yaml
 ├── README.md
 └── .gitignore
 ```
@@ -113,9 +113,9 @@ This defines three entity types:
 
 The `citing_id` and `cited_id` attributes on `Citation` have `range: Publication`. This is an **entity reference** — it differs from a plain `string` attribute in several important ways:
 
-- **Semantic relationship** — `range: Publication` declares that this attribute points to a `Publication` entity. Hippo records and exposes this as a typed edge.
-- **Holds a Hippo internal UUID** — the value stored is the UUID Hippo assigns at ingest time, not a human-visible title or DOI. User-visible identifiers belong in a plain `string` attribute or as an `ExternalID`.
-- **Write-time validation** — Hippo checks at ingest time that the referenced UUID exists and is available. Writing a `Citation` whose `citing_id` points to a non-existent `Publication` is rejected.
+- **Semantic relationship** — `range: Publication` declares that this attribute points to a `Publication` entity. Mosaic records and exposes this as a typed edge.
+- **Holds a Mosaic internal UUID** — the value stored is the UUID Mosaic assigns at ingest time, not a human-visible title or DOI. User-visible identifiers belong in a plain `string` attribute or as an `ExternalID`.
+- **Write-time validation** — Mosaic checks at ingest time that the referenced UUID exists and is available. Writing a `Citation` whose `citing_id` points to a non-existent `Publication` is rejected.
 
 ## Step 3: Create and Query Entities via the SDK
 
@@ -123,16 +123,16 @@ The Python SDK initializes the database schema automatically on first use. Save 
 
 ```python
 from pathlib import Path
-from hippo.linkml_bridge import SchemaRegistry
-from hippo.core.client import HippoClient
-from hippo.core.storage.adapters.sqlite_adapter import SQLiteAdapter
-from hippo.core.pipeline import ValidationPipeline
+from mosaic.linkml_bridge import SchemaRegistry
+from mosaic.core.client import MosaicClient
+from mosaic.core.storage.adapters.sqlite_adapter import SQLiteAdapter
+from mosaic.core.pipeline import ValidationPipeline
 
 # Load the schema and open the database (created automatically on first run).
 HERE = Path(__file__).parent
 registry = SchemaRegistry.from_path(HERE / "schema.yaml")
-storage = SQLiteAdapter(str(HERE / "data" / "hippo.db"), schema_registry=registry)
-client = HippoClient(storage=storage, registry=registry, pipeline=ValidationPipeline())
+storage = SQLiteAdapter(str(HERE / "data" / "mosaic.db"), schema_registry=registry)
+client = MosaicClient(storage=storage, registry=registry, pipeline=ValidationPipeline())
 
 # ── Create entities ──────────────────────────────────────────────────────────
 vaswani = client.create("Author", {
@@ -158,7 +158,7 @@ bert = client.create("Publication", {
 print(f"Created Publication : {bert['id'][:8]}…  {bert['data']['title'][:45]}")
 
 # Citation: BERT cites the Transformer paper.
-# citing_id and cited_id hold the Hippo UUIDs returned above, not titles.
+# citing_id and cited_id hold the Mosaic UUIDs returned above, not titles.
 citation = client.create("Citation", {
     "citing_id": bert["id"],
     "cited_id": transformer["id"],
@@ -201,21 +201,21 @@ Fetched Author: Ashish Vaswani  (version 1)
 
 ## Step 4: One REST Endpoint
 
-Hippo's REST transport wraps the same SDK client. Create `biblio_qs/serve.py`:
+Mosaic's REST transport wraps the same SDK client. Create `biblio_qs/serve.py`:
 
 ```python
 from pathlib import Path
-from hippo.linkml_bridge import SchemaRegistry
-from hippo.core.client import HippoClient
-from hippo.core.storage.adapters.sqlite_adapter import SQLiteAdapter
-from hippo.core.pipeline import ValidationPipeline
-from hippo.serve import create_default_app
+from mosaic.linkml_bridge import SchemaRegistry
+from mosaic.core.client import MosaicClient
+from mosaic.core.storage.adapters.sqlite_adapter import SQLiteAdapter
+from mosaic.core.pipeline import ValidationPipeline
+from mosaic.serve import create_default_app
 import uvicorn
 
 HERE = Path(__file__).parent
 registry = SchemaRegistry.from_path(HERE / "schema.yaml")
-storage = SQLiteAdapter(str(HERE / "data" / "hippo.db"), schema_registry=registry)
-client = HippoClient(storage=storage, registry=registry, pipeline=ValidationPipeline())
+storage = SQLiteAdapter(str(HERE / "data" / "mosaic.db"), schema_registry=registry)
+client = MosaicClient(storage=storage, registry=registry, pipeline=ValidationPipeline())
 app = create_default_app(hippo_client=client)
 
 if __name__ == "__main__":
@@ -277,6 +277,6 @@ kill $SERVER_PID
 - **[Data Model](data-model.md)** — entity types, relationships, and schema design
 - **[SDK Reference](reference_typed_client.md)** — full Python SDK documentation
 - **[API Reference](api-reference.md)** — complete REST API reference
-- **[Schema Guide](schema-guide.md)** — writing and evolving LinkML schemas for Hippo
-- **[Configuration](configuration.md)** — configure Hippo for different deployment scenarios
+- **[Schema Guide](schema-guide.md)** — writing and evolving LinkML schemas for Mosaic
+- **[Configuration](configuration.md)** — configure Mosaic for different deployment scenarios
 - **[Bibliography Worked Example](../examples/bibliography/README.md)** — deeper dive: polymorphism, validators, full-text search, entity supersession, and provenance

@@ -3,7 +3,7 @@ the one-time backfill from ``hippo_meta.reference_entity_ids``
 (sec2 §2.14.9, Decision 2.14.J).
 
 Mirrors ``tests/core/test_reference_write_log.py``. Requires a running
-PostgreSQL instance — set ``HIPPO_DATABASE_URL`` (see
+PostgreSQL instance — set ``MOSAIC_DATABASE_URL`` (see
 ``docker-compose.test.yml``).
 """
 
@@ -18,20 +18,22 @@ import pytest
 
 psycopg = pytest.importorskip("psycopg")
 
-from hippo.core.meta import set_meta as sqlite_set_meta  # noqa: E402
+from mosaic.core.meta import set_meta as sqlite_set_meta  # noqa: E402
 
-POSTGRES_URL = os.environ.get("HIPPO_DATABASE_URL")
+POSTGRES_URL = os.environ.get("MOSAIC_DATABASE_URL") or os.environ.get(
+    "HIPPO_DATABASE_URL"
+)
 
 pytestmark = pytest.mark.skipif(
     not POSTGRES_URL,
-    reason="HIPPO_DATABASE_URL not set — skipping PostgreSQL tests",
+    reason="MOSAIC_DATABASE_URL not set — skipping PostgreSQL tests",
 )
 
 
 def _set_meta_pg(conn, key: str, value: dict) -> None:
     """Postgres-flavoured upsert into ``hippo_meta``.
 
-    Mirrors ``hippo.core.meta.set_meta`` but with ``%s`` placeholders so
+    Mirrors ``mosaic.core.meta.set_meta`` but with ``%s`` placeholders so
     it works against psycopg cursors.
     """
     from datetime import datetime, timezone
@@ -90,7 +92,7 @@ def fresh_db(database_url) -> Iterator[str]:
 @pytest.fixture
 def adapter_factory(minimal_schema_registry, fresh_db):
     """Construct ``PostgresAdapter`` instances against the shared test DB."""
-    from hippo.core.storage.adapters.postgres_adapter import PostgresAdapter
+    from mosaic.core.storage.adapters.postgres_adapter import PostgresAdapter
 
     created = []
 
@@ -148,7 +150,7 @@ def _simulate_v1_state(database_url: str) -> None:
 
 
 def _put_entity(adapter, entity_type: str, name: str) -> str:
-    from hippo.core.storage.adapters.postgres_adapter import PostgresEntity
+    from mosaic.core.storage.adapters.postgres_adapter import PostgresEntity
 
     entity_id = str(uuid.uuid4())
     adapter.create(

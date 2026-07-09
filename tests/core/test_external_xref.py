@@ -22,17 +22,17 @@ import tempfile
 
 import pytest
 
-from hippo.core.client import HippoClient
-from hippo.core.exceptions import SchemaError, XrefUniquenessError
-from hippo.core.schema_typing import (
+from mosaic.core.client import MosaicClient
+from mosaic.core.exceptions import SchemaError, XrefUniquenessError
+from mosaic.core.schema_typing import (
     SlotKind,
     build_type_model,
     exposed_class_names,
 )
-from hippo.core.storage.adapters.sqlite_adapter import SQLiteAdapter
-from hippo.core.storage.ddl_generator import DDLGenerator
-from hippo.core.storage.xref import XREF_TABLE, extract_xref_pairs
-from hippo.linkml_bridge import SchemaRegistry
+from mosaic.core.storage.adapters.sqlite_adapter import SQLiteAdapter
+from mosaic.core.storage.ddl_generator import DDLGenerator
+from mosaic.core.storage.xref import XREF_TABLE, extract_xref_pairs
+from mosaic.linkml_bridge import SchemaRegistry
 
 XREF_TEST_SCHEMA = """
 id: https://example.org/hippo/test_xref
@@ -101,8 +101,8 @@ def storage(registry, db_path) -> SQLiteAdapter:
 
 
 @pytest.fixture
-def client(registry, storage) -> HippoClient:
-    return HippoClient(storage=storage, registry=registry)
+def client(registry, storage) -> MosaicClient:
+    return MosaicClient(storage=storage, registry=registry)
 
 
 def _xref_rows(db_path: str) -> set[tuple]:

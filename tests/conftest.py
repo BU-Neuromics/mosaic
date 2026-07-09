@@ -33,7 +33,7 @@ def _build_minimal_schema_registry():
     import yaml
     from linkml_runtime.utils.schemaview import SchemaView
 
-    from hippo.linkml_bridge import SchemaRegistry, _bundled_importmap
+    from mosaic.linkml_bridge import SchemaRegistry, _bundled_importmap
 
     overlay = {
         "id": "https://example.org/hippo/test_minimal",

@@ -1,8 +1,8 @@
-# Hippo — Metadata Tracking Service
+# Hippo — LinkML Runtime (the structured domain graph)
 ## Specification Index
 
 **Codename:** Hippo  
-**Component:** Metadata Tracking Service (MTS)  
+**Component:** LinkML runtime — the platform's structured domain graph (metadata tracking is its reference application)  
 **Version:** 0.1 — Implementation Ready  
 **Status:** Ready for implementation  
 **LinkML-centric redesign:** Approved 2026-04-18. See `sec9_linkml_redesign.md` (authoritative design) and `sec9_decisions.md` (drafting decision log). Pre-redesign state preserved at git tag `design-pre-linkml`. Section revisions land coordinated with each OpenSpec change per 9.12.
@@ -24,6 +24,7 @@
 | `sec8_auth_integration.md` | 8. Authentication & Authorization Integration | ✅ Draft v0.1 | Bridge-aware `AuthMiddleware` impl, actor propagation, audit trail split |
 | `sec9_linkml_redesign.md` | 9. LinkML-Centric Redesign | ✅ Approved 2026-04-18 | Three-layer schema stack, first-class `Process`, PROV-O-aligned `ProvenanceRecord`, UUID identity model, namespace-aware typed client |
 | `sec9_decisions.md` | 9. (Companion) Decisions Log | ✅ Approved 2026-04-18 | Drafting decisions with alternatives, rationale, revert paths |
+| `sec9_handoff_mosaic_rename.md` | 9. (Handoff) Mosaic rename execution plan | 🟠 Ready for implementation | ADR-0004 execution: WP-H1–H6 (rename, shims, dual entry-point groups, config/env fallback, docs, verification); data-contract carve-out (`hippo_core`/`hippo_ext`/`hippo_meta` unchanged); tracked in #113 |
 | `sec10_recipes.md` | 10. Recipe Subsystem | 📝 Draft v0.1 | RecipeService facade, install pipeline, lockfile reproducibility model, override/extension rules |
 | `sec11_schema_packages.md` | 11. SchemaPackage Abstraction | 📝 Draft v0.1 | Genus/species split (SchemaPackage → ReferenceLoader + DomainModule), ExternalData/MigratableData protocols, migration DAG, deprovision asymmetry, orchestrator, coherence tools |
 | `appendix_a_example_schema_omics.md` | Appendix A. Example Schema (Omics) | ✅ Draft v0.1 | Complete LinkML schema with `search:`, polymorphic extension example |
@@ -106,6 +107,13 @@ New decisions to be introduced in sec9 (preview):
 ---
 
 ## Key Decisions Log
+
+> **Recording format (ADRs, hybrid — 2026-06-17).** Hippo follows the platform-wide ADR
+> convention ([`platform/design/decisions/README.md`](../../platform/design/decisions/README.md)).
+> **New, non-trivial, or still-in-flux decisions** get an ADR in
+> [`decisions/`](./decisions/); this table remains the **scannable index of record** for the
+> settled, shipped decisions and is backfilled only opportunistically (forward-only adoption —
+> no mass migration). See [`decisions/README.md`](./decisions/README.md).
 
 | Decision | Choice | Section |
 |---|---|---|
@@ -200,6 +208,9 @@ out of scope for v0.1 and documented here for tracking.
 | Whole-`upgrade()` multi-entity transaction atomicity | sec11 §11.8.1 | High | **Resolved (S3 → S4)** — no per-`upgrade()` transaction in the runtime (per-write only); S3 documented the limitation, S4 shipped `SQLiteAdapter.staged_transaction()` — a re-entrant outer scope giving true end-to-end commit-or-rollback across all hops/packages (PTS-340). |
 | Runtime `loader_depends_on` ordering | sec11 §11.8.2 | Medium | **Resolved (S4 / PTS-340)** — no runtime path orders loaders by `loader_depends_on`; it is documentation-only (warning-only in `linkml_bridge`). The S4 orchestrator sequences base→dependents explicitly via `topological_sort`; it relies on no implicit ordering. |
 | `HippoClient.schema_references(entity_type)` | — | **✅ Implemented (Hippo v0.4)** | Reads `FieldDefinition.references` from already-loaded schema. Returns `[{field, target_entity_type}]` for each field with `references: {entity_type: <name>}` declared in schema YAML. REST endpoint: `GET /schemas/{entity_type}/references`. Works today — caller schemas must declare `references:` on foreign-key fields. |
+| Graph-level / query-spanning as-of reconstruction | sec6 §6.8, sec4 | High | **🟢 Accepted ([ADR-0001](./decisions/ADR-0001-graph-level-as-of-query.md)); designed in [sec6 §6.8](./sec6_provenance.md). Implementation in progress — increment 1 of 5 (BU-Neuromics/hippo#71).** Generalizes per-entity `state_at` to a whole subgraph (entities + relationships + schema version) at a transaction-time `T`; relationship liveness reconstructed from `relationship_add`/`remove` provenance events; additive `as_of` on REST/GraphQL; decomposed into 5 increments. Required by Aperture data-story reproducibility (Aperture ADR-0023). |
+| Multivalued reference slots silently dropped on ingest | sec3b | High | **🟡 Proposed ([ADR-0002](./decisions/ADR-0002-multivalued-reference-slots-as-relationships.md); [issue #79](https://github.com/BU-Neuromics/hippo/issues/79)).** Multivalued slots get no column and no junction table (linktables filtered in `ddl_generator`), so `put` drops them with no error. Fix: materialize multivalued *reference* slots as relationships keyed by slot name (in-transaction, forward-ref tolerant), hydrate back on read; store non-reference multivalued slots inline as JSON TEXT; raise rather than drop when neither applies. |
+| Polymorphic tree-root collections not ingestable | sec9 §9.8 | High | **🟡 Proposed ([ADR-0003](./decisions/ADR-0003-polymorphic-tree-root-ingest.md); [issue #80](https://github.com/BU-Neuromics/hippo/issues/80)).** Synthesized bundle skipped abstract bases (abstract-base collection → no accessor → hard fail) and ignored `designates_type`, so a base accessor silently downcast subtype instances. Fix: an abstract base declaring a `designates_type` slot gets a base-ranged accessor, and ingest dispatches each instance to the concrete subclass its discriminator names (stored as that subclass). Synthesized `_HippoInstanceBundle` stays the wire contract; user `tree_root` not reinterpreted (Option A). |
 
 ---
 

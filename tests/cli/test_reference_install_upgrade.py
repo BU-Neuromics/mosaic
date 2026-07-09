@@ -32,8 +32,8 @@ from pathlib import Path
 import pytest
 from typer.testing import CliRunner
 
-from hippo.cli.commands import reference as ref_cmd
-from hippo.cli.commands.reference import (
+from mosaic.cli.commands import reference as ref_cmd
+from mosaic.cli.commands.reference import (
     META_KEY_VERSIONS,
     _resolve_breakdown_counts,
     install_reference,
@@ -41,16 +41,16 @@ from hippo.cli.commands.reference import (
     render_breakdown,
     upgrade_reference,
 )
-from hippo.cli.main import app
-from hippo.core.loaders.reference import EntityRef
-from hippo.core.meta import get_meta
-from hippo.testing.example_ontology_loader import OboDemoLoader
-from hippo.testing.fake_reference_loader import FakeLoadParams
+from mosaic.cli.main import app
+from mosaic.core.loaders.reference import EntityRef
+from mosaic.core.meta import get_meta
+from mosaic.testing.example_ontology_loader import OboDemoLoader
+from mosaic.testing.fake_reference_loader import FakeLoadParams
 
 
 @pytest.fixture
 def hippo_workspace(tmp_path: Path) -> dict[str, Path]:
-    """Return paths to an empty Hippo workspace (db + schemas dir).
+    """Return paths to an empty Mosaic workspace (db + schemas dir).
 
     The schemas dir is intentionally left empty so the install lifecycle
     falls back to the bundled ``hippo_core`` schema as the base. The
@@ -69,7 +69,7 @@ def _open(db_path: Path) -> sqlite3.Connection:
 
 
 def _count_rows(db_path: Path, table: str) -> int:
-    """Count *available* rows. Hippo uses soft-delete (sec3) for the
+    """Count *available* rows. Mosaic uses soft-delete (sec3) for the
     standard user/REST path — every ``client.delete()`` flips
     ``is_available=0`` instead of removing the row. ``--prune-old``
     bypasses that path and hard-deletes from the entity tables, so a
@@ -716,7 +716,7 @@ def obodemo_workspace(tmp_path: Path, monkeypatch) -> dict[str, Path]:
 
     ep = _GroupedEP(
         "obodemo",
-        "hippo.testing.example_ontology_loader:OboDemoLoader",
+        "mosaic.testing.example_ontology_loader:OboDemoLoader",
         OboDemoLoader,
     )
     monkeypatch.setattr(
@@ -741,7 +741,7 @@ def _build_merged_client(ws: dict[str, Path]) -> tuple[OboDemoLoader, object]:
 
     Reuses the same private helpers the install/upgrade lifecycle uses, so
     the resulting client exposes the merged ``registry`` the dry-run gate
-    validates against — the SDK equivalent of ``hippo ingest
+    validates against — the SDK equivalent of ``mosaic ingest
     --validate-schema --dry-run`` (sec11 §11.5.2).
     """
     info = ref_cmd.find_loader("obodemo")
@@ -836,7 +836,7 @@ class TestOboDemoDryRun:
     def test_dry_run_is_not_a_state_corrupting_cli_flag(self, obodemo_workspace):
         # Regression guard: the dry-run is an SDK-only method, deliberately
         # NOT a load param. If it leaked into ``load_params_schema`` it would
-        # render as ``hippo reference upgrade --dry-run`` — and the lifecycle
+        # render as ``mosaic reference upgrade --dry-run`` — and the lifecycle
         # would still prune + rotate the version pointer after a write-free
         # LoadResult, leaving an installed-but-empty (data-loss) state. So
         # the flag must NOT exist on the loader's params, and the CLI must

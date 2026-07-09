@@ -1,4 +1,4 @@
-"""Unit tests for HippoClient put, get, query operations."""
+"""Unit tests for MosaicClient put, get, query operations."""
 
 import json
 import os
@@ -7,14 +7,14 @@ import tempfile
 
 import pytest
 
-from hippo.core.client import HippoClient
-from hippo.core.exceptions import EntityNotFoundError, ValidationFailure
-from hippo.core.storage.adapters.sqlite_adapter import SQLiteAdapter
+from mosaic.core.client import MosaicClient
+from mosaic.core.exceptions import EntityNotFoundError, ValidationFailure
+from mosaic.core.storage.adapters.sqlite_adapter import SQLiteAdapter
 from tests.conftest import _build_minimal_schema_registry
 
 
 class TestPutOperation:
-    """Tests for HippoClient.put() operation."""
+    """Tests for MosaicClient.put() operation."""
 
     @pytest.fixture
     def db_path(self) -> str:
@@ -23,12 +23,12 @@ class TestPutOperation:
             yield os.path.join(tmpdir, "test_put.db")
 
     @pytest.fixture
-    def client(self, db_path: str) -> HippoClient:
-        """Create a HippoClient with SQLite storage."""
+    def client(self, db_path: str) -> MosaicClient:
+        """Create a MosaicClient with SQLite storage."""
         storage = SQLiteAdapter(db_path, schema_registry=_build_minimal_schema_registry())
-        return HippoClient(storage=storage, bypass_validation=True)
+        return MosaicClient(storage=storage, bypass_validation=True)
 
-    def test_put_creates_entity_with_generated_id(self, client: HippoClient) -> None:
+    def test_put_creates_entity_with_generated_id(self, client: MosaicClient) -> None:
         """Test that put creates an entity with a generated UUID when no ID provided."""
         result = client.put("Sample", {"name": "test", "value": 123})
 
@@ -37,19 +37,19 @@ class TestPutOperation:
         assert result["data"] == {"name": "test", "value": 123}
         assert result["version"] == 1
 
-    def test_put_creates_entity_with_provided_id(self, client: HippoClient) -> None:
+    def test_put_creates_entity_with_provided_id(self, client: MosaicClient) -> None:
         """Test that put uses provided ID when specified."""
         result = client.put("Sample", {"id": "my-id", "name": "test"})
 
         assert result["id"] == "my-id"
 
-    def test_put_uses_id_from_data(self, client: HippoClient) -> None:
+    def test_put_uses_id_from_data(self, client: MosaicClient) -> None:
         """Test that put uses ID from data dict when entity_id not provided."""
         result = client.put("Sample", {"id": "data-id", "name": "test"})
 
         assert result["id"] == "data-id"
 
-    def test_put_increments_version_on_update(self, client: HippoClient) -> None:
+    def test_put_increments_version_on_update(self, client: MosaicClient) -> None:
         """Test that version is incremented when updating an existing entity."""
         result1 = client.put("Sample", {"id": "v-test", "name": "v1"})
         assert result1["version"] == 1
@@ -60,14 +60,14 @@ class TestPutOperation:
         result3 = client.put("Sample", {"name": "v3"}, "v-test")
         assert result3["version"] == 3
 
-    def test_put_rejects_null_data(self, client: HippoClient) -> None:
+    def test_put_rejects_null_data(self, client: MosaicClient) -> None:
         """Test that put rejects null data with ValidationFailure."""
         with pytest.raises(ValidationFailure) as exc_info:
             client.put("Sample", None)
 
         assert "null or empty" in str(exc_info.value).lower()
 
-    def test_put_rejects_empty_data(self, client: HippoClient) -> None:
+    def test_put_rejects_empty_data(self, client: MosaicClient) -> None:
         """Test that put rejects empty data with ValidationFailure."""
         with pytest.raises(ValidationFailure) as exc_info:
             client.put("Sample", {})
@@ -76,7 +76,7 @@ class TestPutOperation:
 
 
 class TestGetOperation:
-    """Tests for HippoClient.get() operation."""
+    """Tests for MosaicClient.get() operation."""
 
     @pytest.fixture
     def db_path(self) -> str:
@@ -85,12 +85,12 @@ class TestGetOperation:
             yield os.path.join(tmpdir, "test_get.db")
 
     @pytest.fixture
-    def client(self, db_path: str) -> HippoClient:
-        """Create a HippoClient with SQLite storage."""
+    def client(self, db_path: str) -> MosaicClient:
+        """Create a MosaicClient with SQLite storage."""
         storage = SQLiteAdapter(db_path, schema_registry=_build_minimal_schema_registry())
-        return HippoClient(storage=storage, bypass_validation=True)
+        return MosaicClient(storage=storage, bypass_validation=True)
 
-    def test_get_returns_entity_with_metadata(self, client: HippoClient) -> None:
+    def test_get_returns_entity_with_metadata(self, client: MosaicClient) -> None:
         """Test that get returns entity with all metadata fields."""
         created = client.put("Sample", {"id": "get-test", "name": "test"})
         result = client.get("Sample", "get-test")
@@ -102,14 +102,14 @@ class TestGetOperation:
         assert "created_at" in result
         assert "updated_at" in result
 
-    def test_get_raises_error_for_nonexistent_entity(self, client: HippoClient) -> None:
+    def test_get_raises_error_for_nonexistent_entity(self, client: MosaicClient) -> None:
         """Test that get raises EntityNotFoundError for non-existent entity."""
         with pytest.raises(EntityNotFoundError) as exc_info:
             client.get("Sample", "non-existent")
 
         assert "non-existent" in str(exc_info.value)
 
-    def test_get_raises_error_for_wrong_entity_type(self, client: HippoClient) -> None:
+    def test_get_raises_error_for_wrong_entity_type(self, client: MosaicClient) -> None:
         """Test that get raises error when entity exists but wrong type."""
         client.put("Sample", {"id": "type-test", "name": "test"})
 
@@ -118,7 +118,7 @@ class TestGetOperation:
 
 
 class TestQueryOperation:
-    """Tests for HippoClient.query() operation."""
+    """Tests for MosaicClient.query() operation."""
 
     @pytest.fixture
     def db_path(self) -> str:
@@ -127,12 +127,12 @@ class TestQueryOperation:
             yield os.path.join(tmpdir, "test_query.db")
 
     @pytest.fixture
-    def client(self, db_path: str) -> HippoClient:
-        """Create a HippoClient with SQLite storage."""
+    def client(self, db_path: str) -> MosaicClient:
+        """Create a MosaicClient with SQLite storage."""
         storage = SQLiteAdapter(db_path, schema_registry=_build_minimal_schema_registry())
-        return HippoClient(storage=storage, bypass_validation=True)
+        return MosaicClient(storage=storage, bypass_validation=True)
 
-    def test_query_returns_matching_entities(self, client: HippoClient) -> None:
+    def test_query_returns_matching_entities(self, client: MosaicClient) -> None:
         """Test that query returns entities matching the entity type."""
         client.put("Sample", {"id": "q1", "name": "first"})
         client.put("Sample", {"id": "q2", "name": "second"})
@@ -144,7 +144,7 @@ class TestQueryOperation:
         ids = {r["id"] for r in results.items}
         assert ids == {"q1", "q2"}
 
-    def test_query_returns_empty_list_for_no_matches(self, client: HippoClient) -> None:
+    def test_query_returns_empty_list_for_no_matches(self, client: MosaicClient) -> None:
         """Test that query returns PaginatedResult with empty items when no entities match."""
         client.put("Sample", {"id": "q1", "name": "test"})
 
@@ -153,7 +153,7 @@ class TestQueryOperation:
         assert results.items == []
         assert results.total == 0
 
-    def test_query_sorts_by_created_at_ascending(self, client: HippoClient) -> None:
+    def test_query_sorts_by_created_at_ascending(self, client: MosaicClient) -> None:
         """Test that query returns results sorted by created_at ascending."""
         client.put("Sample", {"id": "last", "name": "last"})
         client.put("Sample", {"id": "first", "name": "first"})
@@ -165,7 +165,7 @@ class TestQueryOperation:
         created_at = [r["created_at"] for r in results.items]
         assert created_at == sorted(created_at)
 
-    def test_query_filters_by_date_from(self, client: HippoClient) -> None:
+    def test_query_filters_by_date_from(self, client: MosaicClient) -> None:
         """Test that query filters entities by date_from."""
         client.put("Sample", {"id": "old", "name": "old"})
         client.put("Sample", {"id": "new", "name": "new"})
@@ -174,7 +174,7 @@ class TestQueryOperation:
 
         assert len(results.items) == 0
 
-    def test_query_filters_by_date_to(self, client: HippoClient) -> None:
+    def test_query_filters_by_date_to(self, client: MosaicClient) -> None:
         """Test that query filters entities by date_to."""
         client.put("Sample", {"id": "old", "name": "old"})
         client.put("Sample", {"id": "new", "name": "new"})
@@ -183,7 +183,7 @@ class TestQueryOperation:
 
         assert len(results.items) == 0
 
-    def test_query_respects_limit(self, client: HippoClient) -> None:
+    def test_query_respects_limit(self, client: MosaicClient) -> None:
         """Test that query respects the limit parameter."""
         for i in range(5):
             client.put("Sample", {"id": f"q{i}", "name": f"name{i}"})
@@ -192,7 +192,7 @@ class TestQueryOperation:
 
         assert len(results.items) == 3
 
-    def test_query_respects_offset(self, client: HippoClient) -> None:
+    def test_query_respects_offset(self, client: MosaicClient) -> None:
         """Test that query respects the offset parameter."""
         for i in range(5):
             client.put("Sample", {"id": f"q{i}", "name": f"name{i}"})
@@ -203,7 +203,7 @@ class TestQueryOperation:
 
 
 class TestErrorCases:
-    """Tests for error handling in HippoClient."""
+    """Tests for error handling in MosaicClient."""
 
     @pytest.fixture
     def db_path(self) -> str:
@@ -212,29 +212,29 @@ class TestErrorCases:
             yield os.path.join(tmpdir, "test_errors.db")
 
     @pytest.fixture
-    def client(self, db_path: str) -> HippoClient:
-        """Create a HippoClient with SQLite storage."""
+    def client(self, db_path: str) -> MosaicClient:
+        """Create a MosaicClient with SQLite storage."""
         storage = SQLiteAdapter(db_path, schema_registry=_build_minimal_schema_registry())
-        return HippoClient(storage=storage, bypass_validation=True)
+        return MosaicClient(storage=storage, bypass_validation=True)
 
-    def test_get_nonexistent_entity_raises_error(self, client: HippoClient) -> None:
+    def test_get_nonexistent_entity_raises_error(self, client: MosaicClient) -> None:
         """Test that getting a non-existent entity raises EntityNotFoundError."""
         with pytest.raises(EntityNotFoundError):
             client.get("Sample", "does-not-exist")
 
-    def test_get_with_wrong_type_raises_error(self, client: HippoClient) -> None:
+    def test_get_with_wrong_type_raises_error(self, client: MosaicClient) -> None:
         """Test that getting an entity with wrong type raises EntityNotFoundError."""
         client.put("Sample", {"id": "test", "name": "test"})
 
         with pytest.raises(EntityNotFoundError):
             client.get("WrongType", "test")
 
-    def test_put_null_data_raises_validation_error(self, client: HippoClient) -> None:
+    def test_put_null_data_raises_validation_error(self, client: MosaicClient) -> None:
         """Test that putting null data raises ValidationFailure."""
         with pytest.raises(ValidationFailure):
             client.put("Sample", None)
 
-    def test_put_empty_data_raises_validation_error(self, client: HippoClient) -> None:
+    def test_put_empty_data_raises_validation_error(self, client: MosaicClient) -> None:
         """Test that putting empty data raises ValidationFailure."""
         with pytest.raises(ValidationFailure):
             client.put("Sample", {})
@@ -245,12 +245,12 @@ class TestFTSIntegration:
 
     def test_client_with_no_schemas_has_empty_fts_metadata(self) -> None:
         """Test that client with no schemas has empty _fts_table_metadata."""
-        client = HippoClient()
+        client = MosaicClient()
         assert hasattr(client, "_fts_table_metadata")
         assert client._fts_table_metadata == {}
 
     def test_client_with_schema_containing_fts_field_has_fts_metadata(self) -> None:
-        from hippo.core.storage.fts import FTSTableMetadata
+        from mosaic.core.storage.fts import FTSTableMetadata
         from tests.support.linkml_schemas import build_registry
 
         registry = build_registry(
@@ -267,7 +267,7 @@ class TestFTSIntegration:
                 }
             }
         )
-        client = HippoClient(registry=registry)
+        client = MosaicClient(registry=registry)
         assert len(client._fts_table_metadata) == 1
         assert "Sample" in client._fts_table_metadata
         meta = client._fts_table_metadata["Sample"][0]
@@ -291,11 +291,11 @@ class TestFTSIntegration:
                 }
             }
         )
-        client = HippoClient(registry=registry)
+        client = MosaicClient(registry=registry)
         assert "Sample" not in client._fts_table_metadata
 
     def test_client_with_multiple_entity_types_each_have_fts_fields(self) -> None:
-        from hippo.core.storage.fts import FTSTableMetadata
+        from mosaic.core.storage.fts import FTSTableMetadata
         from tests.support.linkml_schemas import build_registry
 
         registry = build_registry(
@@ -322,7 +322,7 @@ class TestFTSIntegration:
                 },
             }
         )
-        client = HippoClient(registry=registry)
+        client = MosaicClient(registry=registry)
         assert len(client._fts_table_metadata) == 2
         assert "Sample" in client._fts_table_metadata
         assert "Project" in client._fts_table_metadata
@@ -335,7 +335,7 @@ class TestFTSIntegration:
 
 
 class TestTypeResolution:
-    """Tests for HippoClient.resolve_type / resolve_types per sec9 §9.5."""
+    """Tests for MosaicClient.resolve_type / resolve_types per sec9 §9.5."""
 
     @pytest.fixture
     def db_path(self) -> str:
@@ -343,12 +343,12 @@ class TestTypeResolution:
             yield os.path.join(tmpdir, "test_resolve.db")
 
     @pytest.fixture
-    def client(self, db_path: str) -> HippoClient:
+    def client(self, db_path: str) -> MosaicClient:
         storage = SQLiteAdapter(db_path, schema_registry=_build_minimal_schema_registry())
-        return HippoClient(storage=storage, bypass_validation=True)
+        return MosaicClient(storage=storage, bypass_validation=True)
 
     def test_resolve_type_returns_entity_type_for_known_uuid(
-        self, client: HippoClient
+        self, client: MosaicClient
     ) -> None:
         result = client.put("Sample", {"name": "s1"})
         uuid = result["id"]
@@ -356,11 +356,11 @@ class TestTypeResolution:
         assert client.resolve_type(uuid) == "Sample"
 
     def test_resolve_type_returns_none_for_unknown_uuid(
-        self, client: HippoClient
+        self, client: MosaicClient
     ) -> None:
         assert client.resolve_type("nonexistent-uuid") is None
 
-    def test_resolve_types_batch(self, client: HippoClient) -> None:
+    def test_resolve_types_batch(self, client: MosaicClient) -> None:
         r1 = client.put("Sample", {"name": "s1"})
         r2 = client.put("Project", {"name": "p1"})
         r3 = client.put("Sample", {"name": "s2"})
@@ -375,11 +375,11 @@ class TestTypeResolution:
         assert "unknown-uuid" not in resolved
 
     def test_resolve_types_empty_input_returns_empty(
-        self, client: HippoClient
+        self, client: MosaicClient
     ) -> None:
         assert client.resolve_types([]) == {}
 
-    def test_resolve_type_after_delete_still_works(self, client: HippoClient) -> None:
+    def test_resolve_type_after_delete_still_works(self, client: MosaicClient) -> None:
         # Per sec9 §9.5, type resolution must work regardless of availability
         # (archived / deleted entities still have a knowable type).
         result = client.put("Sample", {"name": "s1"})

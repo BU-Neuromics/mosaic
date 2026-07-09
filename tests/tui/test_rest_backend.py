@@ -7,7 +7,7 @@ import os
 
 import pytest
 
-from hippo.tui.backend.rest import RESTBackend, _resolve_token
+from mosaic.tui.backend.rest import RESTBackend, _resolve_token
 
 
 # ---------------------------------------------------------------------------
@@ -155,12 +155,12 @@ def test_authorization_header_sent_on_every_request(monkeypatch):
 
 
 # ---------------------------------------------------------------------------
-# Tests: full REST surface against a mocked `hippo serve` (httpx.MockTransport)
+# Tests: full REST surface against a mocked `mosaic serve` (httpx.MockTransport)
 # ---------------------------------------------------------------------------
 
 import json as _json
 
-from hippo.tui.backend.protocol import BackendError
+from mosaic.tui.backend.protocol import BackendError
 
 _SCHEMAS_PAYLOAD = [
     {
@@ -227,7 +227,7 @@ _HISTORY_PAYLOAD = [
 
 
 def _mock_server(request):
-    """Simulate the `hippo serve` REST surface for the TUI backend."""
+    """Simulate the `mosaic serve` REST surface for the TUI backend."""
     import httpx
 
     path = request.url.path

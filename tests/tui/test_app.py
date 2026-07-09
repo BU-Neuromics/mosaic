@@ -1,4 +1,4 @@
-"""Smoke tests for HippoTUIApp — requires textual[dev] installed."""
+"""Smoke tests for MosaicTUIApp — requires textual[dev] installed."""
 
 from __future__ import annotations
 
@@ -8,10 +8,10 @@ import pytest
 
 # Skip entire module if textual is not installed
 textual = pytest.importorskip(
-    "textual", reason="textual not installed; run: pip install hippo[tui]"
+    "textual", reason="textual not installed; run: pip install datahelix-mosaic[tui]"
 )
 
-from hippo.tui.backend.protocol import (
+from mosaic.tui.backend.protocol import (
     EntityDetail,
     EntityTypeSummary,
     PagedResult,
@@ -56,29 +56,29 @@ class MockBackend:
 
 
 def test_app_mounts_with_mock_backend():
-    """HippoTUIApp can be created with a MockBackend without error."""
-    from hippo.tui.app import HippoTUIApp
+    """MosaicTUIApp can be created with a MockBackend without error."""
+    from mosaic.tui.app import MosaicTUIApp
 
     backend = MockBackend()
-    app = HippoTUIApp(backend=backend)
+    app = MosaicTUIApp(backend=backend)
     assert app is not None
 
 
 def test_schema_cache_starts_empty():
     """Schema cache is None before on_mount is called."""
-    from hippo.tui.app import HippoTUIApp
+    from mosaic.tui.app import MosaicTUIApp
 
     backend = MockBackend()
-    app = HippoTUIApp(backend=backend)
+    app = MosaicTUIApp(backend=backend)
     assert app.schema_cache is None
 
 
 def test_get_or_fetch_schema_populates_cache():
     """get_or_fetch_schema populates the schema cache."""
-    from hippo.tui.app import HippoTUIApp
+    from mosaic.tui.app import MosaicTUIApp
 
     backend = MockBackend()
-    app = HippoTUIApp(backend=backend)
+    app = MosaicTUIApp(backend=backend)
 
     schema = asyncio.run(app.get_or_fetch_schema())
     assert app.schema_cache is schema
@@ -86,10 +86,10 @@ def test_get_or_fetch_schema_populates_cache():
 
 def test_invalidate_schema_cache_refetches():
     """invalidate_schema_cache clears and re-fetches."""
-    from hippo.tui.app import HippoTUIApp
+    from mosaic.tui.app import MosaicTUIApp
 
     backend = MockBackend()
-    app = HippoTUIApp(backend=backend)
+    app = MosaicTUIApp(backend=backend)
 
     schema1 = asyncio.run(app.get_or_fetch_schema())
     schema2 = asyncio.run(app.invalidate_schema_cache())
@@ -99,10 +99,10 @@ def test_invalidate_schema_cache_refetches():
 
 def test_app_pilot_smoke():
     """Textual pilot: app starts and exits cleanly."""
-    from hippo.tui.app import HippoTUIApp
+    from mosaic.tui.app import MosaicTUIApp
 
     backend = MockBackend()
-    app = HippoTUIApp(backend=backend)
+    app = MosaicTUIApp(backend=backend)
 
     async def run():
         async with app.run_test(headless=True, size=(80, 24)) as pilot:

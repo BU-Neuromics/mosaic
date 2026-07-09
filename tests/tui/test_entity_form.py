@@ -7,13 +7,13 @@ import asyncio
 import pytest
 
 pytest.importorskip(
-    "textual", reason="textual not installed; run: pip install hippo[tui]"
+    "textual", reason="textual not installed; run: pip install datahelix-mosaic[tui]"
 )
 
 from textual.widgets import Input, Select, Static
 
-from hippo.tui.backend.protocol import FieldInfo
-from hippo.tui.views.entity_form import (
+from mosaic.tui.backend.protocol import FieldInfo
+from mosaic.tui.views.entity_form import (
     EntityFormScreen,
     FieldCoercionError,
     coerce_field,
@@ -98,9 +98,9 @@ def test_editable_fields_excludes_system_and_identifier(fake_backend):
 
 
 def _form_app(backend, entity_id=None, initial=None):
-    from hippo.tui.app import HippoTUIApp
+    from mosaic.tui.app import MosaicTUIApp
 
-    app = HippoTUIApp(backend=backend)
+    app = MosaicTUIApp(backend=backend)
     schema = backend.schema.get_entity_type("Sample")
     form = EntityFormScreen(
         backend=backend,

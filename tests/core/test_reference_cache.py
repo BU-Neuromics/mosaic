@@ -1,4 +1,4 @@
-"""Tests for HippoClient reference-loader caching surface (PTS-225)."""
+"""Tests for MosaicClient reference-loader caching surface (PTS-225)."""
 
 from __future__ import annotations
 
@@ -10,8 +10,8 @@ from pathlib import Path
 
 import pytest
 
-from hippo.core.client import HippoClient
-from hippo.core.exceptions import CacheIntegrityError, HippoError
+from mosaic.core.client import MosaicClient
+from mosaic.core.exceptions import CacheIntegrityError, MosaicError
 
 
 # --- Fixture HTTP server -------------------------------------------------
@@ -79,7 +79,7 @@ def isolated_cache(tmp_path, monkeypatch):
 class TestCacheDirFor:
     def test_env_override_wins(self, tmp_path, monkeypatch):
         monkeypatch.setenv("HIPPO_CACHE_DIR", str(tmp_path / "envcache"))
-        client = HippoClient()
+        client = MosaicClient()
         path = client.cache_dir_for("ensembl")
         assert path == tmp_path / "envcache" / "ensembl"
         assert path.is_dir()
@@ -87,20 +87,20 @@ class TestCacheDirFor:
     def test_default_resolves_under_home(self, tmp_path, monkeypatch):
         monkeypatch.delenv("HIPPO_CACHE_DIR", raising=False)
         monkeypatch.setattr(Path, "home", classmethod(lambda cls: tmp_path))
-        client = HippoClient()
+        client = MosaicClient()
         path = client.cache_dir_for("fma")
         assert path == tmp_path / ".cache" / "hippo" / "references" / "fma"
         assert path.is_dir()
 
     def test_per_loader_directories_are_disjoint(self, isolated_cache):
-        client = HippoClient()
+        client = MosaicClient()
         a = client.cache_dir_for("a")
         b = client.cache_dir_for("b")
         assert a != b
         assert a.parent == b.parent
 
     def test_empty_loader_name_rejected(self, isolated_cache):
-        client = HippoClient()
+        client = MosaicClient()
         with pytest.raises(ValueError):
             client.cache_dir_for("")
 
@@ -112,7 +112,7 @@ class TestCachedFetch:
     def test_returns_stable_path_across_calls(self, fixture_server, isolated_cache):
         server, base_url = fixture_server
         server.payload = b"hello world"
-        client = HippoClient()
+        client = MosaicClient()
 
         first = client.cached_fetch(f"{base_url}/x", loader_name="demo")
         second = client.cached_fetch(f"{base_url}/x", loader_name="demo")
@@ -125,7 +125,7 @@ class TestCachedFetch:
     def test_writes_under_loader_cache_dir(self, fixture_server, isolated_cache):
         server, base_url = fixture_server
         server.payload = b"payload"
-        client = HippoClient()
+        client = MosaicClient()
         path = client.cached_fetch(f"{base_url}/y", loader_name="ensembl")
         assert path.parent == client.cache_dir_for("ensembl")
 
@@ -133,7 +133,7 @@ class TestCachedFetch:
         server, base_url = fixture_server
         server.payload = b"hello"
         digest = hashlib.sha256(server.payload).hexdigest()
-        client = HippoClient()
+        client = MosaicClient()
         path = client.cached_fetch(
             f"{base_url}/file",
             expected_sha256=digest,
@@ -146,16 +146,16 @@ class TestCachedFetch:
     ):
         server, base_url = fixture_server
         server.payload = b"hello"
-        client = HippoClient()
+        client = MosaicClient()
         with pytest.raises(CacheIntegrityError) as exc:
             client.cached_fetch(
                 f"{base_url}/bad",
                 expected_sha256="0" * 64,
                 loader_name="demo",
             )
-        # CacheIntegrityError is in the HippoError family per the
+        # CacheIntegrityError is in the MosaicError family per the
         # documented exception hierarchy.
-        assert isinstance(exc.value, HippoError)
+        assert isinstance(exc.value, MosaicError)
         # The offending file must not be left behind to satisfy a later
         # cache hit silently.
         assert not (client.cache_dir_for("demo") / hashlib.sha256(
@@ -167,7 +167,7 @@ class TestCachedFetch:
     ):
         server, base_url = fixture_server
         server.payload = b"hello"
-        client = HippoClient()
+        client = MosaicClient()
         path = client.cached_fetch(f"{base_url}/file", loader_name="demo")
         # Corrupt the cached file out-of-band, then re-fetch with an
         # expected digest that matches the *original* payload.
@@ -188,7 +188,7 @@ class TestCachedFetch:
 
 class TestCleanCache:
     def test_clean_named_removes_only_that_loader(self, isolated_cache):
-        from hippo.cli.commands.reference import (
+        from mosaic.cli.commands.reference import (
             clean_reference_cache,
             reference_cache_root,
         )
@@ -208,7 +208,7 @@ class TestCleanCache:
         assert (root / "b" / "file").read_bytes() == b"b"
 
     def test_clean_all_removes_entire_root(self, isolated_cache):
-        from hippo.cli.commands.reference import (
+        from mosaic.cli.commands.reference import (
             clean_reference_cache,
             reference_cache_root,
         )
@@ -225,14 +225,14 @@ class TestCleanCache:
         assert not root.exists()
 
     def test_clean_missing_loader_is_silent_noop(self, isolated_cache):
-        from hippo.cli.commands.reference import clean_reference_cache
+        from mosaic.cli.commands.reference import clean_reference_cache
 
         result = clean_reference_cache("nonexistent")
         assert result["removed"] is False
         assert result["scope"] == "nonexistent"
 
     def test_clean_missing_root_is_silent_noop(self, isolated_cache):
-        from hippo.cli.commands.reference import clean_reference_cache
+        from mosaic.cli.commands.reference import clean_reference_cache
 
         result = clean_reference_cache(None)
         assert result["removed"] is False
@@ -246,8 +246,8 @@ class TestCleanCacheCLI:
     def test_clean_cache_named_command(self, isolated_cache):
         from typer.testing import CliRunner
 
-        from hippo.cli.commands.reference import reference_cache_root
-        from hippo.cli.main import app
+        from mosaic.cli.commands.reference import reference_cache_root
+        from mosaic.cli.main import app
 
         root = reference_cache_root()
         (root / "ensembl").mkdir(parents=True)
@@ -263,8 +263,8 @@ class TestCleanCacheCLI:
     def test_clean_cache_all_command(self, isolated_cache):
         from typer.testing import CliRunner
 
-        from hippo.cli.commands.reference import reference_cache_root
-        from hippo.cli.main import app
+        from mosaic.cli.commands.reference import reference_cache_root
+        from mosaic.cli.main import app
 
         root = reference_cache_root()
         (root / "ensembl").mkdir(parents=True)

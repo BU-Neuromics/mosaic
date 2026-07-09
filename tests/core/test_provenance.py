@@ -8,7 +8,7 @@ import tempfile
 
 import pytest
 
-from hippo.core.storage.adapters import SQLiteAdapter
+from mosaic.core.storage.adapters import SQLiteAdapter
 
 
 class TestEntity:
@@ -275,7 +275,7 @@ class TestHistoryMethods:
         """Test 5.2: history() returns records in chronological order."""
         adapter = SQLiteAdapter(db_path, wal_mode=True, schema_registry=_build_minimal_schema_registry())
 
-        from hippo.core.storage.adapters.sqlite_adapter import SQLiteEntity
+        from mosaic.core.storage.adapters.sqlite_adapter import SQLiteEntity
         from datetime import datetime, timezone
 
         now = datetime.now(timezone.utc).isoformat()
@@ -315,8 +315,8 @@ class TestHistoryMethods:
         """Test 5.3: state_at() returns entity state at specified time."""
         adapter = SQLiteAdapter(db_path, wal_mode=True, schema_registry=_build_minimal_schema_registry())
 
-        from hippo.core.storage.adapters.sqlite_adapter import SQLiteEntity
-        from datetime import datetime, timezone
+        from mosaic.core.storage.adapters.sqlite_adapter import SQLiteEntity
+        from datetime import datetime, timezone, timedelta
 
         now = datetime.now(timezone.utc)
         time1 = now.isoformat()
@@ -333,7 +333,7 @@ class TestHistoryMethods:
         history = adapter.history("state-test-1")
         create_timestamp = history[0]["timestamp"]
 
-        time2 = (now.replace(second=now.second + 1)).isoformat()
+        time2 = (now + timedelta(seconds=1)).isoformat()
 
         adapter.update_data(
             entity_id="state-test-1",
@@ -356,11 +356,11 @@ class TestHistoryMethods:
 
     def test_state_at_before_creation_raises_error(self, db_path: str) -> None:
         """Test 5.4: state_at() raises TemporalQueryError for timestamp before creation."""
-        from hippo.core.exceptions import TemporalQueryError
+        from mosaic.core.exceptions import TemporalQueryError
 
         adapter = SQLiteAdapter(db_path, wal_mode=True, schema_registry=_build_minimal_schema_registry())
 
-        from hippo.core.storage.adapters.sqlite_adapter import SQLiteEntity
+        from mosaic.core.storage.adapters.sqlite_adapter import SQLiteEntity
         from datetime import datetime, timezone, timedelta
 
         now = datetime.now(timezone.utc)
@@ -388,7 +388,7 @@ class TestHistoryMethods:
         """Test that state_at() returns None for deleted entities at deletion time."""
         adapter = SQLiteAdapter(db_path, wal_mode=True, schema_registry=_build_minimal_schema_registry())
 
-        from hippo.core.storage.adapters.sqlite_adapter import SQLiteEntity
+        from mosaic.core.storage.adapters.sqlite_adapter import SQLiteEntity
         from datetime import datetime, timezone, timedelta
 
         now = datetime.now(timezone.utc)
@@ -416,7 +416,7 @@ class TestHistoryMethods:
 
 
 class TestHistoryClientAPI:
-    """Tests for HippoClient history() and state_at() methods."""
+    """Tests for MosaicClient history() and state_at() methods."""
 
     @pytest.fixture
     def db_path(self) -> str:
@@ -426,17 +426,17 @@ class TestHistoryClientAPI:
 
     @pytest.fixture
     def client(self, db_path: str):
-        """Create a HippoClient with SQLite storage."""
-        from hippo.core.client import HippoClient
-        from hippo.core.storage.adapters import SQLiteAdapter
+        """Create a MosaicClient with SQLite storage."""
+        from mosaic.core.client import MosaicClient
+        from mosaic.core.storage.adapters import SQLiteAdapter
 
         adapter = SQLiteAdapter(db_path, wal_mode=True, schema_registry=_build_minimal_schema_registry())
-        client = HippoClient(storage=adapter)
+        client = MosaicClient(storage=adapter)
         yield client
         adapter.close()
 
     def test_client_history(self, client) -> None:
-        """Test 5.2: HippoClient.history() returns entity history."""
+        """Test 5.2: MosaicClient.history() returns entity history."""
         result = client.put("SampleEntity", {"name": "Test Entity"})
         entity_id = result["id"]
 
@@ -447,7 +447,7 @@ class TestHistoryClientAPI:
         assert history[0]["operation_type"] == "create"
 
     def test_client_state_at(self, client) -> None:
-        """Test 5.3: HippoClient.state_at() returns entity state at time."""
+        """Test 5.3: MosaicClient.state_at() returns entity state at time."""
         from datetime import datetime, timezone, timedelta
 
         now = datetime.now(timezone.utc)
@@ -463,8 +463,8 @@ class TestHistoryClientAPI:
         assert state_result["state"]["name"] == "Initial"
 
     def test_client_state_at_before_creation_error(self, client) -> None:
-        """Test 5.4: HippoClient.state_at() raises error for timestamp before creation."""
-        from hippo.core.exceptions import TemporalQueryError
+        """Test 5.4: MosaicClient.state_at() raises error for timestamp before creation."""
+        from mosaic.core.exceptions import TemporalQueryError
         from datetime import datetime, timezone, timedelta
 
         result = client.put("ErrorEntity", {"name": "Test"})
@@ -476,8 +476,8 @@ class TestHistoryClientAPI:
             client.state_at(entity_id, before_creation)
 
     def test_client_history_not_found(self, client) -> None:
-        """Test that HippoClient.history() raises error for non-existent entity."""
-        from hippo.core.exceptions import EntityNotFoundError
+        """Test that MosaicClient.history() raises error for non-existent entity."""
+        from mosaic.core.exceptions import EntityNotFoundError
 
         with pytest.raises(EntityNotFoundError):
             client.history("non-existent-id")

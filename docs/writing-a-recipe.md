@@ -1,6 +1,6 @@
 # Writing a Recipe
 
-A **recipe** is a declarative bundle that packages a LinkML schema fragment for sharing between Hippo deployments. Recipes are identified by a stable reverse-DNS `id`, verified by a sha256 content digest, and installed atomically — making schema contributions reproducible across peer instances.
+A **recipe** is a declarative bundle that packages a LinkML schema fragment for sharing between Mosaic deployments. Recipes are identified by a stable reverse-DNS `id`, verified by a sha256 content digest, and installed atomically — making schema contributions reproducible across peer instances.
 
 This guide walks through authoring a recipe from scratch: laying out the files, writing the manifest, declaring dependencies, and publishing.
 
@@ -30,7 +30,7 @@ Both files must live at the recipe root. Tarballs are also accepted — `tar -cz
 id: org.broad.scrnaseq
 name: scrnaseq
 version: 1.2.0
-description: Single-cell RNA-seq metadata schema fragment for Hippo.
+description: Single-cell RNA-seq metadata schema fragment for Mosaic.
 created_at: "2026-05-27T14:00:00Z"
 hippo_version: ">=0.3,<1.0"
 license: CC-BY-4.0
@@ -52,17 +52,17 @@ Required fields are `id`, `name`, `version`, `created_at`, and `hippo_version`. 
 | `name` | yes | Short, filesystem-safe slug. Becomes the `default_prefix` of the schema fragment — all classes and slots your schema contributes are namespaced under this prefix. Must not collide with any prefix already installed in the target instance. |
 | `version` | yes | Opaque version slug. SemVer (e.g. `1.2.0`) is strongly recommended. |
 | `created_at` | yes | ISO 8601 UTC timestamp (e.g. `"2026-05-27T14:00:00Z"`). |
-| `hippo_version` | yes | PEP 440 version specifier. Import fails with `RecipeVersionIncompatibleError` if the running Hippo version does not satisfy this constraint. |
+| `hippo_version` | yes | PEP 440 version specifier. Import fails with `RecipeVersionIncompatibleError` if the running Mosaic version does not satisfy this constraint. |
 | `description` | no | One paragraph, human-readable. |
 | `license` | no | SPDX identifier (e.g. `CC-BY-4.0`, `MIT`). |
-| `source` | no | Author-declared canonical origin URI — typically a Zenodo DOI URL. Metadata only; Hippo never fetches from this field. |
+| `source` | no | Author-declared canonical origin URI — typically a Zenodo DOI URL. Metadata only; Mosaic never fetches from this field. |
 | `author` | no | Sub-object with optional `name`, `email`, and `organization` keys. |
 
 ---
 
 ## 2. Write the schema fragment (`schema.yaml`)
 
-`schema.yaml` is a standard [LinkML](https://linkml.io/) schema document. Keep it focused on what your recipe contributes — do not redeclare classes or slots from an upstream recipe or from Hippo's own core schema.
+`schema.yaml` is a standard [LinkML](https://linkml.io/) schema document. Keep it focused on what your recipe contributes — do not redeclare classes or slots from an upstream recipe or from Mosaic's own core schema.
 
 ```yaml
 id: https://example.org/hippo/scrnaseq
@@ -89,7 +89,7 @@ classes:
         range: integer
 ```
 
-**`default_prefix` must match `recipe.yaml` `name`.** This is how Hippo namespaces your classes as `scrnaseq:SingleCellExperiment` in the merged schema. Hippo injects a `provided_by: recipe.org.broad.scrnaseq@1.2.0` annotation on every class and slot at import time — do not write this annotation yourself. The manifest identity always wins.
+**`default_prefix` must match `recipe.yaml` `name`.** This is how Mosaic namespaces your classes as `scrnaseq:SingleCellExperiment` in the merged schema. Mosaic injects a `provided_by: recipe.org.broad.scrnaseq@1.2.0` annotation on every class and slot at import time — do not write this annotation yourself. The manifest identity always wins.
 
 ### Overriding upstream classes
 
@@ -120,10 +120,10 @@ parent:
   digest: sha256:abc123...
 ```
 
-The `parent` pointer tells Hippo to install the parent recipe first, then yours. A child manifest does **not** need to also list its parent in `requires.recipes` — the `parent` pointer is itself a typed dependency.
+The `parent` pointer tells Mosaic to install the parent recipe first, then yours. A child manifest does **not** need to also list its parent in `requires.recipes` — the `parent` pointer is itself a typed dependency.
 
 !!! note
-    To scaffold a new recipe that extends an already-installed recipe, use `hippo recipe extend` (Phase 4). It creates a new directory with `parent` pre-populated from the installed `installed_recipes` registry.
+    To scaffold a new recipe that extends an already-installed recipe, use `mosaic recipe extend` (Phase 4). It creates a new directory with `parent` pre-populated from the installed `installed_recipes` registry.
 
 ---
 
@@ -140,7 +140,7 @@ requires:
       digest: sha256:abc123...
 ```
 
-Peer dependencies are recipes that are siblings or prerequisites, not ancestors. At install time, Hippo resolves the full dependency graph bottom-up: parent → requires.recipes → self.
+Peer dependencies are recipes that are siblings or prerequisites, not ancestors. At install time, Mosaic resolves the full dependency graph bottom-up: parent → requires.recipes → self.
 
 ### Reference Loader preconditions
 
@@ -152,16 +152,16 @@ requires:
     - ensembl==homo_sapiens.GRCh38.110
 ```
 
-Hippo checks that each pinned loader is installed at the declared version before importing the recipe. It does **not** install Reference Loaders automatically. If the loader is absent or at a different version, import fails with `RecipeRequiresUnsatisfiedError`.
+Mosaic checks that each pinned loader is installed at the declared version before importing the recipe. It does **not** install Reference Loaders automatically. If the loader is absent or at a different version, import fails with `RecipeRequiresUnsatisfiedError`.
 
 ---
 
 ## 5. Compute and verify the digest
 
-Before publishing, verify the canonical content digest with `hippo recipe inspect`:
+Before publishing, verify the canonical content digest with `mosaic recipe inspect`:
 
 ```bash
-hippo recipe inspect ./my-recipe/
+mosaic recipe inspect ./my-recipe/
 ```
 
 Example output:
@@ -182,17 +182,17 @@ Copy the `digest` value and include it in any `RecipeRef` that references your r
 To see every class and slot:
 
 ```bash
-hippo recipe inspect ./my-recipe/ --show-elements
+mosaic recipe inspect ./my-recipe/ --show-elements
 ```
 
 ---
 
 ## 6. Exporting a live schema as a recipe
 
-If you have been working directly in a live Hippo instance and want to package your locally-authored schema content as a recipe, use `hippo recipe export`:
+If you have been working directly in a live Mosaic instance and want to package your locally-authored schema content as a recipe, use `mosaic recipe export`:
 
 ```bash
-hippo recipe export --out ./my-recipe/
+mosaic recipe export --out ./my-recipe/
 ```
 
 This writes `recipe.yaml` and `schema.yaml` to `./my-recipe/`. Only classes and slots you authored directly are included — content imported from other recipes or Reference Loaders is excluded automatically. The export also auto-populates `requires.recipes` from any upstream recipes your local classes reference via `is_a:` or slot ranges.
@@ -206,23 +206,23 @@ version: 0.0.0          # ← replace with your version
 hippo_version: ">=0.3"  # ← adjust compatibility range
 ```
 
-To declare a parent lineage on the export, pass the `id` of an already-installed recipe with `--parent`. Until `hippo recipe list` ships in Phase 4, find installed recipe ids by reading `hippo_meta.installed_recipes` directly from the database:
+To declare a parent lineage on the export, pass the `id` of an already-installed recipe with `--parent`. Until `mosaic recipe list` ships in Phase 4, find installed recipe ids by reading `hippo_meta.installed_recipes` directly from the database:
 
 ```bash
-hippo recipe export --parent org.broad.base-omics --out ./my-recipe/
+mosaic recipe export --parent org.broad.base-omics --out ./my-recipe/
 ```
 
 ---
 
 ## 7. Publishing
 
-Hippo has no built-in recipe registry. The recommended distribution pattern for publicly-shared recipes is a **DOI-minted release** (Zenodo, figshare, or similar). DOI-backed releases give stable, citable URIs that consumers can pin in `RecipeRef.source`.
+Mosaic has no built-in recipe registry. The recommended distribution pattern for publicly-shared recipes is a **DOI-minted release** (Zenodo, figshare, or similar). DOI-backed releases give stable, citable URIs that consumers can pin in `RecipeRef.source`.
 
 Suggested steps:
 1. Tag your recipe directory in a git repository.
 2. Archive a release tarball: `tar -czf scrnaseq-1.2.0.tar.gz scrnaseq-1.2.0/`
 3. Upload to Zenodo (or similar), mint a DOI, and note the direct download URL.
-4. Run `hippo recipe inspect` on the tarball to obtain the final digest.
+4. Run `mosaic recipe inspect` on the tarball to obtain the final digest.
 5. Include the download URL and digest in your recipe's README so consumers can pin them.
 
 !!! warning "Avoid mutable URLs"

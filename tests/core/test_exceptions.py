@@ -1,24 +1,24 @@
 import pytest
 
-from hippo.core.exceptions import (
+from mosaic.core.exceptions import (
     AdapterError,
     ConfigError,
     EntityNotFoundError,
-    HippoError,
+    MosaicError,
     SchemaError,
     ValidationError,
     ValidationFailure,
 )
 
 
-class TestHippoError:
+class TestMosaicError:
     def test_base_exception_message(self):
-        err = HippoError("Something went wrong")
+        err = MosaicError("Something went wrong")
         assert err.message == "Something went wrong"
         assert "Something went wrong" in str(err)
 
     def test_base_exception_with_context(self):
-        err = HippoError("Operation failed", operation="read", resource="file.txt")
+        err = MosaicError("Operation failed", operation="read", resource="file.txt")
         assert err.context["operation"] == "read"
         assert err.context["resource"] == "file.txt"
         assert "operation='read'" in str(err)
@@ -133,24 +133,24 @@ class TestErrorHierarchy:
             AdapterError("test"),
         ]
         for err in errors:
-            assert isinstance(err, HippoError)
+            assert isinstance(err, MosaicError)
 
     def test_config_error_catchable_as_hippo_error(self):
         try:
             raise ConfigError("test error", field_name="test_field")
-        except HippoError as e:
+        except MosaicError as e:
             assert "test error" in str(e)
 
     def test_schema_error_catchable_as_hippo_error(self):
         try:
             raise SchemaError("test error", error_code="TEST")
-        except HippoError as e:
+        except MosaicError as e:
             assert "test error" in str(e)
 
     def test_validation_error_catchable_as_hippo_error(self):
         try:
             raise ValidationError("test error")
-        except HippoError as e:
+        except MosaicError as e:
             assert "test error" in str(e)
 
     def test_entity_not_found_error_catchable_as_hippo_error(self):
@@ -158,13 +158,13 @@ class TestErrorHierarchy:
             raise EntityNotFoundError(
                 "test error", entity_type="Sample", entity_id="123"
             )
-        except HippoError as e:
+        except MosaicError as e:
             assert "test error" in str(e)
 
     def test_adapter_error_catchable_as_hippo_error(self):
         try:
             raise AdapterError("test error", adapter_name="test")
-        except HippoError as e:
+        except MosaicError as e:
             assert "test error" in str(e)
 
 
@@ -224,4 +224,4 @@ class TestValidationFailure:
 
     def test_validation_failure_inherits_from_hippo_error(self):
         err = ValidationFailure("test")
-        assert isinstance(err, HippoError)
+        assert isinstance(err, MosaicError)

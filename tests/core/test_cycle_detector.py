@@ -2,7 +2,7 @@
 
 import pytest
 
-from hippo.core.cycle_detector import (
+from mosaic.core.cycle_detector import (
     AdjacencyGraph,
     CycleDetectionError,
     CycleDetectionResult,
@@ -10,7 +10,7 @@ from hippo.core.cycle_detector import (
     detect_cycle,
     validate_no_cycle,
 )
-from hippo.core.expand_path_parser import ExpandPathParser, ParseResult, PathNode
+from mosaic.core.expand_path_parser import ExpandPathParser, ParseResult, PathNode
 
 
 class TestAdjacencyGraph:

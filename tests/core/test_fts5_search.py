@@ -1,10 +1,10 @@
 """Integration tests for FTS search functionality."""
 
 import pytest
-from hippo.core.storage.adapters.sqlite_adapter import SQLiteAdapter, SQLiteEntity
+from mosaic.core.storage.adapters.sqlite_adapter import SQLiteAdapter, SQLiteEntity
 from tests.conftest import _build_minimal_schema_registry
-from hippo.core.storage import ScoredMatch
-from hippo.core.exceptions import SearchCapabilityError
+from mosaic.core.storage import ScoredMatch
+from mosaic.core.exceptions import SearchCapabilityError
 
 
 def _create_fts_table(adapter, fts_table_name: str, fields: list[str]) -> None:

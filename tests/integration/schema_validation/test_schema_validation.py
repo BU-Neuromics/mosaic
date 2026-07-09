@@ -10,7 +10,7 @@ These tests verify that the schema validation system correctly:
 
 import pytest
 
-from hippo.core.exceptions import ValidationFailure
+from mosaic.core.exceptions import ValidationFailure
 
 
 class TestPositiveCaseValidation:

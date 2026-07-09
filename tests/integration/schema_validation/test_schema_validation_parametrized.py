@@ -6,7 +6,7 @@ across different entity types with varying schema definitions.
 
 import pytest
 
-from hippo.core.exceptions import ValidationFailure
+from mosaic.core.exceptions import ValidationFailure
 
 
 @pytest.fixture

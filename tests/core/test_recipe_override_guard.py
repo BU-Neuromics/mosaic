@@ -22,9 +22,9 @@ import pytest
 import yaml
 from linkml_runtime.utils.schemaview import SchemaView
 
-from hippo.core.exceptions import RecipeSchemaError
-from hippo.core.schema_manager import SchemaManager
-from hippo.linkml_bridge import SchemaRegistry, _bundled_importmap
+from mosaic.core.exceptions import RecipeSchemaError
+from mosaic.core.schema_manager import SchemaManager
+from mosaic.linkml_bridge import SchemaRegistry, _bundled_importmap
 
 
 def _build_registry(extra_classes: dict, extra_slots: dict | None = None) -> SchemaRegistry:

@@ -4,7 +4,7 @@ name: Schema Closure
 # structurally coherent on every PR and push to main.
 #
 # Two gates:
-#   1. `hippo validate --schema` on hippo_core (fast structural load check).
+#   1. `mosaic validate --schema` on hippo_core (fast structural load check).
 #   2. `scripts/check_schema_closure.py` — deeper guard:
 #        a. Positive: valid synthetic fragments merge without error.
 #        b. Negative: incoherent fragment (dangling is_a) is caught and the
@@ -12,8 +12,8 @@ name: Schema Closure
 #        c. Bundle: Bundle.from_manifest().to_requires() pins are exact-version
 #           and the merged closure for those pins validates.
 #
-# Why class_induced_slots and not only `hippo validate`?
-#   `hippo validate --schema` calls SchemaRegistry.from_path which loads the
+# Why class_induced_slots and not only `mosaic validate`?
+#   `mosaic validate --schema` calls SchemaRegistry.from_path which loads the
 #   schema but does not traverse every class's inheritance chain.  Iterating
 #   class_induced_slots on every class reliably surfaces a dangling is_a or
 #   missing-range class, whereas the CLI exits 0 for those cases.
@@ -47,10 +47,10 @@ jobs:
       - name: Install dependencies
         run: uv pip install --system -e ".[dev]"
 
-      - name: Gate 1 – hippo validate hippo_core
+      - name: Gate 1 – mosaic validate hippo_core
         run: |
-          hippo validate --schema src/hippo/schemas/hippo_core.yaml
-          echo "hippo_core schema passed hippo validate"
+          mosaic validate --schema src/mosaic/schemas/hippo_core.yaml
+          echo "hippo_core schema passed mosaic validate"
 
       - name: Gate 2 – merged-closure integrity check
         run: python scripts/check_schema_closure.py

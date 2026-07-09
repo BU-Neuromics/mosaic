@@ -9,8 +9,8 @@ from unittest.mock import patch
 import pytest
 import typer
 
-from hippo.cli.commands.init import InitCommand
-from hippo.cli.templates import TEMPLATES, get_template, list_templates
+from mosaic.cli.commands.init import InitCommand
+from mosaic.cli.templates import TEMPLATES, get_template, list_templates
 
 
 class TestTemplateRegistry:
@@ -173,11 +173,11 @@ class TestInitCommand:
 
 
 class TestInitCommandIntegration:
-    """Integration tests for hippo init command."""
+    """Integration tests for mosaic init command."""
 
     def test_cli_init_default_produces_bibliography(self):
         with tempfile.TemporaryDirectory() as td:
-            result = os.system(f"hippo init --path {td}/testproj")
+            result = os.system(f"mosaic init --path {td}/testproj")
             assert result == 0
 
             project = Path(td) / "testproj"
@@ -192,7 +192,7 @@ class TestInitCommandIntegration:
 
     def test_cli_init_basic_template(self):
         with tempfile.TemporaryDirectory() as td:
-            result = os.system(f"hippo init --path {td}/testproj --template basic")
+            result = os.system(f"mosaic init --path {td}/testproj --template basic")
             assert result == 0
 
             config_path = Path(td) / "testproj" / "config.json"
@@ -200,7 +200,7 @@ class TestInitCommandIntegration:
 
     def test_cli_init_with_template_option(self):
         with tempfile.TemporaryDirectory() as td:
-            result = os.system(f"hippo init --path {td}/testproj --template full")
+            result = os.system(f"mosaic init --path {td}/testproj --template full")
             assert result == 0
 
             readme_path = Path(td) / "testproj" / "README.md"
@@ -208,5 +208,5 @@ class TestInitCommandIntegration:
 
     def test_cli_init_invalid_template_shows_available(self):
         with tempfile.TemporaryDirectory() as td:
-            result = os.system(f"hippo init --path {td}/testproj --template bad")
+            result = os.system(f"mosaic init --path {td}/testproj --template bad")
             assert result != 0

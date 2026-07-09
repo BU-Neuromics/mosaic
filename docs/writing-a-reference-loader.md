@@ -1,13 +1,13 @@
 # Writing a Reference Loader
 
-This guide walks through building a `hippo-reference-<name>` package from scratch. By the end you will have a loader that installs, upgrades, integrates with the CLI, and passes hermetic CI tests.
+This guide walks through building a `mosaic-reference-<name>` package from scratch. By the end you will have a loader that installs, upgrades, integrates with the CLI, and passes hermetic CI tests.
 
-> **Who this is for:** Python developers building or maintaining a `hippo-reference-*` package. Users who only want to *use* reference data should read [Reference Loaders](reference-loaders.md) instead.
+> **Who this is for:** Python developers building or maintaining a `mosaic-reference-*` package. Users who only want to *use* reference data should read [Reference Loaders](reference-loaders.md) instead.
 
-> **`ReferenceLoader` is one kind of `SchemaPackage`.** Every reference loader is a *species* of a broader genus, `SchemaPackage` (`hippo.core.loaders.schema_package`), which captures the reusable part — *"contribute a versioned, pinnable schema fragment"*. The genus provides `name`, `description`, `versions()`, `schema_fragment()`, `depends_on()`, an optional `validate()`, an optional `load_params_schema`, and three lifecycle hooks (`provision`/`evolve`/`deprovision`) that **default to a no-op**.
+> **`ReferenceLoader` is one kind of `SchemaPackage`.** Every reference loader is a *species* of a broader genus, `SchemaPackage` (`mosaic.core.loaders.schema_package`), which captures the reusable part — *"contribute a versioned, pinnable schema fragment"*. The genus provides `name`, `description`, `versions()`, `schema_fragment()`, `depends_on()`, an optional `validate()`, an optional `load_params_schema`, and three lifecycle hooks (`provision`/`evolve`/`deprovision`) that **default to a no-op**.
 >
 > - A **pure-schema package** (one that only contributes types — no shipped data) subclasses `SchemaPackage` directly, implements just `versions()` + `schema_fragment()`, and merges + pins via `requires:` with no hand-written code.
-> - A **reference loader** is the *external-data* species: `ReferenceLoader(SchemaPackage)`. It keeps the familiar `load()` / `upgrade()` method names, and the genus maps `provision → load()` and `evolve → upgrade()` so the orchestrator can drive any package uniformly. Everything below describes this species — but the method names are unchanged from earlier Hippo versions, so existing loaders need no edits.
+> - A **reference loader** is the *external-data* species: `ReferenceLoader(SchemaPackage)`. It keeps the familiar `load()` / `upgrade()` method names, and the genus maps `provision → load()` and `evolve → upgrade()` so the orchestrator can drive any package uniformly. Everything below describes this species — but the method names are unchanged from earlier Mosaic versions, so existing loaders need no edits.
 > - A **domain module** is the *first-party mutable-data* species: `DomainModule(SchemaPackage)`. It owns the deployment's locally authored records and migrates them in place via declared `(from_version → to_version)` steps. See [Writing a Domain Module](writing-a-domain-module.md).
 
 ---
@@ -15,7 +15,7 @@ This guide walks through building a `hippo-reference-<name>` package from scratc
 ## Project layout
 
 ```
-hippo-reference-myontology/
+mosaic-reference-myontology/
 ├── pyproject.toml
 ├── src/
 │   └── hippo_reference_myontology/
@@ -26,20 +26,20 @@ hippo-reference-myontology/
 │           └── tiny.tar.gz   # bundled "test" fixture dataset
 ```
 
-Use `hippo_reference_<name>` as the Python package name and `hippo-reference-<name>` as the distribution name. This naming convention makes your loader discoverable via PyPI search.
+Use `hippo_reference_<name>` as the Python package name and `mosaic-reference-<name>` as the distribution name. This naming convention makes your loader discoverable via PyPI search.
 
 ---
 
 ## 1. The loader class
 
-Subclass `ReferenceLoader` from `hippo.core.loaders.reference`. At minimum you must implement three abstract methods: `versions()`, `schema_fragment()`, and `load()`. Declaring `populates_types()` — the classes your loader fills with *data* — is recommended for provenance/discoverability but optional.
+Subclass `ReferenceLoader` from `mosaic.core.loaders.reference`. At minimum you must implement three abstract methods: `versions()`, `schema_fragment()`, and `load()`. Declaring `populates_types()` — the classes your loader fills with *data* — is recommended for provenance/discoverability but optional.
 
 > **`entity_types()` was renamed to `populates_types()`.** The name better separates the classes a package *defines* (via `schema_fragment()`) from the classes it *fills with data*. The old `entity_types()` lives on as a deprecated alias — loaders that still override it keep reporting their declared types unchanged — but new loaders should override `populates_types()`.
 
 ```python
 # src/hippo_reference_myontology/loader.py
-from hippo.core.loaders.reference import LoadResult, ReferenceLoader
-from hippo.core.client import HippoClient
+from mosaic.core.loaders.reference import LoadResult, ReferenceLoader
+from mosaic.core.client import MosaicClient
 
 
 class MyOntologyLoader(ReferenceLoader):
@@ -51,7 +51,7 @@ class MyOntologyLoader(ReferenceLoader):
         return ["test", "2023-01", "2024-01"]
 
     def populates_types(self) -> list[str]:
-        # Declarative — tells Hippo what classes this loader fills with data.
+        # Declarative — tells Mosaic what classes this loader fills with data.
         # Does NOT control ingestion order; your load() code does that.
         return ["MyTerm"]
 
@@ -77,7 +77,7 @@ class MyOntologyLoader(ReferenceLoader):
 
     def load(
         self,
-        client: HippoClient,
+        client: MosaicClient,
         version: str,
         params=None,
     ) -> LoadResult:
@@ -89,7 +89,7 @@ class MyOntologyLoader(ReferenceLoader):
         )
         return self._ingest_archive(client, archive)
 
-    def _load_fixture(self, client: HippoClient) -> LoadResult:
+    def _load_fixture(self, client: MosaicClient) -> LoadResult:
         import importlib.resources, tarfile, json
         fixture = importlib.resources.files("hippo_reference_myontology.fixtures").joinpath("tiny.tar.gz")
         entity_ids: list[str] = []
@@ -100,7 +100,7 @@ class MyOntologyLoader(ReferenceLoader):
                 entity_ids.append(result["id"])
         return LoadResult(created=len(entity_ids), entity_type="MyTerm", entity_ids=entity_ids)
 
-    def _ingest_archive(self, client: HippoClient, archive_path) -> LoadResult:
+    def _ingest_archive(self, client: MosaicClient, archive_path) -> LoadResult:
         import tarfile, json
         entity_ids: list[str] = []
         with tarfile.open(str(archive_path)) as tar:
@@ -115,40 +115,40 @@ class MyOntologyLoader(ReferenceLoader):
 
 The `default_prefix` key **must** be set to the loader name. This namespaces all classes and slots under `<name>:`, so user schemas reference them as `myontology:MyTerm`. Two loaders declaring the same prefix cause a `ConfigError` at install time.
 
-Do **not** redeclare `linkml:types` or prefixes already present in the deployed Hippo schema — Hippo strips colliding top-level imports automatically (D2.14.G Rule 2). Loader-private imports (URLs unique to this loader) pass through unchanged.
+Do **not** redeclare `linkml:types` or prefixes already present in the deployed Mosaic schema — Mosaic strips colliding top-level imports automatically (D2.14.G Rule 2). Loader-private imports (URLs unique to this loader) pass through unchanged.
 
-Hippo automatically injects `annotations: { provided_by: <name>@<version> }` on every class and slot your fragment introduces, so `hippo status` and runtime introspection can show which loader owns which types.
+Mosaic automatically injects `annotations: { provided_by: <name>@<version> }` on every class and slot your fragment introduces, so `mosaic status` and runtime introspection can show which loader owns which types.
 
 ---
 
 ## 2. Declaring entry points
 
-Both entry points are registered in `pyproject.toml`. The `hippo.reference_loader_cli` entry point is optional; omit it if your loader has no subcommands.
+Both entry points are registered in `pyproject.toml`. The `mosaic.reference_loader_cli` entry point is optional; omit it if your loader has no subcommands.
 
 ```toml
-[project.entry-points."hippo.reference_loaders"]
+[project.entry-points."mosaic.reference_loaders"]
 myontology = "hippo_reference_myontology.loader:MyOntologyLoader"
 
 # Optional — only needed if you expose a Typer sub-app:
-[project.entry-points."hippo.reference_loader_cli"]
+[project.entry-points."mosaic.reference_loader_cli"]
 myontology = "hippo_reference_myontology.cli:app"
 ```
 
-The entry point key (`myontology`) must match `ReferenceLoader.name`. Hippo validates this at registration and raises `ReferenceLoaderRegistrationError` if the entry point does not resolve to a concrete `ReferenceLoader` subclass.
+The entry point key (`myontology`) must match `ReferenceLoader.name`. Mosaic validates this at registration and raises `ReferenceLoaderRegistrationError` if the entry point does not resolve to a concrete `ReferenceLoader` subclass.
 
-### Entry-point groups: `hippo.schema_packages` and `hippo.reference_loaders`
+### Entry-point groups: `mosaic.schema_packages` and `mosaic.reference_loaders`
 
-Discovery resolves **two** groups and deduplicates by name: the broad genus group `hippo.schema_packages` and its subset/alias `hippo.reference_loaders`. Register a reference loader under `hippo.reference_loaders` as shown above — it remains the conventional home for external-data loaders and is found by both `hippo reference` and the package-level discovery.
+Discovery resolves **two** groups and deduplicates by name: the broad genus group `mosaic.schema_packages` and its subset/alias `mosaic.reference_loaders`. The legacy `hippo.schema_packages` / `hippo.reference_loaders` spellings (pre-rename, ADR-0004) are also resolved for the deprecation window, so existing `hippo-reference-*` packages remain discoverable; new packages should register under the `mosaic.*` groups and follow the `mosaic-reference-<name>` naming convention. Register a reference loader under `mosaic.reference_loaders` as shown above — it remains the conventional home for external-data loaders and is found by both `mosaic reference` and the package-level discovery.
 
 A **pure-schema package** (no shipped data) registers under the genus group instead, and needs no `load()`:
 
 ```toml
-[project.entry-points."hippo.schema_packages"]
-mycore = "hippo_mycore.package:MyCorePackage"
+[project.entry-points."mosaic.schema_packages"]
+mycore = "mosaic_mycore.package:MyCorePackage"
 ```
 
 ```python
-from hippo.core.loaders.schema_package import SchemaPackage
+from mosaic.core.loaders.schema_package import SchemaPackage
 
 class MyCorePackage(SchemaPackage):
     name = "mycore"
@@ -167,7 +167,7 @@ Its fragment merges and pins via `requires:` exactly like a reference loader; th
 
 ## 3. Runtime load parameters (optional)
 
-Loaders that accept runtime parameters declare a Pydantic v2 model as `load_params_schema`. Hippo auto-renders `--flag` arguments from this model and validates user input before invoking `load()`.
+Loaders that accept runtime parameters declare a Pydantic v2 model as `load_params_schema`. Mosaic auto-renders `--flag` arguments from this model and validates user input before invoking `load()`.
 
 ```python
 from pydantic import BaseModel, Field
@@ -188,7 +188,7 @@ class MyOntologyLoader(ReferenceLoader):
 
 CLI rendering:
 ```bash
-hippo reference install myontology \
+mosaic reference install myontology \
     --organism mouse \
     --include-deprecated \
     --term-types class --term-types instance
@@ -221,7 +221,7 @@ def load(self, client, version, params=None):
 Keep the fixture dataset tiny (a few dozen rows). Its only purpose is letting downstream consumers do hermetic CI installs:
 
 ```bash
-hippo reference install myontology --version test
+mosaic reference install myontology --version test
 ```
 
 The fixture should be stable across package versions — no external data fetches, no version-dependent behavior.
@@ -232,7 +232,7 @@ The fixture should be stable across package versions — no external data fetche
 
 ## 5. Caching downloaded files
 
-Use `client.cached_fetch` for any download larger than ~1 MB. This enables `hippo reference clean-cache`, CI cache mounts, and content-addressable reproducibility.
+Use `client.cached_fetch` for any download larger than ~1 MB. This enables `mosaic reference clean-cache`, CI cache mounts, and content-addressable reproducibility.
 
 ```python
 def load(self, client, version, params=None):
@@ -247,7 +247,7 @@ def load(self, client, version, params=None):
 
 `client.cached_fetch` returns a `Path` to the local file. It verifies the sha256 on both download and cache hit when `expected_sha256` is supplied; a mismatch raises `CacheIntegrityError` and removes the stale file so the next call re-downloads cleanly.
 
-The cache location resolves to `$HIPPO_CACHE_DIR/<loader_name>/` when set, else `~/.cache/hippo/references/<loader_name>/`. Use `client.cache_dir_for(self.name)` if you need to inspect or pre-warm the directory.
+The cache location resolves to `$MOSAIC_CACHE_DIR/<loader_name>/` when set, else `~/.cache/hippo/references/<loader_name>/`. Use `client.cache_dir_for(self.name)` if you need to inspect or pre-warm the directory.
 
 **Rule:** loaders MUST use `client.cached_fetch` for all large network downloads. Never roll a private download path.
 
@@ -255,7 +255,7 @@ The cache location resolves to `$HIPPO_CACHE_DIR/<loader_name>/` when set, else 
 
 ## 6. Loader-specific subcommands (optional)
 
-Expose a `typer.Typer` app via the `hippo.reference_loader_cli` entry point to add subcommands under `hippo reference <name> ...`.
+Expose a `typer.Typer` app via the `mosaic.reference_loader_cli` entry point to add subcommands under `mosaic reference <name> ...`.
 
 ```python
 # src/hippo_reference_myontology/cli.py
@@ -269,9 +269,9 @@ def search(term: str = typer.Argument(..., help="Search term.")):
     typer.echo(f"Searching for: {term}")
 ```
 
-Hippo mounts this app at startup so `hippo reference myontology search --help` works after the package is installed.
+Mosaic mounts this app at startup so `mosaic reference myontology search --help` works after the package is installed.
 
-**HippoClient access:** subcommands that need to read or write Hippo data should instantiate a client from the standard config path. The sub-app and `load()` resolve the same `cache_dir_for(name)` because both go through `HippoClient`.
+**MosaicClient access:** subcommands that need to read or write Mosaic data should instantiate a client from the standard config path. The sub-app and `load()` resolve the same `cache_dir_for(name)` because both go through `MosaicClient`.
 
 ---
 
@@ -317,16 +317,16 @@ annotations:
     value: "fma"       # or comma-separated: "fma,go"
 ```
 
-Hippo emits a **warning** (not an error) when a declared `loader_depends_on` loader is not installed. This is a documentation convention — v1 does not validate cross-loader foreign keys at the database level. Your `load()` code must handle missing foreign-key targets gracefully.
+Mosaic emits a **warning** (not an error) when a declared `loader_depends_on` loader is not installed. This is a documentation convention — v1 does not validate cross-loader foreign keys at the database level. Your `load()` code must handle missing foreign-key targets gracefully.
 
 ---
 
 ## 10. Canonical minimal example
 
-The `FakeReferenceLoader` in `hippo.testing.fake_reference_loader` is the canonical minimal example used by Hippo's own test suite. It covers all required methods, `load_params_schema`, and the `"test"` version:
+The `FakeReferenceLoader` in `mosaic.testing.fake_reference_loader` is the canonical minimal example used by Mosaic's own test suite. It covers all required methods, `load_params_schema`, and the `"test"` version:
 
 ```python
-from hippo.core.loaders.reference import LoadResult, ReferenceLoader
+from mosaic.core.loaders.reference import LoadResult, ReferenceLoader
 from pydantic import BaseModel
 
 class FakeLoadParams(BaseModel):
@@ -368,16 +368,16 @@ class FakeReferenceLoader(ReferenceLoader):
         return LoadResult(created=len(entity_ids), entity_type="FakeTerm", entity_ids=entity_ids)
 ```
 
-The full source (including the Typer sub-app fixture and the all-types `RichParamsLoader`) lives in `hippo/src/hippo/testing/fake_reference_loader.py`.
+The full source (including the Typer sub-app fixture and the all-types `RichParamsLoader`) lives in `src/mosaic/testing/fake_reference_loader.py`.
 
 ---
 
 ## Checklist
 
-- [ ] `ReferenceLoader.name` matches the `hippo.reference_loaders` entry point key
+- [ ] `ReferenceLoader.name` matches the `mosaic.reference_loaders` entry point key
 - [ ] `schema_fragment()` declares `default_prefix: <name>`
 - [ ] `"test"` version returns a bundled, network-free fixture
 - [ ] All downloads >1 MB go through `client.cached_fetch`
 - [ ] `LoadResult.entity_ids` is populated (required for `--prune-old` support)
-- [ ] `hippo.reference_loader_cli` entry point registered if a Typer sub-app is provided
+- [ ] `mosaic.reference_loader_cli` entry point registered if a Typer sub-app is provided
 - [ ] `load_params_schema` field types are limited to `str`, `int`, `bool`, `list[str]`, or `Optional` thereof

@@ -1,4 +1,4 @@
-# Hippo Schema Writer's Guide
+# Mosaic Schema Writer's Guide
 
 A practical guide for writing LinkML schema files for your lab. This document covers the most common schema patterns with real examples. For the full field reference, see [Configuration Reference](configuration.md).
 
@@ -45,18 +45,18 @@ classes:
         required: true
 ```
 
-Save this as `schema.yaml`, then point your `HippoConfig` at it:
+Save this as `schema.yaml`, then point your `MosaicConfig` at it:
 
 ```python
-from hippo.config import HippoConfig
-config = HippoConfig(schema_path="schema.yaml", db_path="my_lab.db")
+from mosaic.config import MosaicConfig
+config = MosaicConfig(schema_path="schema.yaml", db_path="my_lab.db")
 ```
 
 ---
 
 ## Schema Header
 
-Every LinkML schema file needs a header with metadata and imports. This tells Hippo (and any LinkML tooling) how to interpret the schema.
+Every LinkML schema file needs a header with metadata and imports. This tells Mosaic (and any LinkML tooling) how to interpret the schema.
 
 ```yaml
 id: https://example.org/brain-study     # unique schema identifier (URI)
@@ -80,7 +80,7 @@ default_range: string                     # default type for attributes without 
 
 ## Classes
 
-Each class defines an entity type in Hippo. Classes are defined under the top-level `classes:` key as a dictionary keyed by class name.
+Each class defines an entity type in Mosaic. Classes are defined under the top-level `classes:` key as a dictionary keyed by class name.
 
 ```yaml
 classes:
@@ -229,13 +229,13 @@ Use `range` to declare that an attribute points to another class. This is the fo
     required: true
 ```
 
-When the `range` is a class (not a built-in type like `string`), Hippo treats the attribute as an entity reference. This enables:
-- Schema introspection (`HippoClient.schema_references()`)
+When the `range` is a class (not a built-in type like `string`), Mosaic treats the attribute as an entity reference. This enables:
+- Schema introspection (`MosaicClient.schema_references()`)
 - Cappella collection resolver entity graph traversal
 - Documentation and tooling
 
 !!! note
-    Reference attributes hold Hippo internal IDs (UUIDs), not user-facing identifiers. User-facing identifiers belong in a plain `string` attribute (such as `external_id`) or as an ExternalID.
+    Reference attributes hold Mosaic internal IDs (UUIDs), not user-facing identifiers. User-facing identifiers belong in a plain `string` attribute (such as `external_id`) or as an ExternalID.
 
 ### Self-Referential Links
 
@@ -269,9 +269,9 @@ With this schema, Cappella can traverse `Dataset.sample -> Sample.donor -> Donor
 
 ---
 
-## Hippo Extensions (Annotations)
+## Mosaic Extensions (Annotations)
 
-Hippo extends standard LinkML with storage and indexing annotations. These are expressed using LinkML's `annotations` mechanism and are specific to Hippo's storage layer.
+Mosaic extends standard LinkML with storage and indexing annotations. These are expressed using LinkML's `annotations` mechanism and are specific to Mosaic's storage layer.
 
 ### Full-Text Search
 
@@ -289,7 +289,7 @@ Mark an attribute for full-text search:
       hippo_search: fts5
 ```
 
-Query via `HippoClient.search()` or the REST API:
+Query via `MosaicClient.search()` or the REST API:
 ```python
 results = client.search("Sample", "hippocampus cortex")
 ```
@@ -412,7 +412,7 @@ validators:
 
 ### Referential Integrity Validator
 
-Since Hippo doesn't enforce foreign keys at the storage level, use a validator if you need hard enforcement:
+Since Mosaic doesn't enforce foreign keys at the storage level, use a validator if you need hard enforcement:
 
 ```yaml
 validators:

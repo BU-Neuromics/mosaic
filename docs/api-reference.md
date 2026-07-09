@@ -1,16 +1,16 @@
-# Hippo API Reference
+# Mosaic API Reference
 
 ## SDK Validation API
 
-Validation runs automatically when you call `create`, `update`, or `delete` on `HippoClient`. The pipeline executes registered validators in order and raises `ValidationFailure` on the first failure. You do not need to call validators directly unless you are building custom validation logic.
+Validation runs automatically when you call `create`, `update`, or `delete` on `MosaicClient`. The pipeline executes registered validators in order and raises `ValidationFailure` on the first failure. You do not need to call validators directly unless you are building custom validation logic.
 
 ### ValidationPipeline
 
 The `ValidationPipeline` class provides sequential execution of validators with fail-fast behavior.
 
 ```python
-from hippo.core.pipeline import ValidationPipeline, create_pipeline
-from hippo.core.validation import WriteOperation, WriteValidator, ValidationResult
+from mosaic.core.pipeline import ValidationPipeline, create_pipeline
+from mosaic.core.validation import WriteOperation, WriteValidator, ValidationResult
 ```
 
 **Core Methods:**
@@ -61,18 +61,18 @@ result = pipeline.execute_all(operation)
 - `execute()` stops on first validation failure and returns immediately
 - `execute_all()` runs all validators and aggregates all errors
 
-### HippoClient
+### MosaicClient
 
-The main SDK client for Hippo with integrated validation pipeline support.
+The main SDK client for Mosaic with integrated validation pipeline support.
 
 ```python
-from hippo import HippoClient
+from mosaic import MosaicClient
 ```
 
 **Constructor:**
 
 ```python
-client = HippoClient(
+client = MosaicClient(
     pipeline=None,           # Optional ValidationPipeline instance
     bypass_validation=False  # DEPRECATED: Skip validation
 )
@@ -91,14 +91,14 @@ client = HippoClient(
 **Usage Example:**
 
 ```python
-from hippo import HippoClient
-from hippo.core.pipeline import ValidationPipeline
-from hippo.core.validation import WriteOperation, WriteValidator, ValidationResult
+from mosaic import MosaicClient
+from mosaic.core.pipeline import ValidationPipeline
+from mosaic.core.validation import WriteOperation, WriteValidator, ValidationResult
 
 # Create a client with a pipeline
 pipeline = ValidationPipeline()
 pipeline.add_validator(MyCustomValidator())
-client = HippoClient(pipeline=pipeline)
+client = MosaicClient(pipeline=pipeline)
 
 # Create an entity (validation runs automatically)
 try:
@@ -126,7 +126,7 @@ client.delete("Sample", "123")
 Exception raised when a write operation fails validation.
 
 ```python
-from hippo.core.exceptions import ValidationFailure
+from mosaic.core.exceptions import ValidationFailure
 ```
 
 **Attributes:**
@@ -148,7 +148,7 @@ from hippo.core.exceptions import ValidationFailure
 **Usage Example:**
 
 ```python
-from hippo.core.exceptions import ValidationFailure
+from mosaic.core.exceptions import ValidationFailure
 
 try:
     client.create("Sample", {"id": "123"})
@@ -164,7 +164,7 @@ except ValidationFailure as e:
 The `RelationshipManager` class provides methods for managing relationships between entities.
 
 ```python
-from hippo.core import RelationshipManager
+from mosaic.core import RelationshipManager
 ```
 
 **Constructor:**
@@ -176,12 +176,12 @@ manager = RelationshipManager(
 )
 ```
 
-**Access via HippoClient:**
+**Access via MosaicClient:**
 
 ```python
-from hippo import HippoClient
+from mosaic import MosaicClient
 
-client = HippoClient(storage=sqlite_adapter)
+client = MosaicClient(storage=sqlite_adapter)
 manager = client.relationships
 ```
 
@@ -241,33 +241,33 @@ results = client.relationships.traverse(
 
 ## Error Handling
 
-All Hippo SDK exceptions inherit from `HippoError`. Catch the base class to handle any SDK error, or catch specific subclasses for finer-grained control.
+All Mosaic SDK exceptions inherit from `MosaicError`. Catch the base class to handle any SDK error, or catch specific subclasses for finer-grained control.
 
 **Exception Hierarchy:**
 
 | Exception | Parent | Description |
 |-----------|--------|-------------|
-| `HippoError` | `Exception` | Base class for all Hippo SDK errors |
-| `ConfigError` | `HippoError` | Configuration loading and validation errors |
-| `SchemaError` | `HippoError` | Schema parsing and processing errors |
-| `ValidationError` | `HippoError` | Internal data validation errors |
-| `EntityNotFoundError` | `HippoError` | Entity not found in the system |
-| `AdapterError` | `HippoError` | Storage or external adapter errors |
-| `ValidationFailure` | `HippoError` | Write operation failed validation pipeline |
+| `MosaicError` | `Exception` | Base class for all Mosaic SDK errors |
+| `ConfigError` | `MosaicError` | Configuration loading and validation errors |
+| `SchemaError` | `MosaicError` | Schema parsing and processing errors |
+| `ValidationError` | `MosaicError` | Internal data validation errors |
+| `EntityNotFoundError` | `MosaicError` | Entity not found in the system |
+| `AdapterError` | `MosaicError` | Storage or external adapter errors |
+| `ValidationFailure` | `MosaicError` | Write operation failed validation pipeline |
 
 **Example:**
 
 ```python
-from hippo import HippoClient
-from hippo.core.exceptions import HippoError, EntityNotFoundError, ValidationFailure
+from mosaic import MosaicClient
+from mosaic.core.exceptions import MosaicError, EntityNotFoundError, ValidationFailure
 
-client = HippoClient()
+client = MosaicClient()
 
 # Catch any SDK error
 try:
     entity = client.get("Sample", "sample-123")
-except HippoError as e:
-    print(f"Hippo error: {e.message}")
+except MosaicError as e:
+    print(f"Mosaic error: {e.message}")
 
 # Catch specific errors
 try:
@@ -299,16 +299,16 @@ All write endpoints (`POST`, `PUT`, `DELETE`) accept the following optional head
 
 | Header | Required | Description |
 |--------|----------|-------------|
-| `X-Hippo-Actor` | Required on writes | Identity of the actor performing the write. Defaults to `"anonymous"` in v0.1 if omitted |
-| `X-Hippo-Context` | Optional | JSON-encoded provenance context (e.g., `{"pipeline": "rnaseq-v2", "run_id": "abc"}`) |
+| `X-Mosaic-Actor` | Required on writes | Identity of the actor performing the write. Defaults to `"anonymous"` in v0.1 if omitted |
+| `X-Mosaic-Context` | Optional | JSON-encoded provenance context (e.g., `{"pipeline": "rnaseq-v2", "run_id": "abc"}`) |
 
 **Example:**
 
 ```bash
 curl -X POST http://127.0.0.1:8000/ingest \
   -H "Authorization: Bearer dev-token" \
-  -H "X-Hippo-Actor: pipeline-run-789" \
-  -H "X-Hippo-Context: {\"pipeline\": \"rnaseq-v2\", \"run_id\": \"abc\"}" \
+  -H "X-Mosaic-Actor: pipeline-run-789" \
+  -H "X-Mosaic-Context: {\"pipeline\": \"rnaseq-v2\", \"run_id\": \"abc\"}" \
   -H "Content-Type: application/json" \
   -d '{"entity_type": "Sample", "data": {...}}'
 ```
@@ -369,7 +369,7 @@ Returns health status of the service.
 {
   "data": {
     "status": "healthy",
-    "service": "hippo"
+    "service": "mosaic"
   },
   "error": null,
   "meta": { "schema_version": "1.1", "request_id": "uuid" }
@@ -384,7 +384,7 @@ Returns API information.
 ```json
 {
   "data": {
-    "service": "Hippo API",
+    "service": "Mosaic API",
     "version": "0.5.0",
     "docs": "/docs"
   },
@@ -404,7 +404,7 @@ response describes the deployment's data. Mirrors the SDK's
 *Response:*
 ```json
 {
-  "service": "hippo",
+  "service": "mosaic",
   "version": "0.8.0",
   "adapter": "SQLiteAdapter",
   "schema_version": "1.2.3",
@@ -418,7 +418,7 @@ response describes the deployment's data. Mirrors the SDK's
 ```
 
 Entity counts include unavailable (soft-deleted / superseded) entities —
-Hippo never hard-deletes. `adapter` and `schema_version` are `null` when
+Mosaic never hard-deletes. `adapter` and `schema_version` are `null` when
 the server runs without a storage adapter or schema registry.
 
 ```python
@@ -540,8 +540,8 @@ Explicit update of an existing entity. Unlike the `POST /ingest` upsert endpoint
 *Request Headers:*
 | Header | Required | Description |
 |--------|----------|-------------|
-| `X-Hippo-Actor` | Required | Identity of the actor performing the update |
-| `X-Hippo-Context` | Optional | JSON-encoded provenance context |
+| `X-Mosaic-Actor` | Required | Identity of the actor performing the update |
+| `X-Mosaic-Context` | Optional | JSON-encoded provenance context |
 
 *Request Body:*
 ```json
@@ -1042,8 +1042,8 @@ Set the availability status on multiple entities of the same type in a single re
 *Request Headers:*
 | Header | Required | Description |
 |--------|----------|-------------|
-| `X-Hippo-Actor` | Required | Identity of the actor performing the operation |
-| `X-Hippo-Context` | Optional | JSON-encoded provenance context |
+| `X-Mosaic-Actor` | Required | Identity of the actor performing the operation |
+| `X-Mosaic-Context` | Optional | JSON-encoded provenance context |
 
 *Request Body:*
 ```json

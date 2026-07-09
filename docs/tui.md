@@ -1,16 +1,16 @@
 # TUI — Terminal User Interface
 
-`hippo tui` launches an interactive, keyboard-driven terminal browser for a
-Hippo instance. It can drive the **Python SDK in-process against a local
-database**, or call a **remote `hippo serve` instance over the REST API** —
+`mosaic tui` launches an interactive, keyboard-driven terminal browser for a
+Mosaic instance. It can drive the **Python SDK in-process against a local
+database**, or call a **remote `mosaic serve` instance over the REST API** —
 the interface is identical in both modes. In SDK mode the TUI is a pure
-consumer of the public `HippoClient` API (queries, writes, provenance, and
+consumer of the public `MosaicClient` API (queries, writes, provenance, and
 validation all go through the SDK); it never touches the storage backend
 directly.
 
 ```bash
-pip install 'hippo[tui]'
-hippo tui
+pip install 'datahelix-mosaic[tui]'
+mosaic tui
 ```
 
 ## Try it now with the example dataset
@@ -22,11 +22,11 @@ Citation) plus a seed script. Two commands give you something to browse:
 
 ```bash
 cd examples/bibliography
-python sdk_example.py     # seeds ./data/hippo.db with the demo citation graph
-hippo tui                 # auto-detects config.json — no flags needed
+python sdk_example.py     # seeds ./data/mosaic.db with the demo citation graph
+mosaic tui                 # auto-detects config.json — no flags needed
 ```
 
-`hippo tui` reads `config.json` in the current directory, so it picks up the
+`mosaic tui` reads `config.json` in the current directory, so it picks up the
 example's database and schema automatically. You land in the entity browser
 with three Authors, a JournalArticle and Preprint of *"Attention Is All You
 Need"*, and a Citation between them. From there you can follow the Authorship
@@ -38,30 +38,30 @@ and run a full-text search for `transformer` on the Query screen.
 ### SDK mode (local database, default)
 
 ```bash
-# Use config.json / data/hippo.db / hippo.db from the current directory
-hippo tui
+# Use config.json / data/mosaic.db / mosaic.db from the current directory
+mosaic tui
 
 # Point at an explicit database and schema
-hippo tui --db data/hippo.db --schema schemas/
+mosaic tui --db data/mosaic.db --schema schemas/
 ```
 
 | Option | Default | Description |
 |--------|---------|-------------|
 | `--backend`, `-b` | `sdk` | Backend mode: `sdk` or `rest` |
-| `--db` | resolved | SQLite database path. Falls back to `config.json` in the cwd, then `data/hippo.db`, then `hippo.db` |
+| `--db` | resolved | SQLite database path. Falls back to `config.json` in the cwd, then `data/mosaic.db`, then `mosaic.db` |
 | `--schema` | resolved | LinkML schema file or directory. Falls back to `schemas/` in the cwd, then the bundled `hippo_core` schema |
 
-### REST mode (remote `hippo serve`)
+### REST mode (remote `mosaic serve`)
 
 ```bash
-hippo serve &                       # on the host
-hippo tui -b rest --url http://localhost:8000 --token $TOKEN
+mosaic serve &                       # on the host
+mosaic tui -b rest --url http://localhost:8000 --token $TOKEN
 ```
 
 | Option | Default | Description |
 |--------|---------|-------------|
-| `--url` | `http://127.0.0.1:8000` | Base URL of the `hippo serve` instance |
-| `--token` | env / `dev-token` | Bearer token. Falls back to the `HIPPO_TUI_TOKEN` environment variable, then `dev-token` |
+| `--url` | `http://127.0.0.1:8000` | Base URL of the `mosaic serve` instance |
+| `--token` | env / `dev-token` | Bearer token. Falls back to the `MOSAIC_TUI_TOKEN` environment variable, then `dev-token` |
 
 The status bar at the bottom always shows the backend mode, the connection
 target, and a live connection indicator (green `●` when the backend is
@@ -108,7 +108,7 @@ type's LinkML schema:
 
 ### Availability transitions
 
-Hippo has **no hard deletes**. `a` opens the availability dialog, which maps
+Mosaic has **no hard deletes**. `a` opens the availability dialog, which maps
 the entity lifecycle statuses onto the `is_available` flag:
 
 | Status | `is_available` |
@@ -169,8 +169,8 @@ Press `?` inside the TUI for this list.
 
 The TUI is a pure consumer of the SDK ([design principles](design-principles.md)):
 all views talk to a small `TUIBackend` protocol with two implementations —
-`SDKBackend` (wraps `HippoClient`, dispatching sync calls off the event loop)
-and `RESTBackend` (an `httpx` async client for `hippo serve`). Backends
+`SDKBackend` (wraps `MosaicClient`, dispatching sync calls off the event loop)
+and `RESTBackend` (an `httpx` async client for `mosaic serve`). Backends
 declare capabilities (structured filters, FTS) and the UI gates features
 accordingly, so both modes stay first-class. All data loading runs in
 Textual workers; the UI never blocks.

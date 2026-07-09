@@ -1,14 +1,14 @@
 # Typed OpenAPI
 
-Hippo's REST routes are deliberately generic — entity payloads travel as
+Mosaic's REST routes are deliberately generic — entity payloads travel as
 plain JSON and the entity type is named in the URL, not in a per-type
 route. That keeps the transport thin (all typing lives in the schema and
 the SDK), but a vanilla generated OpenAPI document would describe every
 payload as an opaque object.
 
-Hippo closes that gap by **enriching the OpenAPI document with
+Mosaic closes that gap by **enriching the OpenAPI document with
 schema-derived components**. When the app is built around a configured
-client (which is what `hippo serve` does), `/openapi.json` includes one
+client (which is what `mosaic serve` does), `/openapi.json` includes one
 JSON Schema component per entity type in your LinkML schema, so API
 explorers and client generators see the real payload shapes — while the
 routes themselves stay generic.
@@ -75,10 +75,10 @@ as its request body, and the `GET` endpoints declare `EntityEnvelope`
 (single or paginated) as their `200` responses.
 
 All exposure and classification decisions come from
-`hippo.core.schema_typing` — the same shared LinkML→type model that
+`mosaic.core.schema_typing` — the same shared LinkML→type model that
 drives the typed SDK — so the OpenAPI surface, the SDK accessors, and any
 other transport cannot drift apart. The rendering lives in
-`hippo.api.openapi`; the document is built once and cached
+`mosaic.api.openapi`; the document is built once and cached
 (`app.openapi_schema`), and an app constructed without a client/registry
 serves the default, unenriched document.
 
@@ -87,7 +87,7 @@ serves the default, unenriched document.
 Start the server against your schema and open the interactive docs:
 
 ```bash
-hippo serve --config hippo.yaml
+mosaic serve --config mosaic.yaml
 # Swagger UI: http://localhost:8000/docs
 # Raw document: http://localhost:8000/openapi.json
 ```
@@ -107,7 +107,7 @@ pip install datamodel-code-generator
 datamodel-codegen \
   --url http://localhost:8000/openapi.json \
   --input-file-type openapi \
-  --output hippo_models.py
+  --output mosaic_models.py
 ```
 
 This emits one Pydantic model per entity type (plus the envelope), with
@@ -120,7 +120,7 @@ enums, optionality, and datetime fields matching your LinkML schema.
 openapi-generator-cli generate \
   -i http://localhost:8000/openapi.json \
   -g typescript-fetch \
-  -o ./hippo-client
+  -o ./mosaic-client
 ```
 
 `readOnly` fields are honored by both tools: generated request types omit

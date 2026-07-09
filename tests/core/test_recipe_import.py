@@ -23,19 +23,19 @@ from textwrap import dedent
 
 import pytest
 
-import hippo
-from hippo.core.client import HippoClient
-from hippo.core.exceptions import (
+import mosaic
+from mosaic.core.client import MosaicClient
+from mosaic.core.exceptions import (
     RecipeLineageCycleError,
     RecipeSchemaError,
     RecipeVersionIncompatibleError,
 )
-from hippo.core.meta import get_meta, set_meta
-from hippo.core.recipe_service import (
+from mosaic.core.meta import get_meta, set_meta
+from mosaic.core.recipe_service import (
     META_KEY_INSTALLED_RECIPES,
     RecipeService,
 )
-from hippo.core.storage.adapters.sqlite_adapter import SQLiteAdapter
+from mosaic.core.storage.adapters.sqlite_adapter import SQLiteAdapter
 from tests.conftest import _build_minimal_schema_registry
 
 
@@ -123,7 +123,7 @@ def storage(db_path):
 
 @pytest.fixture
 def client(storage):
-    return HippoClient(
+    return MosaicClient(
         storage=storage,
         registry=_build_minimal_schema_registry(),
         bypass_validation=True,
@@ -133,7 +133,7 @@ def client(storage):
 class TestImportHappyPath:
     def test_install_creates_meta_entry(
         self,
-        client: HippoClient,
+        client: MosaicClient,
         storage: SQLiteAdapter,
         tmp_path: Path,
     ) -> None:
@@ -154,7 +154,7 @@ class TestImportHappyPath:
 
     def test_install_emits_recipe_imported_provenance(
         self,
-        client: HippoClient,
+        client: MosaicClient,
         storage: SQLiteAdapter,
         tmp_path: Path,
     ) -> None:
@@ -180,7 +180,7 @@ class TestImportHappyPath:
         assert "Solo" in patch["classes_added"]
 
     def test_installed_recipes_returned_after_install(
-        self, client: HippoClient, tmp_path: Path
+        self, client: MosaicClient, tmp_path: Path
     ) -> None:
         recipe_dir = _make_recipe(
             tmp_path, recipe_id="org.example.solo", name="solo"
@@ -194,7 +194,7 @@ class TestImportHappyPath:
 class TestDryRun:
     def test_dry_run_makes_no_state_change(
         self,
-        client: HippoClient,
+        client: MosaicClient,
         storage: SQLiteAdapter,
         tmp_path: Path,
     ) -> None:
@@ -222,7 +222,7 @@ class TestDryRun:
 class TestDependencyResolution:
     def test_parent_installed_before_child(
         self,
-        client: HippoClient,
+        client: MosaicClient,
         storage: SQLiteAdapter,
         tmp_path: Path,
     ) -> None:
@@ -258,7 +258,7 @@ class TestDependencyResolution:
         assert recipe_ids == ["org.example.parent", "org.example.child"]
 
     def test_lineage_cycle_detected(
-        self, client: HippoClient, tmp_path: Path
+        self, client: MosaicClient, tmp_path: Path
     ) -> None:
         # A requires B, B requires A — cycle.
         a_dir = tmp_path / "a"
@@ -283,7 +283,7 @@ class TestDependencyResolution:
 
 class TestVersionCompatibility:
     def test_incompatible_hippo_version_rejected(
-        self, client: HippoClient, tmp_path: Path
+        self, client: MosaicClient, tmp_path: Path
     ) -> None:
         recipe_dir = _make_recipe(
             tmp_path,
@@ -298,7 +298,7 @@ class TestVersionCompatibility:
 class TestOverrideGuardThroughImport:
     def test_in_place_override_rejected(
         self,
-        client: HippoClient,
+        client: MosaicClient,
         tmp_path: Path,
     ) -> None:
         first = _make_recipe(
@@ -347,7 +347,7 @@ class TestOverrideGuardThroughImport:
 class TestAtomicity:
     def test_failed_merge_rolls_back_meta_and_provenance(
         self,
-        client: HippoClient,
+        client: MosaicClient,
         storage: SQLiteAdapter,
         tmp_path: Path,
     ) -> None:
@@ -419,6 +419,6 @@ class TestAtomicity:
 
 class TestRecipeImportedOperationEnum:
     def test_operation_value_recognized(self) -> None:
-        from hippo.core.types import Operation
+        from mosaic.core.types import Operation
 
         assert Operation.recipe_imported.value == "recipe_imported"

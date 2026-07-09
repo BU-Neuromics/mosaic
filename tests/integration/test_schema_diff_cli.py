@@ -11,7 +11,7 @@ import pytest
 import yaml
 from typer.testing import CliRunner
 
-from hippo.cli.main import app
+from mosaic.cli.main import app
 
 runner = CliRunner()
 

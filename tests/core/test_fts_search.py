@@ -1,18 +1,18 @@
 """Tests for FTS search functionality."""
 
 import pytest
-from hippo.core.client import HippoClient
-from hippo.core.storage.adapters.sqlite_adapter import SQLiteAdapter
+from mosaic.core.client import MosaicClient
+from mosaic.core.storage.adapters.sqlite_adapter import SQLiteAdapter
 from tests.conftest import _build_minimal_schema_registry
 
 
 class TestClientFTSearch:
-    """Tests for FTS search in HippoClient."""
+    """Tests for FTS search in MosaicClient."""
 
     def test_search_returns_results(self, temp_db_path):
         """Test that search returns matching entities."""
         adapter = SQLiteAdapter(temp_db_path, schema_registry=_build_minimal_schema_registry())
-        client = HippoClient(storage=adapter)
+        client = MosaicClient(storage=adapter)
 
         entity = {
             "id": "test-1",
@@ -22,7 +22,7 @@ class TestClientFTSearch:
             "data": {"title": "hello world test"},
         }
 
-        from hippo.core.storage.adapters.sqlite_adapter import SQLiteEntity
+        from mosaic.core.storage.adapters.sqlite_adapter import SQLiteEntity
 
         adapter.create(SQLiteEntity(**entity))
 

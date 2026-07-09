@@ -11,10 +11,10 @@ from pathlib import Path
 
 import pytest
 
-from hippo.core.client import HippoClient
-from hippo.core.exceptions import RecipeManifestError
-from hippo.core.recipe import RecipeReport
-from hippo.core.recipe_service import RecipeService
+from mosaic.core.client import MosaicClient
+from mosaic.core.exceptions import RecipeManifestError
+from mosaic.core.recipe import RecipeReport
+from mosaic.core.recipe_service import RecipeService
 
 
 MINIMAL_MANIFEST = """\
@@ -89,7 +89,7 @@ class TestInspectStateChanges:
 
 class TestInspectViaClientDelegator:
     def test_client_recipe_inspect_delegates(self, recipe_dir: Path) -> None:
-        client = HippoClient()
+        client = MosaicClient()
         report = client.recipe_inspect(str(recipe_dir))
         assert report.manifest.id == "org.example.minimal"
 

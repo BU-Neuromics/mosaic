@@ -440,10 +440,179 @@ state = client.state_at("Sample", "abc-123", timestamp="2024-06-01T00:00:00Z")
 timestamp. This is a read-only operation and does not require any additional storage.
 
 The REST API exposes history at `GET /entities/{entity_type}/{entity_id}/history`.
+See §6.8 for **graph-level** (query-spanning) as-of reconstruction, which generalizes
+`state_at` from a single entity to a whole subgraph.
 
 ---
 
-### 6.8 Retention Policy
+### 6.8 Graph-Level As-Of Reconstruction
+
+**Status:** Design (2026-06-17). Resolves the open sub-questions of
+[ADR-0001](./decisions/ADR-0001-graph-level-as-of-query.md) and records the design and
+direction; the implementation is decomposed into increments (§6.8.6) and sequenced via OpenSpec
+— it is not a v0.1 commitment.
+
+§6.7's `state_at` reconstructs **one entity** at a point in time. A consumer that needs a
+*reproducible view of the whole graph* — notably Aperture's data stories, which pin an "as-of
+watermark" so a story reruns identically (Aperture ADR-0023) — needs to evaluate an *entire
+query* (entity selection + relationship traversal + the schema in force) against the graph **as
+it stood at a timestamp `T`**. This section specifies that capability: a read may carry `T`, and
+when present the whole result is reconstructed to `T` from the append-only provenance log.
+
+#### 6.8.1 Semantics
+
+- **Transaction-time as-of.** `T` selects the graph **as Hippo had recorded it** at `T` — the
+  provenance log's `timestamp` axis (§6.6). This is exactly what reproducibility needs: "what the
+  system knew at `T`." Valid-time (when a fact was *true in the world*) is **out of scope** and
+  would require a data-model change (per-fact `valid_from`/`valid_to`); see §6.8.7.
+  *(Resolves ADR-0001 sub-question 1.)*
+- **Opt-in and additive.** A read without `T` behaves exactly as today (current state). `T` is an
+  additive parameter on reads; it never touches the write path.
+- **Read-only.** Reconstruction is a *view* over data already retained in the provenance log
+  (§6.6) and the immutable relationship history (§6.3) — no new state is written and no snapshots
+  are materialized.
+- **One snapshot per read scope.** All elements of a single as-of read — entity set, each
+  entity's state, relationship liveness, schema version, temporal fields — are bound to the
+  **same `T`**, yielding a coherent point-in-time subgraph. A consumer issuing several reads for
+  one logical view (one data story) passes the same `T` to all of them (§6.8.5).
+
+#### 6.8.2 Reconstruction model
+
+For a timestamp `T`, the graph is reconstructed from the provenance log as follows.
+
+**Entity state at `T`.** An entity's state at `T` is the post-image carried by its most recent
+provenance record with `timestamp <= T` — i.e. `state_at` (§6.7) applied per entity.
+
+> **Reconstruction contract (verified — increment 1, BU-Neuromics/hippo#71).** The `create` and
+> `update` write paths both record the **full post-image** of the entity as the `patch`, so an
+> entity's data state at `T` is the patch of its most recent **state-replacing** (`create` /
+> `update`) record with `timestamp <= T` — no replay needed. Non-state-replacing records
+> (`availability_change`, `external_id_add`, `supersede`) carry **deltas**, not entity state, and
+> never define the reconstructed state; the most recent `availability_change` with
+> `timestamp <= T` decides availability. `state_at` / `get_state_at` now implement exactly this
+> (previously they returned the latest record's `patch` regardless of `operation` — incorrect for
+> non-state ops). **Resolved (increment 2):** the supersede path now records the replacement's
+> **full post-image** as the `patch` (the audit note moved to provenance `context`), so the
+> full-post-image invariant holds for *every* `create`/`update` record and as-of reconstruction
+> returns the replacement's real data — no annotation masquerading as state.
+
+**Entity set at `T`.** A query for type `X` as-of `T` returns the entities that, at `T`, had been
+created and were available: an entity is **present at `T`** iff its earliest `create` record has
+`timestamp <= T` and its most recent availability-affecting record with `timestamp <= T` leaves
+it available. Filters then apply to each entity's reconstructed state.
+
+**Relationship liveness at `T`.** Edge liveness is reconstructed from the **provenance log**, not
+from the `relationships.is_available` flag. The relationships table records only the *current*
+flag with no change-timestamp, so it cannot answer "was this edge live at `T`?"; the provenance
+log can, because edge mutations are recorded as `relationship_add` / `relationship_remove` events
+(§6.3) with timestamps. An edge is **live at `T`** iff its most recent add/remove event with
+`timestamp <= T` is an `add`. Traversal at `T` walks only edges live at `T`.
+
+**Schema version at `T`.** The `schema_version` in force is that of the most recent provenance
+record with `timestamp <= T` — the §6.4 derivation, bounded by `T`.
+
+**Temporal fields at `T`.** `created_at` = the first `create` record (always `<= T` for present
+entities); `updated_at` = the most recent record with `timestamp <= T`. The §6.4 derivation,
+bounded by `T`.
+
+#### 6.8.3 Schema-as-of and decoding
+
+An entity reconstructed to `T` carries the `schema_version` in force at `T`. Because Hippo's
+schema evolution is **additive-only** at the transport surface (§4.7), decoding an as-of-`T`
+record against the *current* type model is tolerant: slots added after `T` are simply absent
+(resolve to defaults/null). Non-additive schema change between `T` and now is **out of scope** —
+a deployment that has made a breaking schema change cannot be guaranteed to decode pre-change
+states under the new model; such cases are flagged rather than silently mis-decoded.
+*(Resolves ADR-0001 sub-question 4.)*
+
+#### 6.8.4 Storage & indexing
+
+Reconstruction is provenance-driven and leans on the existing log and indexes (§6.6):
+
+- **Per-entity state / temporal / schema at `T`** — `WHERE entity_id = ? AND timestamp <= ?
+  ORDER BY timestamp DESC LIMIT 1` is already served by `idx_provenance_entity
+  (entity_id, entity_type, timestamp)`. The batched `get_temporal` query (§6.4/§6.6) gains a
+  single `AND timestamp <= :as_of` predicate.
+- **Entity-set selection for a type at `T`** — "the entities of type `X` present at `T`" scans
+  provenance by `entity_type` + `timestamp`. Add a covering index
+  `idx_provenance_type_time (entity_type, timestamp, entity_id)`; the existing
+  `idx_provenance_entity` already covers the per-entity reductions.
+- **Relationship liveness at `T`** — resolved from `relationship_add` / `relationship_remove`
+  records; benefits from a relationship-event lookup index (by edge source/target/type within the
+  provenance log). Exact index is an increment detail.
+- **No materialized snapshots.** Because `T` is a free parameter, the `entity_provenance_summary`
+  view (§6.6) cannot be reused directly (it is unbounded in time); as-of reductions are computed
+  at query time with the `timestamp <= :as_of` bound. A snapshot/caching tier is a *later*
+  optimization, only if profiling demands it. *(Resolves ADR-0001 sub-question 3.)*
+
+#### 6.8.5 SDK & transport surface
+
+**SDK.** `as_of` is threaded through the read surface; the storage contract (`EntityStore` ABC)
+formalizes methods the SQLite/Postgres adapters already implement de facto:
+
+```python
+# HippoClient / QueryService
+client.query("Sample", filters=[...], as_of="2026-06-01T00:00:00Z")          # set + state at T
+client.relationships.traverse(source_id, ..., as_of="2026-06-01T00:00:00Z")  # edges live at T
+
+# EntityStore ABC (formalize — currently de facto on the adapters)
+def find(self, query: Query, *, as_of: str | None = None) -> Iterator[Entity]: ...
+def get_temporal(self, entity_ids: list[str], *, as_of: str | None = None) -> dict[str, TemporalRecord]: ...
+def state_at(self, entity_id: str, timestamp: str) -> dict | None: ...
+def traverse(self, source_id, *, as_of: str | None = None, ...) -> list[dict]: ...
+```
+
+For consumers that need many reads under one coherent `T` (Aperture data stories), an ergonomic
+**snapshot handle** scopes the watermark once:
+
+```python
+snap = client.snapshot(as_of="2026-06-01T00:00:00Z")   # thin read-only view; same T on every read
+snap.query("Sample", filters=[...]); snap.relationships.traverse(...)
+```
+
+**Transports (additive — §4.3 / §4.7).**
+- **REST:** an `?as_of=<ISO-8601>` query parameter on reads (e.g.
+  `GET /entities/Sample?diagnosis=PTSD&as_of=2026-06-01T00:00:00Z`).
+- **GraphQL:** an additive `asOf: DateTime` argument on the generated query and resolved-traversal
+  fields. The chosen expression is a **per-field argument** (not a request header): explicit,
+  composes with existing filters, and preserves the additive-only contract (§4.7). DataLoader
+  batch/cache keys MUST include `as_of` so a request mixing timestamps stays correct (in practice
+  one request uses one `T`). A request-level default may be layered later as pure ergonomics over
+  the per-field argument. *(Resolves ADR-0001 sub-question 2.)*
+
+#### 6.8.6 Implementation increments (sequencing)
+
+Decomposed so each increment is independently shippable and testable *(resolves ADR-0001
+sub-question 5 — sequence via OpenSpec, after the current surface; not a v0.1 commitment)*:
+
+1. ✅ **(done — #73) Formalize the `EntityStore` as-of contract** — `state_at` / `get_temporal` /
+   `find(..., as_of=)` on the ABC; verified the §6.8.2 reconstruction contract per `operation`.
+2. ✅ **(done) Entity set + state + temporal + schema at `T`** — `client.query(..., as_of=)`
+   end-to-end on the SQLite adapter (provenance-driven entity-set reconstruction); added
+   `idx_provenance_type_time`; closed the §6.8.2 supersede-annotation gap.
+3. ✅ **(done) Relationship liveness at `T`** — provenance-driven `traverse(..., as_of=)`: edge
+   liveness reconstructed from `relationship_add`/`remove` events (SQLite). Postgres parity in (5).
+4. ✅ **(done) Transports** — REST `?as_of=` (entity list) and GraphQL `asOf` (generated list
+   queries) thread to `client.query(as_of=)`. As-of resolution of *nested* resolved-relationship
+   fields (DataLoader keyed by `as_of`) and the optional `client.snapshot()` handle remain
+   follow-ups.
+5. ✅ **(done) Postgres adapter parity** — `find(as_of=)`, `entities_created_by` /
+   `state_version_at`, provenance-driven relationship `traverse(as_of=)`, and the
+   `idx_ProvenanceRecord_type_timestamp` index, all mirrored from the SQLite path. Verified by
+   compile + the gated `tests/integration/test_postgres_asof.py` (runs only with a live
+   PostgreSQL / `HIPPO_DATABASE_URL`). The §6.8.4 snapshot/cache **performance tier** remains
+   deliberately deferred ("only if profiling demands"); both adapters carry the type-scoped index.
+
+#### 6.8.7 Deferred
+
+- **Valid-time / full bitemporality** — would need per-fact `valid_from`/`valid_to`;
+  transaction-time only for now (§6.8.1).
+- **As-of across non-additive schema change** — flagged, not guaranteed (§6.8.3).
+- **Snapshot/cache materialization** — query-time reconstruction first; optimize only if needed.
+
+---
+
+### 6.9 Retention Policy
 
 **v0.1 position: no retention policy.** All provenance records are retained indefinitely.
 There is no archive, purge, or truncation mechanism.

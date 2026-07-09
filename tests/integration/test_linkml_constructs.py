@@ -1,4 +1,4 @@
-"""Integration tests for LinkML schema constructs in the Hippo migrate pipeline."""
+"""Integration tests for LinkML schema constructs in the Mosaic migrate pipeline."""
 
 import sqlite3
 import tempfile
@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 from typer.testing import CliRunner
 
-from hippo.cli.main import app
+from mosaic.cli.main import app
 from tests.support.linkml_schemas import write_schema_file
 
 runner = CliRunner()

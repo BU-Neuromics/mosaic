@@ -1,6 +1,6 @@
 ## Context
 
-Hippo is the Metadata Tracking Service (MTS) for the BASS platform. Currently, the system has SDK-level components (HippoClient, QueryEngine, etc.) but lacks a CLI interface for user interaction. This change establishes the foundational CLI infrastructure to enable users to interact with Hippo via command-line operations.
+Hippo is the Metadata Tracking Service (MTS) for the DataHelix platform. Currently, the system has SDK-level components (HippoClient, QueryEngine, etc.) but lacks a CLI interface for user interaction. This change establishes the foundational CLI infrastructure to enable users to interact with Hippo via command-line operations.
 
 ### Current State
 - Core SDK exists in `hippo/core/` with business logic

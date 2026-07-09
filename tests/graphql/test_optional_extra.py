@@ -6,8 +6,8 @@ import sys
 
 import pytest
 
-from hippo.core.client import HippoClient
-from hippo.core.exceptions import (
+from mosaic.core.client import MosaicClient
+from mosaic.core.exceptions import (
     ConfigError,
     EntityAlreadySupersededError,
     EntityNotFoundError,
@@ -15,7 +15,7 @@ from hippo.core.exceptions import (
     ValidationFailed,
     ValidationFailure,
 )
-from hippo.graphql import (
+from mosaic.graphql import (
     GRAPHQL_EXTRA_HINT,
     build_graphql_schema,
     create_graphql_router,
@@ -32,33 +32,33 @@ class TestExtraDetection:
         # ImportError — simulates an environment without the extra.
         monkeypatch.setitem(sys.modules, "strawberry", None)
         assert graphql_available() is False
-        with pytest.raises(ImportError, match="pip install 'hippo\\[graphql\\]'"):
+        with pytest.raises(ImportError, match="pip install 'datahelix-mosaic\\[graphql\\]'"):
             build_graphql_schema(registry)
-        with pytest.raises(ImportError, match="pip install 'hippo\\[graphql\\]'"):
-            create_graphql_router(HippoClient())
+        with pytest.raises(ImportError, match="pip install 'datahelix-mosaic\\[graphql\\]'"):
+            create_graphql_router(MosaicClient())
         assert "graphql" in GRAPHQL_EXTRA_HINT
 
     def test_schemaless_client_raises_config_error(self):
         with pytest.raises(ConfigError, match="schema-backed"):
-            create_graphql_router(HippoClient())
+            create_graphql_router(MosaicClient())
 
     def test_create_default_app_requires_registry_for_graphql(self):
-        from hippo.serve import create_default_app
+        from mosaic.serve import create_default_app
 
         with pytest.raises(ConfigError):
-            create_default_app(hippo_client=HippoClient(), graphql=True)
+            create_default_app(hippo_client=MosaicClient(), graphql=True)
 
 
 class TestErrorMapping:
     """SDK exceptions map onto structured GraphQL error extensions."""
 
     def _map(self, exc):
-        from hippo.graphql.resolvers import _as_graphql_error
+        from mosaic.graphql.resolvers import _as_graphql_error
 
         return _as_graphql_error(exc)
 
     def test_validation_failed_carries_tier_envelope(self):
-        from hippo.core.validation.validators import (
+        from mosaic.core.validation.validators import (
             ValidationFailure as TierFailure,
             ValidationResult,
         )

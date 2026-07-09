@@ -1,4 +1,4 @@
-"""Tests for ``hippo entity`` inspection verbs and ``hippo status``."""
+"""Tests for ``mosaic entity`` inspection verbs and ``mosaic status``."""
 
 import json
 from pathlib import Path
@@ -7,7 +7,7 @@ import pytest
 import yaml
 from typer.testing import CliRunner
 
-from hippo.cli.main import app
+from mosaic.cli.main import app
 
 
 SCHEMA_YAML = """\
@@ -48,18 +48,18 @@ def schema_file(tmp_path: Path) -> Path:
 
 @pytest.fixture()
 def db_path(tmp_path: Path) -> Path:
-    return tmp_path / "data" / "hippo.db"
+    return tmp_path / "data" / "mosaic.db"
 
 
 @pytest.fixture()
 def client(db_path: Path, schema_file: Path):
-    from hippo.core.client import HippoClient
-    from hippo.core.storage.adapters.sqlite_adapter import SQLiteAdapter
-    from hippo.linkml_bridge import SchemaRegistry
+    from mosaic.core.client import MosaicClient
+    from mosaic.core.storage.adapters.sqlite_adapter import SQLiteAdapter
+    from mosaic.linkml_bridge import SchemaRegistry
 
     db_path.parent.mkdir(parents=True, exist_ok=True)
     registry = SchemaRegistry.from_path(schema_file)
-    return HippoClient(
+    return MosaicClient(
         storage=SQLiteAdapter(str(db_path), schema_registry=registry),
         registry=registry,
     )
@@ -197,7 +197,7 @@ class TestStatusCommand:
 
         assert result.exit_code == 0
         payload = json.loads(result.output)
-        assert payload["service"] == "hippo"
+        assert payload["service"] == "mosaic"
         assert payload["adapter"] == "SQLiteAdapter"
         assert payload["entity_counts"] == {"Sample": 1}
 

@@ -1,6 +1,6 @@
 """End-to-end GraphQL tests: FastAPI test client over a temp SQLite DB.
 
-Mirrors the ``tests/serve`` conventions — real ``HippoClient``, real
+Mirrors the ``tests/serve`` conventions — real ``MosaicClient``, real
 storage adapter, requests through the mounted ``/graphql`` route.
 """
 
@@ -61,7 +61,7 @@ class TestAuthAndMounting:
     def test_graphql_not_mounted_by_default(self, hippo_client):
         from fastapi.testclient import TestClient
 
-        from hippo.serve import create_default_app
+        from mosaic.serve import create_default_app
 
         app = create_default_app(hippo_client=hippo_client)
         with TestClient(app) as plain:
@@ -88,7 +88,7 @@ class TestServeWiring:
     """Config-driven factory → create_default_app(client, graphql=True).
 
     Same pattern as tests/serve/test_serve_persistence.py: the app is
-    built exactly the way ``hippo serve --graphql`` builds it.
+    built exactly the way ``mosaic serve --graphql`` builds it.
     """
 
     def test_factory_built_app_serves_rest_and_graphql(self, tmp_path):
@@ -96,14 +96,14 @@ class TestServeWiring:
 
         from fastapi.testclient import TestClient
 
-        from hippo.config import HippoConfig
-        from hippo.core.factory import create_client_from_config
-        from hippo.serve import create_default_app
+        from mosaic.config import MosaicConfig
+        from mosaic.core.factory import create_client_from_config
+        from mosaic.serve import create_default_app
 
         fixture_schema = (
             Path(__file__).parents[1] / "fixtures" / "schemas" / "sample_schema.yaml"
         )
-        cfg = HippoConfig(
+        cfg = MosaicConfig(
             schema_path=str(fixture_schema),
             database_url=str(tmp_path / "gql.db"),
             storage_backend="sqlite",
@@ -268,7 +268,7 @@ class TestMutations:
             {"id": sample_id},
         )
         updated = body["data"]["updateSample"]
-        # Untouched fields survive: HippoClient.update is full-replace,
+        # Untouched fields survive: MosaicClient.update is full-replace,
         # the transport merges the patch over the stored data.
         assert updated["name"] == "keep-me"
         assert updated["donorId"] == donor_id

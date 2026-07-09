@@ -7,13 +7,13 @@ import asyncio
 import pytest
 
 pytest.importorskip(
-    "textual", reason="textual not installed; run: pip install hippo[tui]"
+    "textual", reason="textual not installed; run: pip install datahelix-mosaic[tui]"
 )
 
 from textual.widgets import Input, Select
 
-from hippo.tui.backend.protocol import STATUS_VALUES
-from hippo.tui.widgets.availability_dialog import (
+from mosaic.tui.backend.protocol import STATUS_VALUES
+from mosaic.tui.widgets.availability_dialog import (
     AvailabilityScreen,
     compose_reason,
     status_to_availability,
@@ -53,9 +53,9 @@ def test_compose_reason_with_and_without_note():
 
 
 def _dialog_app(fake_backend):
-    from hippo.tui.app import HippoTUIApp
+    from mosaic.tui.app import MosaicTUIApp
 
-    return HippoTUIApp(backend=fake_backend)
+    return MosaicTUIApp(backend=fake_backend)
 
 
 def test_dialog_apply_returns_transition(fake_backend):

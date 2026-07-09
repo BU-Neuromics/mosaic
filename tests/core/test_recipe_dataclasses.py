@@ -1,7 +1,7 @@
 """Sanity tests for the recipe dataclass surface (sec10 §10.3).
 
 PR 2 of PTS-290 — these are pure-data types. Tests assert constructability,
-defaults, immutability, and that the public ``hippo.core.recipe`` namespace
+defaults, immutability, and that the public ``mosaic.core.recipe`` namespace
 re-exports each symbol.
 """
 
@@ -11,7 +11,7 @@ import dataclasses
 
 import pytest
 
-from hippo.core.recipe import (
+from mosaic.core.recipe import (
     ImportPlan,
     ImportResult,
     InstalledRecipe,

@@ -17,15 +17,15 @@ import pytest
 
 # Skip the entire package if strawberry is not installed.
 strawberry = pytest.importorskip(
-    "strawberry", reason="strawberry not installed; run: pip install hippo[graphql]"
+    "strawberry", reason="strawberry not installed; run: pip install datahelix-mosaic[graphql]"
 )
 
 from fastapi.testclient import TestClient
 
-from hippo.core.client import HippoClient
-from hippo.core.storage.adapters.sqlite_adapter import SQLiteAdapter
-from hippo.linkml_bridge import SchemaRegistry
-from hippo.serve import create_default_app
+from mosaic.core.client import MosaicClient
+from mosaic.core.storage.adapters.sqlite_adapter import SQLiteAdapter
+from mosaic.linkml_bridge import SchemaRegistry
+from mosaic.serve import create_default_app
 
 # Exercises every generation rule: required/optional scalars of each
 # range, an enum, a single-valued reference with the ``_id`` naming
@@ -105,7 +105,7 @@ def hippo_client(registry: SchemaRegistry):
     with tempfile.TemporaryDirectory() as tmpdir:
         db_path = os.path.join(tmpdir, "graphql_test.db")
         storage = SQLiteAdapter(db_path, schema_registry=registry)
-        client = HippoClient(storage=storage, registry=registry)
+        client = MosaicClient(storage=storage, registry=registry)
         # FTS virtual tables for the `hippo_search`-annotated slots (the
         # adapter does not create them; mirrors tests/integration).
         conn = sqlite3.connect(db_path)
@@ -121,7 +121,7 @@ def hippo_client(registry: SchemaRegistry):
 
 
 @pytest.fixture
-def hippo_app(hippo_client: HippoClient):
+def hippo_app(hippo_client: MosaicClient):
     """FastAPI app with REST + GraphQL transports over one client."""
     return create_default_app(hippo_client=hippo_client, graphql=True)
 
@@ -132,7 +132,7 @@ def client(hippo_app):
 
     Entered as a context manager so every request runs on the single
     portal thread — one thread-local SQLite connection, matching how a
-    real (single event loop) ``hippo serve`` process behaves.
+    real (single event loop) ``mosaic serve`` process behaves.
     """
     with TestClient(hippo_app) as test_client:
         yield test_client

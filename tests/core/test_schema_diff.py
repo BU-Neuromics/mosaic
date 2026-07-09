@@ -4,7 +4,7 @@ import sqlite3
 import tempfile
 from pathlib import Path
 
-from hippo.core.storage.schema_diff import (
+from mosaic.core.storage.schema_diff import (
     SchemaDiff,
     SchemaDiffEngine,
     TableMetadata,

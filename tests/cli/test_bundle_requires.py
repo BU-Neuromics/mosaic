@@ -1,4 +1,4 @@
-"""Tests for ``hippo reference bundle-requires`` (PTS-346 item 3 / sec11 §11.6.2).
+"""Tests for ``mosaic reference bundle-requires`` (PTS-346 item 3 / sec11 §11.6.2).
 
 ``Bundle.to_requires()`` / ``requires_yaml()`` were implemented and unit-tested
 (``tests/core/test_exposure.py::TestBundle``) but not wired to any user-facing
@@ -10,7 +10,7 @@ comment naming the bundle and its (validated) version.
 import yaml
 from typer.testing import CliRunner
 
-from hippo.cli.main import app
+from mosaic.cli.main import app
 
 
 def _write(tmp_path, manifest: dict) -> str:

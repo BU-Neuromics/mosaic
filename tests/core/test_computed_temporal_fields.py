@@ -1,6 +1,6 @@
 """Tests for sec9 §9.7 computed temporal fields.
 
-Verifies that `HippoClient.get` and `HippoClient.query` surface the five
+Verifies that `MosaicClient.get` and `MosaicClient.query` surface the five
 sec9 §9.7 temporal fields (`created_at`, `updated_at`, `schema_version`,
 `created_by`, `updated_by`) derived from `ProvenanceRecord` at read
 time, that the batch aggregation primitive runs as a single SQL
@@ -17,11 +17,11 @@ from typing import Optional
 
 import pytest
 
-from hippo.core.client import HippoClient
-from hippo.core.storage.adapters.sqlite_adapter import SQLiteAdapter
+from mosaic.core.client import MosaicClient
+from mosaic.core.storage.adapters.sqlite_adapter import SQLiteAdapter
 from tests.conftest import _build_minimal_schema_registry
-from hippo.core.types import TemporalRecord
-from hippo.linkml_bridge import SchemaRegistry
+from mosaic.core.types import TemporalRecord
+from mosaic.linkml_bridge import SchemaRegistry
 
 
 @pytest.fixture
@@ -31,13 +31,13 @@ def db_path() -> str:
 
 
 @pytest.fixture
-def client(db_path: str) -> HippoClient:
+def client(db_path: str) -> MosaicClient:
     storage = SQLiteAdapter(db_path, schema_registry=_build_minimal_schema_registry())
-    return HippoClient(storage=storage, bypass_validation=True)
+    return MosaicClient(storage=storage, bypass_validation=True)
 
 
 @pytest.fixture
-def client_with_versioned_schema(db_path: str) -> HippoClient:
+def client_with_versioned_schema(db_path: str) -> MosaicClient:
     """Client whose SchemaRegistry has an explicit version — exercises
     the schema_version plumbing path per Decision 9.6.F."""
     yaml_text = (
@@ -58,13 +58,13 @@ def client_with_versioned_schema(db_path: str) -> HippoClient:
     )
     registry = SchemaRegistry.from_yaml(yaml_text)
     storage = SQLiteAdapter(db_path, schema_registry=_build_minimal_schema_registry())
-    return HippoClient(storage=storage, registry=registry, bypass_validation=True)
+    return MosaicClient(storage=storage, registry=registry, bypass_validation=True)
 
 
 class TestComputedTemporalFields:
-    """Temporal fields on HippoClient.get."""
+    """Temporal fields on MosaicClient.get."""
 
-    def test_get_surfaces_all_five_fields(self, client: HippoClient) -> None:
+    def test_get_surfaces_all_five_fields(self, client: MosaicClient) -> None:
         """Every entity read returns the five sec9 §9.7 temporal fields."""
         result = client.put("Sample", {"name": "t1"})
         entity_id = result["id"]
@@ -81,13 +81,13 @@ class TestComputedTemporalFields:
             assert field in got, f"missing {field!r} on read"
 
     def test_created_at_populated_from_create_event(
-        self, client: HippoClient
+        self, client: MosaicClient
     ) -> None:
         result = client.put("Sample", {"name": "t2"})
         got = client.get("Sample", result["id"])
         assert got["created_at"] is not None
 
-    def test_updated_at_advances_on_update(self, client: HippoClient) -> None:
+    def test_updated_at_advances_on_update(self, client: MosaicClient) -> None:
         """Update → read: updated_at advances; created_at unchanged."""
         result = client.put("Sample", {"name": "first"})
         entity_id = result["id"]
@@ -101,7 +101,7 @@ class TestComputedTemporalFields:
         assert second["updated_at"] >= first["updated_at"]
 
     def test_availability_change_does_not_advance_updated_at(
-        self, client: HippoClient
+        self, client: MosaicClient
     ) -> None:
         """Availability change to unavailable excluded from updated_at
         computation (matches legacy SOFT_DELETE-exclusion, per
@@ -125,7 +125,7 @@ class TestComputedTemporalFields:
         assert raw is not None
 
     def test_created_by_is_actor_from_create_record(
-        self, client: HippoClient
+        self, client: MosaicClient
     ) -> None:
         """Write as a specific actor; read back created_by == that actor.
 
@@ -136,7 +136,7 @@ class TestComputedTemporalFields:
         those fields.
         """
         storage = client._storage
-        from hippo.core.storage.adapters.sqlite_adapter import SQLiteEntity
+        from mosaic.core.storage.adapters.sqlite_adapter import SQLiteEntity
 
         entity = SQLiteEntity(
             id="actor-test-1",
@@ -158,7 +158,7 @@ class TestProvenanceIntegrity:
     silently.
     """
 
-    def test_missing_provenance_raises(self, client: HippoClient) -> None:
+    def test_missing_provenance_raises(self, client: MosaicClient) -> None:
         """Entity present in the per-class table with no ProvenanceRecord
         rows → ProvenanceIntegrityError on read.
 
@@ -173,7 +173,7 @@ class TestProvenanceIntegrity:
         import uuid
         from datetime import datetime, timezone
 
-        from hippo.core.exceptions import ProvenanceIntegrityError
+        from mosaic.core.exceptions import ProvenanceIntegrityError
 
         storage = client._storage
         with storage._transaction() as conn:
@@ -199,18 +199,18 @@ class TestProvenanceIntegrity:
         # depending on the call site. Either is acceptable for this
         # test's intent — it documents that orphan rows do not silently
         # leak through. Accept either exception family.
-        from hippo.core.exceptions import EntityNotFoundError
+        from mosaic.core.exceptions import EntityNotFoundError
 
         with pytest.raises((ProvenanceIntegrityError, EntityNotFoundError)):
             client.get("Sample", "orphan-entity-1")
 
     def test_query_raises_on_orphan_entity_in_page(
-        self, client: HippoClient
+        self, client: MosaicClient
     ) -> None:
         """A query whose result set includes an entity with missing
         provenance raises ProvenanceIntegrityError — doesn't silently
         return the entity with stale stored-column values (Decision 9.7.A)."""
-        from hippo.core.exceptions import ProvenanceIntegrityError
+        from mosaic.core.exceptions import ProvenanceIntegrityError
 
         # One valid entity + one orphan (per-class row, no provenance).
         client.put("Sample", {"name": "valid"})
@@ -224,7 +224,7 @@ class TestProvenanceIntegrity:
         with pytest.raises(ProvenanceIntegrityError):
             client.query("Sample")
 
-    def test_missing_create_record_raises(self, client: HippoClient) -> None:
+    def test_missing_create_record_raises(self, client: MosaicClient) -> None:
         """Entity with provenance rows but none of operation='create'
         → ProvenanceIntegrityError.
 
@@ -234,7 +234,7 @@ class TestProvenanceIntegrity:
         import uuid
         from datetime import datetime, timezone
 
-        from hippo.core.exceptions import ProvenanceIntegrityError
+        from mosaic.core.exceptions import ProvenanceIntegrityError
 
         storage = client._storage
         with storage._transaction() as conn:
@@ -272,7 +272,7 @@ class TestBatchPrimitive:
     """Batch aggregation — one SQL round-trip for many entity_ids."""
 
     def test_get_temporal_returns_dict_keyed_by_entity_id(
-        self, client: HippoClient
+        self, client: MosaicClient
     ) -> None:
         ids = [client.put("Sample", {"name": f"b{i}"})["id"] for i in range(5)]
 
@@ -284,11 +284,11 @@ class TestBatchPrimitive:
             assert rec.created_at is not None
 
     def test_get_temporal_handles_empty_input(
-        self, client: HippoClient
+        self, client: MosaicClient
     ) -> None:
         assert client._storage.get_temporal([]) == {}
 
-    def test_get_temporal_absent_ids_omitted(self, client: HippoClient) -> None:
+    def test_get_temporal_absent_ids_omitted(self, client: MosaicClient) -> None:
         """IDs with no provenance rows are absent from the result dict."""
         result = client.put("Sample", {"name": "real"})
         ids = [result["id"], "nonexistent-id"]
@@ -298,7 +298,7 @@ class TestBatchPrimitive:
         assert result["id"] in out
         assert "nonexistent-id" not in out
 
-    def test_query_does_batch_aggregation(self, client: HippoClient) -> None:
+    def test_query_does_batch_aggregation(self, client: MosaicClient) -> None:
         """client.query calls get_temporal once for the full page,
         not N times. Verified by counting invocations on a spy."""
         for i in range(10):
@@ -308,9 +308,9 @@ class TestBatchPrimitive:
         original = storage.get_temporal
         calls: list[list[str]] = []
 
-        def spy(entity_ids: list[str]):
+        def spy(entity_ids: list[str], *, as_of: str | None = None):
             calls.append(list(entity_ids))
-            return original(entity_ids)
+            return original(entity_ids, as_of=as_of)
 
         storage.get_temporal = spy
         try:
@@ -329,7 +329,7 @@ class TestSchemaVersionPlumbing:
     plumbed into new ProvenanceRecord rows at write time."""
 
     def test_schema_version_captured_from_registry(
-        self, client_with_versioned_schema: HippoClient
+        self, client_with_versioned_schema: MosaicClient
     ) -> None:
         """Version set in the merged schema shows up on ProvenanceRecord
         rows and surfaces through client.get."""
@@ -339,7 +339,7 @@ class TestSchemaVersionPlumbing:
         assert got["schema_version"] == "1.2.3"
 
     def test_no_registry_leaves_schema_version_empty(
-        self, client: HippoClient
+        self, client: MosaicClient
     ) -> None:
         """Adapter constructed without a registry → schema_version stays
         empty (the Decision 9.6.F transition fallback)."""

@@ -1,19 +1,19 @@
 # Writing a Domain Module
 
-This guide walks through building a **`DomainModule`** — the first-party, mutable-data species of `SchemaPackage` — and authoring a versioned data migration that Hippo runs with full provenance behind a hard validation gate.
+This guide walks through building a **`DomainModule`** — the first-party, mutable-data species of `SchemaPackage` — and authoring a versioned data migration that Mosaic runs with full provenance behind a hard validation gate.
 
 > **Who this is for:** Python developers who own a deployment's locally authored operational data (samples, donors, projects — the lab's authoritative records) and need to evolve its *shape* across schema versions. If you distribute externally maintained reference datasets instead, read [Writing a Reference Loader](writing-a-reference-loader.md).
 
-> **`DomainModule` is one kind of `SchemaPackage`.** Both `DomainModule` and `ReferenceLoader` are *species* of the genus `SchemaPackage` (`hippo.core.loaders.schema_package`), which captures the reusable part — *"contribute a versioned, pinnable schema fragment"* (`name`, `description`, `versions()`, `schema_fragment()`, `depends_on()`, optional `validate()`, and the `provision`/`evolve`/`deprovision` lifecycle hooks).
+> **`DomainModule` is one kind of `SchemaPackage`.** Both `DomainModule` and `ReferenceLoader` are *species* of the genus `SchemaPackage` (`mosaic.core.loaders.schema_package`), which captures the reusable part — *"contribute a versioned, pinnable schema fragment"* (`name`, `description`, `versions()`, `schema_fragment()`, `depends_on()`, optional `validate()`, and the `provision`/`evolve`/`deprovision` lifecycle hooks).
 >
 > - A **reference loader** wraps *external, reconstructible* data; its `deprovision` prunes willingly.
 > - A **domain module** owns *first-party, mutable* data and migrates it **in place**. Because those records are the deployment's authoritative data, the migration is append-only, id-keyed, and provenanced — every step is auditable and replay-recoverable.
 
 ---
 
-## How a domain migration differs from `hippo migrate`
+## How a domain migration differs from `mosaic migrate`
 
-| | `hippo migrate` (DDL) | `DomainModule.evolve` (data) |
+| | `mosaic migrate` (DDL) | `DomainModule.evolve` (data) |
 |---|---|---|
 | Handles | *Additive* schema changes (new optional column, new class) | *Semantic* data transformations (split a field, re-root a value set, change units) |
 | Touches | Table structure | Row contents |
@@ -26,7 +26,7 @@ They are complementary. Reach for a `DomainModule` migration only when the *data
 ## Project layout
 
 ```
-hippo-domain-mylab/
+mosaic-domain-mylab/
 ├── pyproject.toml
 └── src/
     └── hippo_domain_mylab/
@@ -38,11 +38,11 @@ hippo-domain-mylab/
 
 ## 1. The module class
 
-Subclass `DomainModule` from `hippo.core.loaders.domain_module`. Implement the two genus abstract methods (`versions()`, `schema_fragment()`) plus `migration_steps()`. `provision` is an inherited genus no-op — domain data arrives via `hippo ingest`, not at schema-install time. `deprovision` is overridden to **refuse by default** when the module owns live data (see §7).
+Subclass `DomainModule` from `mosaic.core.loaders.domain_module`. Implement the two genus abstract methods (`versions()`, `schema_fragment()`) plus `migration_steps()`. `provision` is an inherited genus no-op — domain data arrives via `mosaic ingest`, not at schema-install time. `deprovision` is overridden to **refuse by default** when the module owns live data (see §7).
 
 ```python
 # src/hippo_domain_mylab/module.py
-from hippo.core.loaders.domain_module import (
+from mosaic.core.loaders.domain_module import (
     DomainModule,
     MigrationContext,
     MigrationStep,
@@ -99,7 +99,7 @@ class MyLabModule(DomainModule):
             )
 ```
 
-The `schema_fragment()` contract is identical to a reference loader's: `default_prefix` **must** equal `name`, and Hippo auto-injects `provided_by: <name>@<version>` on every introduced element.
+The `schema_fragment()` contract is identical to a reference loader's: `default_prefix` **must** equal `name`, and Mosaic auto-injects `provided_by: <name>@<version>` on every introduced element.
 
 ---
 
@@ -127,13 +127,13 @@ A migration **transform** receives a `MigrationContext` and stages its intended 
 `DomainModule.evolve` runs the matching step, then — **before any committed write** — stages the transform's new-shape records and validates them against the **fully merged schema**. This is the in-process equivalent of:
 
 ```bash
-hippo ingest --validate-schema <merged-dir> --dry-run
+mosaic ingest --validate-schema <merged-dir> --dry-run
 ```
 
 The migration **commits only on green**. If the staged output does not validate, `evolve` raises `MigrationGateError` and the deployment's data is left exactly as it was — no new rows, no supersessions, no provenance events.
 
 ```python
-from hippo.core.exceptions import MigrationGateError
+from mosaic.core.exceptions import MigrationGateError
 
 module = MyLabModule()
 try:
@@ -165,10 +165,10 @@ Inspect it with `client.history(entity_id)` or by following the `superseded_by` 
 
 ## 5. Declaring the entry point
 
-Register the module under the genus group `hippo.schema_packages` (a `DomainModule` is not a reference loader, so it does **not** use `hippo.reference_loaders`):
+Register the module under the genus group `mosaic.schema_packages` (a `DomainModule` is not a reference loader, so it does **not** use `mosaic.reference_loaders`):
 
 ```toml
-[project.entry-points."hippo.schema_packages"]
+[project.entry-points."mosaic.schema_packages"]
 mylab = "hippo_domain_mylab.module:MyLabModule"
 ```
 
@@ -178,7 +178,7 @@ The entry-point key must match `DomainModule.name`.
 
 ## 6. Multi-hop migration chains
 
-`evolve(client, from_version, to_version)` resolves a **path** through your declared migration DAG, not a single edge. Declare one `MigrationStep` per consecutive hop and Hippo composes them:
+`evolve(client, from_version, to_version)` resolves a **path** through your declared migration DAG, not a single edge. Declare one `MigrationStep` per consecutive hop and Mosaic composes them:
 
 ```python
 def migration_steps(self) -> list[MigrationStep]:
@@ -203,7 +203,7 @@ How the resolver behaves:
 
 ## 7. Deprovisioning: refuse by default
 
-`hippo reference deprovision <name>` tears a package down. A `DomainModule` owns the deployment's **authoritative** records, so `DomainModule.deprovision` **refuses by default** when any `populates_types()` class still holds live rows — silently soft-deleting them on uninstall would be a data-loss event. Export first, then re-run with `--force` to soft-delete (the standard availability transition; the provenance trail is kept). With no live data it is a quiet no-op.
+`mosaic reference deprovision <name>` tears a package down. A `DomainModule` owns the deployment's **authoritative** records, so `DomainModule.deprovision` **refuses by default** when any `populates_types()` class still holds live rows — silently soft-deleting them on uninstall would be a data-loss event. Export first, then re-run with `--force` to soft-delete (the standard availability transition; the provenance trail is kept). With no live data it is a quiet no-op.
 
 The orchestrator also **refuses to deprovision a package that any installed package still `depends_on`** (it names the dependents — deprovision those first). Both guards are the asymmetry with reference loaders, whose external, reconstructible rows are pruned willingly.
 
@@ -211,7 +211,7 @@ The orchestrator also **refuses to deprovision a package that any installed pack
 
 ## Checklist
 
-- [ ] `DomainModule.name` matches the `hippo.schema_packages` entry-point key
+- [ ] `DomainModule.name` matches the `mosaic.schema_packages` entry-point key
 - [ ] `schema_fragment()` declares `default_prefix: <name>`
 - [ ] Each `MigrationStep` covers one consecutive `(from_version → to_version)` hop; ship every step back to your supported floor
 - [ ] The transform reads via `ctx.client` and stages via `ctx.plan` — it never writes to the client directly

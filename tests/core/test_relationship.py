@@ -5,14 +5,14 @@ import tempfile
 
 import pytest
 
-from hippo.core.client import HippoClient
-from hippo.core.exceptions import EntityNotFoundError, HippoError
-from hippo.core.relationship import (
+from mosaic.core.client import MosaicClient
+from mosaic.core.exceptions import EntityNotFoundError, MosaicError
+from mosaic.core.relationship import (
     RelationshipExistsError,
     RelationshipManager,
     RelationshipNotFoundError,
 )
-from hippo.core.storage.adapters.sqlite_adapter import SQLiteAdapter
+from mosaic.core.storage.adapters.sqlite_adapter import SQLiteAdapter
 from tests.conftest import _build_minimal_schema_registry
 
 
@@ -26,20 +26,20 @@ class TestRelateOperation:
             yield os.path.join(tmpdir, "test_relate.db")
 
     @pytest.fixture
-    def client(self, db_path: str) -> HippoClient:
-        """Create a HippoClient with SQLite storage."""
+    def client(self, db_path: str) -> MosaicClient:
+        """Create a MosaicClient with SQLite storage."""
         storage = SQLiteAdapter(db_path, schema_registry=_build_minimal_schema_registry())
-        return HippoClient(storage=storage, bypass_validation=True)
+        return MosaicClient(storage=storage, bypass_validation=True)
 
     @pytest.fixture
-    def sample_entities(self, client: HippoClient) -> tuple[str, str]:
+    def sample_entities(self, client: MosaicClient) -> tuple[str, str]:
         """Create sample entities for testing."""
         donor = client.put("Donor", {"name": "John Doe"})
         sample = client.put("Sample", {"name": "Sample 001"})
         return donor["id"], sample["id"]
 
     def test_relate_creates_relationship(
-        self, client: HippoClient, sample_entities: tuple[str, str]
+        self, client: MosaicClient, sample_entities: tuple[str, str]
     ) -> None:
         """Test that relate creates a relationship between entities."""
         donor_id, sample_id = sample_entities
@@ -55,7 +55,7 @@ class TestRelateOperation:
         assert result["relationship_type"] == "donated"
 
     def test_relate_stores_metadata(
-        self, client: HippoClient, sample_entities: tuple[str, str]
+        self, client: MosaicClient, sample_entities: tuple[str, str]
     ) -> None:
         """Test that relate stores metadata with the relationship."""
         donor_id, sample_id = sample_entities
@@ -70,12 +70,12 @@ class TestRelateOperation:
         assert result["metadata"] == {"collection_date": "2024-01-15", "volume": 100}
 
     def test_relate_rejects_empty_type(
-        self, client: HippoClient, sample_entities: tuple[str, str]
+        self, client: MosaicClient, sample_entities: tuple[str, str]
     ) -> None:
         """Test that relate rejects empty relationship type."""
         donor_id, sample_id = sample_entities
 
-        with pytest.raises(HippoError) as exc_info:
+        with pytest.raises(MosaicError) as exc_info:
             client.relationships.relate(
                 source_id=donor_id,
                 target_id=sample_id,
@@ -85,12 +85,12 @@ class TestRelateOperation:
         assert "empty" in str(exc_info.value).lower()
 
     def test_relate_rejects_self_reference(
-        self, client: HippoClient, sample_entities: tuple[str, str]
+        self, client: MosaicClient, sample_entities: tuple[str, str]
     ) -> None:
         """Test that relate rejects self-referential relationships."""
         donor_id, _ = sample_entities
 
-        with pytest.raises(HippoError) as exc_info:
+        with pytest.raises(MosaicError) as exc_info:
             client.relationships.relate(
                 source_id=donor_id,
                 target_id=donor_id,
@@ -100,7 +100,7 @@ class TestRelateOperation:
         assert "self-referential" in str(exc_info.value).lower()
 
     def test_relate_validates_source_exists(
-        self, client: HippoClient, sample_entities: tuple[str, str]
+        self, client: MosaicClient, sample_entities: tuple[str, str]
     ) -> None:
         """Test that relate validates source entity exists."""
         _, sample_id = sample_entities
@@ -115,7 +115,7 @@ class TestRelateOperation:
         assert "not found" in str(exc_info.value).lower()
 
     def test_relate_validates_target_exists(
-        self, client: HippoClient, sample_entities: tuple[str, str]
+        self, client: MosaicClient, sample_entities: tuple[str, str]
     ) -> None:
         """Test that relate validates target entity exists."""
         donor_id, _ = sample_entities
@@ -140,20 +140,20 @@ class TestUnrelateOperation:
             yield os.path.join(tmpdir, "test_unrelate.db")
 
     @pytest.fixture
-    def client(self, db_path: str) -> HippoClient:
-        """Create a HippoClient with SQLite storage."""
+    def client(self, db_path: str) -> MosaicClient:
+        """Create a MosaicClient with SQLite storage."""
         storage = SQLiteAdapter(db_path, schema_registry=_build_minimal_schema_registry())
-        return HippoClient(storage=storage, bypass_validation=True)
+        return MosaicClient(storage=storage, bypass_validation=True)
 
     @pytest.fixture
-    def sample_entities(self, client: HippoClient) -> tuple[str, str]:
+    def sample_entities(self, client: MosaicClient) -> tuple[str, str]:
         """Create sample entities for testing."""
         donor = client.put("Donor", {"name": "John Doe"})
         sample = client.put("Sample", {"name": "Sample 001"})
         return donor["id"], sample["id"]
 
     @pytest.fixture
-    def related_entities(self, client: HippoClient) -> tuple[str, str]:
+    def related_entities(self, client: MosaicClient) -> tuple[str, str]:
         """Create entities with a relationship."""
         donor = client.put("Donor", {"name": "John Doe"})
         sample = client.put("Sample", {"name": "Sample 001"})
@@ -165,7 +165,7 @@ class TestUnrelateOperation:
         return donor["id"], sample["id"]
 
     def test_unrelate_removes_relationship(
-        self, client: HippoClient, related_entities: tuple[str, str]
+        self, client: MosaicClient, related_entities: tuple[str, str]
     ) -> None:
         """Test that unrelate removes a relationship."""
         donor_id, sample_id = related_entities
@@ -179,7 +179,7 @@ class TestUnrelateOperation:
         assert result is True
 
     def test_unrelate_raises_when_not_found(
-        self, client: HippoClient, sample_entities: tuple[str, str]
+        self, client: MosaicClient, sample_entities: tuple[str, str]
     ) -> None:
         """Test that unrelate raises error when relationship doesn't exist."""
         donor_id, sample_id = sample_entities
@@ -194,7 +194,7 @@ class TestUnrelateOperation:
         assert "not found" in str(exc_info.value).lower()
 
     def test_unrelate_only_removes_specific_type(
-        self, client: HippoClient, related_entities: tuple[str, str]
+        self, client: MosaicClient, related_entities: tuple[str, str]
     ) -> None:
         """Test that unrelate only removes the specified relationship type."""
         donor_id, sample_id = related_entities
@@ -228,13 +228,13 @@ class TestTraverseOperation:
             yield os.path.join(tmpdir, "test_traverse.db")
 
     @pytest.fixture
-    def client(self, db_path: str) -> HippoClient:
-        """Create a HippoClient with SQLite storage."""
+    def client(self, db_path: str) -> MosaicClient:
+        """Create a MosaicClient with SQLite storage."""
         storage = SQLiteAdapter(db_path, schema_registry=_build_minimal_schema_registry())
-        return HippoClient(storage=storage, bypass_validation=True)
+        return MosaicClient(storage=storage, bypass_validation=True)
 
     @pytest.fixture
-    def hierarchy(self, client: HippoClient) -> dict[str, str]:
+    def hierarchy(self, client: MosaicClient) -> dict[str, str]:
         """Create a hierarchy of entities for traversal testing."""
         project = client.put("Project", {"name": "Project Alpha"})
         study = client.put("Study", {"name": "Study 001"})
@@ -253,7 +253,7 @@ class TestTraverseOperation:
         }
 
     def test_traverse_finds_connected_entities(
-        self, client: HippoClient, hierarchy: dict[str, str]
+        self, client: MosaicClient, hierarchy: dict[str, str]
     ) -> None:
         """Test that traverse finds all connected entities."""
         results = client.relationships.traverse(hierarchy["project"])
@@ -261,7 +261,7 @@ class TestTraverseOperation:
         assert len(results) >= 3
 
     def test_traverse_respects_max_depth(
-        self, client: HippoClient, hierarchy: dict[str, str]
+        self, client: MosaicClient, hierarchy: dict[str, str]
     ) -> None:
         """Test that traverse respects max_depth parameter."""
         results = client.relationships.traverse(hierarchy["project"], max_depth=2)
@@ -270,7 +270,7 @@ class TestTraverseOperation:
         assert all(d <= 2 for d in depths)
 
     def test_traverse_filters_by_relationship_type(
-        self, client: HippoClient, hierarchy: dict[str, str]
+        self, client: MosaicClient, hierarchy: dict[str, str]
     ) -> None:
         """Test that traverse filters by relationship type."""
         results = client.relationships.traverse(
@@ -281,7 +281,7 @@ class TestTraverseOperation:
             if r["depth"] == 1:
                 assert r["relationship_type"] == "contains"
 
-    def test_traverse_raises_for_nonexistent_entity(self, client: HippoClient) -> None:
+    def test_traverse_raises_for_nonexistent_entity(self, client: MosaicClient) -> None:
         """Test that traverse raises error for nonexistent entity."""
         with pytest.raises(EntityNotFoundError) as exc_info:
             client.relationships.traverse("nonexistent-id")
@@ -289,7 +289,7 @@ class TestTraverseOperation:
         assert "not found" in str(exc_info.value).lower()
 
     def test_traverse_caps_depth_at_100(
-        self, client: HippoClient, hierarchy: dict[str, str]
+        self, client: MosaicClient, hierarchy: dict[str, str]
     ) -> None:
         """Test that traverse caps depth at 100."""
         results = client.relationships.traverse(hierarchy["project"], max_depth=500)
@@ -308,19 +308,19 @@ class TestFindRelationships:
             yield os.path.join(tmpdir, "test_find.db")
 
     @pytest.fixture
-    def client(self, db_path: str) -> HippoClient:
-        """Create a HippoClient with SQLite storage."""
+    def client(self, db_path: str) -> MosaicClient:
+        """Create a MosaicClient with SQLite storage."""
         storage = SQLiteAdapter(db_path, schema_registry=_build_minimal_schema_registry())
-        return HippoClient(storage=storage, bypass_validation=True)
+        return MosaicClient(storage=storage, bypass_validation=True)
 
     @pytest.fixture
-    def sample_entities(self, client: HippoClient) -> tuple[str, str]:
+    def sample_entities(self, client: MosaicClient) -> tuple[str, str]:
         """Create sample entities for testing."""
         donor = client.put("Donor", {"name": "John Doe"})
         sample = client.put("Sample", {"name": "Sample 001"})
         return donor["id"], sample["id"]
 
-    def test_find_returns_empty_for_none(self, client: HippoClient) -> None:
+    def test_find_returns_empty_for_none(self, client: MosaicClient) -> None:
         """Test that find returns empty list when no matches."""
         results = client.relationships.find_relationships()
         assert results == []

@@ -5,8 +5,8 @@ from pathlib import Path
 import pytest
 import yaml
 
-from hippo.config import (
-    HippoConfig,
+from mosaic.config import (
+    MosaicConfig,
     ConfigError,
     ValidationError,
     load_hippo_config,
@@ -49,17 +49,17 @@ class TestSubstituteEnvVars:
         assert result == ["a", "b", "c"]
 
 
-class TestHippoConfigModel:
+class TestMosaicConfigModel:
     def test_valid_config(self):
-        config = HippoConfig(schema_path="/path/to/schema")
+        config = MosaicConfig(schema_path="/path/to/schema")
         assert config.schema_path == Path("/path/to/schema")
 
     def test_schema_path_as_string(self):
-        config = HippoConfig(schema_path="/path/to/schema")
+        config = MosaicConfig(schema_path="/path/to/schema")
         assert isinstance(config.schema_path, Path)
 
     def test_optional_fields(self):
-        config = HippoConfig(
+        config = MosaicConfig(
             schema_path="/schema",
             storage_backend="sqlite",
             database_url="sqlite:///db.db",
@@ -69,10 +69,10 @@ class TestHippoConfigModel:
 
     def test_extra_fields_forbidden(self):
         with pytest.raises(Exception):
-            HippoConfig(schema_path="/schema", unknown_field="value")
+            MosaicConfig(schema_path="/schema", unknown_field="value")
 
 
-class TestLoadHippoConfig:
+class TestLoadMosaicConfig:
     def test_valid_yaml_without_env_vars(self, tmp_path):
         config_file = tmp_path / "hippo.yaml"
         config_file.write_text("schema_path: /path/to/schema\n")

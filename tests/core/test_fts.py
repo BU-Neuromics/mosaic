@@ -2,7 +2,7 @@
 
 import pytest
 
-from hippo.core.storage.fts import (
+from mosaic.core.storage.fts import (
     FTSTableMetadata,
     generate_fts_boolean_query,
     generate_fts_column_definitions,
@@ -20,7 +20,7 @@ class TestFTSTableMetadata:
         )
 
     def test_get_fts_columns(self):
-        from hippo.core.storage.fts import FTSFieldMetadata
+        from mosaic.core.storage.fts import FTSFieldMetadata
 
         meta = FTSTableMetadata(
             table_name="fts_sample_title",

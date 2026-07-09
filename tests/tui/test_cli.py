@@ -1,4 +1,4 @@
-"""Tests for the 'hippo tui' CLI command."""
+"""Tests for the 'mosaic tui' CLI command."""
 
 from __future__ import annotations
 
@@ -10,7 +10,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 from typer.testing import CliRunner
 
-from hippo.cli.main import app
+from mosaic.cli.main import app
 
 
 runner = CliRunner()
@@ -27,7 +27,7 @@ def _strip_ansi(s: str) -> str:
 
 
 def test_tui_help_available():
-    """'hippo tui --help' should work without importing Textual."""
+    """'mosaic tui --help' should work without importing Textual."""
     result = runner.invoke(app, ["tui", "--help"])
     assert result.exit_code == 0
     assert "TUI" in result.output or "tui" in result.output.lower()
@@ -63,13 +63,13 @@ def test_tui_help_shows_db_option():
 
 
 def test_tui_missing_textual_shows_install_error():
-    """Running 'hippo tui' without Textual shows the install guidance message."""
+    """Running 'mosaic tui' without Textual shows the install guidance message."""
     import builtins
 
     original_import = builtins.__import__
 
     def mock_import(name, *args, **kwargs):
-        if name == "hippo.tui.app":
+        if name == "mosaic.tui.app":
             raise ImportError("No module named 'textual'")
         return original_import(name, *args, **kwargs)
 
@@ -89,12 +89,12 @@ def test_tui_missing_textual_shows_install_error():
 
 
 def _make_mock_app_module():
-    """Return a mock module containing a mock HippoTUIApp class."""
+    """Return a mock module containing a mock MosaicTUIApp class."""
     mock_app_cls = MagicMock()
     mock_app_instance = MagicMock()
     mock_app_cls.return_value = mock_app_instance
     mock_module = MagicMock()
-    mock_module.HippoTUIApp = mock_app_cls
+    mock_module.MosaicTUIApp = mock_app_cls
     return mock_module, mock_app_cls, mock_app_instance
 
 
@@ -109,8 +109,8 @@ def test_tui_sdk_mode_wires_db_flag():
     mock_module, mock_app_cls, _ = _make_mock_app_module()
 
     with (
-        patch("hippo.tui.backend.create_backend", mock_create_backend),
-        patch.dict(sys.modules, {"hippo.tui.app": mock_module}),
+        patch("mosaic.tui.backend.create_backend", mock_create_backend),
+        patch.dict(sys.modules, {"mosaic.tui.app": mock_module}),
     ):
         result = runner.invoke(app, ["tui", "--db", "/tmp/test.db"])
 
@@ -128,8 +128,8 @@ def test_tui_rest_mode_wires_url_and_token():
     mock_module, mock_app_cls, _ = _make_mock_app_module()
 
     with (
-        patch("hippo.tui.backend.create_backend", mock_create_backend),
-        patch.dict(sys.modules, {"hippo.tui.app": mock_module}),
+        patch("mosaic.tui.backend.create_backend", mock_create_backend),
+        patch.dict(sys.modules, {"mosaic.tui.app": mock_module}),
     ):
         result = runner.invoke(
             app,

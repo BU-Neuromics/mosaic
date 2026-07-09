@@ -1,7 +1,7 @@
 """Schema-generation tests: LinkML in, generated GraphQL SDL/types out.
 
 No storage involved — these assert the shape of the strawberry schema
-rendered from the shared type model (``hippo.core.schema_typing``) for
+rendered from the shared type model (``mosaic.core.schema_typing``) for
 the fixture LinkML schema in ``conftest``.
 """
 
@@ -11,15 +11,15 @@ import re
 
 import pytest
 
-from hippo.core.schema_typing import build_type_model, exposed_class_names
-from hippo.graphql import build_graphql_schema
-from hippo.graphql.schema_builder import (
+from mosaic.core.schema_typing import build_type_model, exposed_class_names
+from mosaic.graphql import build_graphql_schema
+from mosaic.graphql.schema_builder import (
     INFRASTRUCTURE_CLASSES,
     GraphQLTypeBuilder,
     camel_case,
     snake_case,
 )
-from hippo.linkml_bridge import SchemaRegistry
+from mosaic.linkml_bridge import SchemaRegistry
 
 
 @pytest.fixture(scope="module")
@@ -156,11 +156,11 @@ class TestRootTypes:
 
     def test_hippo_schema_introspection_queries(self, sdl):
         query = _block(sdl, "type Query")
-        assert "hippoSchema: [HippoEntityTypeInfo!]!" in query
-        assert "hippoEntityType(name: String!): HippoEntityTypeInfo" in query
-        info = _block(sdl, "type HippoEntityTypeInfo")
-        assert "fields: [HippoSlotInfo!]!" in info
-        assert "relationships: [HippoReferenceInfo!]!" in info
+        assert "hippoSchema: [MosaicEntityTypeInfo!]!" in query
+        assert "hippoEntityType(name: String!): MosaicEntityTypeInfo" in query
+        info = _block(sdl, "type MosaicEntityTypeInfo")
+        assert "fields: [MosaicSlotInfo!]!" in info
+        assert "relationships: [MosaicReferenceInfo!]!" in info
 
     def test_mutation_root_per_entity(self, sdl):
         mutation = _block(sdl, "type Mutation")
@@ -226,7 +226,7 @@ class TestBuilder:
         # hippo_core alone has exactly one concrete non-infrastructure
         # class (ExternalID); a registry can never really be empty, so
         # exercise the guard through a builder with no entities.
-        from hippo.graphql.resolvers import build_graphql_schema as build_with_builder
+        from mosaic.graphql.resolvers import build_graphql_schema as build_with_builder
 
         registry = SchemaRegistry.from_yaml(GRAPHQL_CORE_ONLY)
         builder = GraphQLTypeBuilder(registry)

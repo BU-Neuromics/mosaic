@@ -1,4 +1,4 @@
-"""Integration tests for ``hippo validate --schema`` `requires:` directive.
+"""Integration tests for ``mosaic validate --schema`` `requires:` directive.
 
 Exercises PTS-227 acceptance criteria end-to-end through the Typer CLI.
 The Python-distribution lookup is patched so tests stay hermetic — no
@@ -13,7 +13,7 @@ from pathlib import Path
 import pytest
 from typer.testing import CliRunner
 
-from hippo.cli.main import app
+from mosaic.cli.main import app
 
 
 SCHEMA_TEMPLATE = """\
@@ -58,7 +58,7 @@ class TestValidateRequiresCLI:
     def test_exact_match_pass(
         self, runner: CliRunner, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ):
-        monkeypatch.setattr("hippo.requires._dist_version", lambda name: "3.3")
+        monkeypatch.setattr("mosaic.requires._dist_version", lambda name: "3.3")
         schema = _write_schema(tmp_path, ["hippo-reference-fma==3.3"])
         result = runner.invoke(app, ["validate", "--schema", str(schema)])
         assert result.exit_code == 0, result.output
@@ -87,21 +87,21 @@ class TestValidateRequiresCLI:
         def _missing(name: str) -> str:
             raise PackageNotFoundError(name)
 
-        monkeypatch.setattr("hippo.requires._dist_version", _missing)
+        monkeypatch.setattr("mosaic.requires._dist_version", _missing)
         schema = _write_schema(tmp_path, ["hippo-reference-fma==3.3"])
         result = runner.invoke(app, ["validate", "--schema", str(schema)])
         assert result.exit_code == 1
         assert "hippo-reference-fma" in result.output
         assert "not installed" in result.output
-        assert "hippo reference install fma --version 3.3" in result.output
+        assert "mosaic reference install fma --version 3.3" in result.output
 
     def test_version_mismatch_fails_with_install_hint(
         self, runner: CliRunner, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ):
-        monkeypatch.setattr("hippo.requires._dist_version", lambda name: "3.2")
+        monkeypatch.setattr("mosaic.requires._dist_version", lambda name: "3.2")
         schema = _write_schema(tmp_path, ["hippo-reference-fma==3.3"])
         result = runner.invoke(app, ["validate", "--schema", str(schema)])
         assert result.exit_code == 1
         assert "hippo-reference-fma==3.3" in result.output
         assert "version 3.2 is installed" in result.output
-        assert "hippo reference install fma --version 3.3" in result.output
+        assert "mosaic reference install fma --version 3.3" in result.output

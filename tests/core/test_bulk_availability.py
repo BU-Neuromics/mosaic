@@ -1,17 +1,17 @@
-"""Unit tests for HippoClient.set_availability_bulk() operation."""
+"""Unit tests for MosaicClient.set_availability_bulk() operation."""
 
 import os
 import tempfile
 
 import pytest
 
-from hippo.core.client import HippoClient
-from hippo.core.storage.adapters.sqlite_adapter import SQLiteAdapter
+from mosaic.core.client import MosaicClient
+from mosaic.core.storage.adapters.sqlite_adapter import SQLiteAdapter
 from tests.conftest import _build_minimal_schema_registry
 
 
 class TestBulkAvailability:
-    """Tests for HippoClient.set_availability_bulk()."""
+    """Tests for MosaicClient.set_availability_bulk()."""
 
     @pytest.fixture
     def db_path(self) -> str:
@@ -19,11 +19,11 @@ class TestBulkAvailability:
             yield os.path.join(tmpdir, "test_bulk_avail.db")
 
     @pytest.fixture
-    def client(self, db_path: str) -> HippoClient:
+    def client(self, db_path: str) -> MosaicClient:
         storage = SQLiteAdapter(db_path, schema_registry=_build_minimal_schema_registry())
-        return HippoClient(storage=storage, bypass_validation=True)
+        return MosaicClient(storage=storage, bypass_validation=True)
 
-    def test_bulk_set_unavailable(self, client: HippoClient) -> None:
+    def test_bulk_set_unavailable(self, client: MosaicClient) -> None:
         """Bulk-mark multiple entities as unavailable."""
         client.put("Sample", {"id": "b1", "name": "one"})
         client.put("Sample", {"id": "b2", "name": "two"})
@@ -39,7 +39,7 @@ class TestBulkAvailability:
         assert result["succeeded"] == 3
         assert result["failed"] == 0
 
-    def test_bulk_partial_failure(self, client: HippoClient) -> None:
+    def test_bulk_partial_failure(self, client: MosaicClient) -> None:
         """Partial failure when some entities don't exist."""
         client.put("Sample", {"id": "b4", "name": "exists"})
 
@@ -54,7 +54,7 @@ class TestBulkAvailability:
         assert result["failed"] == 1
         assert result["failures"][0]["id"] == "nonexistent"
 
-    def test_bulk_set_available(self, client: HippoClient) -> None:
+    def test_bulk_set_available(self, client: MosaicClient) -> None:
         """Bulk-mark entities as available after making them unavailable."""
         client.put("Sample", {"id": "b5", "name": "test"})
         client.set_availability_bulk("Sample", ["b5"], is_available=False)
@@ -62,7 +62,7 @@ class TestBulkAvailability:
         result = client.set_availability_bulk("Sample", ["b5"], is_available=True)
         assert result["succeeded"] == 1
 
-    def test_bulk_empty_list(self, client: HippoClient) -> None:
+    def test_bulk_empty_list(self, client: MosaicClient) -> None:
         """Empty entity list returns zero counts."""
         result = client.set_availability_bulk("Sample", [], is_available=False)
 
@@ -70,7 +70,7 @@ class TestBulkAvailability:
         assert result["succeeded"] == 0
         assert result["failed"] == 0
 
-    def test_bulk_records_provenance(self, client: HippoClient) -> None:
+    def test_bulk_records_provenance(self, client: MosaicClient) -> None:
         """Bulk availability change records provenance events."""
         client.put("Sample", {"id": "b6", "name": "test"})
 

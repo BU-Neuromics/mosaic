@@ -1,4 +1,4 @@
-"""Unit tests for HippoClient availability filtering.
+"""Unit tests for MosaicClient availability filtering.
 
 TDD cycle — RED phase.
 
@@ -14,7 +14,7 @@ See TESTING.md § TDD Policy for the full workflow.
 Xfails in tests/contracts/ and tests/platform/ will be converted to hard
 assertions once this test file passes (GREEN phase).
 
-Implementation target: hippo/src/hippo/core/client.py
+Implementation target: src/mosaic/core/client.py
   - get(): add include_unavailable=False param; raise on is_available=False by default
   - update(): add existence check before write
 """
@@ -25,15 +25,15 @@ from pathlib import Path
 
 import pytest
 
-from hippo.core.client import HippoClient
-from hippo.core.exceptions import EntityNotFoundError
-from hippo.core.storage.adapters.sqlite_adapter import SQLiteAdapter
+from mosaic.core.client import MosaicClient
+from mosaic.core.exceptions import EntityNotFoundError
+from mosaic.core.storage.adapters.sqlite_adapter import SQLiteAdapter
 
 
 @pytest.fixture()
-def client(tmp_path: Path, minimal_schema_registry) -> HippoClient:
+def client(tmp_path: Path, minimal_schema_registry) -> MosaicClient:
     storage = SQLiteAdapter(str(tmp_path / "hippo.db"), schema_registry=minimal_schema_registry)
-    return HippoClient(storage=storage)
+    return MosaicClient(storage=storage)
 
 
 # ---------------------------------------------------------------------------

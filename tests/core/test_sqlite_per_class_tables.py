@@ -20,9 +20,9 @@ from typing import Iterator
 
 import pytest
 
-from hippo.core.client import HippoClient
-from hippo.core.storage.adapters.sqlite_adapter import SQLiteAdapter
-from hippo.linkml_bridge import SchemaRegistry
+from mosaic.core.client import MosaicClient
+from mosaic.core.storage.adapters.sqlite_adapter import SQLiteAdapter
+from mosaic.linkml_bridge import SchemaRegistry
 from tests.support.linkml_schemas import build_registry
 
 
@@ -52,8 +52,8 @@ def adapter(db_path: str) -> SQLiteAdapter:
 
 
 @pytest.fixture
-def client(adapter: SQLiteAdapter) -> HippoClient:
-    return HippoClient(
+def client(adapter: SQLiteAdapter) -> MosaicClient:
+    return MosaicClient(
         storage=adapter,
         registry=adapter.schema_registry,
         bypass_validation=True,
@@ -114,7 +114,7 @@ class TestPerClassTableEmission:
 
 
 class TestCreate:
-    def test_create_writes_typed_row(self, client: HippoClient, db_path: str):
+    def test_create_writes_typed_row(self, client: MosaicClient, db_path: str):
         result = client.put("Sample", {"name": "S001", "tissue": "DLPFC"})
         row = _per_class_row(db_path, "Sample", result["id"])
         assert row is not None
@@ -122,7 +122,7 @@ class TestCreate:
         assert row["tissue"] == "DLPFC"
         assert row["is_available"] == 1
 
-    def test_create_round_trips_via_sdk(self, client: HippoClient):
+    def test_create_round_trips_via_sdk(self, client: MosaicClient):
         result = client.put("Sample", {"name": "S002", "tissue": "DLPFC"})
         got = client.get("Sample", result["id"])
         assert got is not None
@@ -132,7 +132,7 @@ class TestCreate:
 
 class TestUpdateKeepsTablesInSync:
     def test_put_update_propagates_to_typed_table(
-        self, client: HippoClient, db_path: str
+        self, client: MosaicClient, db_path: str
     ):
         created = client.put("Sample", {"id": "u1", "name": "S001", "tissue": "old"})
         client.put("Sample", {"name": "S001", "tissue": "new"}, "u1")
@@ -140,7 +140,7 @@ class TestUpdateKeepsTablesInSync:
         assert row["tissue"] == "new"
 
     def test_set_availability_propagates_to_typed_table(
-        self, client: HippoClient, db_path: str
+        self, client: MosaicClient, db_path: str
     ):
         client.put("Sample", {"id": "a1", "name": "S001"})
         client.set_availability_bulk("Sample", ["a1"], is_available=False)
@@ -149,7 +149,7 @@ class TestUpdateKeepsTablesInSync:
         assert row["is_available"] == 0
 
     def test_delete_propagates_to_typed_table(
-        self, client: HippoClient, db_path: str
+        self, client: MosaicClient, db_path: str
     ):
         client.put("Sample", {"id": "d1", "name": "S001"})
         client.delete("Sample", "d1")
@@ -158,7 +158,7 @@ class TestUpdateKeepsTablesInSync:
         assert row["is_available"] == 0
 
     def test_mark_superseded_propagates_to_typed_table(
-        self, client: HippoClient, db_path: str
+        self, client: MosaicClient, db_path: str
     ):
         client.put("Sample", {"id": "old", "name": "S001"})
         client.put("Sample", {"id": "new", "name": "S002"})
@@ -170,25 +170,25 @@ class TestUpdateKeepsTablesInSync:
 
 
 class TestFindUsesPerClassTable:
-    def test_find_by_entity_type_returns_typed_rows(self, client: HippoClient):
+    def test_find_by_entity_type_returns_typed_rows(self, client: MosaicClient):
         client.put("Sample", {"id": "f1", "name": "Alpha", "tissue": "DLPFC"})
         client.put("Sample", {"id": "f2", "name": "Beta", "tissue": "ACC"})
 
         results = list(
             client._storage.find(
                 __import__(
-                    "hippo.core.storage", fromlist=["Query"]
+                    "mosaic.core.storage", fromlist=["Query"]
                 ).Query(entity_type="Sample")
             )
         )
         names = {e.data.get("name") for e in results}
         assert names == {"Alpha", "Beta"}
 
-    def test_find_filter_uses_column_predicate(self, client: HippoClient):
+    def test_find_filter_uses_column_predicate(self, client: MosaicClient):
         client.put("Sample", {"id": "g1", "name": "Alpha", "tissue": "DLPFC"})
         client.put("Sample", {"id": "g2", "name": "Beta", "tissue": "ACC"})
 
-        Query = __import__("hippo.core.storage", fromlist=["Query"]).Query
+        Query = __import__("mosaic.core.storage", fromlist=["Query"]).Query
         results = list(
             client._storage.find(Query(entity_type="Sample", filters=[{"name": "Alpha"}]))
         )
@@ -231,15 +231,15 @@ class TestCrossClassUuidLookup:
         return SQLiteAdapter(db_path, schema_registry=_multi_class_registry())
 
     @pytest.fixture
-    def client(self, adapter: SQLiteAdapter) -> HippoClient:
-        return HippoClient(
+    def client(self, adapter: SQLiteAdapter) -> MosaicClient:
+        return MosaicClient(
             storage=adapter,
             registry=adapter.schema_registry,
             bypass_validation=True,
         )
 
     def test_cross_class_uuid_lookup(
-        self, client: HippoClient, adapter: SQLiteAdapter
+        self, client: MosaicClient, adapter: SQLiteAdapter
     ) -> None:
         sample = client.put("Sample", {"name": "S001", "tissue": "DLPFC"})
         project = client.put("Project", {"title": "Atlas"})
@@ -266,7 +266,7 @@ class TestCrossClassUuidLookup:
         }
 
     def test_registry_populated_for_each_create(
-        self, client: HippoClient, db_path: str
+        self, client: MosaicClient, db_path: str
     ) -> None:
         sample = client.put("Sample", {"name": "S001"})
         project = client.put("Project", {"title": "Atlas"})
@@ -284,7 +284,7 @@ class TestCrossClassUuidLookup:
         assert rows == [(project["id"], "Project"), (sample["id"], "Sample")]
 
     def test_registry_backfills_from_provenance_on_reinit(
-        self, client: HippoClient, adapter: SQLiteAdapter, db_path: str
+        self, client: MosaicClient, adapter: SQLiteAdapter, db_path: str
     ) -> None:
         # Simulate a pre-PR-2.4 DB that has ProvenanceRecord entries but
         # an empty _entity_registry: clear the registry and re-instantiate
@@ -350,9 +350,9 @@ class TestBooleanRoundTrip:
             yield os.path.join(tmpdir, "boolean.db")
 
     @pytest.fixture
-    def bool_client(self, bool_db_path: str) -> HippoClient:
+    def bool_client(self, bool_db_path: str) -> MosaicClient:
         adapter = SQLiteAdapter(bool_db_path, schema_registry=_boolean_registry())
-        return HippoClient(
+        return MosaicClient(
             storage=adapter,
             registry=adapter.schema_registry,
             bypass_validation=True,
@@ -360,7 +360,7 @@ class TestBooleanRoundTrip:
 
     @pytest.mark.parametrize("value", [True, False])
     def test_stored_as_integer_read_back_as_bool(
-        self, bool_client: HippoClient, bool_db_path: str, value: bool
+        self, bool_client: MosaicClient, bool_db_path: str, value: bool
     ) -> None:
         result = bool_client.put("Flagged", {"name": "f1", "confirmed": value})
         entity_id = result["id"]
@@ -389,3 +389,86 @@ class TestBooleanRoundTrip:
         assert decode(1) == 1
         # The flag does not disturb JSON-container decoding.
         assert decode('[1, 2]', is_boolean=True) == [1, 2]
+
+
+def _string_payload_registry():
+    return build_registry(
+        {
+            "Document": {
+                "attributes": {
+                    "id": {"identifier": True},
+                    "name": {"range": "string"},
+                    "payload": {"range": "string"},
+                    "tags": {"range": "string", "multivalued": True},
+                }
+            }
+        }
+    )
+
+
+class TestStringRoundTrip:
+    """A scalar string slot's text round-trips verbatim — never JSON-decoded.
+
+    Aperture's control-plane documents store serialized ``{"v": …,
+    "data": …}`` envelopes in a ``range: string`` ``payload`` slot; the
+    read side used to JSON-decode any text that parsed as a container,
+    corrupting the string into a dict that GraphQL's String type then
+    refused to serialize (aperture#15 live-seam finding, datahelix#45).
+    Multivalued string slots still decode: they are stored as JSON arrays.
+    """
+
+    @pytest.fixture
+    def string_db_path(self) -> str:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            yield os.path.join(tmpdir, "strings.db")
+
+    @pytest.fixture
+    def string_client(self, string_db_path: str) -> MosaicClient:
+        adapter = SQLiteAdapter(
+            string_db_path, schema_registry=_string_payload_registry()
+        )
+        return MosaicClient(
+            storage=adapter,
+            registry=adapter.schema_registry,
+            bypass_validation=True,
+        )
+
+    @pytest.mark.parametrize(
+        "payload",
+        ['{"v": 1, "data": []}', "[1, 2, 3]", "plain text", "{not json"],
+    )
+    def test_json_looking_string_round_trips_verbatim(
+        self, string_client: MosaicClient, payload: str
+    ) -> None:
+        result = string_client.put(
+            "Document", {"name": "d1", "payload": payload}
+        )
+        entity_id = result["id"]
+
+        # read()/get() path (_read_per_class).
+        got = string_client.get("Document", entity_id)
+        assert got["data"]["payload"] == payload
+        assert isinstance(got["data"]["payload"], str)
+
+        # find()/query() path (_find_per_class).
+        items = string_client.query("Document").items
+        assert len(items) == 1
+        assert items[0]["data"]["payload"] == payload
+        assert isinstance(items[0]["data"]["payload"], str)
+
+    def test_multivalued_string_slot_still_decodes(
+        self, string_client: MosaicClient
+    ) -> None:
+        result = string_client.put(
+            "Document", {"name": "d2", "tags": ["alpha", "beta"]}
+        )
+        got = string_client.get("Document", result["id"])
+        assert got["data"]["tags"] == ["alpha", "beta"]
+
+    def test_decode_column_value_string_flag(self) -> None:
+        decode = SQLiteAdapter._decode_column_value
+        # With the string flag, JSON-looking text passes through verbatim.
+        assert decode('{"v": 1}', is_string=True) == '{"v": 1}'
+        assert decode("[1, 2]", is_string=True) == "[1, 2]"
+        # Without it, containers still decode (multivalued / value types).
+        assert decode("[1, 2]") == [1, 2]

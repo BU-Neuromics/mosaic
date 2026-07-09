@@ -7,10 +7,10 @@ import asyncio
 import pytest
 
 pytest.importorskip(
-    "textual", reason="textual not installed; run: pip install hippo[tui]"
+    "textual", reason="textual not installed; run: pip install datahelix-mosaic[tui]"
 )
 
-from hippo.tui.widgets.status_bar import StatusBar
+from mosaic.tui.widgets.status_bar import StatusBar
 
 
 def test_status_bar_set_backend_sdk():

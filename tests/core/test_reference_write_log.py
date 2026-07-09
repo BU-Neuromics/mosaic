@@ -4,7 +4,7 @@ Decision 2.14.J).
 
 Covers the SQLite adapter unconditionally. Postgres parity is covered by
 ``tests/integration/test_reference_write_log_postgres.py`` (gated on
-``HIPPO_DATABASE_URL``).
+``MOSAIC_DATABASE_URL``).
 """
 
 from __future__ import annotations
@@ -16,10 +16,10 @@ from typing import Iterator
 
 import pytest
 
-from hippo.core.client import HippoClient
-from hippo.core.meta import set_meta
-from hippo.core.storage.adapters.sqlite_adapter import SQLiteAdapter
-from hippo.linkml_bridge import SchemaRegistry
+from mosaic.core.client import MosaicClient
+from mosaic.core.meta import set_meta
+from mosaic.core.storage.adapters.sqlite_adapter import SQLiteAdapter
+from mosaic.linkml_bridge import SchemaRegistry
 from tests.support.linkml_schemas import build_registry
 
 
@@ -177,7 +177,7 @@ class TestReferenceEntityIdsMigration:
 
     def test_populated_payload_writes_rows_and_clears_key(self, db_path: str):
         adapter = SQLiteAdapter(db_path, schema_registry=_registry())
-        client = HippoClient(
+        client = MosaicClient(
             storage=adapter,
             registry=adapter.schema_registry,
             bypass_validation=True,
@@ -221,7 +221,7 @@ class TestReferenceEntityIdsMigration:
         clobbering anything the v1 path writes on subsequent runs.
         """
         adapter = SQLiteAdapter(db_path, schema_registry=_registry())
-        client = HippoClient(
+        client = MosaicClient(
             storage=adapter,
             registry=adapter.schema_registry,
             bypass_validation=True,
@@ -269,7 +269,7 @@ class TestReferenceEntityIdsMigration:
         without duplicating rows.
         """
         adapter = SQLiteAdapter(db_path, schema_registry=_registry())
-        client = HippoClient(
+        client = MosaicClient(
             storage=adapter,
             registry=adapter.schema_registry,
             bypass_validation=True,
@@ -310,7 +310,7 @@ class TestReferenceEntityIdsMigration:
         prune is opt-in, so a partial log is preferable to a broken init.
         """
         adapter = SQLiteAdapter(db_path, schema_registry=_registry())
-        client = HippoClient(
+        client = MosaicClient(
             storage=adapter,
             registry=adapter.schema_registry,
             bypass_validation=True,

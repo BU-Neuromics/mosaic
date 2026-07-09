@@ -11,8 +11,8 @@ import sqlite3
 
 import pytest
 
-from hippo.core.storage.ddl_generator import DDLGenerator
-from hippo.linkml_bridge import SchemaRegistry
+from mosaic.core.storage.ddl_generator import DDLGenerator
+from mosaic.linkml_bridge import SchemaRegistry
 from tests.support.linkml_schemas import build_registry
 
 
@@ -210,6 +210,71 @@ class TestForeignKey:
         assert any(
             fk["from"] == "parent_id" and fk["table"] == "parent_entity"
             for fk in fks
+        )
+
+    def test_reference_to_concrete_polymorphic_base_has_no_fk(self):
+        """A reference ranged on a concrete base that has subclasses must not
+        emit an FK to the base table (issue #93).
+
+        ``mosaic ingest`` dispatches a subtype instance into its own per-subclass
+        table (issue #80), so the base table is never populated for that
+        referent and a base-table FK fails ``FOREIGN KEY constraint``. The
+        reference is stored as a plain TEXT id column instead.
+        """
+        reg = build_registry(
+            {
+                "animal": {
+                    "attributes": {
+                        "id": {"identifier": True},
+                        "category": {"designates_type": True, "range": "string"},
+                    }
+                },
+                "dog": {"is_a": "animal"},
+                "sighting": {
+                    "attributes": {
+                        "id": {"identifier": True},
+                        "animal": {"range": "animal"},
+                    }
+                },
+            }
+        )
+        ddl = DDLGenerator().generate(reg)
+        conn = execute_ddl(ddl)
+        # No FK on the reference column, but the column itself is kept as TEXT.
+        fks = table_foreign_keys(conn, "sighting")
+        assert not any(fk["from"] == "animal" for fk in fks)
+        assert "animal" in table_columns(conn, "sighting")
+        # A leaf subclass referent (dog) can be inserted and referenced without
+        # a base row in animal existing at all.
+        conn.execute("INSERT INTO dog (id) VALUES ('A1')")
+        conn.execute("INSERT INTO sighting (id, animal) VALUES ('S1', 'A1')")
+        conn.commit()
+
+    def test_reference_to_concrete_leaf_still_has_fk(self):
+        """A reference ranged on a concrete class with no subclasses keeps its
+        FK — only polymorphic bases are exempted (issue #93 A/B control)."""
+        reg = build_registry(
+            {
+                "animal": {
+                    "attributes": {
+                        "id": {"identifier": True},
+                        "category": {"designates_type": True, "range": "string"},
+                    }
+                },
+                "dog": {"is_a": "animal"},
+                "sighting": {
+                    "attributes": {
+                        "id": {"identifier": True},
+                        "animal": {"range": "dog"},
+                    }
+                },
+            }
+        )
+        ddl = DDLGenerator().generate(reg)
+        conn = execute_ddl(ddl)
+        fks = table_foreign_keys(conn, "sighting")
+        assert any(
+            fk["from"] == "animal" and fk["table"] == "dog" for fk in fks
         )
 
 

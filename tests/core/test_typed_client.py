@@ -7,11 +7,11 @@ import tempfile
 
 import pytest
 
-from hippo.core.client import HippoClient
-from hippo.core.exceptions import ValidationFailed
-from hippo.core.storage.adapters.sqlite_adapter import SQLiteAdapter
+from mosaic.core.client import MosaicClient
+from mosaic.core.exceptions import ValidationFailed
+from mosaic.core.storage.adapters.sqlite_adapter import SQLiteAdapter
 from tests.conftest import _build_minimal_schema_registry
-from hippo.core.typed_client import (
+from mosaic.core.typed_client import (
     EntityAccessor,
     Namespace,
     SDK_RESERVED_NAMES,
@@ -19,8 +19,8 @@ from hippo.core.typed_client import (
     build_typed_surface,
     default_accessor,
 )
-from hippo.core.validation.validators import ValidationResult, WriteOperation, WriteValidator
-from hippo.linkml_bridge import SchemaRegistry
+from mosaic.core.validation.validators import ValidationResult, WriteOperation, WriteValidator
+from mosaic.linkml_bridge import SchemaRegistry
 
 
 # ---------------------------------------------------------------------------
@@ -49,14 +49,14 @@ def _reg(
 
 @pytest.fixture
 def client_factory():
-    """Produce a HippoClient with a fresh SQLite backing store."""
+    """Produce a MosaicClient with a fresh SQLite backing store."""
     created: list[SQLiteAdapter] = []
 
-    def _make(registry: SchemaRegistry) -> HippoClient:
+    def _make(registry: SchemaRegistry) -> MosaicClient:
         tmpdir = tempfile.mkdtemp()
         storage = SQLiteAdapter(os.path.join(tmpdir, "typed.db"), schema_registry=registry)
         created.append(storage)
-        return HippoClient(
+        return MosaicClient(
             storage=storage, registry=registry, bypass_validation=True
         )
 
@@ -247,7 +247,7 @@ class TestCollisionDetection:
         # `SchemaError` — which fires before the typed-client surface
         # would have raised its own `duplicate_accessor` error. The
         # disambiguation message still names `hippo_accessor`.
-        from hippo.core.exceptions import SchemaError
+        from mosaic.core.exceptions import SchemaError
 
         with pytest.raises(SchemaError) as exc:
             _reg(
@@ -294,7 +294,7 @@ class TestCollisionDetection:
             "  Thing:\n"
             "    is_a: Entity\n"
             "    annotations:\n"
-            "      hippo_namespace: query\n"  # collides with HippoClient.query
+            "      hippo_namespace: query\n"  # collides with MosaicClient.query
             "    attributes:\n"
             "      name: {range: string}\n"
         )
@@ -320,7 +320,7 @@ class TestCollisionDetection:
             "  Schema:\n"
             "    is_a: Entity\n"
             "    annotations:\n"
-            "      hippo_accessor: storage\n"  # conflicts with HippoClient.storage
+            "      hippo_accessor: storage\n"  # conflicts with MosaicClient.storage
             "    attributes:\n"
             "      name: {range: string}\n"
         )
@@ -441,7 +441,7 @@ class TestGenericTypedParity:
 
 
 # ---------------------------------------------------------------------------
-# No-registry path: HippoClient still works without typed accessors
+# No-registry path: MosaicClient still works without typed accessors
 # ---------------------------------------------------------------------------
 
 
@@ -449,7 +449,7 @@ class TestNoRegistry:
     def test_client_without_registry_has_no_typed_accessors(self):
         storage = SQLiteAdapter(":memory:", schema_registry=_build_minimal_schema_registry())
         try:
-            client = HippoClient(storage=storage, bypass_validation=True)
+            client = MosaicClient(storage=storage, bypass_validation=True)
             # No registry → no typed surface built
             assert client._typed_root is None
             assert not hasattr(client, "samples")
@@ -460,22 +460,22 @@ class TestNoRegistry:
 
 class TestReservedNamesGuard:
     """CI guard against drift: `SDK_RESERVED_NAMES` must cover every
-    public attribute of ``HippoClient``. If Hippo gains a new public
+    public attribute of ``MosaicClient``. If Mosaic gains a new public
     method/property, this test fails until the reserved set is
-    updated. Prevents silent shadowing of HippoClient attributes by
+    updated. Prevents silent shadowing of MosaicClient attributes by
     user-schema class accessors."""
 
     def test_reserved_set_covers_every_hippoclient_public_attribute(self):
         public_attrs = {
-            name for name in dir(HippoClient) if not name.startswith("_")
+            name for name in dir(MosaicClient) if not name.startswith("_")
         }
         missing = public_attrs - SDK_RESERVED_NAMES
         assert not missing, (
-            f"HippoClient has public attributes not covered by "
+            f"MosaicClient has public attributes not covered by "
             f"SDK_RESERVED_NAMES: {sorted(missing)}. A user schema "
             f"could declare a class whose accessor shadows one of "
             f"these. Add them to SDK_RESERVED_NAMES in "
-            f"src/hippo/core/typed_client.py."
+            f"src/mosaic/core/typed_client.py."
         )
 
 
@@ -493,14 +493,14 @@ class _AlwaysFailValidator(WriteValidator):
 
 @pytest.fixture
 def validating_client_factory():
-    """HippoClient with validation enabled (bypass_validation=False)."""
+    """MosaicClient with validation enabled (bypass_validation=False)."""
     created: list[SQLiteAdapter] = []
 
-    def _make(registry: SchemaRegistry) -> HippoClient:
+    def _make(registry: SchemaRegistry) -> MosaicClient:
         tmpdir = tempfile.mkdtemp()
         storage = SQLiteAdapter(os.path.join(tmpdir, "typed_val.db"), schema_registry=registry)
         created.append(storage)
-        return HippoClient(storage=storage, registry=registry)
+        return MosaicClient(storage=storage, registry=registry)
 
     yield _make
 

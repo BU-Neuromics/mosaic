@@ -35,14 +35,14 @@ jobs:
         with:
           python-version: "3.11"
 
-      - name: Install hippo
+      - name: Install mosaic
         run: uv pip install --system -e ".[dev]"
 
       # ── Step 1: Initialize a project ────────────────────────────────────────
-      - name: Step 1 – hippo init
+      - name: Step 1 – mosaic init
         run: |
-          hippo init --path biblio_qs 2>&1 | tee init.out
-          grep -q "Hippo project initialized at biblio_qs" init.out
+          mosaic init --path biblio_qs 2>&1 | tee init.out
+          grep -q "Mosaic project initialized at biblio_qs" init.out
           grep -q "Template: bibliography"                 init.out
           grep -q "Storage: sqlite"                        init.out
 
@@ -103,15 +103,15 @@ jobs:
         run: |
           cat > biblio_qs/example.py << 'EOF'
           from pathlib import Path
-          from hippo.linkml_bridge import SchemaRegistry
-          from hippo.core.client import HippoClient
-          from hippo.core.storage.adapters.sqlite_adapter import SQLiteAdapter
-          from hippo.core.pipeline import ValidationPipeline
+          from mosaic.linkml_bridge import SchemaRegistry
+          from mosaic.core.client import MosaicClient
+          from mosaic.core.storage.adapters.sqlite_adapter import SQLiteAdapter
+          from mosaic.core.pipeline import ValidationPipeline
 
           HERE = Path(__file__).parent
           registry = SchemaRegistry.from_path(HERE / "schema.yaml")
-          storage = SQLiteAdapter(str(HERE / "data" / "hippo.db"), schema_registry=registry)
-          client = HippoClient(storage=storage, registry=registry, pipeline=ValidationPipeline())
+          storage = SQLiteAdapter(str(HERE / "data" / "mosaic.db"), schema_registry=registry)
+          client = MosaicClient(storage=storage, registry=registry, pipeline=ValidationPipeline())
 
           vaswani = client.create("Author", {
               "name": "Ashish Vaswani",
@@ -168,17 +168,17 @@ jobs:
         run: |
           cat > biblio_qs/serve.py << 'EOF'
           from pathlib import Path
-          from hippo.linkml_bridge import SchemaRegistry
-          from hippo.core.client import HippoClient
-          from hippo.core.storage.adapters.sqlite_adapter import SQLiteAdapter
-          from hippo.core.pipeline import ValidationPipeline
-          from hippo.serve import create_default_app
+          from mosaic.linkml_bridge import SchemaRegistry
+          from mosaic.core.client import MosaicClient
+          from mosaic.core.storage.adapters.sqlite_adapter import SQLiteAdapter
+          from mosaic.core.pipeline import ValidationPipeline
+          from mosaic.serve import create_default_app
           import uvicorn
 
           HERE = Path(__file__).parent
           registry = SchemaRegistry.from_path(HERE / "schema.yaml")
-          storage = SQLiteAdapter(str(HERE / "data" / "hippo.db"), schema_registry=registry)
-          client = HippoClient(storage=storage, registry=registry, pipeline=ValidationPipeline())
+          storage = SQLiteAdapter(str(HERE / "data" / "mosaic.db"), schema_registry=registry)
+          client = MosaicClient(storage=storage, registry=registry, pipeline=ValidationPipeline())
           app = create_default_app(hippo_client=client)
 
           if __name__ == "__main__":

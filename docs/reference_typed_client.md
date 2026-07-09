@@ -1,6 +1,6 @@
-# Hippo Typed Client Reference
+# Mosaic Typed Client Reference
 
-The typed client gives each schema class its own accessor on `HippoClient` —
+The typed client gives each schema class its own accessor on `MosaicClient` —
 `client.samples.create(Sample(name="S001"))` — alongside the generic
 `client.put("Sample", {...})` that already exists. Both surfaces are **coequal**:
 every SDK capability is reachable from either, neither is preferred, and new
@@ -12,16 +12,16 @@ For the full engineering spec see [sec9 §9.8](../design/sec9_linkml_redesign.md
 
 ## Prerequisites
 
-The typed surface is built when `HippoClient` is constructed with a `SchemaRegistry`.
+The typed surface is built when `MosaicClient` is constructed with a `SchemaRegistry`.
 Without a registry the typed accessors are not present and the generic surface
 continues to work normally.
 
 ```python
-from hippo.core.client import HippoClient
-from hippo.linkml_bridge import SchemaRegistry
+from mosaic.core.client import MosaicClient
+from mosaic.linkml_bridge import SchemaRegistry
 
 registry = SchemaRegistry.from_yaml_file("schemas/my_schema.yaml")
-client = HippoClient(storage=storage, registry=registry)
+client = MosaicClient(storage=storage, registry=registry)
 ```
 
 ---
@@ -109,7 +109,7 @@ classes:
 ## Accessor API
 
 Every class accessor is an `EntityAccessor` instance. All methods forward to
-the same underlying `HippoClient` internals used by the generic surface.
+the same underlying `MosaicClient` internals used by the generic surface.
 
 | Method | Signature | Description |
 |---|---|---|
@@ -128,7 +128,7 @@ the same underlying `HippoClient` internals used by the generic surface.
 
 ## Pydantic Model Access
 
-When `SchemaRegistry` loads a schema, Hippo generates a Pydantic v2 model class
+When `SchemaRegistry` loads a schema, Mosaic generates a Pydantic v2 model class
 for each domain class and attaches it to the accessor.
 
 ```python
@@ -144,7 +144,7 @@ You can pass either a plain dict or a Pydantic instance to any write method:
 client.samples.create({"name": "S001"})
 
 # Pydantic instance — field validation runs at construction time
-from hippo.core.typed_client import EntityAccessor
+from mosaic.core.typed_client import EntityAccessor
 sample = client.samples.model_class(id="x1", name="S001")
 client.samples.create(sample)
 ```
@@ -152,38 +152,38 @@ client.samples.create(sample)
 When Pydantic generation fails at load time, `model_class` is `None` and the
 accessor falls back to plain-dict operation with a logged warning.
 
-### Direct Import via `hippo.models`
+### Direct Import via `mosaic.models`
 
-As an alternative to `accessor.model_class`, Hippo registers every generated
-class under `hippo.models.<namespace>` so you can import classes directly:
+As an alternative to `accessor.model_class`, Mosaic registers every generated
+class under `mosaic.models.<namespace>` so you can import classes directly:
 
 ```python
 # Root-namespace class
-from hippo.models import Sample
+from mosaic.models import Sample
 sample = Sample(id="x1", name="S001")
 client.samples.create(sample)
 
 # Non-root namespace class (hippo_namespace: tissue)
-from hippo.models.tissue import TissueSample
+from mosaic.models.tissue import TissueSample
 
 # Nested namespace class (hippo_namespace: assay.quant)
-from hippo.models.assay.quant import Measurement
+from mosaic.models.assay.quant import Measurement
 ```
 
-The `hippo.models` package is populated by `HippoClient.__init__` when a
+The `mosaic.models` package is populated by `MosaicClient.__init__` when a
 `SchemaRegistry` is provided. The modules are not available until after the
-first `HippoClient(registry=...)` construction.
+first `MosaicClient(registry=...)` construction.
 
 Classes are keyed by their LinkML class name (e.g. `Sample`, `TissueSample`)
 not by the accessor name (`samples`, `tissue_samples`). Root-namespace classes
-land on `hippo.models` itself; non-root classes land on
-`hippo.models.<namespace>`. Intermediate parent modules (e.g. `hippo.models.assay`
+land on `mosaic.models` itself; non-root classes land on
+`mosaic.models.<namespace>`. Intermediate parent modules (e.g. `mosaic.models.assay`
 when only `assay.quant` has classes) are registered as empty modules so import
 chains resolve.
 
-**Multi-client note:** If multiple `HippoClient` instances with different
+**Multi-client note:** If multiple `MosaicClient` instances with different
 registries coexist in the same process, the last-constructed client's classes
-populate `hippo.models`. Concurrent multi-registry use in the same process is
+populate `mosaic.models`. Concurrent multi-registry use in the same process is
 not supported.
 
 ---
@@ -192,7 +192,7 @@ not supported.
 
 ### Load-Time Errors — `TypedClientError`
 
-`HippoClient.__init__` raises `TypedClientError` when the schema produces an
+`MosaicClient.__init__` raises `TypedClientError` when the schema produces an
 ambiguous accessor surface. Four collision cases, each identified by the
 `.case` field:
 
@@ -202,13 +202,13 @@ ambiguous accessor surface. Four collision cases, each identified by the
 | `"accessor_vs_namespace"` | A class accessor conflicts with a sub-namespace segment at the same attribute level | Rename the class, namespace, or add `hippo_accessor` |
 | `"namespace_reserved"` | A namespace segment uses an SDK-reserved name (`query`, `storage`, …) | Rename the namespace |
 | `"reserved_root"` | A class declares `namespace: root` | Use a different namespace name — `root` is reserved |
-| `"accessor_reserved"` | A class's derived or override accessor conflicts with a public `HippoClient` attribute | Override with `hippo_accessor` |
+| `"accessor_reserved"` | A class's derived or override accessor conflicts with a public `MosaicClient` attribute | Override with `hippo_accessor` |
 
 ```python
-from hippo.core.typed_client import TypedClientError
+from mosaic.core.typed_client import TypedClientError
 
 try:
-    client = HippoClient(storage=storage, registry=conflicting_registry)
+    client = MosaicClient(storage=storage, registry=conflicting_registry)
 except TypedClientError as exc:
     print(exc.case)   # e.g. "duplicate_accessor"
     print(exc)        # actionable message with fix suggestion
@@ -230,7 +230,7 @@ Write methods (`create`, `put`, `replace`) raise `ValidationFailed` when
 validation fails. The exception carries full context:
 
 ```python
-from hippo.core.exceptions import ValidationFailed
+from mosaic.core.exceptions import ValidationFailed
 
 try:
     client.samples.create({"name": "bad"})

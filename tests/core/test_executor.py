@@ -2,7 +2,7 @@
 
 import pytest
 
-from hippo.core.validation import (
+from mosaic.core.validation import (
     ExecutorConfig,
     FeatureNotAvailableError,
     ValidationResult,
@@ -293,7 +293,7 @@ class TestEmptyValidatorConfiguration:
         assert result.is_valid is True
 
     def test_load_validators_with_nonexistent_file(self):
-        from hippo.core.validation.loader import load_validators
+        from mosaic.core.validation.loader import load_validators
 
         valid, invalid, expanded = load_validators("/nonexistent/path.yaml")
         assert valid == []
@@ -301,7 +301,7 @@ class TestEmptyValidatorConfiguration:
         assert expanded == []
 
     def test_load_validators_with_empty_validators_list(self, tmp_path):
-        from hippo.core.validation.loader import load_validators
+        from mosaic.core.validation.loader import load_validators
         import yaml
 
         validators_file = tmp_path / "validators.yaml"
@@ -317,7 +317,7 @@ class TestNestedRuleExpansion:
     """Tests for nested rule expansion logic."""
 
     def test_expand_nested_rules_with_no_expand(self):
-        from hippo.core.validation.loader import expand_nested_rules
+        from mosaic.core.validation.loader import expand_nested_rules
 
         config = {"name": "test_validator", "enabled": True}
         expanded = expand_nested_rules(config)
@@ -325,7 +325,7 @@ class TestNestedRuleExpansion:
         assert expanded[0]["name"] == "test_validator"
 
     def test_expand_nested_rules_with_expand(self):
-        from hippo.core.validation.loader import expand_nested_rules
+        from mosaic.core.validation.loader import expand_nested_rules
 
         config = {
             "name": "parent_validator",
@@ -341,7 +341,7 @@ class TestNestedRuleExpansion:
         assert expanded[1]["name"] == "child_validator_2"
 
     def test_expand_nested_rules_preserves_base_config(self):
-        from hippo.core.validation.loader import expand_nested_rules
+        from mosaic.core.validation.loader import expand_nested_rules
 
         config = {
             "name": "parent_validator",

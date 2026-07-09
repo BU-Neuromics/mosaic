@@ -3,9 +3,9 @@
 import pytest
 from unittest.mock import Mock, MagicMock, patch
 
-from hippo.core.batch_fetcher import BatchFetcher
-from hippo.core.cycle_detector import CycleDetector, validate_no_cycle
-from hippo.core.expand_path_parser import (
+from mosaic.core.batch_fetcher import BatchFetcher
+from mosaic.core.cycle_detector import CycleDetector, validate_no_cycle
+from mosaic.core.expand_path_parser import (
     ExpandPathParser,
     MaxSizeExceededError,
     ParserConfig,
@@ -13,7 +13,7 @@ from hippo.core.expand_path_parser import (
     PathNode,
     validate_path,
 )
-from hippo.core.client import HippoClient
+from mosaic.core.client import MosaicClient
 
 
 class TestFullExpandWorkflow:
@@ -56,7 +56,7 @@ class TestFullExpandWorkflow:
         items.children = [user]
         user.parent = items
 
-        from hippo.core.expand_path_parser import ParseResult
+        from mosaic.core.expand_path_parser import ParseResult
 
         parsed = ParseResult(
             root=root,
@@ -69,17 +69,17 @@ class TestFullExpandWorkflow:
         result = detector.detect(parsed)
         assert result.has_cycle
 
-        from hippo.core.cycle_detector import CycleDetectionError
+        from mosaic.core.cycle_detector import CycleDetectionError
 
         with pytest.raises(CycleDetectionError):
             detector.validate(parsed)
 
 
-class TestHippoClientExpand:
-    """Integration tests for HippoClient expand functionality."""
+class TestMosaicClientExpand:
+    """Integration tests for MosaicClient expand functionality."""
 
     def test_get_with_expand_parameter(self):
-        """Test HippoClient.get with expand parameter."""
+        """Test MosaicClient.get with expand parameter."""
         mock_storage = Mock()
         mock_entity = Mock()
         mock_entity.id = "user-123"
@@ -90,14 +90,14 @@ class TestHippoClientExpand:
         mock_entity.updated_at = "2024-01-01T00:00:00"
         mock_storage.read.return_value = mock_entity
 
-        client = HippoClient(storage=mock_storage)
+        client = MosaicClient(storage=mock_storage)
         result = client.get("user", "user-123", expand="profile")
 
         assert result["id"] == "user-123"
         assert "data" in result
 
     def test_get_without_expand_parameter(self):
-        """Test HippoClient.get without expand parameter."""
+        """Test MosaicClient.get without expand parameter."""
         mock_storage = Mock()
         mock_entity = Mock()
         mock_entity.id = "user-123"
@@ -108,14 +108,14 @@ class TestHippoClientExpand:
         mock_entity.updated_at = "2024-01-01T00:00:00"
         mock_storage.read.return_value = mock_entity
 
-        client = HippoClient(storage=mock_storage)
+        client = MosaicClient(storage=mock_storage)
         result = client.get("user", "user-123")
 
         assert result["id"] == "user-123"
         assert "_expanded" not in result
 
     def test_get_with_expand_invalid_path(self):
-        """Test HippoClient.get with invalid expand path."""
+        """Test MosaicClient.get with invalid expand path."""
         mock_storage = Mock()
         mock_entity = Mock()
         mock_entity.id = "user-123"
@@ -126,13 +126,13 @@ class TestHippoClientExpand:
         mock_entity.updated_at = "2024-01-01T00:00:00"
         mock_storage.read.return_value = mock_entity
 
-        client = HippoClient(storage=mock_storage)
+        client = MosaicClient(storage=mock_storage)
 
         with pytest.raises(ParsingError):
             client.get("user", "user-123", expand="user..profile")
 
     def test_get_with_expand_max_size_exceeded(self):
-        """Test HippoClient.get with expand path exceeding max size."""
+        """Test MosaicClient.get with expand path exceeding max size."""
         mock_storage = Mock()
         mock_entity = Mock()
         mock_entity.id = "user-123"
@@ -143,13 +143,13 @@ class TestHippoClientExpand:
         mock_entity.updated_at = "2024-01-01T00:00:00"
         mock_storage.read.return_value = mock_entity
 
-        client = HippoClient(storage=mock_storage)
+        client = MosaicClient(storage=mock_storage)
 
         with pytest.raises(MaxSizeExceededError):
             client.get("user", "user-123", expand="a" * 200)
 
     def test_get_with_expand_cyclic_path(self):
-        """Test HippoClient.get with cyclic expand path."""
+        """Test MosaicClient.get with cyclic expand path."""
         mock_storage = Mock()
         mock_entity = Mock()
         mock_entity.id = "user-123"
@@ -160,9 +160,9 @@ class TestHippoClientExpand:
         mock_entity.updated_at = "2024-01-01T00:00:00"
         mock_storage.read.return_value = mock_entity
 
-        client = HippoClient(storage=mock_storage)
+        client = MosaicClient(storage=mock_storage)
 
-        from hippo.core.cycle_detector import CycleDetectionError
+        from mosaic.core.cycle_detector import CycleDetectionError
 
         with pytest.raises(CycleDetectionError):
             client.get("user", "user-123", expand="user.orders.user")

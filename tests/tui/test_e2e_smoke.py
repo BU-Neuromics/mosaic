@@ -8,10 +8,10 @@ from pathlib import Path
 import pytest
 
 pytest.importorskip(
-    "textual", reason="textual not installed; run: pip install hippo[tui]"
+    "textual", reason="textual not installed; run: pip install datahelix-mosaic[tui]"
 )
 
-from hippo.tui.backend.sdk import SDKBackend
+from mosaic.tui.backend.sdk import SDKBackend
 
 _FIXTURE_SCHEMA = (
     Path(__file__).parents[1] / "fixtures" / "schemas" / "sample_schema.yaml"
@@ -27,13 +27,13 @@ def test_app_boots_and_browses_real_database(sdk_backend):
     """Full stack: boot, sidebar load, browse entities, open detail."""
     from textual.widgets import DataTable
 
-    from hippo.tui.app import HippoTUIApp
-    from hippo.tui.views.entity_browser import EntityBrowserView
-    from hippo.tui.views.entity_detail import EntityDetailScreen
-    from hippo.tui.widgets.sidebar import EntityTypeSidebar
-    from hippo.tui.widgets.status_bar import StatusBar
+    from mosaic.tui.app import MosaicTUIApp
+    from mosaic.tui.views.entity_browser import EntityBrowserView
+    from mosaic.tui.views.entity_detail import EntityDetailScreen
+    from mosaic.tui.widgets.sidebar import EntityTypeSidebar
+    from mosaic.tui.widgets.status_bar import StatusBar
 
-    app = HippoTUIApp(backend=sdk_backend)
+    app = MosaicTUIApp(backend=sdk_backend)
 
     async def run():
         # Seed real entities through the real SDK backend.

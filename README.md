@@ -1,11 +1,16 @@
-# Hippo — A LinkML runtime engine.
+# Mosaic — A LinkML runtime engine.
+
+> **Formerly Hippo** (renamed per ADR-0004; distributed as `datahelix-mosaic`).
+> `import hippo`, the `hippo` CLI, `hippo.yaml`, `HIPPO_*` env vars, and the
+> `hippo.*` entry-point groups keep working through a deprecation window —
+> see [docs/installation.md](docs/installation.md#upgrading-from-hippo).
 
 [![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
-[![Tests](https://img.shields.io/badge/tests-634%20passing-green.svg)](https://github.com/anomalyco/hippo)
+[![Tests](https://img.shields.io/badge/tests-634%20passing-green.svg)](https://github.com/BU-Neuromics/hippo)
 
-Hippo is a runtime for LinkML schemas. Point it at a LinkML schema and you get a typed Python SDK, a REST API, a relational database with append-only PROV-O provenance, and CEL-based dynamic validation — without writing any of that infrastructure yourself. The schema defines the application; Hippo runs it.
+Mosaic is a runtime for LinkML schemas. Point it at a LinkML schema and you get a typed Python SDK, a REST API, a relational database with append-only PROV-O provenance, and CEL-based dynamic validation — without writing any of that infrastructure yourself. The schema defines the application; Mosaic runs it.
 
-One natural application of a LinkML runtime is metadata tracking. Hippo's first reference deployment, at the VA National PTSD Brain Bank, uses it to track biospecimens, experimental data files, and the derivation chains between them. But Hippo doesn't know it's tracking biomedical metadata — it knows it's running a schema.
+One natural application of a LinkML runtime is metadata tracking. Mosaic's first reference deployment, at the VA National PTSD Brain Bank, uses it to track biospecimens, experimental data files, and the derivation chains between them. But Mosaic doesn't know it's tracking biomedical metadata — it knows it's running a schema.
 
 ## Table of Contents
 
@@ -19,23 +24,23 @@ One natural application of a LinkML runtime is metadata tracking. Hippo's first 
 ## Quick Start
 
 ```bash
-# Install Hippo
-pip install hippo
+# Install Mosaic
+pip install datahelix-mosaic
 
-# Initialize a new Hippo project (creates hippo.yaml + schema.yaml)
-hippo init
+# Initialize a new Mosaic project (creates mosaic.yaml + schema.yaml)
+mosaic init
 
 # Apply schema migrations to your database
-hippo migrate
+mosaic migrate
 
 # Start the REST API server (default: http://127.0.0.1:8000)
-hippo serve
+mosaic serve
 
 # Use the SDK
 python -c "
-from hippo import HippoClient
+from mosaic import MosaicClient
 
-client = HippoClient()
+client = MosaicClient()
 sample = client.put('Sample', {'id': 'S001', 'name': 'Test Sample'})
 print(f'Created: {sample[\"id\"]}')
 "
@@ -45,13 +50,13 @@ print(f'Created: {sample[\"id\"]}')
 
 | Guide | Description |
 |-------|-------------|
-| [Installation](docs/installation.md) | Installing Hippo and dependencies |
+| [Installation](docs/installation.md) | Installing Mosaic and dependencies |
 | [Quick Start](docs/quickstart.md) | Get up and running fast |
-| [Configuration](docs/configuration.md) | Configuring Hippo for your project |
+| [Configuration](docs/configuration.md) | Configuring Mosaic for your project |
 | [CLI Reference](docs/cli-reference.md) | Command-line interface documentation |
 | [Data Model](docs/data-model.md) | Entity types, fields, and relationships |
 | [API Reference](docs/api-reference.md) | Complete SDK and REST API docs |
-| [Comparison Guide](docs/comparison.md) | When to use Hippo and when to use something else |
+| [Comparison Guide](docs/comparison.md) | When to use Mosaic and when to use something else |
 
 ## Features
 
@@ -67,9 +72,9 @@ print(f'Created: {sample[\"id\"]}')
 
 ## Validation Pipeline
 
-Hippo validates all write operations against a LinkML schema. Two paths:
+Mosaic validates all write operations against a LinkML schema. Two paths:
 
-- **CLI** — `hippo validate` checks a schema file and/or an instance data bundle.
+- **CLI** — `mosaic validate` checks a schema file and/or an instance data bundle.
 - **SDK** — custom `WriteValidator` subclasses run before every `client.put()`.
 
 ### Schema and Data Validation (CLI)
@@ -115,16 +120,16 @@ Validate the schema alone, or the schema together with a data bundle:
 
 ```bash
 # Validate a LinkML schema file — exits non-zero on any LinkML error
-hippo validate --schema schema.yaml
+mosaic validate --schema schema.yaml
 
 # Validate a data bundle against the schema
-hippo validate --schema schema.yaml --data bundle.yaml
+mosaic validate --schema schema.yaml --data bundle.yaml
 ```
 
-Pass `--validate-schema` to `hippo ingest` to validate the bundle before writing:
+Pass `--validate-schema` to `mosaic ingest` to validate the bundle before writing:
 
 ```bash
-hippo ingest --file bundle.yaml --validate-schema schema.yaml
+mosaic ingest --file bundle.yaml --validate-schema schema.yaml
 ```
 
 ### Custom Write Validators (SDK)
@@ -132,8 +137,8 @@ hippo ingest --file bundle.yaml --validate-schema schema.yaml
 Add application-level rules via `WriteValidator` subclasses. These run in the validation pipeline before every `client.put()`:
 
 ```python
-from hippo import HippoClient, ValidationPipeline
-from hippo.core.validation import WriteOperation, WriteValidator, ValidationResult
+from mosaic import MosaicClient, ValidationPipeline
+from mosaic.core.validation import WriteOperation, WriteValidator, ValidationResult
 
 class RequiredFieldsValidator(WriteValidator):
     def validate(self, operation: WriteOperation) -> ValidationResult:
@@ -144,7 +149,7 @@ class RequiredFieldsValidator(WriteValidator):
 pipeline = ValidationPipeline()
 pipeline.add_validator(RequiredFieldsValidator())
 
-client = HippoClient(pipeline=pipeline)
+client = MosaicClient(pipeline=pipeline)
 
 try:
     entity = client.put("Sample", {"id": "S001", "name": "Test"})
@@ -154,14 +159,14 @@ except ValidationFailure as e:
 
 ## Entity Relationships
 
-Hippo supports managing relationships between entities through the RelationshipManager API.
+Mosaic supports managing relationships between entities through the RelationshipManager API.
 
 ### Basic Operations
 
 ```python
-from hippo import HippoClient
+from mosaic import MosaicClient
 
-client = HippoClient(storage=sqlite_adapter)
+client = MosaicClient(storage=sqlite_adapter)
 
 # Create some entities
 donor = client.put("Donor", {"name": "John Doe"})

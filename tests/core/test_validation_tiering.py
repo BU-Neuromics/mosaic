@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import pytest
 
-from hippo.core.exceptions import ValidationFailed
-from hippo.core.validation.validators import (
+from mosaic.core.exceptions import ValidationFailed
+from mosaic.core.validation.validators import (
     ValidationFailure,
     ValidationResult,
     ValidatorPipeline,
@@ -13,7 +13,7 @@ from hippo.core.validation.validators import (
     WriteOperation,
     WriteValidator,
 )
-from hippo.linkml_bridge import SchemaRegistry
+from mosaic.linkml_bridge import SchemaRegistry
 
 
 class TestValidationResultEnvelope:

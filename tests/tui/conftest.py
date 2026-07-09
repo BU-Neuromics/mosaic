@@ -7,7 +7,7 @@ from typing import Any
 
 import pytest
 
-from hippo.tui.backend.protocol import (
+from mosaic.tui.backend.protocol import (
     PAGE_SIZE,
     BackendCapabilities,
     BackendError,

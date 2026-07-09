@@ -1,1 +1,1 @@
-"""Tests for Hippo Serve module."""
+"""Tests for Mosaic Serve module."""

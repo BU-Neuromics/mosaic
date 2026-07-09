@@ -1,9 +1,9 @@
 """LinkML-derived OpenAPI components on /openapi.json (issue #46, approach A).
 
 The REST routes stay generic, but an app built around a schema-bearing
-client (as ``hippo serve`` builds it) serves an OpenAPI document enriched
+client (as ``mosaic serve`` builds it) serves an OpenAPI document enriched
 with one component schema per exposed entity type, derived from
-``hippo.core.schema_typing``. A no-client app keeps the default document.
+``mosaic.core.schema_typing``. A no-client app keeps the default document.
 """
 
 from __future__ import annotations
@@ -13,9 +13,9 @@ from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 
-from hippo.config import HippoConfig
-from hippo.core.factory import create_client_from_config
-from hippo.serve import create_default_app
+from mosaic.config import MosaicConfig
+from mosaic.core.factory import create_client_from_config
+from mosaic.serve import create_default_app
 
 _FIXTURE_SCHEMA = (
     Path(__file__).parents[1] / "fixtures" / "schemas" / "sample_schema.yaml"
@@ -24,7 +24,7 @@ _FIXTURE_SCHEMA = (
 
 @pytest.fixture()
 def spec(tmp_path):
-    cfg = HippoConfig(
+    cfg = MosaicConfig(
         schema_path=str(_FIXTURE_SCHEMA),
         database_url=str(tmp_path / "openapi.db"),
         storage_backend="sqlite",
@@ -125,7 +125,7 @@ def test_envelope_data_references_umbrella(spec):
 
 
 def test_spec_is_cached_and_stable(tmp_path):
-    cfg = HippoConfig(
+    cfg = MosaicConfig(
         schema_path=str(_FIXTURE_SCHEMA),
         database_url=str(tmp_path / "cache.db"),
         storage_backend="sqlite",

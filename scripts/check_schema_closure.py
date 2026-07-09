@@ -2,7 +2,7 @@
 """Merged-schema closure integrity check (sec11 §11.6.3).
 
 CI guard: proves that the schema-merge machinery detects structural
-incoherence before it ships.  Run this after installing hippo:
+incoherence before it ships.  Run this after installing mosaic:
 
     python scripts/check_schema_closure.py
 
@@ -22,7 +22,7 @@ Checks
 
 Why class_induced_slots?
 ------------------------
-``hippo validate --schema`` calls ``SchemaRegistry.from_path`` which loads
+``mosaic validate --schema`` calls ``SchemaRegistry.from_path`` which loads
 the LinkML schema but does not resolve every class's inheritance chain.
 ``_validate_hippo_annotations`` wraps ``class_induced_slots`` in a
 try/except that skips failures so the annotation checker stays tolerant.
@@ -38,8 +38,8 @@ import sys
 
 from linkml_runtime.utils.schemaview import SchemaView
 
-from hippo.core.loaders.bundle import Bundle
-from hippo.linkml_bridge import LoaderFragmentSpec, SchemaRegistry, merge_loader_fragment
+from mosaic.core.loaders.bundle import Bundle
+from mosaic.linkml_bridge import LoaderFragmentSpec, SchemaRegistry, merge_loader_fragment
 
 
 # ---------------------------------------------------------------------------
@@ -49,7 +49,7 @@ from hippo.linkml_bridge import LoaderFragmentSpec, SchemaRegistry, merge_loader
 
 def _load_base_registry() -> SchemaRegistry:
     hippo_core_path = str(
-        importlib.resources.files("hippo.schemas").joinpath("hippo_core.yaml")
+        importlib.resources.files("mosaic.schemas").joinpath("hippo_core.yaml")
     )
     sv = SchemaView(hippo_core_path)
     return SchemaRegistry(sv)

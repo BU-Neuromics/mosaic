@@ -1,22 +1,22 @@
-# Hippo CLI Reference
+# Mosaic CLI Reference
 
-Complete reference for all `hippo` CLI commands.
+Complete reference for all `mosaic` CLI commands.
 
 ## Global Options
 
 | Option | Description |
 |--------|-------------|
 | `--help` | Show help message and exit |
-| `--version` | Show Hippo version (if available) |
+| `--version` | Show Mosaic version (if available) |
 
 ## init
 
-Initialize a new Hippo project with the specified template.
+Initialize a new Mosaic project with the specified template.
 
 ### Usage
 
 ```bash
-hippo init [OPTIONS]
+mosaic init [OPTIONS]
 ```
 
 ### Options
@@ -31,25 +31,25 @@ hippo init [OPTIONS]
 
 ```bash
 # Initialize with default (basic) template
-hippo init
+mosaic init
 
 # Initialize in a specific directory
-hippo init --path /path/to/project
+mosaic init --path /path/to/project
 
 # Initialize with full template, overwriting existing
-hippo init --template full --force
+mosaic init --template full --force
 ```
 
 ---
 
 ## serve
 
-Start the Hippo REST API server.
+Start the Mosaic REST API server.
 
 ### Usage
 
 ```bash
-hippo serve [OPTIONS]
+mosaic serve [OPTIONS]
 ```
 
 ### Options
@@ -66,16 +66,16 @@ hippo serve [OPTIONS]
 
 ```bash
 # Start with default configuration
-hippo serve
+mosaic serve
 
 # Start on custom port with debug logging
-hippo serve --port 9000 --log-level debug
+mosaic serve --port 9000 --log-level debug
 
 # Enable auto-reload for development
-hippo serve --reload
+mosaic serve --reload
 
 # Run with multiple workers
-hippo serve --workers 4
+mosaic serve --workers 4
 ```
 
 ---
@@ -83,36 +83,36 @@ hippo serve --workers 4
 ## tui
 
 Launch the interactive terminal browser. Requires the `tui` extra
-(`pip install 'hippo[tui]'`). See the **[TUI guide](tui.md)** for screens
+(`pip install 'datahelix-mosaic[tui]'`). See the **[TUI guide](tui.md)** for screens
 and keyboard shortcuts.
 
 ### Usage
 
 ```bash
-hippo tui [OPTIONS]
+mosaic tui [OPTIONS]
 ```
 
 ### Options
 
 | Option | Type | Default | Description |
 |--------|------|---------|-------------|
-| `--backend`, `-b` | `string` | `"sdk"` | Backend mode: `sdk` (local database) or `rest` (remote `hippo serve`) |
-| `--db` | `string` | resolved | SQLite database path (sdk mode). Falls back to `config.json`, then `data/hippo.db`, then `hippo.db` |
+| `--backend`, `-b` | `string` | `"sdk"` | Backend mode: `sdk` (local database) or `rest` (remote `mosaic serve`) |
+| `--db` | `string` | resolved | SQLite database path (sdk mode). Falls back to `config.json`, then `data/mosaic.db`, then `mosaic.db` |
 | `--schema` | `string` | resolved | LinkML schema file or directory (sdk mode). Falls back to `schemas/`, then the bundled `hippo_core` schema |
 | `--url` | `string` | `"http://127.0.0.1:8000"` | Base URL (rest mode) |
-| `--token` | `string` | env / `dev-token` | Bearer token (rest mode). Falls back to `HIPPO_TUI_TOKEN` |
+| `--token` | `string` | env / `dev-token` | Bearer token (rest mode). Falls back to `MOSAIC_TUI_TOKEN` |
 
 ### Example
 
 ```bash
 # Browse the local database in the current project
-hippo tui
+mosaic tui
 
 # Explicit database + schema
-hippo tui --db data/hippo.db --schema schemas/
+mosaic tui --db data/mosaic.db --schema schemas/
 
-# Connect to a remote hippo serve instance
-hippo tui -b rest --url http://hippo.example.org:8000 --token "$HIPPO_TUI_TOKEN"
+# Connect to a remote mosaic serve instance
+mosaic tui -b rest --url http://mosaic.example.org:8000 --token "$MOSAIC_TUI_TOKEN"
 ```
 
 ---
@@ -124,7 +124,7 @@ Run schema migrations based on YAML schema definitions.
 ### Usage
 
 ```bash
-hippo migrate [TARGET] [OPTIONS]
+mosaic migrate [TARGET] [OPTIONS]
 ```
 
 ### Arguments
@@ -139,19 +139,19 @@ hippo migrate [TARGET] [OPTIONS]
 |--------|------|---------|-------------|
 | `--dry-run`, `--preview` | `boolean` | `false` | Preview migrations without applying |
 | `--schema-dir` | `string` | `"schemas/"` | Path to schema directory |
-| `--db-path` | `string` | `"data/hippo.db"` | Path to SQLite database |
+| `--db-path` | `string` | `"data/mosaic.db"` | Path to SQLite database |
 
 ### Example
 
 ```bash
 # Run migrations with defaults
-hippo migrate
+mosaic migrate
 
 # Preview migrations without applying
-hippo migrate --dry-run
+mosaic migrate --dry-run
 
 # Use custom schema and database paths
-hippo migrate --schema-dir custom/schemas --db-path custom/data/hippo.db
+mosaic migrate --schema-dir custom/schemas --db-path custom/data/mosaic.db
 ```
 
 ---
@@ -163,7 +163,7 @@ Validate a LinkML schema file and/or an instance YAML bundle.
 ### Usage
 
 ```bash
-hippo validate [OPTIONS]
+mosaic validate [OPTIONS]
 ```
 
 ### Options
@@ -172,7 +172,7 @@ hippo validate [OPTIONS]
 |--------|------|---------|-------------|
 | `--schema`, `-s` | `string` | `None` | Path to a LinkML schema file or directory |
 | `--data`, `-d` | `string` | `None` | Path to an instance YAML bundle to validate against `--schema` |
-| `--config`, `-c` | `string` | `None` | Path to a Hippo config file to validate |
+| `--config`, `-c` | `string` | `None` | Path to a Mosaic config file to validate |
 | `--verbose`, `-v` | `boolean` | `false` | Show detailed validation output |
 
 `--data` requires `--schema`. `--config` is independent.
@@ -181,20 +181,20 @@ hippo validate [OPTIONS]
 
 ```bash
 # Validate a LinkML schema — exits non-zero on any LinkML error
-hippo validate --schema schemas/brain_study.yaml
+mosaic validate --schema schemas/brain_study.yaml
 
 # Validate a data bundle against a schema
-hippo validate --schema schemas/brain_study.yaml --data data/samples.yaml
+mosaic validate --schema schemas/brain_study.yaml --data data/samples.yaml
 
-# Validate a Hippo config file
-hippo validate --config config/production.yaml
+# Validate a Mosaic config file
+mosaic validate --config config/production.yaml
 ```
 
 ---
 
 ## ingest
 
-Ingest a LinkML-native instance YAML bundle into Hippo, or load data via a generic loader.
+Ingest a LinkML-native instance YAML bundle into Mosaic, or load data via a generic loader.
 
 The default path (`--file`) accepts a **tree-root bundle**: a YAML mapping whose top-level keys are pluralized class names (`samples:`, `projects:`, …) and whose values are lists of instance dicts. Identity is by the `id` slot on each instance — re-ingesting an existing id updates it in place.
 
@@ -203,7 +203,7 @@ CSV/JSON/SQL operational data files are not accepted here; pass `--type` + `--co
 ### Usage
 
 ```bash
-hippo ingest [OPTIONS]
+mosaic ingest [OPTIONS]
 ```
 
 ### Options
@@ -220,13 +220,13 @@ hippo ingest [OPTIONS]
 
 ```bash
 # Ingest a bundle, validating it against the schema first
-hippo ingest --file data/samples.yaml --validate-schema schemas/brain_study.yaml
+mosaic ingest --file data/samples.yaml --validate-schema schemas/brain_study.yaml
 
 # Dry run — validate and show what would be written
-hippo ingest --file data/samples.yaml --validate-schema schemas/brain_study.yaml --dry-run
+mosaic ingest --file data/samples.yaml --validate-schema schemas/brain_study.yaml --dry-run
 
 # Generic CSV loader (separate path)
-hippo ingest --type csv --file donors.csv --config donors_mapping.yaml
+mosaic ingest --type csv --file donors.csv --config donors_mapping.yaml
 ```
 
 ---
@@ -240,7 +240,7 @@ error — these verbs never create one.
 ### Usage
 
 ```bash
-hippo entity <subcommand> [OPTIONS]
+mosaic entity <subcommand> [OPTIONS]
 ```
 
 ### Subcommands
@@ -256,7 +256,7 @@ hippo entity <subcommand> [OPTIONS]
 
 | Option | Type | Default | Description |
 |--------|------|---------|-------------|
-| `--db-path` | `string` | `data/hippo.db` | Path to the SQLite database |
+| `--db-path` | `string` | `data/mosaic.db` | Path to the SQLite database |
 | `--schema` | `string` | `None` | LinkML schema file or directory (required to recognize user-domain classes) |
 | `--json` | `boolean` | `false` | Emit JSON instead of YAML |
 
@@ -264,41 +264,41 @@ hippo entity <subcommand> [OPTIONS]
 
 ```bash
 # Fetch one entity
-hippo entity get Sample 6f1a... --schema schemas/ --json
+mosaic entity get Sample 6f1a... --schema schemas/ --json
 
 # All brain samples
-hippo entity query Sample --filter tissue_type=brain --schema schemas/
+mosaic entity query Sample --filter tissue_type=brain --schema schemas/
 
 # Who touched this entity, and when?
-hippo entity history 6f1a... --schema schemas/
+mosaic entity history 6f1a... --schema schemas/
 ```
 
 ---
 
 ## status
 
-Show deployment status: Hippo version, storage adapter, schema version,
+Show deployment status: Mosaic version, storage adapter, schema version,
 per-type entity counts, and adapter capability declarations. Mirrors the
 REST `GET /status` endpoint and the SDK's `client.status()`.
 
 ### Usage
 
 ```bash
-hippo status [OPTIONS]
+mosaic status [OPTIONS]
 ```
 
 ### Options
 
 | Option | Type | Default | Description |
 |--------|------|---------|-------------|
-| `--db-path` | `string` | `data/hippo.db` | Path to the SQLite database |
+| `--db-path` | `string` | `data/mosaic.db` | Path to the SQLite database |
 | `--schema` | `string` | `None` | LinkML schema file or directory |
 | `--json` | `boolean` | `false` | Emit JSON instead of YAML |
 
 ### Example
 
 ```bash
-hippo status --schema schemas/ --json
+mosaic status --schema schemas/ --json
 ```
 
 ---
@@ -310,7 +310,7 @@ Manage reference data loader packages.
 ### Usage
 
 ```bash
-hippo reference <subcommand> [OPTIONS]
+mosaic reference <subcommand> [OPTIONS]
 ```
 
 ### Subcommands
@@ -320,7 +320,7 @@ hippo reference <subcommand> [OPTIONS]
 Install a reference loader package.
 
 ```bash
-hippo reference install <PACKAGE> [OPTIONS]
+mosaic reference install <PACKAGE> [OPTIONS]
 ```
 
 | Option | Type | Default | Description |
@@ -331,8 +331,8 @@ hippo reference install <PACKAGE> [OPTIONS]
 **Example:**
 
 ```bash
-hippo reference install my-loader
-hippo reference install my-loader --source https://example.com/loader.tar.gz
+mosaic reference install my-loader
+mosaic reference install my-loader --source https://example.com/loader.tar.gz
 ```
 
 #### reference list
@@ -340,13 +340,13 @@ hippo reference install my-loader --source https://example.com/loader.tar.gz
 List installed reference loader packages.
 
 ```bash
-hippo reference list
+mosaic reference list
 ```
 
 **Example:**
 
 ```bash
-hippo reference list
+mosaic reference list
 ```
 
 ---
@@ -358,7 +358,7 @@ Install reference data from a source.
 ### Usage
 
 ```bash
-hippo install-ref <SOURCE> [OPTIONS]
+mosaic install-ref <SOURCE> [OPTIONS]
 ```
 
 ### Arguments
@@ -378,13 +378,13 @@ hippo install-ref <SOURCE> [OPTIONS]
 
 ```bash
 # Install from a local path
-hippo install-ref /path/to/reference/data
+mosaic install-ref /path/to/reference/data
 
 # Install with a specific name
-hippo install-ref /path/to/reference/data --name my_reference
+mosaic install-ref /path/to/reference/data --name my_reference
 
 # Force reinstall
-hippo install-ref /path/to/reference/data --force
+mosaic install-ref /path/to/reference/data --force
 ```
 
 ---
@@ -396,7 +396,7 @@ Update an existing reference.
 ### Usage
 
 ```bash
-hippo update-ref <NAME> [OPTIONS]
+mosaic update-ref <NAME> [OPTIONS]
 ```
 
 ### Arguments
@@ -415,10 +415,10 @@ hippo update-ref <NAME> [OPTIONS]
 
 ```bash
 # Update a reference
-hippo update-ref my_reference
+mosaic update-ref my_reference
 
 # Update with new source
-hippo update-ref my_reference --source /new/path/to/data
+mosaic update-ref my_reference --source /new/path/to/data
 ```
 
 ---
@@ -430,7 +430,7 @@ List installed reference data.
 ### Usage
 
 ```bash
-hippo list-ref [NAME] [OPTIONS]
+mosaic list-ref [NAME] [OPTIONS]
 ```
 
 ### Arguments
@@ -449,16 +449,16 @@ hippo list-ref [NAME] [OPTIONS]
 
 ```bash
 # List all references in table format
-hippo list-ref
+mosaic list-ref
 
 # List in JSON format
-hippo list-ref --format json
+mosaic list-ref --format json
 
 # List in YAML format
-hippo list-ref --format yaml
+mosaic list-ref --format yaml
 
 # Filter by name
-hippo list-ref sample_ref
+mosaic list-ref sample_ref
 ```
 
 ---
@@ -470,7 +470,7 @@ Validate a LinkML schema file.
 ### Usage
 
 ```bash
-hippo validate-schema <INPUT> [OPTIONS]
+mosaic validate-schema <INPUT> [OPTIONS]
 ```
 
 ### Arguments
@@ -489,10 +489,10 @@ hippo validate-schema <INPUT> [OPTIONS]
 
 ```bash
 # Validate a LinkML schema
-hippo validate-schema schema.yaml
+mosaic validate-schema schema.yaml
 
 # Validate a JSON-format schema
-hippo validate-schema schema.json --format json
+mosaic validate-schema schema.json --format json
 ```
 
 ---
@@ -504,7 +504,7 @@ Compare two schema files and show differences.
 ### Usage
 
 ```bash
-hippo schema-diff <FILE1> <FILE2>
+mosaic schema-diff <FILE1> <FILE2>
 ```
 
 ### Arguments
@@ -518,5 +518,5 @@ hippo schema-diff <FILE1> <FILE2>
 
 ```bash
 # Compare two schema versions
-hippo schema-diff schemas/v1.yaml schemas/v2.yaml
+mosaic schema-diff schemas/v1.yaml schemas/v2.yaml
 ```
