@@ -6,6 +6,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from hippo.api.factory import create_app
+from hippo.serve import create_default_app
 from hippo.serve.routers import drs
 
 
@@ -54,6 +55,18 @@ def _make_client(raw_entity=None, full_entity=None):
 def app_no_client():
     """App with no hippo_client attached (simulates un-initialised server)."""
     return create_app(routers=[drs.router])
+
+
+class TestDrsMountedByDefault:
+    def test_default_app_exposes_drs_endpoint(self):
+        """create_default_app() must mount the DRS router (issue #55)."""
+        raw = _make_raw_entity(data={"uri": "s3://bucket/file"})
+        full = _make_full_entity(data={"uri": "s3://bucket/file"})
+        mock_client = _make_client(raw_entity=raw, full_entity=full)
+        app = create_default_app(mock_client)
+        client = TestClient(app)
+        response = client.get("/ga4gh/drs/v1/objects/abc-123")
+        assert response.status_code == 200
 
 
 class TestDrsObjectNotFound:

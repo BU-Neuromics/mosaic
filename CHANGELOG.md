@@ -4,6 +4,10 @@
 
 ### Fixed
 
+- **GA4GH DRS router mounted in the default serve app.** `create_default_app()`
+  omitted the `drs` router from its router list, so `hippo serve` never
+  exposed `GET /ga4gh/drs/v1/objects/{object_id}` despite the router
+  shipping with tests. Fixes #55.
 - **`hippo ingest` now honors `--db-path` and config.** The command
   ignored `--db-path` (which it didn't even accept) and never consulted
   `config.json`/`hippo.yaml`, always writing to the factory default
