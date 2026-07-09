@@ -9,6 +9,13 @@
   `py.typed` marker (`src/mosaic/py.typed`), and `pyproject.toml` gains
   `keywords` and trove `classifiers` (including `Typing :: Typed`).
 
+### Fixed
+
+- **Mount the GA4GH DRS router in the default serve app (issue #55).** The DRS
+  read-only router (`GET /ga4gh/drs/v1/objects/{object_id}`) shipped with tests
+  but was never added to `create_default_app()`, so `mosaic serve` silently
+  omitted it. It is now mounted in the default router set.
+
 ## v0.11.0 — 2026-07-08 (Hippo is now Mosaic)
 
 ### Changed
