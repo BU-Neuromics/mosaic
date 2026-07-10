@@ -70,6 +70,30 @@
   already registered under a different class, instead of silently dropping
   the write. `mosaic ingest` surfaces this per-row as an `errors`-counted
   failure with the conflicting id and both class names.
+- **`mosaic ingest` now accepts `--db-path` (issue #89).** It previously had
+  no `--db-path` option and always wrote to the factory-default
+  `data/mosaic.db` relative to the CWD, regardless of the store a prior
+  `mosaic migrate --db-path` had targeted — `migrate` and `ingest` silently
+  diverged to different databases. `--db-path` now mirrors `migrate`/
+  `query`/`get` for both the LinkML-native path and the generic csv/json/sql
+  loader path.
+- **`test_cli_deprovision_not_installed_exits_nonzero` no longer fails under
+  the project's locked click/typer versions (issue #70).** The test asserted
+  on `result.stderr`, but with click 8.1.8 (pinned in `uv.lock`) typer's
+  `CliRunner` merges stderr into stdout by default and only separates it
+  when constructed with the click-8.2-removed `mix_stderr=False` flag, so
+  `.stderr` raised `ValueError: stderr not separately captured`. Now asserts
+  on `result.output`, matching every other CLI test in the suite and stable
+  across click 8.1/8.2.
+- **`docs/reference-loaders.md` `requires:` pin examples no longer use the
+  unsupported data-version-slug form (issue #78).** The examples showed
+  `mosaic-reference-ensembl==mus_musculus.GRCm39.115`, but v1's `requires:`
+  check matches the pin against the installed **pip package version**
+  (`importlib.metadata.version`), not the data-version slug passed to
+  `mosaic reference install --version` — so copying the documented form
+  failed with `HIPPO_REQUIRES_UNSATISFIED`. Examples now use the pip-version
+  form (`==0.1.0`) with a note on the distinction and the planned v2
+  slug-aware pin surface.
 - **Mount the GA4GH DRS router in the default serve app (issue #55).** The DRS
   read-only router (`GET /ga4gh/drs/v1/objects/{object_id}`) shipped with tests
   but was never added to `create_default_app()`, so `mosaic serve` silently

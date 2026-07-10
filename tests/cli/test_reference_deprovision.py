@@ -274,5 +274,11 @@ class TestDeprovisionCli:
             ],
         )
         assert result.exit_code != 0
-        # Errors are echoed to stderr (Typer ``err=True``).
-        assert "not installed" in result.stderr
+        # Errors are echoed to stderr (Typer ``err=True``). Assert on
+        # ``result.output`` rather than ``result.stderr``: click 8.1's
+        # ``CliRunner`` merges stderr into stdout by default and only
+        # captures it separately when constructed with the now-removed
+        # (click 8.2+) ``mix_stderr=False`` flag, so ``.stderr`` raises
+        # ``ValueError`` here. ``.output`` is what every other CLI test in
+        # this suite already asserts on and is stable across click 8.1/8.2.
+        assert "not installed" in result.output
