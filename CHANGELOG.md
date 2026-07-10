@@ -57,6 +57,19 @@
 
 ### Fixed
 
+- **Ingesting an id that already exists under a different class no longer
+  silently drops the row (issue #116).** `id` values are meant to be globally
+  unique (`_entity_registry` resolves an id to exactly one class), but
+  `MosaicClient.put()`/`replace()` resolved an id polymorphically without
+  checking it against the *requested* class — a second write to the same id
+  under a different class was silently treated as an update against the
+  wrong class's table, updated zero rows, and reported success (`created`/
+  `errors=0`) while persisting nothing. `put`, `replace`, and the SQLite
+  adapter's `create()` now raise a new `EntityTypeConflictError` (REST 409
+  "Entity Type Conflict", GraphQL `ENTITY_TYPE_CONFLICT`) when an id is
+  already registered under a different class, instead of silently dropping
+  the write. `mosaic ingest` surfaces this per-row as an `errors`-counted
+  failure with the conflicting id and both class names.
 - **Mount the GA4GH DRS router in the default serve app (issue #55).** The DRS
   read-only router (`GET /ga4gh/drs/v1/objects/{object_id}`) shipped with tests
   but was never added to `create_default_app()`, so `mosaic serve` silently

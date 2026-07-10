@@ -43,7 +43,11 @@ from mosaic.core.storage.fts import (
 )
 from mosaic.core.storage.xref import XREF_TABLE, extract_xref_pairs
 from mosaic.core.types import ProvenanceRecord as ProvenanceRecordType, TemporalRecord
-from mosaic.core.exceptions import SearchCapabilityError, XrefUniquenessError
+from mosaic.core.exceptions import (
+    EntityTypeConflictError,
+    SearchCapabilityError,
+    XrefUniquenessError,
+)
 
 
 class SQLiteEntity:
@@ -1838,6 +1842,23 @@ class SQLiteAdapter(EntityStore):
 
         with self._transaction() as conn:
             cursor = conn.cursor()
+
+            cursor.execute(
+                "SELECT class_name FROM _entity_registry WHERE uuid = ?",
+                (entity_id,),
+            )
+            registry_row = cursor.fetchone()
+            if registry_row is not None and registry_row["class_name"] != entity_type:
+                raise EntityTypeConflictError(
+                    message=(
+                        f"Cannot create entity {entity_id!r} as {entity_type!r}: "
+                        f"id already registered under "
+                        f"{registry_row['class_name']!r}."
+                    ),
+                    entity_id=entity_id,
+                    requested_entity_type=entity_type,
+                    existing_entity_type=registry_row["class_name"],
+                )
 
             self._insert_per_class(cursor, entity_type, entity_id, entity_data,
                                    is_available=is_available)

@@ -15,6 +15,7 @@ from mosaic.core.exceptions import (
     AdapterError,
     ConfigError,
     EntityAlreadySupersededError,
+    EntityTypeConflictError,
     IngestionError,
     MosaicError,
     ProvenanceIntegrityError,
@@ -52,6 +53,7 @@ logger = logging.getLogger(__name__)
 _MOSAIC_EXCEPTION_STATUS: list[tuple[type[MosaicError], int, str]] = [
     # Conflict — the request collides with current entity/config state.
     (EntityAlreadySupersededError, 409, "Entity Already Superseded"),
+    (EntityTypeConflictError, 409, "Entity Type Conflict"),
     (ConfigError, 409, "Configuration Error"),
     # Semantic validation failure surfaced outside the ValidationFailed path.
     (ValidationFailure, 422, "Validation Failed"),

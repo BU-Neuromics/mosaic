@@ -121,6 +121,34 @@ class EntityNotFoundError(MosaicError):
         super().__init__(message, **context)
 
 
+class EntityTypeConflictError(MosaicError):
+    """Raised when a write targets an ``id`` already registered under a
+    different concrete class.
+
+    ``id`` values are globally unique across all classes (``_entity_registry``
+    resolves an id to exactly one class), so a ``put``/``create`` for
+    ``entity_type`` on an id already owned by ``existing_entity_type`` can
+    never be a same-class update: it would either overwrite the wrong
+    table's row or silently no-op. Raised before any write is attempted.
+    """
+
+    def __init__(
+        self,
+        message: str,
+        entity_id: Optional[str] = None,
+        requested_entity_type: Optional[str] = None,
+        existing_entity_type: Optional[str] = None,
+        **context: Any,
+    ):
+        self.entity_id = entity_id
+        self.requested_entity_type = requested_entity_type
+        self.existing_entity_type = existing_entity_type
+        context["entity_id"] = entity_id
+        context["requested_entity_type"] = requested_entity_type
+        context["existing_entity_type"] = existing_entity_type
+        super().__init__(message, **context)
+
+
 class EntityAlreadySupersededError(MosaicError):
     """Exception raised when supersede_entity() is called on an already-superseded entity.
 

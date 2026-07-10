@@ -312,6 +312,9 @@ def _upsert_instance(
     except EntityNotFoundError:
         existed = False
 
+    # EntityTypeConflictError (id already registered under a different
+    # class) propagates to the caller's per-row exception handler, which
+    # bumps ``result.errors`` — it must not be miscounted as created/updated.
     client.put(entity_type=entity_type, data=data, entity_id=entity_id)
     if existed:
         result.updated += 1
