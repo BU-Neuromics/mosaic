@@ -27,6 +27,7 @@ from strawberry.types import Info
 from mosaic.core.exceptions import (
     EntityAlreadySupersededError,
     EntityNotFoundError,
+    EntityTypeConflictError,
     ValidationError as MosaicValidationError,
     ValidationFailed,
     ValidationFailure,
@@ -328,6 +329,16 @@ def _as_graphql_error(exc: Exception) -> GraphQLError:
         return GraphQLError(message, extensions={"code": "VALIDATION_FAILED"})
     if isinstance(exc, EntityAlreadySupersededError):
         return GraphQLError(message, extensions={"code": "ALREADY_SUPERSEDED"})
+    if isinstance(exc, EntityTypeConflictError):
+        return GraphQLError(
+            message,
+            extensions={
+                "code": "ENTITY_TYPE_CONFLICT",
+                "entity_id": exc.entity_id,
+                "requested_entity_type": exc.requested_entity_type,
+                "existing_entity_type": exc.existing_entity_type,
+            },
+        )
     if isinstance(exc, EntityNotFoundError):
         return GraphQLError(message, extensions={"code": "NOT_FOUND"})
     return GraphQLError(message, extensions={"code": "INTERNAL_ERROR"})

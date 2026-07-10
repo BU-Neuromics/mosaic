@@ -523,6 +523,11 @@ def ingest(
             "classes are recognized."
         ),
     ),
+    db_path: str = typer.Option(
+        None,
+        "--db-path",
+        help="Path to SQLite database (default: data/mosaic.db)",
+    ),
     dry_run: bool = typer.Option(
         False, "--dry-run", help="Show what would be written without writing"
     ),
@@ -538,6 +543,8 @@ def ingest(
         mosaic ingest --file bundle.yaml --validate-schema schema.yaml
 
         mosaic ingest --file bundle.yaml --validate-schema schema.yaml --dry-run
+
+        mosaic ingest --file bundle.yaml --validate-schema schema.yaml --db-path data/store.db
 
         mosaic ingest --type csv --file donors.csv --config donors_mapping.yaml
     """
@@ -589,7 +596,7 @@ def ingest(
             typer.echo(f"[dry-run] {file_path.name}: bundle validates.")
             return
 
-        client = _get_client(schema_path=validate_schema)
+        client = _get_client(db_path=db_path, schema_path=validate_schema)
         try:
             result = ingest_linkml_yaml(file_path, client, registry)
         except IngestError as e:
@@ -608,7 +615,7 @@ def ingest(
 
     elif loader_type:
         # Generic loader path (csv / json / sql)
-        _run_generic_loader(loader_type, file, config, dry_run)
+        _run_generic_loader(loader_type, file, config, dry_run, db_path)
 
     elif config:
         # Legacy: --config only (DataSources format). Process and exit without error.
@@ -623,7 +630,13 @@ def ingest(
         raise typer.Exit(1)
 
 
-def _run_generic_loader(loader_type: str, file: str | None, config: str | None, dry_run: bool) -> None:
+def _run_generic_loader(
+    loader_type: str,
+    file: str | None,
+    config: str | None,
+    dry_run: bool,
+    db_path: str | None = None,
+) -> None:
     """Run a generic loader (csv/json/sql) with an optional config file."""
     import yaml as _yaml
 
@@ -654,7 +667,7 @@ def _run_generic_loader(loader_type: str, file: str | None, config: str | None, 
 
     from mosaic.core.loaders.pipeline import IngestPipeline
 
-    client = _get_client()
+    client = _get_client(db_path=db_path)
     pipeline = IngestPipeline(client=client, loader=loader)
     result = pipeline.run(dry_run=dry_run)
 

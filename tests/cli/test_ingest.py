@@ -328,6 +328,41 @@ class TestIngestCLI:
         assert result.exit_code == 1
         assert "not found" in result.output
 
+    def test_cli_db_path_targets_named_store(
+        self, runner, tmp_hippo, schema_file, monkeypatch
+    ):
+        """``--db-path`` writes to the named store, not ``data/mosaic.db`` (issue #89)."""
+        bundle = _write_bundle(
+            tmp_hippo,
+            {"projects": [{"id": "p1", "name": "Project One", "is_available": True}]},
+        )
+        store_dir = tmp_hippo / "store-0"
+        store_dir.mkdir()
+        db_path = store_dir / "mosaic.db"
+
+        # A default-path store also exists in the CWD, so a regression back
+        # to the old CWD-relative default would silently "succeed" against
+        # the wrong database instead of erroring.
+        (tmp_hippo / "data").mkdir()
+        monkeypatch.chdir(tmp_hippo)
+
+        result = runner.invoke(
+            app,
+            [
+                "ingest",
+                "--file",
+                str(bundle),
+                "--validate-schema",
+                str(schema_file),
+                "--db-path",
+                str(db_path),
+            ],
+        )
+        assert result.exit_code == 0, result.output
+        assert "created=1" in result.output
+        assert db_path.exists()
+        assert not (tmp_hippo / "data" / "mosaic.db").exists()
+
 
 # ---------------------------------------------------------------------------
 # IngestResult

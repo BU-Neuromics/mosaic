@@ -127,10 +127,10 @@ Add a `requires:` block to `schema.yaml` to declare which reference loaders your
 # schema.yaml
 requires:
   - mosaic-reference-fma==3.3
-  - mosaic-reference-ensembl==mus_musculus.GRCm39.115
+  - mosaic-reference-ensembl==0.1.0
 ```
 
-Only exact-match pins (`==`) are supported in v1. If you need a minimum version, pin the lowest acceptable release and upgrade explicitly with `mosaic reference upgrade`.
+Only exact-match pins (`==`) are supported in v1, and the pin's right-hand side is matched against the **installed pip package version** of the loader (`importlib.metadata.version`) — not the data-version slug you pass to `mosaic reference install --version` (see [Installing a loader package](#installing-a-loader-package) above). A future v2 surface will support pinning against the data-version slug directly via `hippo_meta.reference_versions`. If you need a minimum version, pin the lowest acceptable release and upgrade explicitly with `mosaic reference upgrade`.
 
 `mosaic validate` and `mosaic migrate` both check `requires:` before doing anything else — each fails fast with a clear install suggestion if a required loader is missing or its installed version disagrees with the pin.
 
@@ -160,7 +160,7 @@ Reference a loader-provided class from your own schema using the loader-prefixed
 ```yaml
 # schema.yaml
 requires:
-  - mosaic-reference-ensembl==mus_musculus.GRCm39.115
+  - mosaic-reference-ensembl==0.1.0
 classes:
   SampleAnnotation:
     attributes:

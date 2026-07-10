@@ -4,7 +4,11 @@ import uuid
 from datetime import datetime, timezone
 from typing import Any, Optional
 
-from mosaic.core.exceptions import EntityNotFoundError, ValidationFailure
+from mosaic.core.exceptions import (
+    EntityNotFoundError,
+    EntityTypeConflictError,
+    ValidationFailure,
+)
 from mosaic.core.ingestion import extract_fts_content
 from mosaic.core.schema_manager import SchemaManager
 from mosaic.core.storage.adapters.sqlite_adapter import SQLiteAdapter, SQLiteEntity
@@ -156,6 +160,17 @@ class IngestionService:
 
         existing = self._storage.read(final_id)
 
+        if existing is not None and existing.entity_type != entity_type:
+            raise EntityTypeConflictError(
+                message=(
+                    f"Cannot put entity {final_id!r} as {entity_type!r}: "
+                    f"id already registered under {existing.entity_type!r}."
+                ),
+                entity_id=final_id,
+                requested_entity_type=entity_type,
+                existing_entity_type=existing.entity_type,
+            )
+
         if existing is not None:
             new_version = existing.version + 1
             self._storage.update_data(
@@ -270,6 +285,16 @@ class IngestionService:
                 message=f"Entity not found: {entity_id}",
                 entity_type=entity_type,
                 entity_id=entity_id,
+            )
+        if existing.entity_type != entity_type:
+            raise EntityTypeConflictError(
+                message=(
+                    f"Cannot replace entity {entity_id!r} as {entity_type!r}: "
+                    f"id already registered under {existing.entity_type!r}."
+                ),
+                entity_id=entity_id,
+                requested_entity_type=entity_type,
+                existing_entity_type=existing.entity_type,
             )
 
         new_version = existing.version + 1
