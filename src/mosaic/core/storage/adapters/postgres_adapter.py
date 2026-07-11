@@ -1031,6 +1031,8 @@ class PostgresAdapter(EntityStore):
         self.max_pool_size = max_pool_size
         self._schema_version = schema_version or ""
         self._provenance_store: Optional[PostgresProvenanceStore] = None
+        # Per-class cache of multivalued reference slot names (issue #79/#81).
+        self._mv_ref_slots_cache: dict[str, list[str]] = {}
         # Per-thread staged-transaction state (mirrors SQLiteAdapter): when a
         # ``staged_transaction`` scope is active, inner ``_transaction`` calls
         # reuse the pinned connection and defer commit to the outer scope so a
@@ -1220,6 +1222,11 @@ class PostgresAdapter(EntityStore):
                 ON "ProvenanceRecord"(entity_type, timestamp, entity_id)
             """)
 
+            # ``seq`` is a monotonically increasing insertion-order marker.
+            # SQLite relationships rely on the implicit ``rowid`` to
+            # preserve multivalued reference slot order on hydration
+            # (issue #79/#81 / ADR-0002); Postgres has no equivalent
+            # implicit ordering, so this column stands in for it.
             cur.execute("""
                 CREATE TABLE IF NOT EXISTS relationships (
                     id TEXT PRIMARY KEY,
@@ -1229,7 +1236,8 @@ class PostgresAdapter(EntityStore):
                     metadata TEXT,
                     created_at TEXT NOT NULL,
                     created_by TEXT,
-                    is_available BOOLEAN NOT NULL DEFAULT TRUE
+                    is_available BOOLEAN NOT NULL DEFAULT TRUE,
+                    seq BIGSERIAL
                 )
             """)
 
@@ -1481,6 +1489,199 @@ class PostgresAdapter(EntityStore):
                 return entity_type
         return None
 
+    # -- multivalued reference slots → relationships (issue #79/#81 / ADR-0002) --
+    #
+    # Postgres has no per-class typed table (entities live in one generic
+    # ``entities`` row with a JSONB ``data`` document), so there is no
+    # column to omit the way SQLite omits one from its per-class table.
+    # Parity is achieved by stripping these slot keys out of the JSONB
+    # document before it is stored (the relationships table becomes the
+    # sole current-state source for them) and hydrating them back into
+    # ``entity["data"][slot]`` on every read path. The unstripped dict is
+    # still recorded verbatim in the ``ProvenanceRecord.patch`` (see
+    # ``create``/``update_data`` below), so as-of reconstruction
+    # (``get_state_at`` / ADR-0001) is unaffected — it never touches the
+    # relationships table and reads the full patch as before.
+
+    def _multivalued_ref_slot_names(self, entity_type: str) -> list[str]:
+        """Names of multivalued reference slots for a class (issue #79/#81).
+
+        Cached per class. Empty when the registry is absent or the class
+        declares no multivalued slot ranged on an entity type. Mirrors
+        ``SQLiteAdapter._multivalued_ref_slot_names``.
+        """
+        cached = self._mv_ref_slots_cache.get(entity_type)
+        if cached is None:
+            registry = self.schema_registry
+            if registry is None or not registry.has_class(entity_type):
+                cached = []
+            else:
+                cached = [
+                    name
+                    for name, _target in registry.multivalued_reference_slots(
+                        entity_type
+                    )
+                ]
+            self._mv_ref_slots_cache[entity_type] = cached
+        return cached
+
+    @staticmethod
+    def _normalize_ref_list(value: Any) -> list[str]:
+        """Normalize a multivalued reference slot value to a list of ids.
+
+        Mirrors ``SQLiteAdapter._normalize_ref_list``: tolerates a bare
+        scalar (treated as a single-element list) and drops ``None``
+        entries; non-string ids are coerced to ``str``.
+        """
+        if value is None:
+            return []
+        items = value if isinstance(value, (list, tuple)) else [value]
+        return [str(v) for v in items if v is not None]
+
+    def _strip_multivalued_refs(
+        self, entity_type: str, data: dict[str, Any]
+    ) -> dict[str, Any]:
+        """Drop multivalued reference slot keys before persisting to ``entities.data``.
+
+        These slots have no column-equivalent in the stored JSONB
+        document — only relationships. Returns ``data`` unchanged (no
+        copy) when the class has no such slots or none are present, to
+        keep the common path cheap.
+        """
+        slot_names = self._multivalued_ref_slot_names(entity_type)
+        if not slot_names or not any(name in data for name in slot_names):
+            return data
+        return {k: v for k, v in data.items() if k not in slot_names}
+
+    def _materialize_multivalued_refs(
+        self,
+        conn: "psycopg.Connection",
+        entity_type: str,
+        entity_id: str,
+        data: dict[str, Any],
+        *,
+        reconcile: bool,
+        actor: Optional[str] = None,
+    ) -> None:
+        """Persist multivalued reference slots as relationships (issue #79/#81).
+
+        Postgres mirror of ``SQLiteAdapter._materialize_multivalued_refs``:
+        one relationship per target id, keyed by the slot name, written in
+        the caller's transaction. On ``reconcile`` (update/replace) the
+        existing live edges of every such slot for this source are
+        soft-deleted first, then rebuilt from ``data`` — an omitted slot
+        clears its edges, matching column-NULL semantics on SQLite.
+
+        Target existence is NOT checked: single-valued reference ids
+        persist as opaque strings, and this matches that, so forward
+        references during bulk ingest are preserved. Each add/remove
+        records a ``relationship_add``/``relationship_remove``
+        ProvenanceRecord so as-of edge replay (ADR-0001) stays consistent.
+        """
+        slot_names = self._multivalued_ref_slot_names(entity_type)
+        if not slot_names:
+            return
+
+        rel_store = self._get_relationship_store(conn)
+        prov = self._get_provenance_store(conn)
+
+        for slot in slot_names:
+            if reconcile:
+                for rel in list(
+                    rel_store.find_by_source(entity_id, relationship_type=slot)
+                ):
+                    rel_store.delete(entity_id, rel.target_id, slot)
+                    prov.record(
+                        entity_id=entity_id,
+                        entity_type="relationship",
+                        operation="relationship_remove",
+                        actor_id=actor,
+                        patch={
+                            "source_id": entity_id,
+                            "target_id": rel.target_id,
+                            "relationship_type": slot,
+                        },
+                    )
+
+            if slot not in data:
+                continue
+            for target_id in self._normalize_ref_list(data[slot]):
+                rel = rel_store.create(
+                    source_id=entity_id,
+                    target_id=target_id,
+                    relationship_type=slot,
+                    created_by=actor,
+                )
+                prov.record(
+                    entity_id=entity_id,
+                    entity_type="relationship",
+                    operation="relationship_add",
+                    actor_id=actor,
+                    patch={
+                        "relationship_id": rel.id,
+                        "source_id": entity_id,
+                        "target_id": target_id,
+                        "relationship_type": slot,
+                    },
+                )
+
+    def _hydrate_multivalued_refs_batch(
+        self,
+        conn: "psycopg.Connection",
+        entity_type: str,
+        entity_ids: list[str],
+    ) -> dict[str, dict[str, list[str]]]:
+        """Read multivalued reference slot edges for a set of entities.
+
+        Postgres mirror of
+        ``SQLiteAdapter._hydrate_multivalued_refs_batch``: returns
+        ``{entity_id: {slot_name: [target_id, ...]}}`` in a single
+        round-trip (no N+1). Target ids preserve insertion order via the
+        ``seq`` column (Postgres has no SQLite-style implicit ``rowid``).
+        Only currently-live edges are returned.
+        """
+        slot_names = self._multivalued_ref_slot_names(entity_type)
+        if not slot_names or not entity_ids:
+            return {}
+
+        cur = conn.cursor()
+        cur.execute(
+            "SELECT source_id, relationship_type, target_id FROM relationships "
+            "WHERE source_id = ANY(%s) "
+            "AND relationship_type = ANY(%s) "
+            "AND is_available = TRUE "
+            "ORDER BY seq",
+            (list(entity_ids), list(slot_names)),
+        )
+        out: dict[str, dict[str, list[str]]] = {}
+        for row in cur.fetchall():
+            out.setdefault(row["source_id"], {}).setdefault(
+                row["relationship_type"], []
+            ).append(row["target_id"])
+        return out
+
+    def _hydrate_multivalued_refs_for_entities(
+        self, conn: "psycopg.Connection", entities: list["PostgresEntity"]
+    ) -> None:
+        """Batch-hydrate multivalued reference edges into ``entity.data``.
+
+        Unlike SQLite (whose per-class tables are scanned one type at a
+        time), a single Postgres ``find()`` can return rows spanning
+        several entity types. Ids are grouped by type so each distinct
+        type present in the result set costs one round-trip, not one per
+        entity.
+        """
+        by_type: dict[str, list[str]] = {}
+        for entity in entities:
+            by_type.setdefault(entity.entity_type, []).append(entity.id)
+        for entity_type, ids in by_type.items():
+            hydrated = self._hydrate_multivalued_refs_batch(conn, entity_type, ids)
+            if not hydrated:
+                continue
+            for entity in entities:
+                if entity.entity_type == entity_type and entity.id in hydrated:
+                    entity.data.update(hydrated[entity.id])
+
     # ------------------------------------------------------------------
     # EntityStore protocol implementation
     # ------------------------------------------------------------------
@@ -1517,6 +1718,13 @@ class PostgresAdapter(EntityStore):
                     if not callable(value):
                         entity_data[attr] = value
 
+        # Multivalued reference slots get no column-equivalent in the
+        # stored JSONB document (issue #79/#81 / ADR-0002) — only
+        # relationships. The provenance patch below still records the
+        # unstripped ``entity_data`` so as-of reconstruction sees the full
+        # submitted payload.
+        stored_data = self._strip_multivalued_refs(entity_type, entity_data)
+
         with self._transaction() as conn:
             cur = conn.cursor()
 
@@ -1532,7 +1740,7 @@ class PostgresAdapter(EntityStore):
                     entity_id,
                     entity_type,
                     entity.version if hasattr(entity, "version") else 1,
-                    json.dumps(entity_data),
+                    json.dumps(stored_data),
                 ),
             )
 
@@ -1543,6 +1751,15 @@ class PostgresAdapter(EntityStore):
                 operation="create",
                 actor_id=user_context,
                 patch=entity_data,
+            )
+
+            self._materialize_multivalued_refs(
+                conn,
+                entity_type,
+                entity_id,
+                entity_data,
+                reconcile=False,
+                actor=user_context,
             )
 
             if loader_context is not None:
@@ -1587,11 +1804,15 @@ class PostgresAdapter(EntityStore):
         previously didn't have it, so every SDK/transport update crashed
         (datahelix#45 golden path).
         """
+        # See ``create`` — multivalued reference slots are stripped from the
+        # stored JSONB document; the provenance patch keeps the full ``data``.
+        stored_data = self._strip_multivalued_refs(entity_type, data)
+
         with self._transaction() as conn:
             cur = conn.cursor()
             cur.execute(
                 "UPDATE entities SET data = %s, version = %s WHERE id = %s",
-                (json.dumps(data), new_version, entity_id),
+                (json.dumps(stored_data), new_version, entity_id),
             )
 
             provenance = PostgresProvenanceStore(conn, self._schema_version)
@@ -1601,6 +1822,15 @@ class PostgresAdapter(EntityStore):
                 operation=operation,
                 actor_id=actor,
                 patch=data,
+            )
+
+            self._materialize_multivalued_refs(
+                conn,
+                entity_type,
+                entity_id,
+                data,
+                reconcile=True,
+                actor=actor,
             )
 
             if loader_context is not None:
@@ -1665,7 +1895,11 @@ class PostgresAdapter(EntityStore):
             )
 
     def read(self, entity_id: str) -> Optional[PostgresEntity]:
-        """Read an entity by its ID (available entities only)."""
+        """Read an entity by its ID (available entities only).
+
+        Hydrates multivalued reference slot edges into ``entity.data``
+        (issue #79/#81 / ADR-0002) — see ``_hydrate_multivalued_refs_batch``.
+        """
         with self._transaction() as conn:
             cur = conn.cursor()
             cur.execute(
@@ -1678,10 +1912,20 @@ class PostgresAdapter(EntityStore):
             if row is None:
                 return None
 
-            return self._row_to_entity(row)
+            entity = self._row_to_entity(row)
+            mv_refs = self._hydrate_multivalued_refs_batch(
+                conn, entity.entity_type, [entity.id]
+            ).get(entity.id)
+            if mv_refs:
+                entity.data.update(mv_refs)
+            return entity
 
     def read_any(self, entity_id: str) -> Optional[PostgresEntity]:
-        """Read an entity by its ID, regardless of availability."""
+        """Read an entity by its ID, regardless of availability.
+
+        Hydrates multivalued reference slot edges into ``entity.data``,
+        mirroring ``read`` (issue #79/#81 / ADR-0002).
+        """
         with self._transaction() as conn:
             cur = conn.cursor()
             cur.execute(
@@ -1694,7 +1938,13 @@ class PostgresAdapter(EntityStore):
             if row is None:
                 return None
 
-            return self._row_to_entity(row)
+            entity = self._row_to_entity(row)
+            mv_refs = self._hydrate_multivalued_refs_batch(
+                conn, entity.entity_type, [entity.id]
+            ).get(entity.id)
+            if mv_refs:
+                entity.data.update(mv_refs)
+            return entity
 
     def resolve_type(self, entity_id: str) -> Optional[str]:
         """Return the entity_type for a given UUID, or None if unknown.
@@ -1746,6 +1996,16 @@ class PostgresAdapter(EntityStore):
 
             entity_type = row["entity_type"]
             original_data = row["data"] if isinstance(row["data"], dict) else json.loads(row["data"])
+            # The stored JSONB document has multivalued reference slots
+            # stripped (issue #79/#81 / ADR-0002); re-hydrate them from
+            # relationships so the deletion snapshot carries the full
+            # payload, mirroring ``SQLiteAdapter.delete``'s use of
+            # ``self.read()`` (which hydrates) for its snapshot.
+            mv_refs = self._hydrate_multivalued_refs_batch(
+                conn, entity_type, [entity_id]
+            ).get(entity_id)
+            if mv_refs:
+                original_data = {**original_data, **mv_refs}
 
             cur.execute(
                 """UPDATE entities SET is_available = FALSE
@@ -1817,8 +2077,13 @@ class PostgresAdapter(EntityStore):
                 params.append(query.offset)
 
             cur.execute(sql, params)
-            for row in cur.fetchall():
-                yield self._row_to_entity(row)
+            entities = [self._row_to_entity(row) for row in cur.fetchall()]
+            # Batched hydration (issue #79/#81 / ADR-0002): one round-trip
+            # per distinct entity type present in the result set, not one
+            # per entity. Still inside the connection's transaction scope
+            # so this runs before the ``with`` block is exited.
+            self._hydrate_multivalued_refs_for_entities(conn, entities)
+            yield from entities
 
     def _find_as_of(
         self, query: Query, as_of: str

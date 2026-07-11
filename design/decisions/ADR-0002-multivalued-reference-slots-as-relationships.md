@@ -203,6 +203,36 @@ Shipped for the SQLite backend:
 `src/hippo/core/storage/adapters/postgres_adapter.py` needs the same materialize/hydrate
 hooks), mirroring how ADR-0001 sequenced SQLite then PostgreSQL increments.
 
+### Update (issue #81): PostgreSQL parity shipped
+
+`PostgresAdapter` (now `src/mosaic/core/storage/adapters/postgres_adapter.py`) has no
+per-class typed table — every entity is one row in a generic `entities` table with a JSONB
+`data` document — so there was no column for a multivalued reference slot to be dropped
+*from*; instead the whole submitted dict, edges included, was stored verbatim in `data`.
+That is not silent data loss in the literal sense, but it is a representation gap from this
+ADR's design intent: the slot's values lived only as a plain JSON array, invisible to
+`find_relationships`/`traverse` and to `relationship_add`/`relationship_remove`-driven as-of
+edge replay (ADR-0001) — exactly the gap §2/§3 close for SQLite.
+
+Parity now ships: `PostgresAdapter._materialize_multivalued_refs` /
+`_hydrate_multivalued_refs_batch` mirror the SQLite methods of the same name, called from
+`create`/`update_data` and from `read`/`read_any`/`find`/`delete` respectively. Because
+Postgres has one row per entity rather than per-class columns, the slot keys are stripped
+from the stored JSONB document (the relationships table becomes the sole current-state
+source, matching SQLite's column omission) while the unstripped dict is still recorded in
+the `ProvenanceRecord.patch`, so `get_state_at`/as-of reconstruction is unaffected — as
+already noted above, it never touches the relationships table. A `seq BIGSERIAL` column was
+added to the `relationships` table to preserve edge insertion order on hydration (Postgres
+has no SQLite-style implicit `rowid`), and `find()`'s batched hydration groups by entity
+type since a single Postgres query can span multiple types, unlike SQLite's one-type-at-a-time
+per-class table scan. `PostgresDDLGenerator` (`src/mosaic/core/storage/pg_ddl_generator.py`
+— a separate per-class-table migration generator not currently wired into the CRUD path) was
+also updated to exclude multivalued reference slots from generated tables and collapse
+multivalued non-reference slots to a single TEXT column, for consistency with `DDLGenerator`.
+Tests ported to `tests/integration/test_postgres_multivalued_refs.py`. Status stays
+**Proposed** per the original decision — this update documents implementation, not
+ratification.
+
 ## Notes / open sub-questions
 
 - **Reconciliation granularity:** replace-all (soft-delete every slot-named edge from the

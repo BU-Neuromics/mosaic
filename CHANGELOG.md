@@ -57,6 +57,33 @@
 
 ### Fixed
 
+- **PostgreSQL now has parity with SQLite for multivalued reference/scalar
+  slots (issue #81, follow-up to #79 / ADR-0002).** `PostgresAdapter`
+  previously stored every submitted field verbatim in the `entities.data`
+  JSONB document, so multivalued reference slots round-tripped as plain
+  JSON arrays instead of relationships — no edges, no `relationship_add`/
+  `relationship_remove` provenance, no as-of edge replay (ADR-0001), and no
+  traversal support, unlike the SQLite backend fixed under #79. Multivalued
+  reference slot values are now materialized as relationships keyed by the
+  slot name inside the same transaction as `create`/`update_data` (target
+  existence is not checked, preserving forward references; update/replace
+  reconciles edges, so an omitted slot clears them) and stripped from the
+  stored JSONB document — the relationships table is the sole current-state
+  source, matching SQLite's per-class-table omission. `read`, `read_any`,
+  `find` (query), and `delete`'s snapshot now hydrate those edges back into
+  `entity["data"][slot]` in one batched round-trip (`find` batches per
+  distinct entity type present in the result set, since a single Postgres
+  query can span multiple types). The `relationships` table gains a `seq`
+  `BIGSERIAL` column so edge order is preserved on hydration (Postgres has
+  no SQLite-style implicit `rowid`). `PostgresDDLGenerator` (the separate,
+  not-yet-wired-into-CRUD per-class-table migration generator) also now
+  excludes multivalued reference slots from generated tables (no column, no
+  FK) and collapses multivalued non-reference slots to a single inline TEXT
+  column, mirroring `DDLGenerator._rewrite_multivalued_scalar_slots`. Ported
+  `tests/core/test_multivalued_refs.py`'s scenarios onto the adapter
+  directly as `tests/integration/test_postgres_multivalued_refs.py`. No data
+  migration/backfill — reconciliation is idempotent runtime upsert
+  behavior, and the project's dev-only stance covers any prior rows.
 - **Ingesting an id that already exists under a different class no longer
   silently drops the row (issue #116).** `id` values are meant to be globally
   unique (`_entity_registry` resolves an id to exactly one class), but

@@ -82,13 +82,28 @@ class PostgresDDLGenerator:
         )
 
         known_classes = set(registry.class_names())
+        # Multivalued reference slots (range is an entity class) get no
+        # column and no FK — they persist as relationships keyed by the
+        # slot name instead (issue #79/#81 / ADR-0002), mirroring
+        # ``DDLGenerator._rewrite_multivalued_scalar_slots``'s SQLite
+        # treatment of the equivalent case.
+        mv_ref_slot_names = {
+            name for name, _target in registry.multivalued_reference_slots(class_name)
+        }
         for slot in registry.induced_slots(class_name):
             if slot.name == id_name:
                 continue
+            if slot.name in mv_ref_slot_names:
+                continue
             rng = slot.range
+            # Multivalued *non-reference* slots (scalars/enums) collapse to
+            # a single inline TEXT column carrying JSON-encoded values,
+            # rather than the per-value column ``col_type`` below would
+            # otherwise imply (issue #79/#81 / ADR-0002).
+            is_mv_scalar = bool(slot.multivalued) and rng not in known_classes
             col_type = (
                 "TEXT"
-                if rng in known_classes or rng is None
+                if is_mv_scalar or rng in known_classes or rng is None
                 else self.TYPE_MAPPING.get(rng, "TEXT")
             )
             default = slot_default(slot)
