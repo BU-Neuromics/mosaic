@@ -998,10 +998,10 @@ def reference_install(
     from mosaic.cli.commands.reference import (
         _resolve_breakdown_counts,
         find_loader,
-        install_reference,
         parse_load_params,
         render_breakdown,
     )
+    from mosaic.core.loaders.lifecycle import install_reference
 
     from mosaic.core.factory import default_sqlite_path
 
@@ -1072,8 +1072,8 @@ def reference_upgrade(
         find_loader,
         parse_load_params,
         render_breakdown,
-        upgrade_reference,
     )
+    from mosaic.core.loaders.lifecycle import upgrade_reference
 
     from mosaic.core.factory import default_sqlite_path
 
@@ -1137,7 +1137,7 @@ def reference_migrate_bundle(
     extensions) end-to-end before the one commit. Any failure rolls the
     whole chain back, leaving the deployment exactly as it was.
     """
-    from mosaic.cli.commands.reference import migrate_bundle
+    from mosaic.core.loaders.lifecycle import migrate_bundle
 
     from mosaic.core.factory import default_sqlite_path
 
@@ -1214,7 +1214,7 @@ def reference_exposure(
     extension step; non-empty ⇒ supply a complementary ``evolve`` step or the
     end-to-end gate (``mosaic reference migrate-bundle``) will block it.
     """
-    from mosaic.cli.commands.reference import compute_exposure
+    from mosaic.core.loaders.lifecycle import compute_exposure
 
     try:
         report = compute_exposure(old_schema, new_schema, extension)
@@ -1252,7 +1252,7 @@ def reference_deprovision(
     ``--force`` is given (export first). Reference loaders prune their
     reconstructible rows willingly.
     """
-    from mosaic.cli.commands.reference import deprovision_reference
+    from mosaic.core.loaders.lifecycle import deprovision_reference
 
     from mosaic.core.factory import default_sqlite_path
 
@@ -1281,7 +1281,7 @@ def reference_list(
     ),
 ) -> None:
     """List discoverable reference loaders + installed versions."""
-    from mosaic.cli.commands.reference import list_reference_loaders
+    from mosaic.core.loaders.lifecycle import list_reference_loaders
 
     try:
         loaders = list_reference_loaders(db_path=db_path)

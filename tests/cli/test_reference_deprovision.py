@@ -25,7 +25,13 @@ from pathlib import Path
 import pytest
 from typer.testing import CliRunner
 
-import mosaic.cli.commands.reference as refmod
+# deprovision_reference's internal collaborator calls (find_loader,
+# _read_versions, _find_installed_dependents, _load_deployed_registry,
+# _build_fragment_spec, _merge_fragment_into, _build_client, _remove_version)
+# resolve against the module they're *defined* in
+# (mosaic.core.loaders.lifecycle, post-issue-#69 relocation) regardless of
+# where the caller imported them from, so patches must target that module.
+import mosaic.core.loaders.lifecycle as refmod
 from mosaic.cli.commands.reference import (
     META_KEY_VERSIONS,
     _find_installed_dependents,

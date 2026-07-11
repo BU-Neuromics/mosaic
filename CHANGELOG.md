@@ -112,6 +112,25 @@
   `staged_transaction` scope generally, so `batch_put` gains the same cyclic
   support.
 
+### Changed
+
+- **Reference-loader install/upgrade/deprovision lifecycle relocated into
+  the core SDK (issue #69).** Follow-up to #67 / PR #68, which moved
+  schema-package *discovery* and `requires:` resolution out of the CLI
+  layer into `mosaic/core/loaders/discovery.py`. The remaining lifecycle
+  orchestration (`install_reference`, `upgrade_reference`,
+  `deprovision_reference`, `migrate_bundle`, `compute_exposure`,
+  `list_reference_loaders`, and their private helpers) is pure business
+  logic with no `typer`/`argparse` dependency, so per CLAUDE.md's
+  "business logic in SDK, transport layers are thin wrappers" principle
+  it now lives in `mosaic/core/loaders/lifecycle.py`. `mosaic/cli/commands/
+  reference.py` re-exports every moved name so existing imports and test
+  monkeypatch targets keep resolving, and is now purely presentational
+  (argparse `--flag` rendering, typer sub-app mounting, breakdown table
+  formatting, and the cache verbs). `cli/main.py`'s command bodies import
+  the lifecycle entry points directly from core. Behavior-preserving; no
+  functional changes.
+
 ## v0.11.0 — 2026-07-08 (Hippo is now Mosaic)
 
 ### Changed

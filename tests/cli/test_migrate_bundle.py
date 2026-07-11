@@ -16,7 +16,11 @@ import pytest
 import yaml
 from linkml_runtime.utils.schemaview import SchemaView
 
-from mosaic.cli.commands import reference as refmod
+# migrate_bundle's internal collaborator calls (discover_schema_packages,
+# _build_merged_registry) resolve against the module they're *defined* in
+# (mosaic.core.loaders.lifecycle, post-issue-#69 relocation) regardless of
+# where the caller imported them from, so patches must target that module.
+from mosaic.core.loaders import lifecycle as refmod
 from mosaic.cli.commands.reference import _read_versions, _write_versions, migrate_bundle
 from mosaic.core.client import MosaicClient
 from mosaic.core.exceptions import MigrationGateError
