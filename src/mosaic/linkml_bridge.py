@@ -1109,6 +1109,12 @@ class SchemaRegistry:
         relationships keyed by the slot name (issue #79 / ADR-0002). Value
         types (``ExternalReference`` and any identifier-less value object) are
         excluded — they store inline as JSON TEXT regardless of cardinality.
+
+        A slot explicitly marked ``inlined``/``inlined_as_list`` is also
+        excluded even when its range declares an identifier: the schema
+        author has said the objects embed inline, so they must round-trip as
+        structured JSON rather than being coerced into id-only relationship
+        rows (issue #121).
         """
         known = set(self._sv.all_classes().keys())
         value_types = self.value_type_classes()
@@ -1120,6 +1126,8 @@ class SchemaRegistry:
                 and rng
                 and rng in known
                 and rng not in value_types
+                and not slot.inlined
+                and not slot.inlined_as_list
             ):
                 refs.append((slot.name, rng))
         return refs

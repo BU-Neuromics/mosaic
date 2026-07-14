@@ -99,8 +99,16 @@ class PostgresDDLGenerator:
             # Multivalued *non-reference* slots (scalars/enums) collapse to
             # a single inline TEXT column carrying JSON-encoded values,
             # rather than the per-value column ``col_type`` below would
-            # otherwise imply (issue #79/#81 / ADR-0002).
-            is_mv_scalar = bool(slot.multivalued) and rng not in known_classes
+            # otherwise imply (issue #79/#81 / ADR-0002). A multivalued slot
+            # explicitly marked ``inlined``/``inlined_as_list`` gets the same
+            # JSON TEXT treatment even when its range is a known class: it
+            # was excluded from ``mv_ref_slot_names`` above precisely because
+            # its objects embed inline rather than persisting as
+            # relationships (issue #121).
+            is_inlined = bool(slot.inlined or slot.inlined_as_list)
+            is_mv_scalar = bool(slot.multivalued) and (
+                rng not in known_classes or is_inlined
+            )
             col_type = (
                 "TEXT"
                 if is_mv_scalar or rng in known_classes or rng is None
@@ -134,7 +142,13 @@ class PostgresDDLGenerator:
             # in their own per-subclass tables so the base table can never
             # satisfy the FK, and an abstract base has no table at all. The
             # reference is stored as the plain TEXT id column above (issue #93).
-            if rng in known_classes and not registry.is_polymorphic_base(rng):
+            # Also skip inlined multivalued slots (issue #121): the column
+            # holds JSON-encoded objects, not an id.
+            if (
+                rng in known_classes
+                and not is_inlined
+                and not registry.is_polymorphic_base(rng)
+            ):
                 table.foreign_keys.append(
                     ForeignKeyDefinition(
                         columns=[slot.name],
