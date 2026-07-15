@@ -246,18 +246,36 @@ class DDLGenerator:
         list round-trips through that TEXT column via ``_coerce_for_column``
         (JSON-encodes lists) / ``_decode_column_value`` (JSON-decodes on read).
 
-        Multivalued slots whose range *is* a remaining class are left untouched
-        so their linktable is still generated (and then filtered in
-        ``generate``); those edges persist as relationships (ADR-0002).
+        A slot explicitly marked ``inlined``/``inlined_as_list`` is rewritten
+        the same way even when its range *is* a remaining class: the schema
+        author has said its objects embed inline, so they belong in a JSON
+        TEXT column on the declaring table, not a linktable/relationship —
+        otherwise a range class that also declares an identifier (so it isn't
+        a value type and keeps its own table) gets no column at all on the
+        declaring side and the values are dropped (issue #121).
+
+        Multivalued slots whose range *is* a remaining class and are **not**
+        marked inline are left untouched so their linktable is still
+        generated (and then filtered in ``generate``); those edges persist
+        as relationships (ADR-0002).
         """
         class_names = set((flat_schema.get("classes") or {}).keys())
 
         def _rewrite(slot_spec: Any) -> None:
-            if (
-                isinstance(slot_spec, dict)
-                and slot_spec.get("multivalued")
-                and slot_spec.get("range") not in class_names
-            ):
+            if not isinstance(slot_spec, dict) or not slot_spec.get("multivalued"):
+                return
+            rng = slot_spec.get("range")
+            is_inlined = bool(
+                slot_spec.get("inlined") or slot_spec.get("inlined_as_list")
+            )
+            if rng not in class_names or is_inlined:
+                if is_inlined:
+                    # rng is still a real class here (the branch above
+                    # already handles non-class ranges) — force it to a
+                    # scalar range too, or SQLTableGenerator treats the now
+                    # single-valued slot as a `<slot>_id` FK column instead
+                    # of a plain JSON TEXT column (issue #121).
+                    slot_spec["range"] = "string"
                 slot_spec["multivalued"] = False
                 slot_spec.pop("inlined", None)
                 slot_spec.pop("inlined_as_list", None)

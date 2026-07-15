@@ -57,6 +57,25 @@
 
 ### Fixed
 
+- **A multivalued `inlined_as_list` slot ranged on a class with its own
+  identifier no longer stringifies its inline objects (issue #121).**
+  `SchemaRegistry.multivalued_reference_slots` classified any multivalued
+  slot ranged on a known, non-value-type class as a reference — it never
+  consulted `slot.inlined`/`slot.inlined_as_list`. An explicitly inlined
+  list of objects whose range class declared an identifier (e.g.
+  `Analysis.parameters: Parameter`, `Parameter` having an `id`) was
+  therefore routed through the id-normalization relationship path, which
+  `str()`-coerced each element — the values round-tripped as a list of
+  stringified Python dicts (`"{'pid': 'P1', ...}"`) instead of structured
+  objects, silently (`errors=0`). Identifier-less inline value objects
+  (`Mass`/`Volume`/`Concentration`) were unaffected. `inlined`/
+  `inlined_as_list` slots are now excluded from
+  `multivalued_reference_slots` regardless of whether the range declares an
+  identifier, and both DDL generators (`DDLGenerator` for SQLite,
+  `PostgresDDLGenerator` for the not-yet-wired-into-CRUD per-class-table
+  migration path) collapse them to a single JSON TEXT column instead of a
+  linktable/FK, mirroring the existing scalar-multivalued and
+  identifier-less-value-type treatment.
 - **PostgreSQL now has parity with SQLite for multivalued reference/scalar
   slots (issue #81, follow-up to #79 / ADR-0002).** `PostgresAdapter`
   previously stored every submitted field verbatim in the `entities.data`
