@@ -10,10 +10,13 @@ renders into GraphQL:
 
 - One object type per exposed entity class (``build_type_model``).
 - Slots map to GraphQL fields with scalar/enum/list typing.
-- Reference slots (``SlotKind.REFERENCE``) get TWO fields: the raw
-  stored UUID (``donor`` → ``donorId: ID``) and a resolved field
-  (``donor: Donor``) that traverses the graph via a per-request
-  DataLoader.
+- Reference slots (``SlotKind.REFERENCE``) emit ONE field: the resolved
+  relationship (``donor: Donor``), traversed via a per-request DataLoader.
+  The raw stored id is a hidden ``strawberry.Private`` carrier the resolver
+  reads — not an exposed GraphQL field (edge-only; ADR-0005). Physical
+  identifiers never cross the API boundary. A reference whose target has no
+  generated type (abstract/polymorphic base) retains a raw ``*_id`` field as
+  an interim (polymorphic reference resolution is future work).
 - System fields (``id``, ``is_available``) come from the entity table;
   temporal fields (``schema_typing.TEMPORAL_FIELDS`` plus ``version``
   and ``superseded_by``) are computed at read time from the provenance
@@ -29,6 +32,7 @@ from __future__ import annotations
 import enum
 import keyword
 import re
+import warnings
 from dataclasses import dataclass, field as dc_field
 from typing import Any, NewType, Optional
 
@@ -433,6 +437,16 @@ class GraphQLTypeBuilder:
         if spec.slot_name == "is_available":
             return bool
         if spec.kind == "reference":
+            if spec.resolvable:
+                # Edge-only (ADR-0005): the raw foreign-key id is a hidden
+                # carrier the resolved-field resolver reads — never an exposed
+                # GraphQL field. Only the resolved relationship is in the schema,
+                # so a physical id never crosses the API boundary.
+                carrier: Any = list[str] if spec.multivalued else str
+                return strawberry.Private[Optional[carrier]]
+            # Unresolvable target (abstract/polymorphic base with no generated
+            # type): retain the raw *_id field so the reference isn't lost.
+            # See _build_object_types for the rationale + build-time warning.
             base: Any = strawberry.ID
         elif spec.kind == "enum":
             base = spec.enum_cls
@@ -459,16 +473,52 @@ class GraphQLTypeBuilder:
             assert model is not None
 
             specs = [self._slot_spec(slot) for slot in model.fields]
-            # Final resolvability check: a resolved relationship field
-            # must not collide with any sibling attribute name.
+            # Edge-only reference emission (ADR-0005): every reference renders
+            # as its resolved relationship field; the raw id is a hidden carrier
+            # (see _output_annotation). Two cases can't produce an edge and are
+            # handled explicitly rather than silently downgraded to a raw-id
+            # field:
+            #   * a resolved-field NAME COLLISION with a sibling → build error
+            #     (fail loud; the schema is ambiguous);
+            #   * a target with NO generated type (abstract/polymorphic base)
+            #     → retain the raw *_id field as an interim, and warn.
             used = {s.attr_name for s in specs}
             for spec in specs:
-                if spec.kind == "reference" and spec.resolvable:
+                if spec.kind != "reference":
+                    continue
+                if spec.resolvable:
                     if spec.resolved_attr in used:
-                        spec.resolvable = False
-                        spec.resolved_attr = None
-                    else:
-                        used.add(spec.resolved_attr)  # type: ignore[arg-type]
+                        raise ValueError(
+                            f"{class_name}.{spec.slot_name}: the resolved "
+                            f"relationship field '{spec.resolved_attr}' collides "
+                            f"with another field on {class_name}. Rename the slot "
+                            f"to disambiguate (edge-only reference emission, "
+                            f"ADR-0005 — no silent raw-id fallback)."
+                        )
+                    used.add(spec.resolved_attr)  # type: ignore[arg-type]
+                elif spec.target_class in self.entities:
+                    # resolvable was cleared for a name degeneracy even though
+                    # the target IS exposed — same ambiguity, fail loud.
+                    raise ValueError(
+                        f"{class_name}.{spec.slot_name}: cannot derive a distinct "
+                        f"resolved relationship field name for reference target "
+                        f"'{spec.target_class}' (edge-only, ADR-0005). Rename the "
+                        f"slot to disambiguate."
+                    )
+                else:
+                    # Abstract/polymorphic base (ADR-0003) has no generated
+                    # object type to resolve to. Keep the raw *_id field as an
+                    # interim so the reference is not dropped; edge-only covers
+                    # resolvable references, and interface/union-typed
+                    # polymorphic references are future work.
+                    warnings.warn(
+                        f"{class_name}.{spec.slot_name}: reference target "
+                        f"'{spec.target_class}' has no generated GraphQL type "
+                        f"(abstract/polymorphic base); retaining the raw "
+                        f"'{spec.attr_name}' id field as an interim "
+                        f"(edge-only emission, ADR-0005).",
+                        stacklevel=2,
+                    )
 
             for spec in specs:
                 entity.slots.append(spec)

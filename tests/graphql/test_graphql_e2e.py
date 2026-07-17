@@ -230,13 +230,14 @@ class TestRelationshipTraversal:
     def test_single_reference_resolves(self, gql):
         donor_id = _create_donor(gql, name="Rosalind")
         sample_id = _create_sample(gql, name="tissue-1", donorId=donor_id)
+        # Edge-only (ADR-0005): the reference is read through the resolved
+        # edge (donor { id }), not a raw donorId scalar (which no longer exists).
         body = gql(
             "query($id: ID!) { sample(id: $id) {"
-            "  donorId donor { id name sex } } }",
+            "  donor { id name sex } } }",
             {"id": sample_id},
         )
         sample = body["data"]["sample"]
-        assert sample["donorId"] == donor_id
         assert sample["donor"]["id"] == donor_id
         assert sample["donor"]["name"] == "Rosalind"
 
@@ -245,11 +246,11 @@ class TestRelationshipTraversal:
         child_id = _create_sample(gql, name="child", parent=parent_id)
         body = gql(
             "query($id: ID!) { sample(id: $id) {"
-            "  parentId parent { id name parent { id } } } }",
+            "  parent { id name parent { id } } } }",
             {"id": child_id},
         )
         child = body["data"]["sample"]
-        assert child["parentId"] == parent_id
+        assert child["parent"]["id"] == parent_id
         assert child["parent"]["name"] == "parent"
         assert child["parent"]["parent"] is None
 
@@ -302,14 +303,14 @@ class TestMutations:
         )
         body = gql(
             "mutation($id: ID!) { updateSample(id: $id, data: {volumeMl: 9.9}) {"
-            "  name volumeMl donorId version } }",
+            "  name volumeMl donor { id } version } }",
             {"id": sample_id},
         )
         updated = body["data"]["updateSample"]
         # Untouched fields survive: MosaicClient.update is full-replace,
         # the transport merges the patch over the stored data.
         assert updated["name"] == "keep-me"
-        assert updated["donorId"] == donor_id
+        assert updated["donor"]["id"] == donor_id
         assert updated["volumeMl"] == 9.9
         assert updated["version"] == 2
 

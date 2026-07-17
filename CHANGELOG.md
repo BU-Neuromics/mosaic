@@ -2,6 +2,21 @@
 
 ## [Unreleased]
 
+### Changed
+
+- **BREAKING — GraphQL reference emission is edge-only ([ADR-0005](design/decisions/ADR-0005-graphql-reference-emission-edge-only.md)).**
+  A reference slot now renders as a single resolved relationship field
+  (`donor: Donor`, `samples: [Sample!]!`); the raw `*_id`/`*_ids` output scalar
+  is **removed**. The stored foreign-key id becomes a hidden
+  `strawberry.Private` carrier the resolver reads — physical identifiers no
+  longer cross the API boundary (the *logical-identity boundary* invariant).
+  Read a reference's id through the edge (`donor { id }`); filter/create/update
+  inputs are unchanged (they still take the target id under the slot name). A
+  reference to an abstract/polymorphic base (no generated type) retains a raw
+  `*_id` field as an interim (build-time warning); a resolved-name collision is
+  now a build-time error rather than a silent raw-id fallback. Consumers
+  reading the raw output field must migrate to the edge. (#133)
+
 ## v0.11.0 — 2026-07-17 (Hippo is now Mosaic; status introspection, incremental polling, cyclic-reference ingest)
 
 ### Added
