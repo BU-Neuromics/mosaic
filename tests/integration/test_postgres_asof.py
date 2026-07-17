@@ -89,6 +89,30 @@ def test_query_as_of_applies_filters(client, adapter):
     assert {item["data"]["name"] for item in res.items} == {"keep"}
 
 
+def test_query_as_of_applies_in_filter(client, adapter):
+    """IN / set-membership filter (issue #102) on the as-of (Python-side)
+    matcher — Postgres parity with the SQLite as-of path."""
+    _entity(adapter, "keep1")
+    _entity(adapter, "keep2")
+    _entity(adapter, "drop")
+    res = client.query(
+        entity_type="Sample",
+        filters=[{"field": "name", "op": "in", "value": ["keep1", "keep2"]}],
+        as_of=FUTURE,
+    )
+    assert {item["data"]["name"] for item in res.items} == {"keep1", "keep2"}
+
+
+def test_query_as_of_empty_in_filter_matches_nothing(client, adapter):
+    _entity(adapter, "alpha")
+    res = client.query(
+        entity_type="Sample",
+        filters=[{"field": "name", "op": "in", "value": []}],
+        as_of=FUTURE,
+    )
+    assert res.total == 0
+
+
 def test_traverse_as_of(client, adapter):
     a = _entity(adapter, "a")
     b = _entity(adapter, "b")

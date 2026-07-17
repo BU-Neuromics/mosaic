@@ -44,6 +44,33 @@ class Query:
         self.filter_mode = filter_mode  # "and" or "or"
 
 
+# Filter ops recognized by ``normalize_filter`` / adapter predicate builders
+# (issue #102). "eq" is the historical (and default) behavior; "in" is the
+# set-membership predicate-pushdown prerequisite.
+VALID_FILTER_OPS = {"eq", "in"}
+
+
+def normalize_filter(f: Dict[str, Any]) -> List[tuple]:
+    """Normalize one ``Query.filters`` entry to ``[(field, op, value), ...]``.
+
+    Accepts both filter-dict shapes in use across the codebase:
+
+    - Canonical: ``{"field": ..., "value": ..., "op": ...}``. ``op`` is
+      optional and defaults to ``"eq"`` — filters built before ``op``
+      existed (and third-party callers passing extra keys like
+      ``"operator"``, which is ignored) keep behaving exactly as before.
+      Yields a single ``(field, "eq"|op, value)`` triple.
+    - Bare shorthand: ``{field_name: value, ...}``, always ``"eq"``.
+      Yields one triple per key (historically each key of a shorthand
+      dict is an independent AND'd sub-filter — see the adapters'
+      pre-existing ``for key, value in f.items()`` loops).
+    """
+    if "field" in f and "value" in f:
+        op = f.get("op", "eq")
+        return [(f["field"], op, f["value"])]
+    return [(key, "eq", value) for key, value in f.items()]
+
+
 class EntityStore(ABC):
     """Abstract base class for storage adapters.
 
@@ -270,4 +297,6 @@ __all__ = [
     "EntityStore",
     "ScoredMatch",
     "ValidatingEntityStore",
+    "VALID_FILTER_OPS",
+    "normalize_filter",
 ]

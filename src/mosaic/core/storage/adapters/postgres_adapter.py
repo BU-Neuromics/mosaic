@@ -27,7 +27,7 @@ from typing import TYPE_CHECKING, Any, Dict, Generator, Iterator, List, Optional
 if TYPE_CHECKING:
     from mosaic.linkml_bridge import SchemaRegistry
 
-from mosaic.core.storage import EntityStore, Query, ScoredMatch
+from mosaic.core.storage import EntityStore, Query, ScoredMatch, normalize_filter
 from mosaic.core.types import ProvenanceRecord as ProvenanceRecordType, TemporalRecord
 from mosaic.core.exceptions import AdapterError, SearchCapabilityError
 
@@ -2052,16 +2052,20 @@ class PostgresAdapter(EntityStore):
                 joiner = " OR " if getattr(query, "filter_mode", "and") == "or" else " AND "
                 filter_clauses = []
                 for f in query.filters:
-                    if "field" in f and "value" in f:
-                        field = f["field"]
-                        value = f["value"]
-                        filter_clauses.append("data->>%s = %s")
-                        params.append(field)
-                        params.append(self._jsonb_text(value))
-                    else:
-                        for key, value in f.items():
+                    for field, op, value in normalize_filter(f):
+                        if op == "in":
+                            if not value:
+                                # Empty IN-list: short-circuit to "no rows
+                                # match" rather than `= ANY('{}')` semantics
+                                # surprises.
+                                filter_clauses.append("FALSE")
+                                continue
+                            filter_clauses.append("data->>%s = ANY(%s)")
+                            params.append(field)
+                            params.append([self._jsonb_text(v) for v in value])
+                        else:
                             filter_clauses.append("data->>%s = %s")
-                            params.append(key)
+                            params.append(field)
                             params.append(self._jsonb_text(value))
                 if filter_clauses:
                     sql += " AND (" + joiner.join(filter_clauses) + ")"
@@ -2127,24 +2131,29 @@ class PostgresAdapter(EntityStore):
     def _matches_filters(
         data: dict[str, Any], entity_id: str, query: Query
     ) -> bool:
-        """Equality-match query.filters against reconstructed data (honoring
+        """Match query.filters against reconstructed data (honoring
         filter_mode). Mirrors the SQLite as-of path; ``id`` resolves to
-        ``entity_id``."""
+        ``entity_id``.
+
+        Supports ``op="eq"`` (default) and ``op="in"`` (set membership —
+        issue #102); an empty ``"in"`` list matches nothing.
+        """
         filters = query.filters or []
         if not filters:
             return True
 
-        def one(field: str, value: Any) -> bool:
+        def one(field: str, op: str, value: Any) -> bool:
             actual = entity_id if field == "id" else data.get(field)
+            if op == "in":
+                if not value:
+                    return False
+                return actual in value
             return actual == value
 
         checks: list[bool] = []
         for f in filters:
-            if "field" in f and "value" in f:
-                checks.append(one(f["field"], f["value"]))
-            else:
-                for key, value in f.items():
-                    checks.append(one(key, value))
+            for field, op, value in normalize_filter(f):
+                checks.append(one(field, op, value))
         if not checks:
             return True
         mode = getattr(query, "filter_mode", "and")

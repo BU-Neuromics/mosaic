@@ -4,6 +4,22 @@
 
 ### Added
 
+- **IN / set-membership filter — SDK + GraphQL (partial issue #102).**
+  `Query.filters` entries gain an optional `op` key alongside `field`/
+  `value` (`{"field": ..., "op": "in", "value": [...]}`); `op` defaults to
+  `"eq"` so every pre-existing filter dict — canonical or the bare
+  `{field: value}` shorthand — keeps behaving exactly as before. `"in"`
+  matches when the field's value is a member of the given list; an empty
+  list short-circuits to "no rows match" rather than emitting invalid
+  `IN ()` SQL. Implemented across all four filter-evaluation paths: the
+  SQLite typed-column path (`"field" IN (?,...)`), the SQLite as-of
+  Python matcher, the PostgreSQL JSONB path (`data->>%s = ANY(%s)`), and
+  the PostgreSQL as-of Python matcher — sharing a new
+  `mosaic.core.storage.normalize_filter()` helper. GraphQL's
+  `FilterInput` gains an `op: FilterOp` field (`EQ`/`IN`, default `EQ`)
+  threaded through to the SDK. REST field filtering is out of scope for
+  this change — `mosaic/serve/routers/entity.py` does not yet wire
+  arbitrary field filters at all (a separate prerequisite gap).
 - **Status introspection across SDK / REST / CLI (sec4 system
   endpoints).** `MosaicClient.status()` owns a single status summary —
   Mosaic version, active storage adapter, schema version, declared entity
