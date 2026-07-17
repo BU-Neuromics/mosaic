@@ -173,6 +173,60 @@ class TestPostgresAdapterQuery:
         results = list(adapter.find(query))
         assert len(results) >= 2
 
+    def test_find_with_in_filter(self, adapter):
+        """IN / set-membership filter (issue #102) — JSONB path."""
+        from mosaic.core.storage import Query
+        from mosaic.core.storage.adapters.postgres_adapter import PostgresEntity
+
+        e1 = PostgresEntity(
+            id=str(uuid.uuid4()),
+            entity_type="Sample",
+            is_available=True,
+            version=1,
+            data={"name": "Alpha", "category": "blood"},
+        )
+        e2 = PostgresEntity(
+            id=str(uuid.uuid4()),
+            entity_type="Sample",
+            is_available=True,
+            version=1,
+            data={"name": "Beta", "category": "tissue"},
+        )
+        e3 = PostgresEntity(
+            id=str(uuid.uuid4()),
+            entity_type="Sample",
+            is_available=True,
+            version=1,
+            data={"name": "Gamma", "category": "bone"},
+        )
+        adapter.create(e1)
+        adapter.create(e2)
+        adapter.create(e3)
+
+        query = Query(
+            entity_type="Sample",
+            filters=[
+                {"field": "category", "op": "in", "value": ["blood", "tissue"]}
+            ],
+        )
+        results = list(adapter.find(query))
+        ids = {r.id for r in results}
+        assert e1.id in ids
+        assert e2.id in ids
+        assert e3.id not in ids
+
+    def test_find_with_empty_in_filter_matches_nothing(self, adapter, sample_entity):
+        """Empty IN-list short-circuits to no matches (issue #102)."""
+        from mosaic.core.storage import Query
+
+        adapter.create(sample_entity)
+        query = Query(
+            entity_type="Sample",
+            filters=[{"field": "category", "op": "in", "value": []}],
+        )
+        results = list(adapter.find(query))
+        assert results == []
+
     def test_find_with_limit_offset(self, adapter):
         from mosaic.core.storage import Query
         from mosaic.core.storage.adapters.postgres_adapter import PostgresEntity

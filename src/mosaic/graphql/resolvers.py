@@ -50,10 +50,23 @@ class FilterMode(enum.Enum):
     OR = "or"
 
 
-@strawberry.input(description="Field/value equality filter (SDK query filter).")
+@strawberry.enum(description="Predicate applied to a filter's field/value (SDK filter op).")
+class FilterOp(enum.Enum):
+    EQ = "eq"
+    IN = "in"
+
+
+@strawberry.input(
+    description=(
+        "Field/value filter (SDK query filter). ``op`` defaults to EQ "
+        "(equality); IN treats ``value`` as a list and matches when the "
+        "field is a member of it (issue #102)."
+    )
+)
 class FilterInput:
     field: str
     value: JSON
+    op: FilterOp = FilterOp.EQ
 
 
 @strawberry.type(
@@ -378,7 +391,10 @@ def _make_list_resolver(builder: GraphQLTypeBuilder, entity: EntityGraphQLInfo):
     ):
         paginated = _client(info).query(
             entity_type=class_name,
-            filters=[{"field": f.field, "value": f.value} for f in filters or []],
+            filters=[
+                {"field": f.field, "value": f.value, "op": f.op.value}
+                for f in filters or []
+            ],
             limit=limit,
             offset=offset,
             filter_mode=filter_mode.value,

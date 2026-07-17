@@ -187,6 +187,44 @@ class TestQueries:
         )
         assert body["data"]["samples"]["total"] == 2
 
+    def test_list_with_in_filter(self, gql):
+        """IN / set-membership filter (issue #102) — FilterInput.op: IN,
+        value is a list. Mirrors test_list_with_equality_filter."""
+        _create_sample(gql, name="brain-3")
+        _create_sample(gql, name="liver-3")
+        _create_sample(gql, name="heart-3")
+        body = gql(
+            '{ samples(filters: [{field: "name", op: IN, '
+            'value: ["brain-3", "heart-3"]}]) {'
+            "  total items { name } } }"
+        )
+        assert "errors" not in body, body
+        page = body["data"]["samples"]
+        assert page["total"] == 2
+        names = {item["name"] for item in page["items"]}
+        assert names == {"brain-3", "heart-3"}
+
+    def test_list_with_in_filter_empty_list_matches_nothing(self, gql):
+        _create_sample(gql, name="only-one")
+        body = gql(
+            '{ samples(filters: [{field: "name", op: IN, value: []}]) { total } }'
+        )
+        assert "errors" not in body, body
+        assert body["data"]["samples"]["total"] == 0
+
+    def test_list_with_eq_op_matches_default(self, gql):
+        """``op`` defaults to EQ — explicit EQ behaves like the
+        default/omitted case (backward compatibility)."""
+        _create_sample(gql, name="explicit-eq")
+        body = gql(
+            '{ samples(filters: [{field: "name", op: EQ, '
+            'value: "explicit-eq"}]) { total items { name } } }'
+        )
+        assert "errors" not in body, body
+        page = body["data"]["samples"]
+        assert page["total"] == 1
+        assert page["items"][0]["name"] == "explicit-eq"
+
 
 class TestRelationshipTraversal:
     def test_single_reference_resolves(self, gql):
