@@ -81,22 +81,24 @@ class TestObjectTypeGeneration:
 
 
 class TestRelationshipFields:
-    def test_reference_slot_gets_raw_id_and_resolved_field(self, sdl):
+    def test_reference_emits_edge_only(self, sdl):
+        # Edge-only (ADR-0005): the resolved relationship is the ONLY field;
+        # the raw *_id scalar is a hidden Private carrier, absent from the SDL.
         sample = _block(sdl, "type Sample")
-        assert "donorId: ID" in sample  # raw stored UUID
-        assert "donor: Donor" in sample  # graph traversal
+        assert "donor: Donor" in sample  # resolved graph edge
+        assert "donorId" not in sample  # raw FK id is not exposed
 
-    def test_self_reference_without_id_suffix(self, sdl):
+    def test_self_reference_emits_edge_only(self, sdl):
         sample = _block(sdl, "type Sample")
-        # Slot is named `parent` (no _id suffix): raw field derives the
-        # _id name, resolved field keeps the natural name.
-        assert "parentId: ID" in sample
+        # Slot named `parent` (no _id suffix): the resolved field keeps the
+        # natural name; the raw parentId field is not exposed.
         assert "parent: Sample" in sample
+        assert "parentId" not in sample
 
-    def test_multivalued_reference(self, sdl):
+    def test_multivalued_reference_emits_edge_only(self, sdl):
         study = _block(sdl, "type Study")
-        assert "sampleIds: [ID!]" in study
         assert "samples: [Sample!]!" in study
+        assert "sampleIds" not in study
 
 
 class TestPageTypes:
@@ -245,6 +247,86 @@ imports:
   - hippo_core
 default_range: string
 """
+
+
+#: A reference whose range is an ABSTRACT polymorphic base (ADR-0003). The
+#: base has no generated object type, so the reference can't resolve to an edge.
+EDGE_ONLY_POLYMORPHIC_SCHEMA = """
+id: https://example.org/hippo/test_edge_only_polymorphic
+name: test_edge_only_polymorphic
+prefixes:
+  linkml: https://w3id.org/linkml/
+imports:
+  - linkml:types
+  - hippo_core
+default_range: string
+
+classes:
+  Container:
+    is_a: Entity
+    abstract: true
+    attributes:
+      label:
+        required: true
+  Box:
+    is_a: Container
+  Item:
+    is_a: Entity
+    attributes:
+      name:
+        required: true
+      container:
+        range: Container
+"""
+
+#: A resolved relationship field name that collides with a sibling scalar slot.
+EDGE_ONLY_COLLISION_SCHEMA = """
+id: https://example.org/hippo/test_edge_only_collision
+name: test_edge_only_collision
+prefixes:
+  linkml: https://w3id.org/linkml/
+imports:
+  - linkml:types
+  - hippo_core
+default_range: string
+
+classes:
+  Donor:
+    is_a: Entity
+    attributes:
+      name:
+        required: true
+  Widget:
+    is_a: Entity
+    attributes:
+      donor_id:
+        range: Donor
+      donor:
+        range: string
+"""
+
+
+class TestEdgeOnlyReferenceEmission:
+    """ADR-0005: references emit only the resolved edge; the raw id is hidden.
+
+    The two cases that can't produce an edge are handled explicitly — a
+    non-exposed (abstract/polymorphic) target keeps a raw id as an interim; a
+    resolved-name collision is a build-time error (no silent raw-id fallback).
+    """
+
+    def test_abstract_target_retains_raw_id_and_warns(self):
+        registry = SchemaRegistry.from_yaml(EDGE_ONLY_POLYMORPHIC_SCHEMA)
+        with pytest.warns(UserWarning, match="no generated GraphQL type"):
+            sdl = str(build_graphql_schema(registry))
+        item = _block(sdl, "type Item")
+        # Unresolvable (abstract) target → raw id retained (interim), no edge.
+        assert "containerId: ID" in item
+        assert "container: Container" not in item
+
+    def test_resolved_name_collision_is_build_error(self):
+        registry = SchemaRegistry.from_yaml(EDGE_ONLY_COLLISION_SCHEMA)
+        with pytest.raises(ValueError, match="collides"):
+            build_graphql_schema(registry)
 
 
 class TestNamingHelpers:
