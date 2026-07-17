@@ -272,7 +272,10 @@ class QueryService:
         actual_offset = offset or 0
         if actual_offset:
             filtered = filtered[actual_offset:]
-        if limit:
+        # `is not None`, not truthiness: limit=0 means "zero rows", not
+        # "unlimited" — Python's falsy-0 would otherwise return everything
+        # (issue #130).
+        if limit is not None:
             filtered = filtered[:limit]
 
         return PaginatedResult(
@@ -348,7 +351,7 @@ class QueryService:
         actual_offset = offset or 0
         if actual_offset:
             sorted_items = sorted_items[actual_offset:]
-        if limit:
+        if limit is not None:  # limit=0 means zero rows, not unlimited (#130)
             sorted_items = sorted_items[:limit]
 
         return PaginatedResult(

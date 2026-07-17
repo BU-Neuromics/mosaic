@@ -2556,7 +2556,7 @@ class SQLiteAdapter(EntityStore):
 
         offset = query.offset or 0
         sliced = matched[offset:]
-        if query.limit:
+        if query.limit is not None:  # limit=0 → zero rows, not unlimited (#130)
             sliced = sliced[: query.limit]
         yield from sliced
 
@@ -2638,7 +2638,9 @@ class SQLiteAdapter(EntityStore):
             if filter_clauses:
                 sql += " AND (" + joiner.join(filter_clauses) + ")"
 
-        if query.limit:
+        # `is not None`, not truthiness: LIMIT 0 must return zero rows, not
+        # fall through to "no limit" (issue #130).
+        if query.limit is not None:
             sql += f" LIMIT {query.limit}"
             if query.offset:
                 sql += f" OFFSET {query.offset}"

@@ -2,6 +2,26 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- **Unsupported filter operators now raise instead of silently degrading to
+  equality (#129).** Only `eq` and `in` are implemented; any other `op`
+  (`gt`/`lt`/`ne`/`contains`/…) previously fell through to exact equality,
+  returning a **wrong** result set rather than an error — `ne` returned the
+  logical *inverse* of what was asked. `mosaic.core.storage.normalize_filter`
+  now validates `op` against `VALID_FILTER_OPS` and raises `ValidationError`
+  for anything else, covering every backend and both the live and as-of read
+  paths. A canonical filter dict carrying the key `operator` (the
+  `FilterCondition` model field name) instead of `op`, previously ignored and
+  defaulted to `eq`, now raises the same clear error. (The `mosaic entity`
+  CLI's own filter parser, which used the `operator` key, now emits `op`.)
+- **`query(limit=0)` now returns zero rows instead of all rows (#130).** The
+  limiting code was gated on `if limit:`, so Python's falsy-`0` skipped the
+  slice and returned the full result set — identical to `limit=None`. Fixed to
+  `if limit is not None:` on every paginating path: `QueryService.query`,
+  `QueryService.query_updated_since`, and the SQLite and PostgreSQL adapters'
+  live and as-of `find` slices.
+
 ### Changed
 
 - **BREAKING — GraphQL reference emission is edge-only ([ADR-0005](design/decisions/ADR-0005-graphql-reference-emission-edge-only.md)).**
