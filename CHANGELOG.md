@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## v0.11.0 — 2026-07-17 (Hippo is now Mosaic; status introspection, incremental polling, cyclic-reference ingest)
+
 ### Added
 
 - **IN / set-membership filter — SDK + GraphQL (partial issue #102).**
@@ -192,11 +194,6 @@
   formatting, and the cache verbs). `cli/main.py`'s command bodies import
   the lifecycle entry points directly from core. Behavior-preserving; no
   functional changes.
-
-## v0.11.0 — 2026-07-08 (Hippo is now Mosaic)
-
-### Changed
-
 - **The component is renamed Hippo → Mosaic** (ADR-0004). The distribution
   is now `datahelix-mosaic` (platform ADR-0002 prefixed-dist convention),
   the import package is `mosaic`, the CLI is `mosaic`, and the public
