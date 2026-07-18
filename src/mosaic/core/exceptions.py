@@ -104,6 +104,46 @@ class XrefUniquenessError(ValidationError):
         super().__init__(message, **context)
 
 
+class DanglingReferenceError(ValidationError):
+    """A single-valued reference points at an id that does not exist.
+
+    Raised by the storage adapter at commit for references whose range is a
+    **polymorphic base** (abstract, or concrete with concrete subclasses).
+    Those references cannot be expressed as a SQL foreign key — subtype
+    instances live in their own per-class tables, so no single table can be
+    the FK target (issue #93) — and the DDL drops the constraint. The
+    referential-integrity check is instead performed in the application layer
+    against the ``_entity_registry`` cross-class index, deferred to commit so
+    that forward references within a staged bundle still resolve (mirroring
+    the deferred-FK behavior for non-polymorphic references, issue #95). A
+    dangling or out-of-range reference rolls the write back (issue #127).
+
+    Subclasses :class:`ValidationError` so the standard transport error paths
+    apply (REST 422 / GraphQL ``VALIDATION_FAILED``).
+    """
+
+    def __init__(
+        self,
+        message: str,
+        entity_id: Optional[str] = None,
+        entity_type: Optional[str] = None,
+        slot: Optional[str] = None,
+        target_id: Optional[str] = None,
+        target_range: Optional[str] = None,
+        **context: Any,
+    ):
+        self.entity_id = entity_id
+        self.entity_type = entity_type
+        self.slot = slot
+        self.target_id = target_id
+        self.target_range = target_range
+        context["entity_id"] = entity_id
+        context["entity_type"] = entity_type
+        context["target_id"] = target_id
+        context["target_range"] = target_range
+        super().__init__(message, field_name=slot, **context)
+
+
 class EntityNotFoundError(MosaicError):
     """Exception raised when an entity is not found in the system."""
 

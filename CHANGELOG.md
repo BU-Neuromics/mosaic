@@ -16,6 +16,21 @@
   works. Adds end-to-end coverage against a real SQLite adapter (every prior
   expand test used a `Mock()` with hand-shaped dicts and never exercised real
   reference data).
+- **Polymorphic-base references are now referentially enforced (#127).** A
+  single-valued reference whose range is a polymorphic base (abstract, or
+  concrete with concrete subclasses) has no SQL foreign key — subtype
+  instances live in their own per-class tables, so no single table can be the
+  FK target (#93) — and a dangling id on such a slot was silently accepted on
+  both `put` and `ingest` (`errors=0`), while non-polymorphic references (real
+  FKs) still caught it. Referential integrity for these slots is now checked
+  in the application layer against the `_entity_registry` cross-class index,
+  **deferred to commit** so forward references within a staged bundle still
+  resolve, mirroring the deferred-FK behavior for non-polymorphic references
+  (#95). A dangling or out-of-range id raises the new `DanglingReferenceError`
+  (a `ValidationError` subclass → REST 422 / GraphQL `VALIDATION_FAILED`) and
+  rolls the write back. In the Brain Bank schema this closes the gap on
+  `Dataset.produced_by → Activity`, `Diagnosis.sample → Sample`, and
+  `Measurement.sample → Sample`.
 - **Unsupported filter operators now raise instead of silently degrading to
   equality (#129).** Only `eq` and `in` are implemented; any other `op`
   (`gt`/`lt`/`ne`/`contains`/…) previously fell through to exact equality,
