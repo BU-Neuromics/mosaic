@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## v0.12.0 — 2026-07-18 (BREAKING: edge-only GraphQL references; REST field filtering; query-correctness & referential-integrity fixes)
+
 ### Added
 
 - **REST entity-field filtering — eq + IN via multi-value query params (#102).**
@@ -77,6 +79,11 @@
   `*_id` field as an interim (build-time warning); a resolved-name collision is
   now a build-time error rather than a silent raw-id fallback. Consumers
   reading the raw output field must migrate to the edge. (#133)
+- **Removed the bearer-token gate on REST/GraphQL operations (#54 Part A).**
+  Mosaic holds **zero authn/authz** — authentication and authorization are
+  entirely the deployment's responsibility (the platform's Bridge PEP/PDP). The
+  previously-required bearer token on operations is gone; deployments that
+  fronted Mosaic with their own gateway are unaffected.
 
 ## v0.11.0 — 2026-07-17 (Hippo is now Mosaic; status introspection, incremental polling, cyclic-reference ingest)
 
