@@ -4,6 +4,18 @@
 
 ### Fixed
 
+- **`client.get(expand=…)` now resolves real references (#128).** Reference
+  slots are stored as bare ids — a single-valued reference is a plain string
+  id, a multivalued reference a hydrated `list[str]` (#79 / ADR-0002) — but
+  `BatchFetcher._extract_entity_ids` only recognized nested `list[dict]` /
+  `dict` shapes, so `_expanded` came back `{}` for every real reference, with
+  no error. Resolution is rewritten to handle the actual id shapes: a
+  single-valued reference resolves to one entity dict, a multivalued reference
+  to a list, keyed by the expanded slot name, with nested paths (`a.b`) hung
+  off each level's own `_expanded` map. The embedded `{"id": …}` shape still
+  works. Adds end-to-end coverage against a real SQLite adapter (every prior
+  expand test used a `Mock()` with hand-shaped dicts and never exercised real
+  reference data).
 - **Unsupported filter operators now raise instead of silently degrading to
   equality (#129).** Only `eq` and `in` are implemented; any other `op`
   (`gt`/`lt`/`ne`/`contains`/…) previously fell through to exact equality,

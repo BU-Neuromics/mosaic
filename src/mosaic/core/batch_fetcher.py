@@ -18,6 +18,10 @@ from typing import Any, Iterator, Optional
 
 from mosaic.core.expand_path_parser import ParseResult, PathNode
 
+# Sentinel distinguishing "slot absent from the entity's data" (omit the key)
+# from "slot present but resolved to nothing" (record an explicit null).
+_MISSING = object()
+
 
 @dataclass
 class EntityQuery:
@@ -39,7 +43,9 @@ class FetchResult:
     """
 
     primary_entity: dict[str, Any]
-    expanded_data: dict[str, list[dict[str, Any]]]
+    # Keyed by the expanded slot name; value is a single resolved entity dict
+    # (single-valued reference) or a list of them (multivalued reference).
+    expanded_data: dict[str, Any]
     query_count: int
 
     def to_dict(self) -> dict[str, Any]:
@@ -115,23 +121,21 @@ class BatchFetcher:
                 query_count=0,
             )
 
-        expanded_data: dict[str, list[dict[str, Any]]] = {}
-        query_count = 0
-
-        entity_queries = self._group_queries_by_entity(
-            parsed_result.root, primary_entity
-        )
-
-        for query in entity_queries:
-            if query.entity_ids:
-                results = self._execute_query(query.entity_type, query.entity_ids)
-                expanded_data[query.path_segment] = results
-                query_count += 1
+        # ``expanded_data`` is keyed by the *slot name* the caller expanded,
+        # mirroring the reference's cardinality: a single-valued reference
+        # resolves to one entity dict, a multivalued reference to a list of
+        # entity dicts. Nested expansion hangs each level's resolution off the
+        # parent entity's own ``_expanded`` map (see ``_attach_children``).
+        counter = [0]
+        expanded_data: dict[str, Any] = {}
+        resolved = self._expand_node(parsed_result.root, primary_entity, counter)
+        if resolved is not _MISSING:
+            expanded_data[parsed_result.root.name] = resolved
 
         return FetchResult(
             primary_entity=primary_entity,
             expanded_data=expanded_data,
-            query_count=query_count,
+            query_count=counter[0],
         )
 
     def _fetch_primary_entity(self, entity_id: str) -> Optional[dict[str, Any]]:
@@ -157,98 +161,115 @@ class BatchFetcher:
             "version": entity.version,
         }
 
-    def _group_queries_by_entity(
-        self,
-        root: PathNode,
-        primary_entity: dict[str, Any],
-    ) -> list[EntityQuery]:
-        """Group entity IDs by entity type for batch querying.
-
-        Args:
-            root: The root node of the parsed path.
-            primary_entity: The primary entity data.
-
-        Returns:
-            List of EntityQuery objects grouped by entity type.
-        """
-        queries: list[EntityQuery] = []
-        entity_ids_by_type: dict[str, list[str]] = {}
-
-        self._extract_entity_ids(root, primary_entity, entity_ids_by_type)
-
-        for entity_type, entity_ids in entity_ids_by_type.items():
-            if entity_ids:
-                unique_ids = list(set(entity_ids))
-                queries.append(
-                    EntityQuery(
-                        entity_type=entity_type,
-                        entity_ids=unique_ids,
-                        path_segment=entity_type,
-                    )
-                )
-
-        return queries
-
-    def _extract_entity_ids(
+    def _expand_node(
         self,
         node: PathNode,
-        entity_data: dict[str, Any],
-        entity_ids_by_type: dict[str, list[str]],
-    ) -> None:
-        """Recursively extract entity IDs from the data structure.
+        parent_entity: dict[str, Any],
+        counter: list[int],
+    ) -> Any:
+        """Resolve one expand slot against a parent entity's real data.
 
-        Args:
-            node: The current path node.
-            entity_data: The entity data to extract from.
-            entity_ids_by_type: Dictionary to accumulate entity IDs by type.
+        Returns the resolved value for ``node.name`` on ``parent_entity``:
+        a single entity dict for a single-valued reference, a list of entity
+        dicts for a multivalued reference, ``None`` when a single-valued
+        reference is dangling, or the sentinel :data:`_MISSING` when the slot
+        is absent from the parent's data (so the caller can omit the key
+        entirely rather than record a spurious ``null``).
+
+        Reference slots are stored as bare ids, not nested dicts: a
+        single-valued reference is a plain string id (a per-class column
+        value) and a multivalued reference is a hydrated ``list[str]`` of
+        target ids (issue #79 / ADR-0002). The pre-#128 implementation only
+        recognized ``list[dict]``/``dict`` shapes, so it silently resolved
+        nothing against real data. We handle the id shapes directly, while
+        still accepting the embedded ``{"id": ...}`` shape for callers (and
+        tests) that pass pre-hydrated nested dicts.
         """
-        data = entity_data.get("data", entity_data)
+        data = parent_entity.get("data", parent_entity)
+        if not isinstance(data, dict) or node.name not in data:
+            return _MISSING
 
-        for key, value in data.items():
-            if key == node.name or node.parent is None:
-                if isinstance(value, list):
-                    for item in value:
-                        if isinstance(item, dict) and "id" in item:
-                            entity_type = item.get("entity_type", node.name)
-                            if entity_type not in entity_ids_by_type:
-                                entity_ids_by_type[entity_type] = []
-                            entity_ids_by_type[entity_type].append(item["id"])
+        ids, multivalued = self._reference_ids(data[node.name])
+        if not ids and not multivalued:
+            # A present-but-unresolvable single-valued slot (null or a value
+            # carrying no id): the slot was expanded but points at nothing.
+            return None
 
-                for child in node.children:
-                    if isinstance(value, dict):
-                        self._extract_entity_ids(child, value, entity_ids_by_type)
+        resolved: list[dict[str, Any]] = []
+        for entity_id in ids:
+            child = self._read_entity(entity_id)
+            if child is None:
+                continue  # dangling reference — skip, don't fabricate
+            self._attach_children(node, child, counter)
+            resolved.append(child)
+        if ids:
+            counter[0] += 1  # one batch resolution for this slot
 
-    def _execute_query(
+        if multivalued:
+            return resolved
+        return resolved[0] if resolved else None
+
+    def _attach_children(
         self,
-        entity_type: str,
-        entity_ids: list[str],
-    ) -> list[dict[str, Any]]:
-        """Execute a batch query for entities.
+        node: PathNode,
+        entity: dict[str, Any],
+        counter: list[int],
+    ) -> None:
+        """Recursively resolve ``node``'s child slots onto ``entity``.
 
-        Args:
-            entity_type: The type of entities to fetch.
-            entity_ids: List of entity IDs to fetch.
-
-        Returns:
-            List of entity data dictionaries.
+        Each nested level is recorded under the entity's own ``_expanded``
+        map, keyed by slot name — so ``expand="a.b"`` yields
+        ``{"a": {..., "_expanded": {"b": ...}}}``.
         """
+        if not node.children:
+            return
+        nested: dict[str, Any] = {}
+        for child in node.children:
+            resolved = self._expand_node(child, entity, counter)
+            if resolved is not _MISSING:
+                nested[child.name] = resolved
+        if nested:
+            entity["_expanded"] = nested
+
+    @staticmethod
+    def _reference_ids(value: Any) -> tuple[list[str], bool]:
+        """Extract target ids from a reference slot value.
+
+        Returns ``(ids, multivalued)``. Accepts the real stored shapes — a
+        bare string id (single-valued) and a ``list[str]`` (multivalued) —
+        as well as the embedded ``{"id": ...}`` / ``list[{"id": ...}]`` shapes
+        some callers pass pre-hydrated.
+        """
+        if isinstance(value, str):
+            return [value], False
+        if isinstance(value, dict):
+            rid = value.get("id")
+            return ([rid] if isinstance(rid, str) else []), False
+        if isinstance(value, list):
+            ids: list[str] = []
+            for item in value:
+                if isinstance(item, str):
+                    ids.append(item)
+                elif isinstance(item, dict) and isinstance(item.get("id"), str):
+                    ids.append(item["id"])
+            return ids, True
+        return [], False
+
+    def _read_entity(self, entity_id: str) -> Optional[dict[str, Any]]:
+        """Read one entity by id, shaped like the other fetch results."""
         if self._storage is None:
-            return [{"id": eid, "data": {}} for eid in entity_ids]
+            return {"id": entity_id, "data": {}}
 
-        results = []
-        for entity_id in entity_ids:
-            entity = self._storage.read(entity_id)
-            if entity is not None:
-                results.append(
-                    {
-                        "id": entity.id,
-                        "entity_type": entity.entity_type,
-                        "data": entity.data,
-                        "version": entity.version,
-                    }
-                )
+        entity = self._storage.read(entity_id)
+        if entity is None:
+            return None
 
-        return results
+        return {
+            "id": entity.id,
+            "entity_type": entity.entity_type,
+            "data": entity.data,
+            "version": entity.version,
+        }
 
     def fetch_simple(
         self,
