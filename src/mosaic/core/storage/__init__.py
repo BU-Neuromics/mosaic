@@ -56,17 +56,52 @@ def normalize_filter(f: Dict[str, Any]) -> List[tuple]:
     Accepts both filter-dict shapes in use across the codebase:
 
     - Canonical: ``{"field": ..., "value": ..., "op": ...}``. ``op`` is
-      optional and defaults to ``"eq"`` — filters built before ``op``
-      existed (and third-party callers passing extra keys like
-      ``"operator"``, which is ignored) keep behaving exactly as before.
-      Yields a single ``(field, "eq"|op, value)`` triple.
+      optional and defaults to ``"eq"``. It must name a supported operator
+      (:data:`VALID_FILTER_OPS`); an unsupported ``op`` (``"gt"``, ``"ne"``,
+      ``"contains"``, ...) raises
+      :class:`~mosaic.core.exceptions.ValidationError` rather than silently
+      degrading to equality — the highest-risk failure for a query API, since
+      ``ne`` would otherwise return the *inverse* of what was asked (issue
+      #129). Yields a single ``(field, op, value)`` triple.
     - Bare shorthand: ``{field_name: value, ...}``, always ``"eq"``.
       Yields one triple per key (historically each key of a shorthand
       dict is an independent AND'd sub-filter — see the adapters'
       pre-existing ``for key, value in f.items()`` loops).
+
+    The operator key is ``op``. A canonical dict that carries ``operator``
+    (the field name on :class:`~mosaic.core.types.FilterCondition`, a very
+    plausible slip) but no ``op`` raises rather than silently defaulting to
+    ``eq`` (issue #129).
     """
     if "field" in f and "value" in f:
+        if "op" not in f and "operator" in f:
+            from mosaic.core.exceptions import ValidationError
+
+            raise ValidationError(
+                message=(
+                    f"Filter on field {f['field']!r} uses key 'operator'; the "
+                    f"query filter-dict operator key is 'op'. Use "
+                    f"{{'field': ..., 'op': ..., 'value': ...}}. ('operator' is "
+                    f"the FilterCondition model field name, not the "
+                    f"filter-dict key.)"
+                ),
+                field_name=f["field"],
+            )
         op = f.get("op", "eq")
+        if op not in VALID_FILTER_OPS:
+            from mosaic.core.exceptions import ValidationError
+
+            raise ValidationError(
+                message=(
+                    f"Unsupported filter operator {op!r} on field "
+                    f"{f['field']!r}. Implemented operators: "
+                    f"{sorted(VALID_FILTER_OPS)}. Operators such as "
+                    f"'gt'/'lt'/'ne'/'contains' are not supported and once "
+                    f"degraded silently to equality (issue #129); they now "
+                    f"raise so callers are never handed wrong results."
+                ),
+                field_name=f["field"],
+            )
         return [(f["field"], op, f["value"])]
     return [(key, "eq", value) for key, value in f.items()]
 

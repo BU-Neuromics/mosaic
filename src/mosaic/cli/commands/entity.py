@@ -86,7 +86,7 @@ def _parse_filters(filters: list[str]) -> list[dict[str, Any]]:
                 f"Error: invalid --filter {raw!r}; expected field=value", err=True
             )
             raise typer.Exit(1)
-        parsed.append({"field": field, "operator": "eq", "value": value})
+        parsed.append({"field": field, "op": "eq", "value": value})
     return parsed
 
 

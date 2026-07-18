@@ -119,7 +119,7 @@ class TestQueryUpdatedSince:
         result = client.query_updated_since(
             "Sample",
             since="2000-01-01T00:00:00Z",
-            filters=[{"field": "name", "operator": "eq", "value": "keep"}],
+            filters=[{"field": "name", "op": "eq", "value": "keep"}],
         )
 
         assert [item["data"]["name"] for item in result.items] == ["keep"]
