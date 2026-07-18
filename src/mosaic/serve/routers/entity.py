@@ -48,6 +48,42 @@ async def require_auth(authorization: Optional[str] = Header(None)) -> dict:
     return {"user_id": "default"}
 
 
+# Query params consumed by ``list_entities`` itself — everything else on the
+# request is treated as an entity-field filter (sec4 §4.3 "Query Filtering —
+# OR Composition").
+_RESERVED_LIST_PARAMS = {
+    "entity_type",
+    "limit",
+    "offset",
+    "filter_mode",
+    "updated_since",
+    "as_of",
+}
+
+
+def _parse_field_filters(request: Request) -> list[dict[str, Any]]:
+    """Build ``client.query`` filters from arbitrary entity-field query params.
+
+    Implements the sec4 §4.3 "multi-value parameters" convention: a field
+    repeated in the query string is a same-field OR (translated to an
+    ``"in"`` filter over the repeated values); a field given once is an
+    ordinary ``"eq"`` filter. These compose across fields per ``filter_mode``,
+    same as the SDK's ``client.query(tissue_type=["brain", "liver"], ...)``.
+    """
+    filters: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for field in request.query_params.keys():
+        if field in _RESERVED_LIST_PARAMS or field in seen:
+            continue
+        seen.add(field)
+        values = request.query_params.getlist(field)
+        if len(values) == 1:
+            filters.append({"field": field, "op": "eq", "value": values[0]})
+        else:
+            filters.append({"field": field, "op": "in", "value": values})
+    return filters
+
+
 @router.get("")
 async def list_entities(
     request: Request,
@@ -96,7 +132,7 @@ async def list_entities(
     else:
         paginated = client.query(
             entity_type=entity_type,
-            filters=[],
+            filters=_parse_field_filters(request),
             limit=limit,
             offset=offset,
             filter_mode=filter_mode,

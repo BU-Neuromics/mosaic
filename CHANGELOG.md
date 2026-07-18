@@ -2,6 +2,20 @@
 
 ## [Unreleased]
 
+### Added
+
+- **REST entity-field filtering — eq + IN via multi-value query params (#102).**
+  `GET /entities` previously accepted `filter_mode` but never actually
+  filtered on entity data fields (`filters=[]` was hardcoded). Per sec4 §4.3's
+  "multi-value parameters" convention, any query param other than the
+  endpoint's own reserved set (`entity_type`, `limit`, `offset`,
+  `filter_mode`, `updated_since`, `as_of`) is now treated as an entity-field
+  filter: given once it's an `eq` filter, repeated it's an `in` (set-membership)
+  filter — e.g. `?tissue_type=brain&tissue_type=liver` — composed across
+  fields per `filter_mode`. This closes the REST leg of #102; the SDK
+  (`QueryEngine`), both storage adapters, and GraphQL already supported `in`
+  (#125).
+
 ### Fixed
 
 - **`client.get(expand=…)` now resolves real references (#128).** Reference
