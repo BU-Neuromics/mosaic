@@ -44,6 +44,7 @@ from mosaic.core.storage.fts import (
 from mosaic.core.storage.xref import XREF_TABLE, extract_xref_pairs
 from mosaic.core.types import ProvenanceRecord as ProvenanceRecordType, TemporalRecord
 from mosaic.core.exceptions import (
+    DanglingReferenceError,
     EntityTypeConflictError,
     SearchCapabilityError,
     XrefUniquenessError,
@@ -942,6 +943,10 @@ class SQLiteAdapter(EntityStore):
         self._xref_slots_cache: dict[str, list[str]] = {}
         # Per-class cache of multivalued reference slot names (issue #79).
         self._mv_ref_slots_cache: dict[str, list[str]] = {}
+        # Per-class cache of single-valued polymorphic-base reference slots
+        # (slot_name, base_range) — the references with no SQL FK, checked in
+        # the application layer at commit (issue #127).
+        self._poly_ref_slots_cache: dict[str, list[tuple[str, str]]] = {}
         self._init_database()
 
     def _get_connection(self) -> sqlite3.Connection:
@@ -1008,8 +1013,12 @@ class SQLiteAdapter(EntityStore):
             return
         try:
             yield conn
+            # Application-level referential-integrity for polymorphic-base
+            # references (no SQL FK exists to enforce them) — see issue #127.
+            self._verify_pending_ref_checks(conn)
             conn.commit()
         except Exception:
+            self._local.pending_ref_checks = []
             self._safe_rollback(conn)
             raise
 
@@ -1063,12 +1072,18 @@ class SQLiteAdapter(EntityStore):
         conn.execute("PRAGMA defer_foreign_keys=ON")
         try:
             yield conn
+            # Deferred app-level check for polymorphic-base references, run at
+            # the single staged commit so forward references across the bundle
+            # resolve just like the deferred SQL FKs do (issues #127, #95).
+            self._verify_pending_ref_checks(conn)
             conn.commit()
         except Exception:
+            self._local.pending_ref_checks = []
             self._safe_rollback(conn)
             raise
         finally:
             self._local.staging_depth = 0
+            self._local.pending_ref_checks = []
 
     def _init_database(self) -> None:
         """Initialize database schema."""
@@ -1869,6 +1884,11 @@ class SQLiteAdapter(EntityStore):
                 (entity_id, entity_type),
             )
 
+            # Queue polymorphic-base references for the deferred integrity
+            # check at commit (issue #127) — these have no SQL FK to catch a
+            # dangling id.
+            self._record_ref_checks(entity_type, entity_id, entity_data)
+
             provenance = self._get_provenance_store(conn)
             provenance.record(
                 entity_id=entity_id,
@@ -1897,6 +1917,129 @@ class SQLiteAdapter(EntityStore):
                 )
 
         return entity
+
+    def _polymorphic_base_ref_slots(
+        self, entity_type: str
+    ) -> list[tuple[str, str]]:
+        """(slot_name, base_range) for single-valued references on
+        ``entity_type`` whose range is a polymorphic base.
+
+        These are exactly the references the DDL stores as a bare TEXT id with
+        no SQL foreign key (issue #93), so nothing at the SQL layer catches a
+        dangling id — the gap this integrity check fills (issue #127).
+        Multivalued references are excluded: they persist as relationship rows
+        (issue #79), not scalar columns.
+        """
+        cached = self._poly_ref_slots_cache.get(entity_type)
+        if cached is not None:
+            return cached
+        registry = self.schema_registry
+        result: list[tuple[str, str]] = []
+        if registry is not None:
+            try:
+                multivalued = {
+                    name
+                    for name, _ in registry.multivalued_reference_slots(entity_type)
+                }
+                for slot_name, target_range in registry.reference_slots(entity_type):
+                    if (
+                        target_range
+                        and slot_name not in multivalued
+                        and registry.is_polymorphic_base(target_range)
+                    ):
+                        result.append((slot_name, target_range))
+            except Exception:
+                result = []
+        self._poly_ref_slots_cache[entity_type] = result
+        return result
+
+    def _record_ref_checks(
+        self, entity_type: str, entity_id: str, data: dict[str, Any]
+    ) -> None:
+        """Queue this entity's polymorphic-base references for the deferred
+        commit-time existence check (issue #127)."""
+        slots = self._polymorphic_base_ref_slots(entity_type)
+        if not slots:
+            return
+        pending = getattr(self._local, "pending_ref_checks", None)
+        if pending is None:
+            pending = []
+            self._local.pending_ref_checks = pending
+        for slot_name, target_range in slots:
+            value = data.get(slot_name)
+            if isinstance(value, str) and value:
+                pending.append(
+                    (entity_id, entity_type, slot_name, target_range, value)
+                )
+
+    def _verify_pending_ref_checks(self, conn: sqlite3.Connection) -> None:
+        """Verify every queued polymorphic-base reference resolves, then clear
+        the queue.
+
+        Run at commit (see :meth:`_transaction` / :meth:`staged_transaction`)
+        against the committing connection, so staged-but-uncommitted
+        registrations — forward references within an ingest bundle — are
+        visible, exactly as SQLite's deferred foreign keys would see them.
+
+        A reference is valid when its target id is registered in
+        ``_entity_registry`` under a class within the reference's declared base
+        subtree. A missing id, or an id registered under an unrelated class,
+        raises :class:`DanglingReferenceError`, rolling the write back.
+        """
+        pending = getattr(self._local, "pending_ref_checks", None)
+        if not pending:
+            return
+        self._local.pending_ref_checks = []
+
+        registry = self.schema_registry
+        subtree_cache: dict[str, set[str]] = {}
+
+        def subtree(base: str) -> set[str]:
+            names = subtree_cache.get(base)
+            if names is None:
+                names = {base}
+                if registry is not None:
+                    try:
+                        names.update(registry.concrete_subclasses(base))
+                    except Exception:
+                        pass
+                subtree_cache[base] = names
+            return names
+
+        for entity_id, entity_type, slot_name, target_range, target_id in pending:
+            row = conn.execute(
+                "SELECT class_name FROM _entity_registry WHERE uuid = ?",
+                (target_id,),
+            ).fetchone()
+            if row is None:
+                raise DanglingReferenceError(
+                    message=(
+                        f"{entity_type} {entity_id!r} references {target_id!r} "
+                        f"via {slot_name!r}, but no entity with that id exists. "
+                        f"The reference is ranged on the polymorphic base "
+                        f"{target_range!r}, which has no SQL foreign key to "
+                        f"enforce this (issue #127)."
+                    ),
+                    entity_id=entity_id,
+                    entity_type=entity_type,
+                    slot=slot_name,
+                    target_id=target_id,
+                    target_range=target_range,
+                )
+            actual_class = row["class_name"]
+            if actual_class not in subtree(target_range):
+                raise DanglingReferenceError(
+                    message=(
+                        f"{entity_type} {entity_id!r} references {target_id!r} "
+                        f"via {slot_name!r}, but that id is a {actual_class!r}, "
+                        f"which is not {target_range!r} or one of its subclasses."
+                    ),
+                    entity_id=entity_id,
+                    entity_type=entity_type,
+                    slot=slot_name,
+                    target_id=target_id,
+                    target_range=target_range,
+                )
 
     def _insert_per_class(
         self,
@@ -2331,6 +2474,7 @@ class SQLiteAdapter(EntityStore):
         with self._transaction() as conn:
             cursor = conn.cursor()
             self._update_per_class(cursor, entity_type, entity_id, data)
+            self._record_ref_checks(entity_type, entity_id, data)
         return entity
 
     def update_data(
@@ -2360,6 +2504,7 @@ class SQLiteAdapter(EntityStore):
         with self._transaction() as conn:
             cursor = conn.cursor()
             self._update_per_class(cursor, entity_type, entity_id, data)
+            self._record_ref_checks(entity_type, entity_id, data)
 
             provenance = self._get_provenance_store(conn)
             provenance.record(
