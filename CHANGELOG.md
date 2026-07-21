@@ -2,6 +2,18 @@
 
 ## [Unreleased]
 
+## v0.12.1 — 2026-07-21 (multi-arch images; publish as `mosaic`)
+
+### Changed
+
+- **Release pipeline now publishes multi-arch images** (`linux/amd64` +
+  `linux/arm64`) so the image runs natively on arm64 (Graviton) hosts without
+  emulation.
+- **Published image renamed `ghcr.io/bu-neuromics/hippo` →
+  `ghcr.io/bu-neuromics/mosaic`** (ADR-0004 "Phase R"). No code changes; the
+  repo redirect was already in place. The `hippo.*` import/entry-point
+  namespace migration remains separate and unchanged.
+
 ## v0.12.0 — 2026-07-18 (BREAKING: edge-only GraphQL references; REST field filtering; query-correctness & referential-integrity fixes)
 
 ### Added
