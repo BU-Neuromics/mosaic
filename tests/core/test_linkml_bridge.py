@@ -986,3 +986,71 @@ class TestTreeRootSynthesis:
         )
         with pytest.raises(SchemaError):
             SchemaRegistry.from_yaml(schema)
+
+
+class TestRelativeImportResolution:
+    """Relative sibling ``imports:`` resolve relative to the referencing
+    schema, not the process CWD (datahelix #66)."""
+
+    # A tree-root file importing a sibling in the same directory — the standard
+    # LinkML "schema split across files" pattern.
+    _ROOT = (
+        "id: https://example.org/main\n"
+        "name: main\n"
+        "prefixes: {linkml: 'https://w3id.org/linkml/'}\n"
+        "default_range: string\n"
+        "imports: [linkml:types, pathology]\n"
+        "classes:\n"
+        "  Donor:\n"
+        "    tree_root: true\n"
+        "    attributes:\n"
+        "      id: {identifier: true}\n"
+        "      diagnosis: {range: Pathology}\n"
+    )
+    _SIBLING = (
+        "id: https://example.org/pathology\n"
+        "name: pathology\n"
+        "prefixes: {linkml: 'https://w3id.org/linkml/'}\n"
+        "default_range: string\n"
+        "imports: [linkml:types]\n"
+        "classes:\n"
+        "  Pathology:\n"
+        "    attributes:\n"
+        "      code: {range: string}\n"
+    )
+
+    @pytest.fixture
+    def schema_dir(self, tmp_path: Path) -> Path:
+        d = tmp_path / "schemas"
+        d.mkdir()
+        (d / "main.yaml").write_text(self._ROOT)
+        (d / "pathology.yaml").write_text(self._SIBLING)
+        return d
+
+    def test_directory_load_resolves_siblings_from_foreign_cwd(
+        self, schema_dir: Path, monkeypatch, tmp_path: Path
+    ):
+        # cwd is the *parent* of the schema dir — mirrors a container invoking
+        # `mosaic migrate --schema-dir schemas` from its WORKDIR.
+        monkeypatch.chdir(tmp_path)
+        reg = SchemaRegistry.from_path(schema_dir)
+        assert {"Donor", "Pathology"}.issubset(set(reg.class_names()))
+
+    def test_single_file_with_requires_resolves_siblings_from_foreign_cwd(
+        self, schema_dir: Path, monkeypatch, tmp_path: Path
+    ):
+        # A `requires:` directive forces string-construction; the sibling
+        # import must still resolve relative to the schema file.
+        (schema_dir / "main.yaml").write_text(
+            self._ROOT + "requires: [some_loader==1.0.0]\n"
+        )
+        monkeypatch.chdir(tmp_path)
+        reg = SchemaRegistry.from_path(schema_dir / "main.yaml")
+        assert {"Donor", "Pathology"}.issubset(set(reg.class_names()))
+
+    def test_single_file_without_requires_resolves_siblings_from_foreign_cwd(
+        self, schema_dir: Path, monkeypatch, tmp_path: Path
+    ):
+        monkeypatch.chdir(tmp_path)
+        reg = SchemaRegistry.from_path(schema_dir / "main.yaml")
+        assert {"Donor", "Pathology"}.issubset(set(reg.class_names()))
