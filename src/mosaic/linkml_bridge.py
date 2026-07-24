@@ -179,6 +179,33 @@ def _bundled_importmap() -> dict[str, str]:
     }
 
 
+def _schema_view_from_text(
+    text: str, *, source_file: Optional[Union[str, Path]] = None
+) -> SchemaView:
+    """Build a ``SchemaView`` from YAML *text*, anchoring relative imports.
+
+    LinkML resolves a schema's relative ``imports:`` against the directory of
+    that schema's ``source_file``. But ``linkml_runtime`` only records
+    ``source_file`` when a schema is loaded from a *path* — a schema built
+    from an in-memory *string* has ``source_file = None``, so its relative
+    imports fall back to the process's current working directory (datahelix
+    #66: ``mosaic migrate --schema-dir schemas`` run from ``/project`` looked
+    for ``/project/pathology.yaml`` instead of ``/project/schemas/``).
+
+    Mosaic constructs a SchemaView from text whenever it must pre-process a
+    schema before handing it to LinkML — stripping the Mosaic-only
+    ``requires:`` directive, or merging every file in a directory. Setting
+    ``source_file`` to the originating path restores the LinkML contract:
+    relative sibling imports resolve relative to the *referencing schema*, not
+    the CWD. ``source_file`` need not exist on disk — only its parent
+    directory is consulted, and only to resolve the imports themselves.
+    """
+    sv = SchemaView(text, importmap=_bundled_importmap())
+    if source_file is not None:
+        sv.schema.source_file = str(source_file)
+    return sv
+
+
 def _check_value_type(slot_decl: SlotDefinition, value: Any, enums: dict) -> Optional[str]:
     """Return an error message if ``value`` doesn't match ``slot_decl.range``; else None."""
     rng = slot_decl.range
@@ -948,9 +975,11 @@ class SchemaRegistry:
         doc = yaml.safe_load(raw) or {}
         if isinstance(doc, dict) and _HIPPO_TOP_LEVEL_KEYS & doc.keys():
             doc = {k: v for k, v in doc.items() if k not in _HIPPO_TOP_LEVEL_KEYS}
-            return cls(
-                SchemaView(yaml.safe_dump(doc), importmap=_bundled_importmap())
-            )
+            # Stripping `requires:` forces construction from a string, which
+            # loses the source path LinkML uses to resolve relative imports;
+            # re-anchor it to ``p`` so sibling imports resolve relative to the
+            # schema file rather than the CWD (datahelix #66).
+            return cls(_schema_view_from_text(yaml.safe_dump(doc), source_file=p))
         return cls(SchemaView(str(p), importmap=_bundled_importmap()))
 
     @classmethod
@@ -987,11 +1016,27 @@ class SchemaRegistry:
             del merged["slots"]
         if not merged["types"]:
             del merged["types"]
-        return cls.from_dict(merged)
+        # Anchor the merged schema inside ``path`` so any relative ``imports:``
+        # carried over from the merged files resolve relative to the schema
+        # directory rather than the process CWD (datahelix #66). Sibling files
+        # are already merged inline above; an anchored re-resolution of their
+        # import names is idempotent, and out-of-directory relative imports
+        # (e.g. ``../common/base``) now resolve correctly too.
+        return cls.from_dict(merged, source_file=path / "__mosaic_merged__.yaml")
 
     @classmethod
-    def from_dict(cls, data: dict) -> "SchemaRegistry":
-        return cls(SchemaView(yaml.safe_dump(data), importmap=_bundled_importmap()))
+    def from_dict(
+        cls, data: dict, *, source_file: Optional[Union[str, Path]] = None
+    ) -> "SchemaRegistry":
+        """Build a registry from a schema ``dict``.
+
+        *source_file* anchors relative ``imports:`` resolution (see
+        :func:`_schema_view_from_text`); it defaults to ``None`` for callers
+        whose schema dict carries no relative imports.
+        """
+        return cls(
+            _schema_view_from_text(yaml.safe_dump(data), source_file=source_file)
+        )
 
     @classmethod
     def from_yaml(cls, yaml_text: str) -> "SchemaRegistry":
