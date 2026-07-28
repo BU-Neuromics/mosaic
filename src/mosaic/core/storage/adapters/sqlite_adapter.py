@@ -37,6 +37,7 @@ from mosaic.core.storage.fts import (
     generate_fts_create_sql,
     generate_fts_delete_sql,
     generate_fts_insert_sql,
+    generate_fts_phrase_query,
     generate_fts_update_sql,
     get_fts_tables_for_entity_type,
     normalize_bm25_score,
@@ -891,7 +892,7 @@ class FTSStore:
         cursor = self._conn.cursor()
         cursor.execute(
             f"SELECT entity_id, content FROM {table_name} WHERE {table_name} MATCH ? LIMIT ?",
-            (query, limit),
+            (generate_fts_phrase_query(query), limit),
         )
         return [
             {"entity_id": row["entity_id"], "content": row["content"]}
@@ -1788,7 +1789,7 @@ class SQLiteAdapter(EntityStore):
                     AND pc.is_available = 1
                     ORDER BY bm25_score
                     LIMIT ?""",
-                (query, limit * 2),
+                (generate_fts_phrase_query(query), limit * 2),
             )
 
             results = []

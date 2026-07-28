@@ -174,7 +174,12 @@ def generate_fts_query(
 
 
 def generate_fts_phrase_query(phrase: str, field_name: Optional[str] = None) -> str:
-    """Generate an FTS5 phrase query.
+    """Generate an FTS5 phrase query, escaping the phrase as literal text.
+
+    Wraps ``phrase`` in double quotes so FTS5 treats it as a literal phrase
+    rather than parsing it as query syntax (column filters, NOT-prefixes,
+    prefix-match ``*``, etc.). Embedded double quotes are doubled per FTS5's
+    quoting rules so arbitrary user text round-trips safely.
 
     Args:
         phrase: The phrase to search for.
@@ -183,9 +188,10 @@ def generate_fts_phrase_query(phrase: str, field_name: Optional[str] = None) -> 
     Returns:
         FTS5 phrase query string.
     """
+    escaped = phrase.replace('"', '""')
     if field_name:
-        return f'"{field_name}":"{phrase}"'
-    return f'"{phrase}"'
+        return f'"{field_name}":"{escaped}"'
+    return f'"{escaped}"'
 
 
 def generate_fts_boolean_query(
