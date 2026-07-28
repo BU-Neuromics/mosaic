@@ -96,6 +96,81 @@ class TestSchemaDiffEngine:
         assert "existing_entity" in diff.new_columns
         assert [s.name for s in diff.new_columns["existing_entity"]] == ["new_field"]
 
+    def test_multivalued_reference_slot_not_reported_as_missing_column(self):
+        """Regression test for #143: a multivalued slot ranged on another
+        entity class is persisted as a relationship (ADR-0002), not a
+        physical column, and must not be diffed as one — otherwise a
+        re-run of ``mosaic migrate`` against an unchanged schema tries to
+        ``ALTER TABLE ADD COLUMN ... NOT NULL`` with no default (crash) or
+        silently adds a spurious always-NULL column."""
+        existing = TableMetadata(
+            name="workflow",
+            columns=[
+                {
+                    "name": "id",
+                    "type": "TEXT",
+                    "not_null": True,
+                    "default": None,
+                    "primary_key": True,
+                },
+                {
+                    "name": "name",
+                    "type": "TEXT",
+                    "not_null": True,
+                    "default": None,
+                    "primary_key": False,
+                },
+            ],
+        )
+        reg = build_registry(
+            {
+                "sample": {
+                    "attributes": {
+                        "id": {"identifier": True},
+                    }
+                },
+                "workflow": {
+                    "attributes": {
+                        "id": {"identifier": True},
+                        "name": {"range": "string", "required": True},
+                        "input_samples": {"range": "sample", "multivalued": True},
+                    }
+                },
+            }
+        )
+        engine = SchemaDiffEngine()
+        engine._existing_tables = {"workflow": existing}
+        diff = engine.compute_diff(reg)
+        assert diff.new_tables == ["sample"]
+        assert "workflow" not in diff.new_columns
+        assert diff.warnings == []
+
+    def test_value_type_class_not_reported_as_new_table(self):
+        """Regression test for #143: value types (no identifier slot) store
+        inline as JSON TEXT on the referencing entity's table and never get
+        a table of their own — they must not perpetually show up as a
+        pending "new table" on every diff."""
+        reg = build_registry(
+            {
+                "value_object": {
+                    "attributes": {
+                        "system": {"range": "string"},
+                        "value": {"range": "string"},
+                    }
+                },
+                "sample": {
+                    "attributes": {
+                        "id": {"identifier": True},
+                        "ref": {"range": "value_object"},
+                    }
+                },
+            }
+        )
+        engine = SchemaDiffEngine()
+        engine._existing_tables = {}
+        diff = engine.compute_diff(reg)
+        assert diff.new_tables == ["sample"]
+
     def test_missing_index_reported(self):
         existing = TableMetadata(
             name="test_entity",

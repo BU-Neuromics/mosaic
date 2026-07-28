@@ -82,9 +82,18 @@ class SchemaDiffEngine:
     def compute_diff(self, registry: SchemaRegistry) -> SchemaDiff:
         diff = SchemaDiff()
         sv = registry.schema_view
+        value_types = registry.value_type_classes()
         for class_name in registry.class_names():
             cls = sv.get_class(class_name)
             if cls is None or cls.abstract:
+                continue
+            if class_name in value_types:
+                # Value types (ExternalReference and any identifier-less
+                # value object) store inline as JSON TEXT on the declaring
+                # entity's table and get no table of their own — mirrors the
+                # ``concrete_classes`` filter in DDLGenerator.generate(). Not
+                # excluding them here made every rerun report them as a
+                # perpetual "new table" that is never actually created.
                 continue
             if class_name not in self._existing_tables:
                 diff.new_tables.append(class_name)
@@ -103,8 +112,23 @@ class SchemaDiffEngine:
         diff: SchemaDiff,
     ) -> None:
         existing_cols = {col["name"] for col in existing.columns}
+        multivalued_ref_slots = {
+            slot_name
+            for slot_name, _ in registry.multivalued_reference_slots(class_name)
+        }
         for slot in registry.induced_slots(class_name):
             if slot.name in existing_cols:
+                continue
+            if slot.name in multivalued_ref_slots:
+                # Multivalued slots ranged on an entity class get neither a
+                # per-class column nor a junction table — they persist as
+                # relationships keyed by slot name (issue #79 / ADR-0002).
+                # DDL generation already excludes them (DDLGenerator filters
+                # their linktable); the diff must apply the same exclusion,
+                # or it perpetually "discovers" a missing column that was
+                # never supposed to exist and either crashes trying to add
+                # it NOT NULL with no default, or silently adds a spurious
+                # always-NULL column (issue #143).
                 continue
             diff.new_columns.setdefault(class_name, []).append(slot)
             if slot.required:
