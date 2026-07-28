@@ -79,6 +79,38 @@ class TestFTSStore:
         assert "entity-1" in entity_ids
         assert "entity-3" in entity_ids
 
+    def test_search_fts_hyphenated_phrase_does_not_raise(self, sqlite_connection):
+        """Regression test for #144: hyphens are live FTS5 query syntax and
+        must not be interpreted as column filters/NOT-prefixes."""
+        store = FTSStore(sqlite_connection)
+        store.create_fts_table(table_name="fts_test", columns=["title"])
+        store.insert_fts_entry("fts_test", "entity-1", "longitudinal cohort 42")
+
+        results = store.search_fts("fts_test", "longitudinal-cohort-42")
+        assert len(results) == 1
+        assert results[0]["entity_id"] == "entity-1"
+
+    def test_search_fts_colon_query_does_not_raise(self, sqlite_connection):
+        """Regression test for #144: a colon is FTS5 column-filter syntax and
+        must not be parsed as such against literal user text."""
+        store = FTSStore(sqlite_connection)
+        store.create_fts_table(table_name="fts_test", columns=["title"])
+        store.insert_fts_entry("fts_test", "entity-1", "ratio 1:1 control")
+
+        results = store.search_fts("fts_test", "cohort:mixed")
+        assert results == []
+
+    def test_search_fts_embedded_quote_does_not_raise(self, sqlite_connection):
+        """A literal double quote in the query must not unbalance the
+        FTS5 phrase-query wrapper."""
+        store = FTSStore(sqlite_connection)
+        store.create_fts_table(table_name="fts_test", columns=["title"])
+        store.insert_fts_entry("fts_test", "entity-1", 'say "hello" world')
+
+        results = store.search_fts("fts_test", 'say "hello"')
+        assert len(results) == 1
+        assert results[0]["entity_id"] == "entity-1"
+
     def test_sync_entity_to_fts_insert(self, sqlite_connection):
         """Test syncing entity to FTS (insert)."""
         store = FTSStore(sqlite_connection)
