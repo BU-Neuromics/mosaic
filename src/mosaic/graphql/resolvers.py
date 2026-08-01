@@ -136,6 +136,27 @@ class XrefMatch:
     updated_at: Optional[ISODateTime]
 
 
+@strawberry.type(
+    description=(
+        "An entity that references the queried entity through a "
+        "relationships-table-backed multivalued slot (ADR-0002) — the "
+        "reverse of forward multivalued-reference resolution (issue "
+        "#146). Generic envelope shape — the referencing entity's type "
+        "is only known at query time, so `data` carries the typed "
+        "payload as JSON; use `entityType` with the per-type queries "
+        "for typed traversal."
+    )
+)
+class RelatedEntity:
+    entity_id: strawberry.ID
+    entity_type: str
+    relationship_type: str
+    data: JSON
+    version: Optional[int]
+    created_at: Optional[ISODateTime]
+    updated_at: Optional[ISODateTime]
+
+
 @strawberry.type(description="Result of a supersede operation.")
 class SupersedeResult:
     entity_id: strawberry.ID
@@ -539,6 +560,55 @@ def _find_by_xref_resolver(
     )
 
 
+def _related_to_resolver(
+    info: Info,
+    id: strawberry.ID,  # noqa: A002
+    relationship_type: Optional[str] = None,
+) -> list[RelatedEntity]:
+    """Reverse lookup: entities referencing ``id`` via a relationships-
+    table-backed multivalued slot (ADR-0002) — answers "what points at
+    this entity" (issue #146), the reverse of forward multivalued-
+    reference resolution which has no such symmetric path today.
+
+    Thin delegation to ``RelationshipManager.find_relationships(target_id=...)``.
+    ``relationship_type`` (the referencing slot name) narrows the result
+    when the target is referenced by more than one slot/class; omitted,
+    all referencing edges are returned.
+    """
+    client = _client(info)
+    edges = client.relationships.find_relationships(
+        target_id=str(id), relationship_type=relationship_type
+    )
+    if not edges:
+        return []
+
+    source_ids = [edge["source_id"] for edge in edges]
+    types_by_id = client.resolve_types(source_ids)
+
+    results = []
+    for edge in edges:
+        source_id = edge["source_id"]
+        entity_type = types_by_id.get(source_id)
+        if entity_type is None:
+            continue  # dangling edge: source no longer resolvable
+        try:
+            envelope = client.get(entity_type, source_id)
+        except EntityNotFoundError:
+            continue
+        results.append(
+            RelatedEntity(
+                entity_id=strawberry.ID(source_id),
+                entity_type=entity_type,
+                relationship_type=edge["relationship_type"],
+                data=envelope.get("data") or {},
+                version=envelope.get("version"),
+                created_at=envelope.get("created_at"),
+                updated_at=envelope.get("updated_at"),
+            )
+        )
+    return results
+
+
 def _make_hippo_schema_resolver(builder: GraphQLTypeBuilder):
     def resolver(info: Info) -> list[MosaicEntityTypeInfo]:
         return [
@@ -855,6 +925,9 @@ def build_query_type(builder: GraphQLTypeBuilder) -> type:
     )
     fields.append(
         strawberry.field(resolver=_find_by_xref_resolver, name="findByXref")
+    )
+    fields.append(
+        strawberry.field(resolver=_related_to_resolver, name="relatedTo")
     )
     fields.append(
         strawberry.field(
