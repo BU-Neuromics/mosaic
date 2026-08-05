@@ -97,16 +97,20 @@ class TestUnrecognizedFilterFields:
         # The message names the vocabulary the caller should have used.
         assert "is_tumor" in error["message"]
 
-    def test_provenance_derived_field_errors_with_its_own_code(self, gql):
-        """``createdAt`` is a real field on the type but is computed from the
-        provenance log at read time — no column to match."""
+    def test_read_time_computed_field_errors_under_either_spelling(self, gql):
+        """``createdAt`` is a real field on the type but is computed at read
+        time — no column to match. Introspection only ever shows the
+        camelCase spelling, so that one has to be recognized too."""
         _create_sample(gql, "present")
-        body = gql(
-            '{ samples(filters: [{field: "created_at", value: "2020-01-01"}]) '
-            "{ total } }"
-        )
-        assert body["errors"], body
-        assert body["errors"][0]["extensions"]["code"] == "UNFILTERABLE_FIELD"
+        for field in ("created_at", "createdAt", "supersededBy"):
+            body = gql(
+                '{ samples(filters: [{field: "%s", value: "x"}]) { total } }' % field
+            )
+            assert body["errors"], (field, body)
+            assert body["errors"][0]["extensions"]["code"] == "UNFILTERABLE_FIELD", (
+                field,
+                body["errors"][0],
+            )
 
     def test_multivalued_reference_errors_and_points_at_related_to(self, gql):
         """``Study.sample_ids`` lives in the relationships table (ADR-0002),

@@ -67,10 +67,11 @@ A list query's `filters` argument accepts **either** spelling for its `field` �
 the LinkML slot name (`volume_ml`, as listed by `hippoSchema`) or the camelCased
 field name the type exposes (`volumeMl`). A `field` that matches neither is an
 error (`extensions.code: UNKNOWN_FILTER_FIELD`) rather than an empty page, as
-are the two names that look filterable but cannot be: provenance-derived
-temporal fields (`createdAt`, `updatedAt` — use `asOf`) and multivalued
-references, which are stored as relationship edges rather than columns (use
-`relatedTo`). Both report `extensions.code: UNFILTERABLE_FIELD`.
+are the two kinds of name that look filterable but cannot be: read-time
+computed fields (`createdAt`, `updatedAt`, `supersededBy` — for temporal
+queries use `asOf`) and multivalued references, which are stored as
+relationship edges rather than columns (use `relatedTo`). Both report
+`extensions.code: UNFILTERABLE_FIELD`.
 
 The exposed class set is decided by Mosaic's shared type model
 (`mosaic.core.schema_typing`) — the same model behind the typed Python SDK — so

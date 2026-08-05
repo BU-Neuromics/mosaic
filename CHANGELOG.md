@@ -15,9 +15,10 @@
   reference's resolved edge name (`donor` → the `donor_id` column), whose raw
   carrier is hidden under edge-only emission (ADR-0005). A `field` that
   addresses no column is now a GraphQL error: `UNKNOWN_FILTER_FIELD` for an
-  unrecognized name, and `UNFILTERABLE_FIELD` for the two that look filterable
-  but cannot be — provenance-derived temporal fields (`createdAt`/`updatedAt`,
-  computed at read time per sec9 §9.7; use `asOf`) and multivalued references
+  unrecognized name, and `UNFILTERABLE_FIELD` for the two kinds that look
+  filterable but cannot be — read-time computed fields (`createdAt`,
+  `updatedAt`, `supersededBy`; sec9 §9.7, recognized under either spelling
+  since introspection only shows the camelCase one) and multivalued references
   (relationship edges rather than columns per ADR-0002; use `relatedTo`).
   REST is unaffected — its filters are query params spelled as slot names —
   but the SDK/storage layer still answers an unknown filter field with zero

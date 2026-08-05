@@ -201,6 +201,16 @@ class EntityGraphQLInfo:
             if not (spec.kind == "reference" and spec.multivalued)
         ]
 
+    def is_computed_field(self, field: str) -> bool:
+        """True when ``field`` names a read-time computed field.
+
+        Matched under either spelling, since these are exposed on the type
+        (as camelCase) but are not columns of it.
+        """
+        return any(
+            field in (name, camel_case(name)) for name in self.computed_fields
+        )
+
     def resolve_filter_field(self, field: str) -> Optional[SlotSpec]:
         """Find the slot a ``filters.field`` value addresses (issue #149).
 

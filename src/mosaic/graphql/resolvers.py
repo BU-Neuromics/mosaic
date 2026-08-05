@@ -416,12 +416,13 @@ def _to_sdk_filters(
     out: list[dict[str, Any]] = []
     for f in filters or []:
         spec = entity.resolve_filter_field(f.field)
-        if spec is None and f.field in entity.computed_fields:
+        if spec is None and entity.is_computed_field(f.field):
             raise GraphQLError(
-                f"{entity.class_name}.{f.field} is derived from the "
-                f"provenance log at read time rather than stored on the "
-                f"entity (sec9 §9.7), so it cannot be filtered on. Use "
-                f"`asOf` for transaction-time queries.",
+                f"{entity.class_name}.{f.field} is computed at read time "
+                f"rather than being a column of {entity.class_name} "
+                f"(sec9 §9.7), so it cannot be filtered on. Temporal fields "
+                f"come from the provenance log — use `asOf` for "
+                f"transaction-time queries.",
                 extensions={"code": "UNFILTERABLE_FIELD", "field": f.field},
             )
         if spec is None:
