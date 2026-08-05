@@ -58,9 +58,12 @@ class FilterOp(enum.Enum):
 
 @strawberry.input(
     description=(
-        "Field/value filter (SDK query filter). ``op`` defaults to EQ "
-        "(equality); IN treats ``value`` as a list and matches when the "
-        "field is a member of it (issue #102)."
+        "Field/value filter (SDK query filter). ``field`` is a LinkML slot "
+        "name (snake_case, as listed by `hippoSchema`); the equivalent "
+        "camelCase spelling exposed on the entity type is also accepted. An "
+        "unrecognized name is an error, never an empty result (issue #149). "
+        "``op`` defaults to EQ (equality); IN treats ``value`` as a list and "
+        "matches when the field is a member of it (issue #102)."
     )
 )
 class FilterInput:
@@ -399,6 +402,48 @@ def _make_get_resolver(builder: GraphQLTypeBuilder, entity: EntityGraphQLInfo):
     return resolver
 
 
+def _to_sdk_filters(
+    entity: EntityGraphQLInfo, filters: Optional[list[FilterInput]]
+) -> list[dict[str, Any]]:
+    """Translate GraphQL filter inputs into SDK query filters (issue #149).
+
+    Storage matches on LinkML slot names; the generated type exposes their
+    camelCase spellings. Both resolve here, and a name that is neither is
+    rejected — the storage layer's own response to an unknown column is to
+    match zero rows, which is indistinguishable from a legitimately empty
+    result.
+    """
+    out: list[dict[str, Any]] = []
+    for f in filters or []:
+        spec = entity.resolve_filter_field(f.field)
+        if spec is None and entity.is_computed_field(f.field):
+            raise GraphQLError(
+                f"{entity.class_name}.{f.field} is computed at read time "
+                f"rather than being a column of {entity.class_name} "
+                f"(sec9 §9.7), so it cannot be filtered on. Temporal fields "
+                f"come from the provenance log — use `asOf` for "
+                f"transaction-time queries.",
+                extensions={"code": "UNFILTERABLE_FIELD", "field": f.field},
+            )
+        if spec is None:
+            raise GraphQLError(
+                f"Unknown filter field {f.field!r} for {entity.class_name}. "
+                f"Filters match on: "
+                f"{', '.join(sorted(entity.filterable_slot_names()))}.",
+                extensions={"code": "UNKNOWN_FILTER_FIELD", "field": f.field},
+            )
+        if spec.kind == "reference" and spec.multivalued:
+            raise GraphQLError(
+                f"{entity.class_name}.{spec.slot_name} is a multivalued "
+                f"reference, stored as relationship edges rather than a "
+                f"column (ADR-0002), so it cannot be filtered on. Use the "
+                f"`relatedTo` query for reverse lookups over these edges.",
+                extensions={"code": "UNFILTERABLE_FIELD", "field": f.field},
+            )
+        out.append({"field": spec.slot_name, "value": f.value, "op": f.op.value})
+    return out
+
+
 def _make_list_resolver(builder: GraphQLTypeBuilder, entity: EntityGraphQLInfo):
     class_name = entity.class_name
 
@@ -412,10 +457,7 @@ def _make_list_resolver(builder: GraphQLTypeBuilder, entity: EntityGraphQLInfo):
     ):
         paginated = _client(info).query(
             entity_type=class_name,
-            filters=[
-                {"field": f.field, "value": f.value, "op": f.op.value}
-                for f in filters or []
-            ],
+            filters=_to_sdk_filters(_builder(info).entities[class_name], filters),
             limit=limit,
             offset=offset,
             filter_mode=filter_mode.value,
