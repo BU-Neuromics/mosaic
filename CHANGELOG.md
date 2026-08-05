@@ -2,6 +2,27 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- **GraphQL list filters no longer answer an unmatched `field` with an empty
+  page (#149).** `filters.field` reaches storage, which is keyed by LinkML slot
+  name (`sample_type`), while the generated type exposes the camelCase spelling
+  of the same slot (`sampleType`). Nothing in the schema signalled that two
+  vocabularies were in play, and the adapter's response to an unknown column is
+  to match zero rows — so a filter built from ordinary GraphQL introspection
+  returned a valid-shaped, empty result indistinguishable from "nothing
+  matched". Both spellings now resolve to the same column, as does a
+  reference's resolved edge name (`donor` → the `donor_id` column), whose raw
+  carrier is hidden under edge-only emission (ADR-0005). A `field` that
+  addresses no column is now a GraphQL error: `UNKNOWN_FILTER_FIELD` for an
+  unrecognized name, and `UNFILTERABLE_FIELD` for the two that look filterable
+  but cannot be — provenance-derived temporal fields (`createdAt`/`updatedAt`,
+  computed at read time per sec9 §9.7; use `asOf`) and multivalued references
+  (relationship edges rather than columns per ADR-0002; use `relatedTo`).
+  REST is unaffected — its filters are query params spelled as slot names —
+  but the SDK/storage layer still answers an unknown filter field with zero
+  rows for non-GraphQL callers.
+
 ## v0.12.1 — 2026-07-21 (multi-arch images; publish as `mosaic`)
 
 ### Changed

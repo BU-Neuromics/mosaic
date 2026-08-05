@@ -188,6 +188,42 @@ class EntityGraphQLInfo:
     create_specs: list[SlotSpec] = dc_field(default_factory=list)
     update_specs: list[SlotSpec] = dc_field(default_factory=list)
 
+    def filterable_slot_names(self) -> list[str]:
+        """Slot names a list query's ``filters.field`` can match on.
+
+        Multivalued references are excluded: they live in the relationships
+        table rather than a column of the entity's own table (ADR-0002), so
+        no column predicate can ever match them.
+        """
+        return [
+            spec.slot_name
+            for spec in self.slots
+            if not (spec.kind == "reference" and spec.multivalued)
+        ]
+
+    def resolve_filter_field(self, field: str) -> Optional[SlotSpec]:
+        """Find the slot a ``filters.field`` value addresses (issue #149).
+
+        Filters reach the storage layer, which is keyed by LinkML slot name
+        (snake_case); the generated GraphQL type exposes those same slots
+        under camelCase, and a reference slot under its resolved edge name.
+        All of those spellings resolve here so a filter built from ordinary
+        GraphQL introspection matches the intended column instead of
+        silently matching nothing. ``None`` = unrecognized.
+        """
+        # Exact slot names first, so a slot can never be shadowed by another
+        # slot's alias.
+        for spec in self.slots:
+            if field == spec.slot_name:
+                return spec
+        for spec in self.slots:
+            aliases = {camel_case(spec.slot_name)}
+            if spec.resolved_attr is not None:
+                aliases |= {spec.resolved_attr, camel_case(spec.resolved_attr)}
+            if field in aliases:
+                return spec
+        return None
+
 
 def get_entity_loader(context: Any, class_name: str) -> DataLoader:
     """Per-request, per-entity-type DataLoader (batched relationship reads).

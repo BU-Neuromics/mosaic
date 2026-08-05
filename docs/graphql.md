@@ -63,6 +63,15 @@ LinkML enums become GraphQL enums. Field names are camelCased
 (`volume_ml` → `volumeMl`); write payloads are mapped back to slot names before
 they reach the SDK.
 
+A list query's `filters` argument accepts **either** spelling for its `field` —
+the LinkML slot name (`volume_ml`, as listed by `hippoSchema`) or the camelCased
+field name the type exposes (`volumeMl`). A `field` that matches neither is an
+error (`extensions.code: UNKNOWN_FILTER_FIELD`) rather than an empty page, as
+are the two names that look filterable but cannot be: provenance-derived
+temporal fields (`createdAt`, `updatedAt` — use `asOf`) and multivalued
+references, which are stored as relationship edges rather than columns (use
+`relatedTo`). Both report `extensions.code: UNFILTERABLE_FIELD`.
+
 The exposed class set is decided by Mosaic's shared type model
 (`mosaic.core.schema_typing`) — the same model behind the typed Python SDK — so
 the two surfaces never drift. Framework classes (`Entity`, `ProvenanceRecord`,
