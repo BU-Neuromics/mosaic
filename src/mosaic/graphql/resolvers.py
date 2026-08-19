@@ -930,26 +930,67 @@ def _make_field_range_resolver(
 def _make_search_resolver(builder: GraphQLTypeBuilder, entity: EntityGraphQLInfo):
     class_name = entity.class_name
 
-    def resolver(info: Info, q: str, limit: int = 100, offset: int = 0):
-        results = _client(info).search(
-            entity_type=class_name,
-            query=q,
-            limit=limit,
+    def resolver(
+        info: Info,
+        q: str,
+        filters: Optional[list[FilterInput]] = None,
+        where=None,
+        filter_mode: FilterMode = FilterMode.AND,
+        limit: int = 100,
+        offset: int = 0,
+        order_by=None,
+        order_dir: OrderDirection = OrderDirection.ASC,
+    ):
+        ent = _builder(info).entities[class_name]
+        tree = (
+            _where_to_tree(ent, where)
+            if where is not None and where is not strawberry.UNSET
+            else None
         )
+        order_field = (
+            order_by.value
+            if order_by is not None and order_by is not strawberry.UNSET
+            else None
+        )
+        try:
+            paginated = _client(info).search(
+                entity_type=class_name,
+                query=q,
+                limit=limit,
+                offset=offset,
+                filters=_to_sdk_filters(ent, filters),
+                filter_mode=filter_mode.value,
+                where=tree,
+                order_by=order_field,
+                order_dir=order_dir.value,
+            )
+        except MosaicValidationError as exc:
+            raise _as_graphql_error(exc) from exc
         b = _builder(info)
-        return [
-            b.instance_from_envelope(class_name, envelope)
-            for envelope in results[offset : offset + limit]
-        ]
+        return entity.page_type(
+            items=[
+                b.instance_from_envelope(class_name, item)
+                for item in paginated.items
+            ],
+            total=paginated.total,
+            limit=paginated.limit,
+            offset=paginated.offset,
+        )
 
     resolver.__name__ = f"search_{entity.plural_name}"
     resolver.__doc__ = (
-        f"Full-text search over {class_name} entities (mirrors REST "
-        f"GET /search and MosaicClient.search). Requires the schema to "
-        f"declare searchable slots for {class_name}; returns matching "
-        f"entities, empty list otherwise."
+        f"Full-text search over {class_name} entities, composed with the "
+        f"list surface (issue #157): takes the same `filters`/`where`/"
+        f"`filterMode` arguments as the list query and returns the same "
+        f"{class_name}Page envelope (items/total/limit/offset). Results "
+        f"come back in FTS rank order; an explicit `orderBy` overrides "
+        f"rank (ADR-0007). `total` is the matching-and-filtered count, "
+        f"bounded by the 1000-hit FTS budget. Requires the schema to "
+        f"declare searchable slots for {class_name}."
     )
-    resolver.__annotations__["return"] = list[entity.gql_type]  # type: ignore[valid-type]
+    resolver.__annotations__["return"] = entity.page_type
+    resolver.__annotations__["where"] = Optional[entity.filter_input]
+    resolver.__annotations__["order_by"] = Optional[entity.order_field_enum]
     return resolver
 
 

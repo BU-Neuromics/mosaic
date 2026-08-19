@@ -139,7 +139,9 @@ never "unlimited" (#130; `query_service.py:276-279` and the adapters' guards), a
 - `facetCounts` on relationship-backed multivalued reference slots (a GROUP BY over the link
   table) is deliberately **not** in scope; it belongs with ADR-0006's M5b machinery if ever.
 - Interaction with bm25-ranked search ordering is settled in OpenSpec `search-composition`
-  (rank vs. `order_by` precedence).
+  (rank vs. `order_by` precedence). **Settled at implementation (issue #157):** search
+  results come back in FTS rank order when no explicit ordering is given; an explicit
+  `order_by` overrides rank and reuses this ADR's pushdown.
 - Implementation increments, tasks, and acceptance live in the OpenSpec change
   `aggregation-and-ordering` ([#156](https://github.com/BU-Neuromics/mosaic/issues/156));
   do not implement ahead of it.

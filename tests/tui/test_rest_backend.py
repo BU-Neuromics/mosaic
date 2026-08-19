@@ -258,7 +258,11 @@ def _mock_server(request):
         return httpx.Response(200, json=_HISTORY_PAYLOAD)
     if path == "/search":
         assert dict(request.url.params)["q"] == "S1"
-        return httpx.Response(200, json=[_SAMPLE_RECORD])
+        # Paginated envelope (issue #157).
+        return httpx.Response(
+            200,
+            json={"items": [_SAMPLE_RECORD], "total": 1, "limit": 50, "offset": 0},
+        )
     if path == "/ingest" and request.method == "POST":
         body = _json.loads(request.content)
         if not body["data"].get("name"):

@@ -146,7 +146,10 @@ class TestRootTypes:
         query = _block(sdl, "type Query")
         assert "searchSamples(q: String!" in query
         assert "searchDonors(q: String!" in query
-        assert "[Sample!]!" in query
+        # Search twins return the Page envelope and take the list
+        # surface's filter arguments (issue #157) — no more bare lists.
+        assert "searchSamples(q: String!, filters: [FilterInput!]" in query
+        assert "): SamplePage!" in query
 
     def test_supersession_query(self, sdl):
         query = _block(sdl, "type Query")

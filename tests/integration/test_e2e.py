@@ -317,7 +317,7 @@ class TestFTSSearch:
         )
 
         results = client.search("Sample", "hippocampus")
-        names = [_data(r)["name"] for r in results]
+        names = [_data(r)["name"] for r in results.items]
         assert "S001" in names
         assert "S002" not in names
 
@@ -332,7 +332,7 @@ class TestFTSSearch:
             },
         )
         results = client.search("Sample", "nonexistentterm12345")
-        assert results == []
+        assert results.items == [] and results.total == 0
 
     def test_fts_search_multiple_results(self, tmp_hippo):
         client = _make_client(tmp_hippo, fts=True)
@@ -362,7 +362,7 @@ class TestFTSSearch:
         )
 
         results = client.search("Sample", "cortex")
-        names = [_data(r)["name"] for r in results]
+        names = [_data(r)["name"] for r in results.items]
         assert "S001" in names
         assert "S002" in names
         assert "S003" not in names

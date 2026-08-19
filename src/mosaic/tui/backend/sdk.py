@@ -323,7 +323,11 @@ class SDKBackend:
     ) -> list[dict[str, Any]]:
         client = self._get_client()
         try:
-            return client.search(entity_type=entity_type, query=query, limit=limit)
+            return list(
+                client.search(
+                    entity_type=entity_type, query=query, limit=limit
+                ).items
+            )
         except Exception as exc:  # noqa: BLE001
             raise BackendError(f"Search failed for {entity_type}: {exc}") from exc
 

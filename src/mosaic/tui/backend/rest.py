@@ -344,6 +344,10 @@ class RESTBackend:
             f"&q={urllib.parse.quote(query)}&limit={limit}"
         )
         data = await self._get_json(path)
+        if isinstance(data, dict):
+            # Paginated envelope (issue #157); items carry the entities.
+            items = data.get("items")
+            return items if isinstance(items, list) else []
         return data if isinstance(data, list) else []
 
     async def get_entity(self, entity_type: str, entity_id: str) -> EntityDetail:

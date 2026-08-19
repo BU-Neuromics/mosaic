@@ -961,10 +961,31 @@ class MosaicClient:
         self,
         entity_type: str,
         query: str,
-        limit: int = 100,
-    ) -> list[dict[str, Any]]:
-        """Search entities using full-text search."""
-        return self._query_service.search(entity_type, query, limit)
+        limit: Optional[int] = 100,
+        offset: Optional[int] = 0,
+        *,
+        filters: Optional[list[dict[str, Any]]] = None,
+        filter_mode: str = "and",
+        where: Optional[dict[str, Any]] = None,
+        order_by: Optional[str] = None,
+        order_dir: str = "asc",
+    ) -> "PaginatedResult":
+        """Full-text search composed with the list surface (issue #157).
+
+        BREAKING (v0.15): returns the same ``PaginatedResult`` envelope as
+        ``query()`` instead of a bare list. Ranked FTS ids feed one
+        ``find()`` composed with the caller's ``filters``/``where`` (id-set
+        composition) — availability and filter semantics are identical to
+        list queries, with one batched read per page instead of a per-hit
+        N+1. Default order is FTS rank; an explicit ``order_by`` overrides
+        rank (ADR-0007 pushdown). ``total`` is the matching-and-filtered
+        count, bounded by the 1000-hit FTS budget.
+        """
+        return self._query_service.search(
+            entity_type, query, limit, offset,
+            filters=filters, filter_mode=filter_mode, where=where,
+            order_by=order_by, order_dir=order_dir,
+        )
 
     # -- ProvenanceService delegations --
 

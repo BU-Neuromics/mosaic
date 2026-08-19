@@ -32,8 +32,10 @@ class TestClientFTSearch:
             "fts_sample_title", "test-1", "hello world test"
         )
 
-        results = client.search("Sample", "hello")
-        assert len(results) >= 0
+        result = client.search("Sample", "hello")
+        # BREAKING (issue #157): search returns the PaginatedResult
+        # envelope, same as query().
+        assert result.total == len(result.items)
 
 
 @pytest.fixture

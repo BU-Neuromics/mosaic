@@ -544,7 +544,8 @@ class TestPostgresClientFTSWrites:
             {"id": str(uuid.uuid4()), "name": "n2", "notes": "korokke recipe"},
         )
         results = fts_client.search("Sample", "korokke")
-        assert [r["id"] for r in results] == [created["id"]]
+        assert [r["id"] for r in results.items] == [created["id"]]
+        assert results.total == 1
 
     def test_put_syncs_content_when_fts_table_exists(self, fts_client):
         meta = fts_client._fts_table_metadata["Sample"][0]
@@ -1157,3 +1158,108 @@ class TestPostgresAggregationAndOrdering:
             ),
             "age",
         ) == (None, None)
+
+
+class TestPostgresSearchComposition:
+    """Parity for search composition (issue #157): ranked ts_rank ids feed
+    one composed find(); envelope, filter intersection, rank-vs-order_by
+    precedence, and availability consistency match the SQLite path
+    (``tests/core/test_search_composition.py``)."""
+
+    @pytest.fixture
+    def search_client(self):
+        from mosaic.core.client import MosaicClient
+        from mosaic.core.storage.adapters.postgres_adapter import PostgresAdapter
+        from tests.support.linkml_schemas import build_registry
+
+        registry = build_registry(
+            {
+                "Note": {
+                    "attributes": {
+                        "id": {"identifier": True},
+                        "name": {"range": "string", "required": True},
+                        "tissue": {"range": "string"},
+                        "priority": {"range": "integer"},
+                        "body": {
+                            "range": "string",
+                            "annotations": {"hippo_search": "fts5"},
+                        },
+                    }
+                }
+            }
+        )
+        adapter = PostgresAdapter(
+            database_url=POSTGRES_URL,
+            schema_registry=registry,
+            min_pool_size=1,
+            max_pool_size=5,
+        )
+        client = MosaicClient(storage=adapter, registry=registry)
+        client.put("Note", {"id": "n1", "name": "One", "tissue": "brain",
+                            "priority": 1, "body": "cortex cortex cortex alpha"})
+        client.put("Note", {"id": "n2", "name": "Two", "tissue": "brain",
+                            "priority": 2, "body": "cortex cortex beta filler"})
+        client.put("Note", {"id": "n3", "name": "Three", "tissue": "liver",
+                            "priority": 3, "body": "cortex gamma delta filler"})
+        client.put("Note", {"id": "n4", "name": "Four", "tissue": "brain",
+                            "priority": 4, "body": "hippocampus only here now"})
+        yield client
+        with adapter._transaction() as conn:
+            cur = conn.cursor()
+            cur.execute('ALTER TABLE "ProvenanceRecord" DISABLE TRIGGER ALL')
+            cur.execute('DELETE FROM "ProvenanceRecord"')
+            cur.execute('ALTER TABLE "ProvenanceRecord" ENABLE TRIGGER ALL')
+            cur.execute("DELETE FROM entities")
+            cur.execute(
+                "SELECT tablename FROM pg_tables "
+                "WHERE schemaname = 'public' AND tablename LIKE 'fts_%'"
+            )
+            for row in cur.fetchall():
+                cur.execute(f'DROP TABLE IF EXISTS "{row["tablename"]}" CASCADE')
+        adapter.close()
+
+    @staticmethod
+    def _ids(result):
+        return [item["id"] for item in result.items]
+
+    def test_envelope_in_rank_order(self, search_client):
+        result = search_client.search("Note", "cortex")
+        assert self._ids(result) == ["n1", "n2", "n3"]
+        assert result.total == 3
+
+    def test_offset_ge_limit_returns_correct_page(self, search_client):
+        result = search_client.search("Note", "cortex", limit=1, offset=2)
+        assert self._ids(result) == ["n3"]
+        assert result.total == 3
+
+    def test_filters_intersect_ranked_hits(self, search_client):
+        result = search_client.search(
+            "Note", "cortex", filters=[{"field": "tissue", "value": "brain"}]
+        )
+        assert self._ids(result) == ["n1", "n2"]
+        assert result.total == 2
+
+    def test_where_tree_composes(self, search_client):
+        result = search_client.search(
+            "Note", "cortex",
+            where={"field": "priority", "op": "gte", "value": 2},
+        )
+        assert self._ids(result) == ["n2", "n3"]
+
+    def test_order_by_overrides_rank(self, search_client):
+        result = search_client.search(
+            "Note", "cortex", order_by="priority", order_dir="desc"
+        )
+        assert self._ids(result) == ["n3", "n2", "n1"]
+        assert result.total == 3
+
+    def test_unavailable_entities_never_surface(self, search_client):
+        search_client.put("Note", {"id": "n5", "name": "Ghost", "tissue": "x",
+                                   "priority": 5, "body": "cortex ghost gone"})
+        search_client.set_availability_bulk(
+            entity_type="Note", entity_ids=["n5"],
+            is_available=False, reason="test",
+        )
+        result = search_client.search("Note", "cortex")
+        assert "n5" not in self._ids(result)
+        assert result.total == 3
