@@ -1881,7 +1881,7 @@ Without one, <code>--graphql</code> fails at startup with a configuration error.
 </tr>
 <tr>
 <td>Queries</td>
-<td><code>sample(id)</code>, <code>samples(filters, where, filterMode, limit, offset, orderBy, orderDir, asOf)</code>, <code>searchSamples(q, limit, offset)</code></td>
+<td><code>sample(id)</code>, <code>samples(filters, where, filterMode, limit, offset, orderBy, orderDir, asOf)</code>, <code>searchSamples(q, filters, where, filterMode, limit, offset, orderBy, orderDir): SamplePage</code></td>
 </tr>
 <tr>
 <td>Aggregations</td>
@@ -2039,9 +2039,24 @@ chain:</p>
 <a id="__codelineno-8-3" name="__codelineno-8-3" href="#__codelineno-8-3"></a><span class="k">query</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="n">supersededBy</span><span class="p">(</span><span class="n">id</span><span class="p">:</span><span class="w"> </span><span class="s">"old"</span><span class="p">)</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="n">entityId</span><span class="w"> </span><span class="n">supersededBy</span><span class="w"> </span><span class="n">chain</span><span class="w"> </span><span class="p">}</span><span class="w"> </span><span class="p">}</span>
 </code></pre></div>
 <h3 id="full-text-search">Full-text search<a class="headerlink" href="#full-text-search" title="Permanent link">&para;</a></h3>
-<p>Slots annotated <code>hippo_search</code> in your schema are searchable per type:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a><span class="p">{</span><span class="w"> </span><span class="n">searchSamples</span><span class="p">(</span><span class="n">q</span><span class="p">:</span><span class="w"> </span><span class="s">"hippocampus"</span><span class="p">,</span><span class="w"> </span><span class="n">limit</span><span class="p">:</span><span class="w"> </span><span class="mi">20</span><span class="p">)</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="n">id</span><span class="w"> </span><span class="n">name</span><span class="w"> </span><span class="p">}</span><span class="w"> </span><span class="p">}</span>
+<p>Slots annotated <code>hippo_search</code> in your schema are searchable per type. Search
+<strong>composes with the list surface</strong> (issue #157): the twins take the same
+<code>filters</code>/<code>where</code>/<code>filterMode</code> arguments as list queries and return the same
+<code>Page</code> envelope:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a><span class="p">{</span>
+<a id="__codelineno-9-2" name="__codelineno-9-2" href="#__codelineno-9-2"></a><span class="w">  </span><span class="n">searchSamples</span><span class="p">(</span><span class="n">q</span><span class="p">:</span><span class="w"> </span><span class="s">"hippocampus"</span><span class="p">,</span><span class="w"> </span><span class="n">where</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="n">isTumor</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="n">eq</span><span class="p">:</span><span class="w"> </span><span class="nb">true</span><span class="p">}},</span><span class="w"> </span><span class="n">limit</span><span class="p">:</span><span class="w"> </span><span class="mi">20</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-9-3" name="__codelineno-9-3" href="#__codelineno-9-3"></a><span class="w">    </span><span class="n">items</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="n">id</span><span class="w"> </span><span class="n">name</span><span class="w"> </span><span class="p">}</span>
+<a id="__codelineno-9-4" name="__codelineno-9-4" href="#__codelineno-9-4"></a><span class="w">    </span><span class="n">total</span>
+<a id="__codelineno-9-5" name="__codelineno-9-5" href="#__codelineno-9-5"></a><span class="w">  </span><span class="p">}</span>
+<a id="__codelineno-9-6" name="__codelineno-9-6" href="#__codelineno-9-6"></a><span class="p">}</span>
 </code></pre></div>
+<p>Under the hood the ranked FTS hit set feeds one composed list query
+(<code>id IN (…)</code> — one batched read per page, no per-hit fetches), so
+availability and filter semantics are identical to list queries and <code>total</code>
+honors both the FTS match set (bounded at 1000 hits) and the composed
+filters. Results come back in FTS rank order — the point of search — unless
+an explicit <code>orderBy</code> is given, which overrides rank (the pinned precedence
+rule). Unknown filter fields are the same coded errors as list queries.</p>
 <h3 id="schema-introspection-the-mosaic-kind">Schema introspection (the Mosaic kind)<a class="headerlink" href="#schema-introspection-the-mosaic-kind" title="Permanent link">&para;</a></h3>
 <p>Beyond GraphQL's own <code>__schema</code>, the API exposes Mosaic's domain type model —
 useful for generic clients that need the LinkML classification:</p>
