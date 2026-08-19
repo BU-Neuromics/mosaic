@@ -1857,6 +1857,25 @@ computed fields (<code>createdAt</code>, <code>updatedAt</code>, <code>supersede
 queries use <code>asOf</code>) and multivalued references, which are stored as
 relationship edges rather than columns (use <code>relatedTo</code>). Both report
 <code>extensions.code: UNFILTERABLE_FIELD</code>.</p>
+<p>Each filter carries an operator (<code>op</code>, default <code>EQ</code>). Which operators a slot
+supports follows from its LinkML range (ADR-0006): numeric and temporal slots
+take <code>GT</code>/<code>GTE</code>/<code>LT</code>/<code>LTE</code> (typed comparisons on both backends — never
+lexicographic), string slots take <code>CONTAINS</code> (case-insensitive substring;
+<code>%</code>/<code>_</code> are literals), most slots take <code>NEQ</code> and <code>IN</code>, and every slot takes
+<code>IS_NULL</code> with a boolean value (<code>true</code> matches entities with no stored value).
+An operator outside a slot's set is <code>extensions.code: UNSUPPORTED_FILTER_OP</code>,
+and a malformed value (<code>value: null</code>, non-boolean <code>IS_NULL</code>, non-list <code>IN</code>) is
+<code>INVALID_FILTER_VALUE</code> — never a silently-wrong result. SQL NULL semantics
+apply: comparisons (including <code>NEQ</code>) never match an entity that lacks the
+field; ask about absence with <code>IS_NULL</code>.</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="p">{</span>
+<a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a><span class="w">  </span><span class="n">samples</span><span class="p">(</span><span class="n">filters</span><span class="p">:</span><span class="w"> </span><span class="p">[</span>
+<a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a><span class="w">    </span><span class="p">{</span><span class="n">field</span><span class="p">:</span><span class="w"> </span><span class="s">"replicateCount"</span><span class="p">,</span><span class="w"> </span><span class="n">op</span><span class="p">:</span><span class="w"> </span><span class="no">GT</span><span class="p">,</span><span class="w"> </span><span class="n">value</span><span class="p">:</span><span class="w"> </span><span class="mi">2</span><span class="p">},</span>
+<a id="__codelineno-3-4" name="__codelineno-3-4" href="#__codelineno-3-4"></a><span class="w">    </span><span class="p">{</span><span class="n">field</span><span class="p">:</span><span class="w"> </span><span class="s">"name"</span><span class="p">,</span><span class="w"> </span><span class="n">op</span><span class="p">:</span><span class="w"> </span><span class="no">CONTAINS</span><span class="p">,</span><span class="w"> </span><span class="n">value</span><span class="p">:</span><span class="w"> </span><span class="s">"tumor"</span><span class="p">},</span>
+<a id="__codelineno-3-5" name="__codelineno-3-5" href="#__codelineno-3-5"></a><span class="w">    </span><span class="p">{</span><span class="n">field</span><span class="p">:</span><span class="w"> </span><span class="s">"notes"</span><span class="p">,</span><span class="w"> </span><span class="n">op</span><span class="p">:</span><span class="w"> </span><span class="no">IS_NULL</span><span class="p">,</span><span class="w"> </span><span class="n">value</span><span class="p">:</span><span class="w"> </span><span class="nb">false</span><span class="p">}</span>
+<a id="__codelineno-3-6" name="__codelineno-3-6" href="#__codelineno-3-6"></a><span class="w">  </span><span class="p">])</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="n">total</span><span class="w"> </span><span class="n">items</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="n">name</span><span class="w"> </span><span class="p">}</span><span class="w"> </span><span class="p">}</span>
+<a id="__codelineno-3-7" name="__codelineno-3-7" href="#__codelineno-3-7"></a><span class="p">}</span>
+</code></pre></div>
 <p>The exposed class set is decided by Mosaic's shared type model
 (<code>mosaic.core.schema_typing</code>) — the same model behind the typed Python SDK — so
 the two surfaces never drift. Framework classes (<code>Entity</code>, <code>ProvenanceRecord</code>,
@@ -1864,18 +1883,18 @@ the two surfaces never drift. Framework classes (<code>Entity</code>, <code>Prov
 <h3 id="relationships-traverse-the-graph">Relationships traverse the graph<a class="headerlink" href="#relationships-traverse-the-graph" title="Permanent link">&para;</a></h3>
 <p>A class-ranged slot generates <strong>two</strong> fields: the raw stored UUID and a resolved
 field that walks the relationship.</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="p">{</span>
-<a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a><span class="w">  </span><span class="n">samples</span><span class="w"> </span><span class="p">{</span>
-<a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a><span class="w">    </span><span class="n">items</span><span class="w"> </span><span class="p">{</span>
-<a id="__codelineno-3-4" name="__codelineno-3-4" href="#__codelineno-3-4"></a><span class="w">      </span><span class="n">name</span>
-<a id="__codelineno-3-5" name="__codelineno-3-5" href="#__codelineno-3-5"></a><span class="w">      </span><span class="n">donorId</span><span class="w">          </span><span class="c"># raw stored UUID</span>
-<a id="__codelineno-3-6" name="__codelineno-3-6" href="#__codelineno-3-6"></a><span class="w">      </span><span class="n">donor</span><span class="w"> </span><span class="p">{</span><span class="w">          </span><span class="c"># resolved Donor — one batched query, no N+1</span>
-<a id="__codelineno-3-7" name="__codelineno-3-7" href="#__codelineno-3-7"></a><span class="w">        </span><span class="n">name</span>
-<a id="__codelineno-3-8" name="__codelineno-3-8" href="#__codelineno-3-8"></a><span class="w">        </span><span class="n">sex</span>
-<a id="__codelineno-3-9" name="__codelineno-3-9" href="#__codelineno-3-9"></a><span class="w">      </span><span class="p">}</span>
-<a id="__codelineno-3-10" name="__codelineno-3-10" href="#__codelineno-3-10"></a><span class="w">    </span><span class="p">}</span>
-<a id="__codelineno-3-11" name="__codelineno-3-11" href="#__codelineno-3-11"></a><span class="w">  </span><span class="p">}</span>
-<a id="__codelineno-3-12" name="__codelineno-3-12" href="#__codelineno-3-12"></a><span class="p">}</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="p">{</span>
+<a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a><span class="w">  </span><span class="n">samples</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a><span class="w">    </span><span class="n">items</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-4-4" name="__codelineno-4-4" href="#__codelineno-4-4"></a><span class="w">      </span><span class="n">name</span>
+<a id="__codelineno-4-5" name="__codelineno-4-5" href="#__codelineno-4-5"></a><span class="w">      </span><span class="n">donorId</span><span class="w">          </span><span class="c"># raw stored UUID</span>
+<a id="__codelineno-4-6" name="__codelineno-4-6" href="#__codelineno-4-6"></a><span class="w">      </span><span class="n">donor</span><span class="w"> </span><span class="p">{</span><span class="w">          </span><span class="c"># resolved Donor — one batched query, no N+1</span>
+<a id="__codelineno-4-7" name="__codelineno-4-7" href="#__codelineno-4-7"></a><span class="w">        </span><span class="n">name</span>
+<a id="__codelineno-4-8" name="__codelineno-4-8" href="#__codelineno-4-8"></a><span class="w">        </span><span class="n">sex</span>
+<a id="__codelineno-4-9" name="__codelineno-4-9" href="#__codelineno-4-9"></a><span class="w">      </span><span class="p">}</span>
+<a id="__codelineno-4-10" name="__codelineno-4-10" href="#__codelineno-4-10"></a><span class="w">    </span><span class="p">}</span>
+<a id="__codelineno-4-11" name="__codelineno-4-11" href="#__codelineno-4-11"></a><span class="w">  </span><span class="p">}</span>
+<a id="__codelineno-4-12" name="__codelineno-4-12" href="#__codelineno-4-12"></a><span class="p">}</span>
 </code></pre></div>
 <p>Resolved fields load through a per-request DataLoader: resolving the same target
 type N times in one request issues a single batched query.</p>
@@ -1887,42 +1906,42 @@ at read time, never stored on entity rows.</p>
 <h3 id="lifecycle-not-deletion">Lifecycle, not deletion<a class="headerlink" href="#lifecycle-not-deletion" title="Permanent link">&para;</a></h3>
 <p>There are no delete mutations. Mosaic never hard-deletes; use availability
 transitions:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="k">mutation</span><span class="w"> </span><span class="p">{</span>
-<a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a><span class="w">  </span><span class="n">setSampleAvailability</span><span class="p">(</span><span class="n">id</span><span class="p">:</span><span class="w"> </span><span class="s">"…"</span><span class="p">,</span><span class="w"> </span><span class="n">isAvailable</span><span class="p">:</span><span class="w"> </span><span class="nb">false</span><span class="p">,</span><span class="w"> </span><span class="n">reason</span><span class="p">:</span><span class="w"> </span><span class="s">"depleted"</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
-<a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a><span class="w">    </span><span class="n">entityId</span>
-<a id="__codelineno-4-4" name="__codelineno-4-4" href="#__codelineno-4-4"></a><span class="w">    </span><span class="n">isAvailable</span>
-<a id="__codelineno-4-5" name="__codelineno-4-5" href="#__codelineno-4-5"></a><span class="w">  </span><span class="p">}</span>
-<a id="__codelineno-4-6" name="__codelineno-4-6" href="#__codelineno-4-6"></a><span class="p">}</span>
-<a id="__codelineno-4-7" name="__codelineno-4-7" href="#__codelineno-4-7"></a>
-<a id="__codelineno-4-8" name="__codelineno-4-8" href="#__codelineno-4-8"></a><span class="k">mutation</span><span class="w"> </span><span class="p">{</span>
-<a id="__codelineno-4-9" name="__codelineno-4-9" href="#__codelineno-4-9"></a><span class="w">  </span><span class="n">setSampleAvailabilityBulk</span><span class="p">(</span><span class="n">ids</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="s">"…"</span><span class="p">,</span><span class="w"> </span><span class="s">"…"</span><span class="p">],</span><span class="w"> </span><span class="n">isAvailable</span><span class="p">:</span><span class="w"> </span><span class="nb">false</span><span class="p">,</span><span class="w"> </span><span class="n">reason</span><span class="p">:</span><span class="w"> </span><span class="s">"audit"</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
-<a id="__codelineno-4-10" name="__codelineno-4-10" href="#__codelineno-4-10"></a><span class="w">    </span><span class="n">total</span><span class="w"> </span><span class="n">succeeded</span><span class="w"> </span><span class="n">failed</span>
-<a id="__codelineno-4-11" name="__codelineno-4-11" href="#__codelineno-4-11"></a><span class="w">    </span><span class="n">failures</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="n">entityId</span><span class="w"> </span><span class="n">error</span><span class="w"> </span><span class="p">}</span>
-<a id="__codelineno-4-12" name="__codelineno-4-12" href="#__codelineno-4-12"></a><span class="w">  </span><span class="p">}</span>
-<a id="__codelineno-4-13" name="__codelineno-4-13" href="#__codelineno-4-13"></a><span class="p">}</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="k">mutation</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a><span class="w">  </span><span class="n">setSampleAvailability</span><span class="p">(</span><span class="n">id</span><span class="p">:</span><span class="w"> </span><span class="s">"…"</span><span class="p">,</span><span class="w"> </span><span class="n">isAvailable</span><span class="p">:</span><span class="w"> </span><span class="nb">false</span><span class="p">,</span><span class="w"> </span><span class="n">reason</span><span class="p">:</span><span class="w"> </span><span class="s">"depleted"</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a><span class="w">    </span><span class="n">entityId</span>
+<a id="__codelineno-5-4" name="__codelineno-5-4" href="#__codelineno-5-4"></a><span class="w">    </span><span class="n">isAvailable</span>
+<a id="__codelineno-5-5" name="__codelineno-5-5" href="#__codelineno-5-5"></a><span class="w">  </span><span class="p">}</span>
+<a id="__codelineno-5-6" name="__codelineno-5-6" href="#__codelineno-5-6"></a><span class="p">}</span>
+<a id="__codelineno-5-7" name="__codelineno-5-7" href="#__codelineno-5-7"></a>
+<a id="__codelineno-5-8" name="__codelineno-5-8" href="#__codelineno-5-8"></a><span class="k">mutation</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-5-9" name="__codelineno-5-9" href="#__codelineno-5-9"></a><span class="w">  </span><span class="n">setSampleAvailabilityBulk</span><span class="p">(</span><span class="n">ids</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="s">"…"</span><span class="p">,</span><span class="w"> </span><span class="s">"…"</span><span class="p">],</span><span class="w"> </span><span class="n">isAvailable</span><span class="p">:</span><span class="w"> </span><span class="nb">false</span><span class="p">,</span><span class="w"> </span><span class="n">reason</span><span class="p">:</span><span class="w"> </span><span class="s">"audit"</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-5-10" name="__codelineno-5-10" href="#__codelineno-5-10"></a><span class="w">    </span><span class="n">total</span><span class="w"> </span><span class="n">succeeded</span><span class="w"> </span><span class="n">failed</span>
+<a id="__codelineno-5-11" name="__codelineno-5-11" href="#__codelineno-5-11"></a><span class="w">    </span><span class="n">failures</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="n">entityId</span><span class="w"> </span><span class="n">error</span><span class="w"> </span><span class="p">}</span>
+<a id="__codelineno-5-12" name="__codelineno-5-12" href="#__codelineno-5-12"></a><span class="w">  </span><span class="p">}</span>
+<a id="__codelineno-5-13" name="__codelineno-5-13" href="#__codelineno-5-13"></a><span class="p">}</span>
 </code></pre></div>
 <p>The bulk form mirrors the REST bulk-availability endpoint: per-record error
 isolation — one bad id never rolls back its siblings.</p>
 <p>Supersession works the same way as in the SDK, with a read-side query for the
 chain:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="k">mutation</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="n">supersedeSample</span><span class="p">(</span><span class="n">id</span><span class="p">:</span><span class="w"> </span><span class="s">"old"</span><span class="p">,</span><span class="w"> </span><span class="n">replacementId</span><span class="p">:</span><span class="w"> </span><span class="s">"new"</span><span class="p">,</span><span class="w"> </span><span class="n">reason</span><span class="p">:</span><span class="w"> </span><span class="s">"remeasured"</span><span class="p">)</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="n">entityId</span><span class="w"> </span><span class="n">supersededBy</span><span class="w"> </span><span class="p">}</span><span class="w"> </span><span class="p">}</span>
-<a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a>
-<a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a><span class="k">query</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="n">supersededBy</span><span class="p">(</span><span class="n">id</span><span class="p">:</span><span class="w"> </span><span class="s">"old"</span><span class="p">)</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="n">entityId</span><span class="w"> </span><span class="n">supersededBy</span><span class="w"> </span><span class="n">chain</span><span class="w"> </span><span class="p">}</span><span class="w"> </span><span class="p">}</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a><span class="k">mutation</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="n">supersedeSample</span><span class="p">(</span><span class="n">id</span><span class="p">:</span><span class="w"> </span><span class="s">"old"</span><span class="p">,</span><span class="w"> </span><span class="n">replacementId</span><span class="p">:</span><span class="w"> </span><span class="s">"new"</span><span class="p">,</span><span class="w"> </span><span class="n">reason</span><span class="p">:</span><span class="w"> </span><span class="s">"remeasured"</span><span class="p">)</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="n">entityId</span><span class="w"> </span><span class="n">supersededBy</span><span class="w"> </span><span class="p">}</span><span class="w"> </span><span class="p">}</span>
+<a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a>
+<a id="__codelineno-6-3" name="__codelineno-6-3" href="#__codelineno-6-3"></a><span class="k">query</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="n">supersededBy</span><span class="p">(</span><span class="n">id</span><span class="p">:</span><span class="w"> </span><span class="s">"old"</span><span class="p">)</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="n">entityId</span><span class="w"> </span><span class="n">supersededBy</span><span class="w"> </span><span class="n">chain</span><span class="w"> </span><span class="p">}</span><span class="w"> </span><span class="p">}</span>
 </code></pre></div>
 <h3 id="full-text-search">Full-text search<a class="headerlink" href="#full-text-search" title="Permanent link">&para;</a></h3>
 <p>Slots annotated <code>hippo_search</code> in your schema are searchable per type:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a><span class="p">{</span><span class="w"> </span><span class="n">searchSamples</span><span class="p">(</span><span class="n">q</span><span class="p">:</span><span class="w"> </span><span class="s">"hippocampus"</span><span class="p">,</span><span class="w"> </span><span class="n">limit</span><span class="p">:</span><span class="w"> </span><span class="mi">20</span><span class="p">)</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="n">id</span><span class="w"> </span><span class="n">name</span><span class="w"> </span><span class="p">}</span><span class="w"> </span><span class="p">}</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a><span class="p">{</span><span class="w"> </span><span class="n">searchSamples</span><span class="p">(</span><span class="n">q</span><span class="p">:</span><span class="w"> </span><span class="s">"hippocampus"</span><span class="p">,</span><span class="w"> </span><span class="n">limit</span><span class="p">:</span><span class="w"> </span><span class="mi">20</span><span class="p">)</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="n">id</span><span class="w"> </span><span class="n">name</span><span class="w"> </span><span class="p">}</span><span class="w"> </span><span class="p">}</span>
 </code></pre></div>
 <h3 id="schema-introspection-the-mosaic-kind">Schema introspection (the Mosaic kind)<a class="headerlink" href="#schema-introspection-the-mosaic-kind" title="Permanent link">&para;</a></h3>
 <p>Beyond GraphQL's own <code>__schema</code>, the API exposes Mosaic's domain type model —
 useful for generic clients that need the LinkML classification:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a><span class="p">{</span>
-<a id="__codelineno-7-2" name="__codelineno-7-2" href="#__codelineno-7-2"></a><span class="w">  </span><span class="n">hippoSchema</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="n">name</span><span class="w"> </span><span class="n">accessorName</span><span class="w"> </span><span class="p">}</span>
-<a id="__codelineno-7-3" name="__codelineno-7-3" href="#__codelineno-7-3"></a><span class="w">  </span><span class="n">hippoEntityType</span><span class="p">(</span><span class="n">name</span><span class="p">:</span><span class="w"> </span><span class="s">"Sample"</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
-<a id="__codelineno-7-4" name="__codelineno-7-4" href="#__codelineno-7-4"></a><span class="w">    </span><span class="n">fields</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="n">name</span><span class="w"> </span><span class="n">kind</span><span class="w"> </span><span class="n">range</span><span class="w"> </span><span class="n">role</span><span class="w"> </span><span class="n">required</span><span class="w"> </span><span class="n">multivalued</span><span class="w"> </span><span class="n">targetEntityType</span><span class="w"> </span><span class="n">enumValues</span><span class="w"> </span><span class="p">}</span>
-<a id="__codelineno-7-5" name="__codelineno-7-5" href="#__codelineno-7-5"></a><span class="w">    </span><span class="n">relationships</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="n">field</span><span class="w"> </span><span class="n">targetEntityType</span><span class="w"> </span><span class="p">}</span>
-<a id="__codelineno-7-6" name="__codelineno-7-6" href="#__codelineno-7-6"></a><span class="w">  </span><span class="p">}</span>
-<a id="__codelineno-7-7" name="__codelineno-7-7" href="#__codelineno-7-7"></a><span class="p">}</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a><span class="p">{</span>
+<a id="__codelineno-8-2" name="__codelineno-8-2" href="#__codelineno-8-2"></a><span class="w">  </span><span class="n">hippoSchema</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="n">name</span><span class="w"> </span><span class="n">accessorName</span><span class="w"> </span><span class="p">}</span>
+<a id="__codelineno-8-3" name="__codelineno-8-3" href="#__codelineno-8-3"></a><span class="w">  </span><span class="n">hippoEntityType</span><span class="p">(</span><span class="n">name</span><span class="p">:</span><span class="w"> </span><span class="s">"Sample"</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-8-4" name="__codelineno-8-4" href="#__codelineno-8-4"></a><span class="w">    </span><span class="n">fields</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="n">name</span><span class="w"> </span><span class="n">kind</span><span class="w"> </span><span class="n">range</span><span class="w"> </span><span class="n">role</span><span class="w"> </span><span class="n">required</span><span class="w"> </span><span class="n">multivalued</span><span class="w"> </span><span class="n">targetEntityType</span><span class="w"> </span><span class="n">enumValues</span><span class="w"> </span><span class="p">}</span>
+<a id="__codelineno-8-5" name="__codelineno-8-5" href="#__codelineno-8-5"></a><span class="w">    </span><span class="n">relationships</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="n">field</span><span class="w"> </span><span class="n">targetEntityType</span><span class="w"> </span><span class="p">}</span>
+<a id="__codelineno-8-6" name="__codelineno-8-6" href="#__codelineno-8-6"></a><span class="w">  </span><span class="p">}</span>
+<a id="__codelineno-8-7" name="__codelineno-8-7" href="#__codelineno-8-7"></a><span class="p">}</span>
 </code></pre></div>
 <h2 id="errors">Errors<a class="headerlink" href="#errors" title="Permanent link">&para;</a></h2>
 <p>SDK errors surface as structured GraphQL errors with a machine-readable
@@ -1941,10 +1960,11 @@ exempt, so GraphiQL works regardless. Configure with
 <li><strong>No schema versioning</strong> — the GraphQL schema regenerates from your LinkML
   schema at startup; breaking LinkML changes break the GraphQL contract the
   same way they break the typed SDK.</li>
-<li><strong>Equality and <code>in</code> filters only</strong> (<code>filters</code> with <code>op: EQ | IN</code>, plus
-  AND/OR composition), mirroring <code>MosaicClient.query</code>. Other comparison
-  operators (<code>gt</code>, <code>lt</code>, <code>ne</code>, <code>contains</code>, …) raise a coded error rather
-  than silently degrading to equality.</li>
+<li><strong>Flat filter list only</strong> — <code>filters</code> carries <code>op: EQ | IN | NEQ | GT |
+  GTE | LT | LTE | CONTAINS | IS_NULL</code> with AND/OR composition (each slot
+  supports the operators its range allows; unsupported combinations raise
+  coded errors). Nested boolean groups and relationship predicates arrive
+  with the generated <code>where:</code> argument (ADR-0006, in progress).</li>
 <li><strong>Updates cannot null-out a field</strong> — omitted and <code>null</code> input fields are
   both dropped from the patch.</li>
 </ul>
