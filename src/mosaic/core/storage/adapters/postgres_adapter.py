@@ -22,12 +22,29 @@ import threading
 import uuid
 from contextlib import contextmanager
 from datetime import datetime, timezone
-from typing import TYPE_CHECKING, Any, Dict, Generator, Iterator, List, Optional
+from typing import (
+    TYPE_CHECKING,
+    Any,
+    ClassVar,
+    Dict,
+    Generator,
+    Iterator,
+    List,
+    Optional,
+)
 
 if TYPE_CHECKING:
     from mosaic.linkml_bridge import SchemaRegistry
 
-from mosaic.core.storage import EntityStore, Query, ScoredMatch, normalize_filter
+from mosaic.core.storage import (
+    COMPARISON_SQL_OPS,
+    EntityStore,
+    Query,
+    ScoredMatch,
+    escape_like,
+    matches_operator,
+    normalize_filter,
+)
 from mosaic.core.types import ProvenanceRecord as ProvenanceRecordType, TemporalRecord
 from mosaic.core.exceptions import AdapterError, SearchCapabilityError
 
@@ -1033,6 +1050,9 @@ class PostgresAdapter(EntityStore):
         self._provenance_store: Optional[PostgresProvenanceStore] = None
         # Per-class cache of multivalued reference slot names (issue #79/#81).
         self._mv_ref_slots_cache: dict[str, list[str]] = {}
+        # Per-class cache of filter-cast suffixes for comparison predicates
+        # (ADR-0006): slot name -> "::numeric" / "::timestamptz" / "" (text).
+        self._filter_cast_cache: dict[str, dict[str, str]] = {}
         # Per-thread staged-transaction state (mirrors SQLiteAdapter): when a
         # ``staged_transaction`` scope is active, inner ``_transaction`` calls
         # reuse the pinned connection and defer commit to the outer scope so a
@@ -1787,6 +1807,57 @@ class PostgresAdapter(EntityStore):
             return "true" if value else "false"
         return str(value)
 
+    #: Base LinkML scalar range → SQL cast applied to both sides of a
+    #: comparison predicate. ``data->>field`` extracts text; without the
+    #: cast, numeric and temporal comparisons would be lexicographic on
+    #: that text — a silently wrong answer (ADR-0006's named risk).
+    _RANGE_CASTS: ClassVar[dict[str, str]] = {
+        "integer": "::numeric",
+        "float": "::numeric",
+        "double": "::numeric",
+        "decimal": "::numeric",
+        "date": "::date",
+        "datetime": "::timestamptz",
+        "time": "::time",
+    }
+
+    def _filter_cast(self, entity_type: Optional[str], field: str) -> str:
+        """SQL cast suffix for a comparison predicate on ``field``.
+
+        Resolved from the slot's LinkML range (typeof chains included) via
+        the schema registry; empty string = compare as text (strings and
+        unknown ranges). Comparison operators require ``entity_type`` —
+        without a class there is no slot range to drive the cast, and a
+        lexicographic fallback on numeric data would be a silently wrong
+        answer (issue #129's loud-over-wrong rule).
+        """
+        if entity_type is None:
+            from mosaic.core.exceptions import ValidationError
+
+            raise ValidationError(
+                message=(
+                    f"Comparison filter on field {field!r} requires an "
+                    f"entity_type on the query: the slot's declared range "
+                    f"drives the typed JSONB cast (ADR-0006)."
+                ),
+                field_name=field,
+            )
+        cached = self._filter_cast_cache.get(entity_type)
+        if cached is None:
+            registry = self.schema_registry
+            cached = (
+                {
+                    name: self._RANGE_CASTS.get(base, "")
+                    for name, base in registry.slot_base_ranges(
+                        entity_type
+                    ).items()
+                }
+                if registry is not None
+                else {}
+            )
+            self._filter_cast_cache[entity_type] = cached
+        return cached.get(field, "")
+
     def update_data(
         self,
         entity_id: str,
@@ -2063,6 +2134,41 @@ class PostgresAdapter(EntityStore):
                             filter_clauses.append("data->>%s = ANY(%s)")
                             params.append(field)
                             params.append([self._jsonb_text(v) for v in value])
+                        elif op == "is_null":
+                            # "No stored value" = key absent OR JSON null,
+                            # matching the SQLite column-IS-NULL semantics.
+                            filter_clauses.append(
+                                "(NOT jsonb_exists(data, %s) "
+                                "OR data->%s = 'null'::jsonb)"
+                                if value
+                                else "(jsonb_exists(data, %s) "
+                                "AND data->%s <> 'null'::jsonb)"
+                            )
+                            params.append(field)
+                            params.append(field)
+                        elif op == "neq":
+                            # Plain <> (not IS DISTINCT FROM): a missing key
+                            # yields SQL NULL and matches nothing, per the
+                            # shared operator semantics (ADR-0006).
+                            filter_clauses.append("data->>%s <> %s")
+                            params.append(field)
+                            params.append(self._jsonb_text(value))
+                        elif op == "contains":
+                            filter_clauses.append(
+                                "data->>%s ILIKE %s ESCAPE '\\'"
+                            )
+                            params.append(field)
+                            params.append(f"%{escape_like(str(value))}%")
+                        elif op in COMPARISON_SQL_OPS:
+                            cast = self._filter_cast(query.entity_type, field)
+                            sql_op = COMPARISON_SQL_OPS[op]
+                            filter_clauses.append(
+                                f"(data->>%s){cast} {sql_op} %s{cast}"
+                            )
+                            params.append(field)
+                            params.append(
+                                value if cast else self._jsonb_text(value)
+                            )
                         else:
                             filter_clauses.append("data->>%s = %s")
                             params.append(field)
@@ -2096,7 +2202,8 @@ class PostgresAdapter(EntityStore):
     ) -> Iterator[PostgresEntity]:
         """Query-spanning as-of reconstruction (sec6 §6.8) — Postgres mirror of
         the SQLite path: candidates created <= as_of, reconstructed via
-        get_state_at, equality filters in Python, offset/limit last."""
+        get_state_at, filters in Python (shared operator evaluator),
+        offset/limit last."""
         with self._transaction() as conn:
             prov = PostgresProvenanceStore(conn, self._schema_version)
             candidates = prov.entities_created_by(
@@ -2137,25 +2244,20 @@ class PostgresAdapter(EntityStore):
         filter_mode). Mirrors the SQLite as-of path; ``id`` resolves to
         ``entity_id``.
 
-        Supports ``op="eq"`` (default) and ``op="in"`` (set membership —
-        issue #102); an empty ``"in"`` list matches nothing.
+        Operator semantics live once in
+        :func:`mosaic.core.storage.matches_operator`, shared with the
+        SQLite mirror so as-of results never diverge from the SQL
+        builders (ADR-0006).
         """
         filters = query.filters or []
         if not filters:
             return True
 
-        def one(field: str, op: str, value: Any) -> bool:
-            actual = entity_id if field == "id" else data.get(field)
-            if op == "in":
-                if not value:
-                    return False
-                return actual in value
-            return actual == value
-
         checks: list[bool] = []
         for f in filters:
             for field, op, value in normalize_filter(f):
-                checks.append(one(field, op, value))
+                actual = entity_id if field == "id" else data.get(field)
+                checks.append(matches_operator(actual, op, value))
         if not checks:
             return True
         mode = getattr(query, "filter_mode", "and")

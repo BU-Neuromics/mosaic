@@ -73,6 +73,28 @@ queries use `asOf`) and multivalued references, which are stored as
 relationship edges rather than columns (use `relatedTo`). Both report
 `extensions.code: UNFILTERABLE_FIELD`.
 
+Each filter carries an operator (`op`, default `EQ`). Which operators a slot
+supports follows from its LinkML range (ADR-0006): numeric and temporal slots
+take `GT`/`GTE`/`LT`/`LTE` (typed comparisons on both backends — never
+lexicographic), string slots take `CONTAINS` (case-insensitive substring;
+`%`/`_` are literals), most slots take `NEQ` and `IN`, and every slot takes
+`IS_NULL` with a boolean value (`true` matches entities with no stored value).
+An operator outside a slot's set is `extensions.code: UNSUPPORTED_FILTER_OP`,
+and a malformed value (`value: null`, non-boolean `IS_NULL`, non-list `IN`) is
+`INVALID_FILTER_VALUE` — never a silently-wrong result. SQL NULL semantics
+apply: comparisons (including `NEQ`) never match an entity that lacks the
+field; ask about absence with `IS_NULL`.
+
+```graphql
+{
+  samples(filters: [
+    {field: "replicateCount", op: GT, value: 2},
+    {field: "name", op: CONTAINS, value: "tumor"},
+    {field: "notes", op: IS_NULL, value: false}
+  ]) { total items { name } }
+}
+```
+
 The exposed class set is decided by Mosaic's shared type model
 (`mosaic.core.schema_typing`) — the same model behind the typed Python SDK — so
 the two surfaces never drift. Framework classes (`Entity`, `ProvenanceRecord`,
@@ -185,9 +207,10 @@ exempt, so GraphiQL works regardless. Configure with
 - **No schema versioning** — the GraphQL schema regenerates from your LinkML
   schema at startup; breaking LinkML changes break the GraphQL contract the
   same way they break the typed SDK.
-- **Equality and `in` filters only** (`filters` with `op: EQ | IN`, plus
-  AND/OR composition), mirroring `MosaicClient.query`. Other comparison
-  operators (`gt`, `lt`, `ne`, `contains`, …) raise a coded error rather
-  than silently degrading to equality.
+- **Flat filter list only** — `filters` carries `op: EQ | IN | NEQ | GT |
+  GTE | LT | LTE | CONTAINS | IS_NULL` with AND/OR composition (each slot
+  supports the operators its range allows; unsupported combinations raise
+  coded errors). Nested boolean groups and relationship predicates arrive
+  with the generated `where:` argument (ADR-0006, in progress).
 - **Updates cannot null-out a field** — omitted and `null` input fields are
   both dropped from the patch.

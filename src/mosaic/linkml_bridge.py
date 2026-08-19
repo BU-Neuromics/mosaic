@@ -1297,6 +1297,43 @@ class SchemaRegistry:
             if s.range == "string" and not s.multivalued
         }
 
+    def base_scalar_range(self, range_name: Optional[str]) -> str:
+        """Resolve a slot range to its base LinkML scalar type name.
+
+        Custom types declared with ``typeof:`` chains resolve to the
+        builtin they derive from (e.g. a ``AgeInYears`` type with
+        ``typeof: integer`` resolves to ``"integer"``). Classes, enums,
+        and unknown names resolve to themselves. Consumers use this to
+        pick typed behavior per slot — the Postgres adapter's JSONB
+        filter casts and the GraphQL filter-operator selection
+        (ADR-0006) — so both read one resolution.
+        """
+        rng = range_name or "string"
+        types = self._sv.all_types(imports=True) or {}
+        seen: set[str] = set()
+        while rng in types and rng not in seen:
+            seen.add(rng)
+            typeof = getattr(types[rng], "typeof", None)
+            if not typeof:
+                break
+            rng = typeof
+        return rng
+
+    def slot_base_ranges(self, class_name: str) -> dict[str, str]:
+        """Map each induced scalar slot name to its base scalar range.
+
+        Only single-valued slots appear (multivalued slots store JSON
+        arrays — no scalar comparison applies). Unknown classes yield an
+        empty mapping.
+        """
+        if not self.has_class(class_name):
+            return {}
+        return {
+            s.name: self.base_scalar_range(s.range)
+            for s in self.induced_slots(class_name)
+            if not s.multivalued
+        }
+
     def reference_loaders(self) -> list[str]:
         """Names of concrete classes that are subclasses of ``ReferenceLoader``.
 

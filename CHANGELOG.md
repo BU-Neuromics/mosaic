@@ -2,6 +2,28 @@
 
 ## [Unreleased]
 
+### Added
+
+- **Comparison and null-test filter operators** (ADR-0006 increment 1,
+  issue #155): list-query filters now support `neq`, `gt`/`gte`/`lt`/`lte`
+  (numeric and temporal slots), `contains` (case-insensitive substring,
+  `%`/`_` literal), and `is_null` (boolean value; `true` matches entities
+  with no stored value) alongside `eq`/`in` — on the SDK
+  (`client.query(filters=[{"field": ..., "op": ..., "value": ...}])`) and
+  the GraphQL `FilterOp` enum. Pushed down on both adapters: SQLite typed
+  column predicates; Postgres JSONB predicates with per-range casts
+  (`::numeric`, `::date`/`::timestamptz`) resolved from the slot's LinkML
+  range (typeof chains included) so numeric/temporal comparisons are never
+  lexicographic. The as-of path evaluates every operator through one shared
+  evaluator (`mosaic.core.storage.matches_operator`), so as-of results
+  cannot diverge from live SQL. GraphQL enforces the per-slot operator
+  vocabulary (comparisons on ordered ranges, `CONTAINS` on strings,
+  `IS_NULL` everywhere) with coded `UNSUPPORTED_FILTER_OP` /
+  `INVALID_FILTER_VALUE` errors; `value: null` is rejected — absence is
+  asked with `IS_NULL`. SQL NULL semantics apply throughout: comparison
+  operators (including `neq` and the previously-divergent as-of `eq`)
+  never match entities missing the field.
+
 ### Fixed
 
 - **GraphQL list filters no longer answer an unmatched `field` with an empty
