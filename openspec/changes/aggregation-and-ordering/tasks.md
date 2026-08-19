@@ -2,15 +2,15 @@
 
 Tracking issue: BU-Neuromics/mosaic#156
 
-> Design-only at this stage: ADR-0007 is Proposed (#154). Do not start implementation tasks
-> until the ADR is ratified and the increment is scheduled.
+> ADR-0007 ratified 2026-08-19 (gate decisions recorded in the ADR). Implementation to be
+> scheduled.
 
 ## 0. Design gate
 
-- [ ] 0.1 ADR-0007 ratified (Status → Accepted; #154 closed with a link to the record).
-- [ ] 0.2 Temporal-ordering stance chosen (provenance-summary path with documented cost vs.
+- [x] 0.1 ADR-0007 ratified (Status → Accepted; #154 closed with a link to the record).
+- [x] 0.2 Temporal-ordering stance chosen (provenance-summary path with documented cost vs.
   omit from `order_by` in increment 1) and recorded in ADR-0007.
-- [ ] 0.3 As-of aggregation stance for increment 1 chosen (documented Python-path compute vs.
+- [x] 0.3 As-of aggregation stance for increment 1 chosen (documented Python-path compute vs.
   coded error).
 
 ## 1. Pushdown + count mode (increment 1)

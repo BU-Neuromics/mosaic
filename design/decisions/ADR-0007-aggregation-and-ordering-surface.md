@@ -1,8 +1,8 @@
 # ADR-0007: Aggregation & ordering surface for list queries
 
-- **Status:** Proposed
-- **Date:** 2026-08-19
-- **Deciders:** labadorf (pending), design session
+- **Status:** Accepted
+- **Date:** 2026-08-19 (ratified same day; see #154)
+- **Deciders:** labadorf
 - **Related:** sec4 §4.7 (GraphQL transport; `Page` envelope), sec6 (temporal fields are
   provenance-computed, never stored — the ordering constraint below), ADR-0006 (typed filter
   contract — aggregations take the same `where:` argument), ADR-0001 (as-of reads);
@@ -10,8 +10,9 @@
   counts, `totalCount`, range filters, `order_by`; the top cross-component ask, previously
   tracked as hippo#96, which has **zero footprint** in this working tree — this ADR fills a
   void rather than reconciling prior design), **Aperture `design/cross-class-query.md` §7 M2**
-  (the co-design exploration), **Aperture ADR-0035** (Proposed; may not exist yet — cite the
-  exploration doc meanwhile). Code landing sites cited inline (mosaic @ 502991c, v0.12.1).
+  (the co-design exploration), **Aperture ADR-0035** (Accepted 2026-08-19 — the QuerySpec
+  artifact whose counts/sort compile to this surface). Code landing sites cited inline
+  (mosaic @ 502991c, v0.12.1).
 - **Tracking issue:** [#154](https://github.com/BU-Neuromics/mosaic/issues/154)
   (implementation: OpenSpec `aggregation-and-ordering`,
   [#156](https://github.com/BU-Neuromics/mosaic/issues/156))
@@ -128,8 +129,13 @@ never "unlimited" (#130; `query_service.py:276-279` and the adapters' guards), a
 
 ## Notes / open sub-questions
 
-- Whether temporal ordering ships in increment 1 via the provenance-summary path or is
-  deferred (option (i) vs (ii) above) — decide in OpenSpec `aggregation-and-ordering`.
+- **Temporal ordering (decided at ratification): option (ii)** — `created_at`/`updated_at`
+  are omitted from the generated `order_by` enum in the first increment (today's default
+  Python-side `created_at` ordering remains the no-`order_by` behavior); the
+  provenance-summary path is the accepted design if/when temporal ordering is funded.
+- **As-of aggregation (decided at ratification):** in the first increment, `facetCounts`,
+  min/max, and `orderBy` combined with `asOf` return a coded error; `Page.total` under
+  `asOf` keeps its current documented Python-path semantics.
 - `facetCounts` on relationship-backed multivalued reference slots (a GROUP BY over the link
   table) is deliberately **not** in scope; it belongs with ADR-0006's M5b machinery if ever.
 - Interaction with bm25-ranked search ordering is settled in OpenSpec `search-composition`

@@ -1,8 +1,8 @@
 # ADR-0006: The GraphQL filter contract is typed per-class input objects
 
-- **Status:** Proposed
-- **Date:** 2026-08-19
-- **Deciders:** labadorf (pending), design session
+- **Status:** Accepted
+- **Date:** 2026-08-19 (ratified same day; see #153)
+- **Deciders:** labadorf
 - **Related:** sec4 §4.3 (REST filtering — the CEL sketch this ADR supersedes/narrows for the
   GraphQL transport), sec4 §4.7 (GraphQL transport), ADR-0001 (graph-level as-of — every filter
   feature must mirror into the as-of path), ADR-0002 (multivalued reference slots persist as
@@ -10,11 +10,11 @@
   ADR-0005 (edge-only reference emission; its "clean break, early software" precedent is the
   prior art for eventually retiring the flat `filters:` arg); **Aperture
   `design/cross-class-query.md` §7** (the co-design exploration this ADR lands, M1/M5 and the
-  wire-contract decision), **Aperture ADR-0035** (Proposed; may not exist yet — cite the
-  exploration doc meanwhile), **Aperture `design/portal-requirements.md` X-tracker** (Aperture
-  will file the "typed operator + relationship-predicate filter contract" requirement pointing
-  here; the exploration names it X3, but X3a/X3b already exist in that tracker for schema
-  editing, so it will likely land under a fresh ID — the X4/L9/L10 citation form modeled by
+  wire-contract decision), **Aperture ADR-0035** (Accepted 2026-08-19 — cross-class queries
+  are a typed QuerySpec artifact; carries the reciprocal cross-reference), **Aperture
+  `design/portal-requirements.md` X5** (the "typed operator + relationship-predicate filter
+  contract" requirement pointing here; filed as X5 because the exploration's "X3" name was
+  already taken by X3a/X3b — the X4/L9/L10 citation form modeled by
   `design/sec5_ingestion.md` §5.4 and `openspec/changes/batch-unit-of-work/proposal.md`).
   Code landing sites cited inline (mosaic @ 502991c, v0.12.1).
 - **Tracking issue:** [#153](https://github.com/BU-Neuromics/mosaic/issues/153)
@@ -192,13 +192,17 @@ answer).
 
 ## Notes / open sub-questions
 
-- **Deprecation path for the flat `filters:` arg.** Keep both until Aperture's planner emits
-  `where:` everywhere, then either `@deprecated` (additive discipline, sec4 §4.7) or remove in
-  a breaking release per the ADR-0005 clean-break precedent. Decide when M1 ships.
-- **`contains` semantics** need pinning per range at implementation time: substring
-  (case-sensitivity?) for strings; membership for inline (non-reference) multivalued slots —
-  SQLite stores those as JSON TEXT and Postgres inside the JSONB document, so the two
-  pushdowns differ (`LIKE`/`json_each` vs. `@>`); parity tests must cover both.
+- **Deprecation path for the flat `filters:` arg (decided at ratification):** the flat arg
+  stays supported beside `where:`; once increment 2 ships, its SDL description names it the
+  legacy form. Removal, if ever, is a later breaking release per the ADR-0005 clean-break
+  precedent, and not before Aperture's planner emits `where:` everywhere.
+- **`contains` semantics (decided at ratification):** case-insensitive substring on
+  string-ranged slots — SQLite `LIKE` (ASCII case folding) / Postgres `ILIKE` (locale case
+  folding; the non-ASCII divergence is a documented backend difference), with `%`/`_`
+  treated as literals via an `ESCAPE` clause and the same semantics in the as-of mirror
+  (`matches_operator`). Membership testing on inline (non-reference) multivalued slots is
+  **deferred** — those slots offer `eq`/`isNull` only until a membership design lands
+  (`LIKE`/`json_each` vs. `@>` pushdowns differ).
 - **Literate schema (M0 ask):** LinkML `description`s already propagate into SDL for object
   types, fields, and enums (`schema_builder.py:404,463,477,599`; enum descriptions at
   `:361-381`); LinkML `comments` do **not** propagate anywhere today. The new filter inputs

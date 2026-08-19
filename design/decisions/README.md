@@ -29,5 +29,5 @@ The supersede-don't-delete discipline already used in the Key Decisions Log (ent
 | [0003](./ADR-0003-polymorphic-tree-root-ingest.md) | Polymorphic tree-root ingest via `designates_type` dispatch (issue #80) | 🟡 Proposed |
 | [0004](./ADR-0004-rename-hippo-to-mosaic.md) | Rename the Hippo component to **Mosaic** (music/art naming convention; PyPI-saturation dissolved by platform ADR-0002) | ✅ Accepted |
 | [0005](./ADR-0005-graphql-reference-emission-edge-only.md) | GraphQL reference emission is edge-only — logical-identity boundary (issue #131) | ✅ Accepted |
-| [0006](./ADR-0006-graphql-typed-filter-contract.md) | The GraphQL filter contract is typed per-class input objects — not CEL on the wire (issue #153) | 🟡 Proposed |
-| [0007](./ADR-0007-aggregation-and-ordering-surface.md) | Aggregation & ordering surface — count mode, facet counts, min/max, `order_by` (issue #154) | 🟡 Proposed |
+| [0006](./ADR-0006-graphql-typed-filter-contract.md) | The GraphQL filter contract is typed per-class input objects — not CEL on the wire (issue #153) | ✅ Accepted |
+| [0007](./ADR-0007-aggregation-and-ordering-surface.md) | Aggregation & ordering surface — count mode, facet counts, min/max, `order_by` (issue #154) | ✅ Accepted |
