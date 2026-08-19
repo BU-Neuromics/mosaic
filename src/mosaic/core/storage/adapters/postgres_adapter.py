@@ -21,7 +21,8 @@ import hashlib
 import threading
 import uuid
 from contextlib import contextmanager
-from datetime import datetime, timezone
+from datetime import date, datetime, time, timezone
+from decimal import Decimal
 from typing import (
     TYPE_CHECKING,
     Any,
@@ -2203,36 +2204,13 @@ class PostgresAdapter(EntityStore):
         with self._transaction() as conn:
             cur = conn.cursor()
 
-            sql = """SELECT id, entity_type, is_available, version, data,
-                            superseded_by
-                     FROM entities WHERE is_available = TRUE"""
             params: list[Any] = []
-
-            if query.entity_type:
-                sql += " AND entity_type = %s"
-                params.append(query.entity_type)
-
-            if query.filters:
-                joiner = " OR " if getattr(query, "filter_mode", "and") == "or" else " AND "
-                filter_clauses = []
-                for f in query.filters:
-                    for field, op, value in normalize_filter(f):
-                        filter_clauses.append(
-                            self._leaf_predicate(
-                                field, op, value, query.entity_type, params
-                            )
-                        )
-                if filter_clauses:
-                    sql += " AND (" + joiner.join(filter_clauses) + ")"
-
-            where = getattr(query, "where", None)
-            if where is not None:
-                # Boolean filter tree (ADR-0006 increment 2); composes with
-                # the flat ``filters`` by AND.
-                tree = normalize_where(where)
-                sql += " AND (" + self._tree_predicate(
-                    tree, query.entity_type, params
-                ) + ")"
+            sql = (
+                "SELECT id, entity_type, is_available, version, data, "
+                "superseded_by FROM entities "
+                f"WHERE {self._query_predicate(query, params)}"
+            )
+            sql += self._order_clause(query, params)
 
             # `is not None`, not truthiness: LIMIT 0 must return zero rows,
             # not fall through to "no limit" (issue #130).
@@ -2255,6 +2233,217 @@ class PostgresAdapter(EntityStore):
             self._hydrate_multivalued_refs_for_entities(conn, entities)
             yield from entities
 
+    def _query_predicate(self, query: Query, params: list[Any]) -> str:
+        """The WHERE clause (sans leading keyword) ``find``/``count``/the
+        aggregates all share, so every surface sees exactly the same rows
+        (ADR-0007's availability-consistency rule)."""
+        sql = "is_available = TRUE"
+        if query.entity_type:
+            sql += " AND entity_type = %s"
+            params.append(query.entity_type)
+
+        if query.filters:
+            joiner = " OR " if getattr(query, "filter_mode", "and") == "or" else " AND "
+            filter_clauses = []
+            for f in query.filters:
+                for field, op, value in normalize_filter(f):
+                    filter_clauses.append(
+                        self._leaf_predicate(
+                            field, op, value, query.entity_type, params
+                        )
+                    )
+            if filter_clauses:
+                sql += " AND (" + joiner.join(filter_clauses) + ")"
+
+        where = getattr(query, "where", None)
+        if where is not None:
+            # Boolean filter tree (ADR-0006 increment 2); composes with
+            # the flat ``filters`` by AND.
+            tree = normalize_where(where)
+            sql += " AND (" + self._tree_predicate(
+                tree, query.entity_type, params
+            ) + ")"
+        return sql
+
+    def _orderable_fields(self, entity_type: str) -> set[str]:
+        """Fields ordering/aggregation may address: the class's single-valued
+        slots (multivalued slots store JSON arrays — no scalar order) plus
+        ``id``. Mirrors the SQLite adapter's typed-column set."""
+        registry = self.schema_registry
+        slots = (
+            set(registry.slot_base_ranges(entity_type))
+            if registry is not None
+            else set()
+        )
+        return slots | {"id"}
+
+    def _order_clause(self, query: Query, params: list[Any]) -> str:
+        """SQL ORDER BY for ``query.order_by`` (ADR-0007): stable ``id``
+        tiebreak; NULLs last regardless of direction (matching SQLite so
+        orderings never diverge across backends). Range-driven cast so
+        numeric/temporal slots order by value, not by their JSON text."""
+        order_by = getattr(query, "order_by", None)
+        if not order_by:
+            return ""
+        from mosaic.core.exceptions import ValidationError
+
+        if not query.entity_type:
+            raise ValidationError(
+                message=(
+                    "order_by requires an entity type on the query: the "
+                    "slot's declared range drives the typed ordering "
+                    "(ADR-0007)."
+                ),
+                field_name="order_by",
+            )
+        valid = self._orderable_fields(query.entity_type)
+        if order_by not in valid:
+            raise ValidationError(
+                message=(
+                    f"Unknown order_by column {order_by!r}; orderable "
+                    f"columns: {sorted(valid)}. Computed temporal "
+                    f"fields are provenance-derived, not columns, and "
+                    f"cannot be ordered on (ADR-0007)."
+                ),
+                field_name="order_by",
+            )
+        direction = (
+            "DESC" if getattr(query, "order_dir", "asc") == "desc" else "ASC"
+        )
+        if order_by == "id":
+            return f" ORDER BY id {direction}"
+        cast = self._filter_cast(query.entity_type, order_by)
+        params.append(order_by)
+        return (
+            f" ORDER BY (data->>%s){cast} {direction} NULLS LAST, id ASC"
+        )
+
+    def count(self, query: Query, *, as_of: Optional[str] = None) -> int:
+        """Count matching entities without materializing them (ADR-0007).
+
+        Pushed down as ``COUNT(*)`` under the exact predicate ``find`` uses
+        (availability-consistency rule). ``query.limit``/``offset`` are
+        ignored — a count is over the whole match set. Under ``as_of`` the
+        count is the length of the reconstructed match set (the documented
+        Python-path semantics)."""
+        if as_of is not None:
+            unpaged = Query(
+                entity_type=query.entity_type,
+                filters=query.filters,
+                filter_mode=query.filter_mode,
+                where=query.where,
+            )
+            return sum(1 for _ in self._find_as_of(unpaged, as_of))
+        params: list[Any] = []
+        sql = (
+            "SELECT COUNT(*) AS c FROM entities "
+            f"WHERE {self._query_predicate(query, params)}"
+        )
+        with self._transaction() as conn:
+            cur = conn.cursor()
+            cur.execute(sql, params)
+            return int(cur.fetchone()["c"])
+
+    def facet_counts(self, query: Query, field: str) -> List[tuple]:
+        """Per-value counts for ``field`` under ``query``'s predicate —
+        ``[(value, count), ...]``, count desc then value asc (ADR-0007).
+        NULL/absent values are not counted. Values come back natively
+        decoded (``data->field`` jsonb), matching what list queries return.
+        """
+        entity_type = self._require_aggregate_field(
+            query, field, surface="facet_counts"
+        )
+        params: list[Any] = []
+        predicate = self._query_predicate(query, params)
+        # data->field (jsonb, native decode) both buckets and orders the
+        # values: jsonb ordering is numeric for numbers and collation-based
+        # for strings, matching the SQLite typed-column ordering. Ordinal
+        # GROUP BY/ORDER BY: repeating the parameter would render as a
+        # *different* placeholder, which Postgres rejects as an ungrouped
+        # expression.
+        sql = (
+            "SELECT data->%s AS value, COUNT(*) AS c FROM entities "
+            f"WHERE {predicate} "
+            "AND jsonb_exists(data, %s) AND data->%s <> 'null'::jsonb "
+            "GROUP BY 1 ORDER BY 2 DESC, 1 ASC"
+        )
+        all_params = [field] + params + [field, field]
+        with self._transaction() as conn:
+            cur = conn.cursor()
+            cur.execute(sql, all_params)
+            rows = cur.fetchall()
+        return [
+            (self._normalize_aggregate_value(row["value"]), int(row["c"]))
+            for row in rows
+        ]
+
+    def field_range(self, query: Query, field: str) -> tuple:
+        """``(min, max)`` of ``field`` under ``query``'s predicate
+        (ADR-0007); ``(None, None)`` when no matching entity has a value.
+        The slot's range drives the cast so numeric/temporal slots
+        aggregate by value, not by JSON text."""
+        entity_type = self._require_aggregate_field(
+            query, field, surface="field_range"
+        )
+        cast = self._filter_cast(entity_type, field)
+        params: list[Any] = []
+        predicate = self._query_predicate(query, params)
+        sql = (
+            f"SELECT MIN((data->>%s){cast}) AS lo, "
+            f"MAX((data->>%s){cast}) AS hi "
+            f"FROM entities WHERE {predicate}"
+        )
+        with self._transaction() as conn:
+            cur = conn.cursor()
+            cur.execute(sql, [field, field] + params)
+            row = cur.fetchone()
+        return (
+            self._normalize_aggregate_value(row["lo"]),
+            self._normalize_aggregate_value(row["hi"]),
+        )
+
+    def _require_aggregate_field(
+        self, query: Query, field: str, *, surface: str
+    ) -> str:
+        """Shared validation for the per-field aggregates — mirrors the
+        SQLite adapter: an entity type is required and ``field`` must be a
+        single-valued slot (or ``id``) of that class."""
+        from mosaic.core.exceptions import ValidationError
+
+        if not query.entity_type:
+            raise ValidationError(
+                message=(
+                    f"{surface}() requires an entity type: facets and "
+                    f"ranges are per-class aggregates over typed columns."
+                ),
+                field_name=field,
+            )
+        valid = self._orderable_fields(query.entity_type)
+        if field not in valid:
+            raise ValidationError(
+                message=(
+                    f"Unknown {surface} field {field!r} for "
+                    f"{query.entity_type}; valid columns: {sorted(valid)}. "
+                    f"Computed temporal fields are provenance-derived, not "
+                    f"columns, and cannot be aggregated on (ADR-0007)."
+                ),
+                field_name=field,
+            )
+        return query.entity_type
+
+    @staticmethod
+    def _normalize_aggregate_value(value: Any) -> Any:
+        """Normalize driver-native aggregate scalars to the Python types the
+        SQLite adapter returns, so aggregate results never diverge across
+        backends: ``Decimal`` (numeric casts) → int/float; date/datetime/time
+        (temporal casts) → ISO-8601 strings (slots store ISO strings)."""
+        if isinstance(value, Decimal):
+            as_int = int(value)
+            return as_int if value == as_int else float(value)
+        if isinstance(value, (datetime, date, time)):
+            return value.isoformat()
+        return value
+
     def _find_as_of(
         self, query: Query, as_of: str
     ) -> Iterator[PostgresEntity]:
@@ -2262,6 +2451,18 @@ class PostgresAdapter(EntityStore):
         the SQLite path: candidates created <= as_of, reconstructed via
         get_state_at, filters in Python (shared operator evaluator),
         offset/limit last."""
+        if getattr(query, "order_by", None):
+            from mosaic.core.exceptions import ValidationError
+
+            raise ValidationError(
+                message=(
+                    "order_by is not supported together with as_of: ordering "
+                    "pushdown targets current-state storage, and the "
+                    "reconstructed as-of path keeps its documented Python "
+                    "ordering (ADR-0007 gate decision)."
+                ),
+                field_name="order_by",
+            )
         with self._transaction() as conn:
             prov = PostgresProvenanceStore(conn, self._schema_version)
             candidates = prov.entities_created_by(

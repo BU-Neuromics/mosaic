@@ -2684,6 +2684,18 @@ class SQLiteAdapter(EntityStore):
         optimization). Relationship-existence filters and cross-class temporal
         joins are out of scope for this increment (BU-Neuromics/hippo#71).
         """
+        if getattr(query, "order_by", None):
+            from mosaic.core.exceptions import ValidationError
+
+            raise ValidationError(
+                message=(
+                    "order_by is not supported together with as_of: ordering "
+                    "pushdown targets current-state typed columns, and the "
+                    "reconstructed as-of path keeps its documented Python "
+                    "ordering (ADR-0007 gate decision)."
+                ),
+                field_name="order_by",
+            )
         with self._transaction() as conn:
             prov = self._get_provenance_store(conn)
             candidates = prov.entities_created_by(
@@ -2835,6 +2847,73 @@ class SQLiteAdapter(EntityStore):
         leaf = self._leaf_predicate(field, node["op"], node["value"], params)
         return f"COALESCE(({leaf}), 0)"
 
+    def _query_predicate(
+        self,
+        entity_type: str,
+        query: Query,
+        valid_columns: set[str],
+        params: list[Any],
+    ) -> Optional[str]:
+        """The WHERE clause (sans leading keyword) ``find``/``count``/the
+        aggregates all share, so every surface sees exactly the same rows
+        (ADR-0007's availability-consistency rule). ``None`` = an unknown
+        flat-path field: match zero rows (legacy #149 behavior)."""
+        clauses = ["is_available = 1"]
+        if query.filters:
+            joiner = " OR " if getattr(query, "filter_mode", "and") == "or" else " AND "
+            filter_clauses = []
+            for f in query.filters:
+                for field, op, value in normalize_filter(f):
+                    if field not in valid_columns:
+                        # Legacy flat-path behavior: an unknown field
+                        # answers with zero rows (GraphQL rejects it far
+                        # earlier with a coded error, #149).
+                        return None
+                    filter_clauses.append(
+                        self._leaf_predicate(field, op, value, params)
+                    )
+            if filter_clauses:
+                clauses.append("(" + joiner.join(filter_clauses) + ")")
+
+        where = getattr(query, "where", None)
+        if where is not None:
+            # Boolean filter tree (ADR-0006 increment 2); composes with the
+            # flat ``filters`` by AND.
+            tree = normalize_where(where)
+            clauses.append(
+                "(" + self._tree_predicate(tree, valid_columns, params) + ")"
+            )
+        return " AND ".join(clauses)
+
+    def _order_clause(
+        self, query: Query, valid_columns: set[str]
+    ) -> str:
+        """SQL ORDER BY for ``query.order_by`` (ADR-0007): stable ``id``
+        tiebreak; NULLs last regardless of direction (matching Postgres so
+        orderings never diverge across backends)."""
+        order_by = getattr(query, "order_by", None)
+        if not order_by:
+            return ""
+        if order_by not in valid_columns:
+            from mosaic.core.exceptions import ValidationError
+
+            raise ValidationError(
+                message=(
+                    f"Unknown order_by column {order_by!r}; orderable "
+                    f"columns: {sorted(valid_columns)}. Computed temporal "
+                    f"fields are provenance-derived, not columns, and "
+                    f"cannot be ordered on (ADR-0007)."
+                ),
+                field_name=order_by,
+            )
+        direction = (
+            "DESC" if getattr(query, "order_dir", "asc") == "desc" else "ASC"
+        )
+        return (
+            f' ORDER BY ("{order_by}" IS NULL) ASC, '
+            f'"{order_by}" {direction}, "id" ASC'
+        )
+
     def _find_per_class(
         self, entity_type: str, query: Query
     ) -> Iterator[SQLiteEntity]:
@@ -2852,37 +2931,16 @@ class SQLiteAdapter(EntityStore):
         select_cols = ['"id"', '"is_available"', '"superseded_by"'] + [
             f'"{c}"' for c in slot_columns
         ]
+        params: list[Any] = []
+        valid_columns = set(slot_columns) | {"id", "is_available"}
+        predicate = self._query_predicate(entity_type, query, valid_columns, params)
+        if predicate is None:
+            return
         sql = (
             f"SELECT {', '.join(select_cols)} FROM \"{entity_type}\" "
-            "WHERE is_available = 1"
+            f"WHERE {predicate}"
         )
-        params: list[Any] = []
-
-        valid_columns = set(slot_columns) | {"id", "is_available"}
-        if query.filters:
-            joiner = " OR " if getattr(query, "filter_mode", "and") == "or" else " AND "
-            filter_clauses = []
-            for f in query.filters:
-                for field, op, value in normalize_filter(f):
-                    if field not in valid_columns:
-                        # Legacy flat-path behavior: an unknown field
-                        # answers with zero rows (GraphQL rejects it far
-                        # earlier with a coded error, #149).
-                        return
-                    filter_clauses.append(
-                        self._leaf_predicate(field, op, value, params)
-                    )
-            if filter_clauses:
-                sql += " AND (" + joiner.join(filter_clauses) + ")"
-
-        where = getattr(query, "where", None)
-        if where is not None:
-            # Boolean filter tree (ADR-0006 increment 2); composes with the
-            # flat ``filters`` by AND.
-            tree = normalize_where(where)
-            sql += " AND (" + self._tree_predicate(
-                tree, valid_columns, params
-            ) + ")"
+        sql += self._order_clause(query, valid_columns)
 
         # `is not None`, not truthiness: LIMIT 0 must return zero rows, not
         # fall through to "no limit" (issue #130).
@@ -2946,6 +3004,169 @@ class SQLiteAdapter(EntityStore):
                 data=data,
                 superseded_by=row["superseded_by"],
             )
+
+    def _valid_query_columns(self, entity_type: str) -> set[str]:
+        """Columns filters/ordering/aggregation may address on a per-class
+        table — the slot columns plus ``id``/``is_available`` (identical to
+        the set ``_find_per_class`` validates against, by construction)."""
+        slot_columns = {
+            c for c in self._per_class_columns(entity_type)
+            if c not in {"id", "is_available", "superseded_by"}
+        }
+        return slot_columns | {"id", "is_available"}
+
+    def count(self, query: Query, *, as_of: Optional[str] = None) -> int:
+        """Count matching entities without materializing them (ADR-0007).
+
+        Pushed down as ``COUNT(*)`` under the exact predicate ``find`` uses
+        (availability-consistency rule). ``query.limit``/``offset`` are
+        ignored — a count is over the whole match set. Under ``as_of`` the
+        count is the length of the reconstructed match set (the documented
+        Python-path semantics; no cheap pushdown exists over the provenance
+        log yet).
+        """
+        if as_of is not None:
+            unpaged = Query(
+                entity_type=query.entity_type,
+                filters=query.filters,
+                filter_mode=query.filter_mode,
+                where=query.where,
+            )
+            return sum(1 for _ in self._find_as_of(unpaged, as_of))
+
+        if query.entity_type:
+            class_names = [query.entity_type]
+        elif self.schema_registry is not None:
+            class_names = list(self.schema_registry.class_names())
+        else:
+            return 0
+
+        total = 0
+        for class_name in class_names:
+            if not self._per_class_table_exists(class_name):
+                continue
+            params: list[Any] = []
+            predicate = self._query_predicate(
+                class_name, query, self._valid_query_columns(class_name), params
+            )
+            if predicate is None:
+                continue  # unknown flat-path field: zero rows (#149)
+            with self._transaction() as conn:
+                cursor = conn.cursor()
+                cursor.execute(
+                    f'SELECT COUNT(*) AS c FROM "{class_name}" '
+                    f"WHERE {predicate}",
+                    params,
+                )
+                total += int(cursor.fetchone()["c"])
+        return total
+
+    def facet_counts(self, query: Query, field: str) -> List[tuple]:
+        """Per-value counts for ``field`` under ``query``'s predicate —
+        ``[(value, count), ...]``, count desc then value asc (ADR-0007).
+
+        NULL/absent values are not counted (absence is queried with
+        ``is_null``, not enumerated as a facet bucket). Requires
+        ``query.entity_type`` — facets are per-class, over that class's
+        typed columns.
+        """
+        entity_type, valid_columns = self._require_aggregate_field(
+            query, field, surface="facet_counts"
+        )
+        if not self._per_class_table_exists(entity_type):
+            return []
+        params: list[Any] = []
+        predicate = self._query_predicate(
+            entity_type, query, valid_columns, params
+        )
+        if predicate is None:
+            return []
+        with self._transaction() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                f'SELECT "{field}" AS value, COUNT(*) AS c '
+                f'FROM "{entity_type}" '
+                f'WHERE {predicate} AND "{field}" IS NOT NULL '
+                f'GROUP BY "{field}" '
+                f'ORDER BY c DESC, "{field}" ASC',
+                params,
+            )
+            rows = cursor.fetchall()
+        decode = self._aggregate_value_decoder(entity_type, field)
+        return [(decode(row["value"]), int(row["c"])) for row in rows]
+
+    def field_range(self, query: Query, field: str) -> tuple:
+        """``(min, max)`` of ``field`` under ``query``'s predicate
+        (ADR-0007); ``(None, None)`` when no matching entity has a value."""
+        entity_type, valid_columns = self._require_aggregate_field(
+            query, field, surface="field_range"
+        )
+        if not self._per_class_table_exists(entity_type):
+            return (None, None)
+        params: list[Any] = []
+        predicate = self._query_predicate(
+            entity_type, query, valid_columns, params
+        )
+        if predicate is None:
+            return (None, None)
+        with self._transaction() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                f'SELECT MIN("{field}") AS lo, MAX("{field}") AS hi '
+                f'FROM "{entity_type}" WHERE {predicate}',
+                params,
+            )
+            row = cursor.fetchone()
+        decode = self._aggregate_value_decoder(entity_type, field)
+        lo = decode(row["lo"]) if row["lo"] is not None else None
+        hi = decode(row["hi"]) if row["hi"] is not None else None
+        return (lo, hi)
+
+    def _require_aggregate_field(
+        self, query: Query, field: str, *, surface: str
+    ) -> tuple[str, set[str]]:
+        """Shared validation for the per-field aggregates: an entity type is
+        required and ``field`` must be one of its typed columns (computed
+        temporal fields are provenance-derived, not columns — ADR-0007)."""
+        from mosaic.core.exceptions import ValidationError
+
+        if not query.entity_type:
+            raise ValidationError(
+                message=(
+                    f"{surface}() requires an entity type: facets and "
+                    f"ranges are per-class aggregates over typed columns."
+                ),
+                field_name=field,
+            )
+        valid_columns = self._valid_query_columns(query.entity_type)
+        if field not in valid_columns:
+            raise ValidationError(
+                message=(
+                    f"Unknown {surface} field {field!r} for "
+                    f"{query.entity_type}; valid columns: "
+                    f"{sorted(valid_columns)}. Computed temporal fields are "
+                    f"provenance-derived, not columns, and cannot be "
+                    f"aggregated on (ADR-0007)."
+                ),
+                field_name=field,
+            )
+        return query.entity_type, valid_columns
+
+    def _aggregate_value_decoder(self, entity_type: str, field: str):
+        """Value decoder for aggregate results on one column — the same
+        boolean/string-aware decoding ``_find_per_class`` applies to row
+        values, so facet buckets equal the values list queries return."""
+        is_boolean = (
+            self.schema_registry is not None
+            and field in self.schema_registry.boolean_slot_names(entity_type)
+        )
+        is_string = (
+            self.schema_registry is not None
+            and field in self.schema_registry.string_slot_names(entity_type)
+        )
+        return lambda v: self._decode_column_value(
+            v, is_boolean=is_boolean, is_string=is_string
+        )
 
     @staticmethod
     def _decode_column_value(

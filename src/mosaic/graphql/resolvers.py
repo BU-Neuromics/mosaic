@@ -81,6 +81,38 @@ _ORDERED_RANGES = frozenset(
 )
 
 
+@strawberry.enum(description="Sort direction for orderBy (ADR-0007).")
+class OrderDirection(enum.Enum):
+    ASC = "asc"
+    DESC = "desc"
+
+
+@strawberry.type(
+    description=(
+        "One facet bucket: a stored value of the requested field and how "
+        "many matching entities carry it (ADR-0007). Entities with no "
+        "stored value are not counted — query absence with IS_NULL. "
+        "Availability-consistent: buckets sum over exactly the entities "
+        "the list query would return under the same filters."
+    )
+)
+class FacetCount:
+    value: JSON
+    count: int
+
+
+@strawberry.type(
+    description=(
+        "Min/max of a field under a filter, for range facets (ADR-0007). "
+        "Both null when no matching entity has a stored value. "
+        "Availability-consistent with the list surface."
+    )
+)
+class FieldRange:
+    min: Optional[JSON]
+    max: Optional[JSON]
+
+
 def _allowed_filter_ops(spec: "SlotSpec") -> set[str]:
     """Operator set a slot's kind/range supports (ADR-0006).
 
@@ -657,6 +689,8 @@ def _make_list_resolver(builder: GraphQLTypeBuilder, entity: EntityGraphQLInfo):
         limit: int = 100,
         offset: int = 0,
         as_of: Optional[str] = None,
+        order_by=None,
+        order_dir: OrderDirection = OrderDirection.ASC,
     ):
         ent = _builder(info).entities[class_name]
         tree = (
@@ -664,15 +698,32 @@ def _make_list_resolver(builder: GraphQLTypeBuilder, entity: EntityGraphQLInfo):
             if where is not None and where is not strawberry.UNSET
             else None
         )
-        paginated = _client(info).query(
-            entity_type=class_name,
-            filters=_to_sdk_filters(ent, filters),
-            limit=limit,
-            offset=offset,
-            filter_mode=filter_mode.value,
-            as_of=as_of,
-            where=tree,
+        order_field = (
+            order_by.value
+            if order_by is not None and order_by is not strawberry.UNSET
+            else None
         )
+        if order_field is not None and as_of is not None:
+            raise GraphQLError(
+                "orderBy cannot be combined with asOf: ordering pushdown "
+                "targets current-state storage; as-of reconstruction keeps "
+                "its documented default ordering (ADR-0007).",
+                extensions={"code": "ASOF_ORDERING_UNSUPPORTED"},
+            )
+        try:
+            paginated = _client(info).query(
+                entity_type=class_name,
+                filters=_to_sdk_filters(ent, filters),
+                limit=limit,
+                offset=offset,
+                filter_mode=filter_mode.value,
+                as_of=as_of,
+                where=tree,
+                order_by=order_field,
+                order_dir=order_dir.value,
+            )
+        except MosaicValidationError as exc:
+            raise _as_graphql_error(exc) from exc
         b = _builder(info)
         return entity.page_type(
             items=[
@@ -690,9 +741,188 @@ def _make_list_resolver(builder: GraphQLTypeBuilder, entity: EntityGraphQLInfo):
         f"pagination (mirrors MosaicClient.query). `where` is the typed "
         f"{class_name}Filter (per-slot operator objects + and/or/not "
         f"combinators — ADR-0006); the flat `filters` list (FilterOp per "
-        f"entry) remains supported and composes with `where` by AND."
+        f"entry) remains supported and composes with `where` by AND. "
+        f"`orderBy` sorts on a stored column (ADR-0007: NULLs last, stable "
+        f"id tiebreak, ordering and pagination pushed down to storage); "
+        f"omitted, results keep the historical createdAt-ascending order. "
+        f"Not combinable with `asOf`."
     )
     resolver.__annotations__["return"] = entity.page_type
+    resolver.__annotations__["where"] = Optional[entity.filter_input]
+    resolver.__annotations__["order_by"] = Optional[entity.order_field_enum]
+    return resolver
+
+
+def _resolve_aggregate_field(
+    entity: EntityGraphQLInfo, field: str, *, ordered_only: bool = False
+) -> "SlotSpec":
+    """Validate an aggregation `field` argument (facetCounts/fieldRange) —
+    the #149 discipline extended to aggregates: unknown or unaggregatable
+    names are coded errors, never empty results."""
+    spec = entity.resolve_filter_field(field)
+    if spec is None and entity.is_computed_field(field):
+        raise GraphQLError(
+            f"{entity.class_name}.{field} is computed at read time from "
+            f"the provenance log rather than being a column of "
+            f"{entity.class_name} (sec9 §9.7), so it cannot be aggregated "
+            f"on (ADR-0007).",
+            extensions={"code": "UNAGGREGATABLE_FIELD", "field": field},
+        )
+    if spec is None:
+        raise GraphQLError(
+            f"Unknown aggregation field {field!r} for {entity.class_name}. "
+            f"Aggregations run on: "
+            f"{', '.join(sorted(entity.filterable_slot_names()))}.",
+            extensions={"code": "UNKNOWN_AGGREGATION_FIELD", "field": field},
+        )
+    if spec.multivalued or (spec.kind == "scalar" and spec.scalar_type is JSON):
+        raise GraphQLError(
+            f"{entity.class_name}.{spec.slot_name} holds structured/"
+            f"multivalued values, which have no scalar buckets or order, "
+            f"so it cannot be aggregated on (ADR-0007).",
+            extensions={
+                "code": "UNAGGREGATABLE_FIELD",
+                "field": field,
+            },
+        )
+    if ordered_only:
+        base = spec.base_range or "string"
+        if spec.kind != "scalar" or base not in _ORDERED_RANGES:
+            raise GraphQLError(
+                f"fieldRange on {entity.class_name}.{spec.slot_name} is not "
+                f"supported: min/max is defined for numeric and temporal "
+                f"slots (slot range "
+                f"{spec.base_range or spec.kind!s}) — ADR-0007.",
+                extensions={
+                    "code": "UNAGGREGATABLE_FIELD",
+                    "field": field,
+                },
+            )
+    return spec
+
+
+def _make_count_resolver(builder: GraphQLTypeBuilder, entity: EntityGraphQLInfo):
+    class_name = entity.class_name
+
+    def resolver(
+        info: Info,
+        filters: Optional[list[FilterInput]] = None,
+        where=None,
+        filter_mode: FilterMode = FilterMode.AND,
+        as_of: Optional[str] = None,
+    ) -> int:
+        ent = _builder(info).entities[class_name]
+        tree = (
+            _where_to_tree(ent, where)
+            if where is not None and where is not strawberry.UNSET
+            else None
+        )
+        try:
+            return _client(info).count(
+                entity_type=class_name,
+                filters=_to_sdk_filters(ent, filters),
+                filter_mode=filter_mode.value,
+                as_of=as_of,
+                where=tree,
+            )
+        except MosaicValidationError as exc:
+            raise _as_graphql_error(exc) from exc
+
+    resolver.__name__ = f"{entity.plural_name}_count"
+    resolver.__doc__ = (
+        f"Count {class_name} entities matching the given filters without "
+        f"materializing them — a COUNT(*) under the exact predicate the "
+        f"list query uses, so it always equals the list's `total` "
+        f"(availability-consistent; ADR-0007). Under `asOf`, the count is "
+        f"over the reconstructed as-of match set."
+    )
+    resolver.__annotations__["where"] = Optional[entity.filter_input]
+    return resolver
+
+
+def _make_facet_counts_resolver(
+    builder: GraphQLTypeBuilder, entity: EntityGraphQLInfo
+):
+    class_name = entity.class_name
+
+    def resolver(
+        info: Info,
+        field: str,
+        filters: Optional[list[FilterInput]] = None,
+        where=None,
+        filter_mode: FilterMode = FilterMode.AND,
+    ) -> list[FacetCount]:
+        ent = _builder(info).entities[class_name]
+        spec = _resolve_aggregate_field(ent, field)
+        tree = (
+            _where_to_tree(ent, where)
+            if where is not None and where is not strawberry.UNSET
+            else None
+        )
+        try:
+            buckets = _client(info).facet_counts(
+                class_name,
+                spec.slot_name,
+                _to_sdk_filters(ent, filters),
+                filter_mode.value,
+                where=tree,
+            )
+        except MosaicValidationError as exc:
+            raise _as_graphql_error(exc) from exc
+        return [FacetCount(value=value, count=count) for value, count in buckets]
+
+    resolver.__name__ = f"{entity.plural_name}_facet_counts"
+    resolver.__doc__ = (
+        f"Per-value counts of one {class_name} field under the given "
+        f"filters, ordered by count descending then value (ADR-0007). "
+        f"`field` is a LinkML slot name (camelCase also accepted). "
+        f"Entities with no stored value are not counted (ask about absence "
+        f"with IS_NULL). Availability-consistent with the list surface. "
+        f"Current-state only: as-of aggregation is a later increment."
+    )
+    resolver.__annotations__["where"] = Optional[entity.filter_input]
+    return resolver
+
+
+def _make_field_range_resolver(
+    builder: GraphQLTypeBuilder, entity: EntityGraphQLInfo
+):
+    class_name = entity.class_name
+
+    def resolver(
+        info: Info,
+        field: str,
+        filters: Optional[list[FilterInput]] = None,
+        where=None,
+        filter_mode: FilterMode = FilterMode.AND,
+    ) -> FieldRange:
+        ent = _builder(info).entities[class_name]
+        spec = _resolve_aggregate_field(ent, field, ordered_only=True)
+        tree = (
+            _where_to_tree(ent, where)
+            if where is not None and where is not strawberry.UNSET
+            else None
+        )
+        try:
+            lo, hi = _client(info).field_range(
+                class_name,
+                spec.slot_name,
+                _to_sdk_filters(ent, filters),
+                filter_mode.value,
+                where=tree,
+            )
+        except MosaicValidationError as exc:
+            raise _as_graphql_error(exc) from exc
+        return FieldRange(min=lo, max=hi)
+
+    resolver.__name__ = f"{entity.plural_name}_field_range"
+    resolver.__doc__ = (
+        f"Min/max of one numeric or temporal {class_name} field under the "
+        f"given filters, for range facets (ADR-0007). Both null when no "
+        f"matching entity has a stored value. Availability-consistent with "
+        f"the list surface. Current-state only: as-of aggregation is a "
+        f"later increment."
+    )
     resolver.__annotations__["where"] = Optional[entity.filter_input]
     return resolver
 
@@ -1171,6 +1401,24 @@ def build_query_type(builder: GraphQLTypeBuilder) -> type:
             strawberry.field(
                 resolver=_make_search_resolver(builder, entity),
                 name=camel_case(f"search_{entity.plural_name}"),
+            )
+        )
+        fields.append(
+            strawberry.field(
+                resolver=_make_count_resolver(builder, entity),
+                name=camel_case(f"{entity.plural_name}_count"),
+            )
+        )
+        fields.append(
+            strawberry.field(
+                resolver=_make_facet_counts_resolver(builder, entity),
+                name=camel_case(f"{entity.plural_name}_facet_counts"),
+            )
+        )
+        fields.append(
+            strawberry.field(
+                resolver=_make_field_range_resolver(builder, entity),
+                name=camel_case(f"{entity.plural_name}_field_range"),
             )
         )
     fields.append(

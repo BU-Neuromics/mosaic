@@ -56,7 +56,8 @@ For each concrete entity class in your schema (say `Sample`), Mosaic generates:
 | Object type | `type Sample` with every slot as a typed field |
 | Page type | `type SamplePage { items, total, limit, offset }` |
 | Input types | `input SampleCreateInput`, `input SampleUpdateInput` |
-| Queries | `sample(id)`, `samples(filters, filterMode, limit, offset)`, `searchSamples(q, limit, offset)` |
+| Queries | `sample(id)`, `samples(filters, where, filterMode, limit, offset, orderBy, orderDir, asOf)`, `searchSamples(q, limit, offset)` |
+| Aggregations | `samplesCount(filters, where)`, `samplesFacetCounts(field, filters, where)`, `samplesFieldRange(field, filters, where)` |
 | Mutations | `createSample`, `updateSample`, `setSampleAvailability`, `setSampleAvailabilityBulk`, `supersedeSample` |
 
 LinkML enums become GraphQL enums. Field names are camelCased
@@ -123,6 +124,49 @@ missing the field satisfies the negation). `where` composes with the flat
 `filters:` list by AND. Reference edges are not filterable through `where`
 yet (relationship predicates are a later increment; use `filters:` for
 reference-id equality meanwhile).
+
+### Ordering and aggregation
+
+Every list query takes **`orderBy: <Type>OrderField`** and
+**`orderDir: ASC | DESC`** (ADR-0007). The generated `<Type>OrderField`
+enum lists the class's orderable stored columns — single-valued scalar and
+enum slots, `id` included; multivalued slots, references, and the computed
+temporal fields are absent (those are provenance-derived, not columns).
+With `orderBy` set, ordering **and pagination push down to storage** (SQL
+`ORDER BY`/`LIMIT`/`OFFSET`; missing values sort last in either direction;
+ties break on `id`), and `total` comes from a `COUNT(*)` under the same
+predicate — paging through a large class no longer materializes it.
+Without `orderBy`, results keep the historical `createdAt`-ascending
+order. `orderBy` cannot combine with `asOf`
+(`extensions.code: ASOF_ORDERING_UNSUPPORTED`).
+
+Three aggregation roots per class share the list surface's exact predicate
+— the **availability-consistency rule**: an aggregate counts precisely the
+entities the equivalent list query would return, never unavailable ones.
+
+```graphql
+{
+  samplesCount(where: {isTumor: {eq: true}})
+  samplesFacetCounts(field: "tissue") { value count }
+  samplesFieldRange(field: "volumeMl", where: {isTumor: {eq: true}}) { min max }
+}
+```
+
+- **`{plural}Count(filters, where, filterMode, asOf)`** — a pushed-down
+  `COUNT(*)`; always equals the list's `total`. Under `asOf` it counts the
+  reconstructed as-of match set (the documented Python-path semantics).
+- **`{plural}FacetCounts(field, filters, where, filterMode)`** — per-value
+  buckets `{value, count}` ordered by count descending then value. `field`
+  takes either spelling (slot name or camelCase). Entities with no stored
+  value are not counted — ask about absence with `IS_NULL`.
+- **`{plural}FieldRange(field, filters, where, filterMode)`** — `{min,
+  max}` for numeric and temporal slots (range facets); both null when no
+  matching entity has a value.
+
+Unknown aggregation fields are `extensions.code: UNKNOWN_AGGREGATION_FIELD`;
+computed temporal fields, multivalued slots, and (for `fieldRange`)
+non-ordered ranges are `UNAGGREGATABLE_FIELD`. The facet/range roots are
+current-state only in this increment — they take no `asOf`.
 
 The exposed class set is decided by Mosaic's shared type model
 (`mosaic.core.schema_typing`) — the same model behind the typed Python SDK — so

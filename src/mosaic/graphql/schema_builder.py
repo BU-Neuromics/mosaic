@@ -211,6 +211,9 @@ class EntityGraphQLInfo:
     #: reads these to translate a filter input into the SDK tree.
     filter_input: Any = None
     filter_fields: list[tuple[str, SlotSpec]] = dc_field(default_factory=list)
+    #: Generated ``<Class>OrderField`` enum (ADR-0007 increment 3): the
+    #: orderable stored columns. Member values are LinkML slot names.
+    order_field_enum: Any = None
 
     def filterable_slot_names(self) -> list[str]:
         """Slot names a list query's ``filters.field`` can match on.
@@ -313,6 +316,7 @@ class GraphQLTypeBuilder:
         self._build_page_types()
         self._build_input_types()
         self._build_filter_input_types()
+        self._build_order_enums()
         self._built = True
         return self
 
@@ -943,6 +947,44 @@ class GraphQLTypeBuilder:
                     f"predicates arrive in a later increment; use the flat "
                     f"`filters:` argument for reference-id equality). "
                     f"Composes with `filters:` by AND."
+                ),
+            )
+
+    def _build_order_enums(self) -> None:
+        """Generate per-class ``<Class>OrderField`` enums (ADR-0007 inc. 3).
+
+        Members are the class's orderable stored columns: single-valued
+        scalar and enum slots (including ``id``). Excluded: multivalued
+        slots (JSON arrays), reference slots (UUIDs have no meaningful
+        order), inline JSON slots, and the computed temporal fields —
+        those are provenance-derived, not columns, and are never column
+        sorts (ADR-0007's pinned constraint). Member values are LinkML
+        slot names, so introspection doubles as the aggregation-field
+        capability contract.
+        """
+        for entity in self.entities.values():
+            # SCREAMING_SNAKE member names (GraphQL enum convention, like
+            # FilterOp); values stay the LinkML slot names.
+            members = {
+                _enum_member_name(spec.slot_name).upper(): spec.slot_name
+                for spec in entity.slots
+                if not spec.multivalued
+                and spec.kind != "reference"
+                and spec.scalar_type is not JSON
+            }
+            if not members:
+                continue  # unreachable in practice: `id` is always a slot
+            py_enum = enum.Enum(  # type: ignore[misc]
+                f"{entity.class_name}OrderField", members
+            )
+            entity.order_field_enum = strawberry.enum(
+                py_enum,
+                name=f"{entity.class_name}OrderField",
+                description=(
+                    f"Orderable stored columns of {entity.class_name} "
+                    f"(ADR-0007). Computed temporal fields (createdAt/"
+                    f"updatedAt) are provenance-derived, not columns, and "
+                    f"are not orderable."
                 ),
             )
 

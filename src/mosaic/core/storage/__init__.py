@@ -37,6 +37,8 @@ class Query:
         offset: Optional[int] = None,
         filter_mode: str = "and",
         where: Optional[Dict[str, Any]] = None,
+        order_by: Optional[str] = None,
+        order_dir: str = "asc",
     ):
         self.entity_type = entity_type
         self.filters = filters or []
@@ -48,6 +50,12 @@ class Query:
         # {"not": node}. Composes with ``filters`` by AND. Validate with
         # ``normalize_where``.
         self.where = where
+        # Optional stored-column ordering (ADR-0007): a slot name pushed down
+        # as SQL ORDER BY (stable id tiebreak; NULLs last on both backends).
+        # Computed temporal fields are NOT orderable this way — they are
+        # provenance-derived, not columns (ADR-0007's pinned constraint).
+        self.order_by = order_by
+        self.order_dir = order_dir  # "asc" or "desc"
 
 
 # Filter ops recognized by ``normalize_filter`` / adapter predicate builders.
@@ -495,6 +503,53 @@ class EntityStore(ABC):
     # Postgres) override all three; the default raises NotImplementedError and
     # names the gap.
     # ------------------------------------------------------------------
+
+    # ------------------------------------------------------------------
+    # Aggregation surface (ADR-0007). Part of the EntityStore contract but
+    # intentionally NOT @abstractmethod (mirrors the provenance reads
+    # below): wrappers and minimal adapters are not forced to implement
+    # them; the defaults raise and name the gap. The pinned
+    # availability-consistency rule: every aggregate sees exactly what
+    # list queries see (is_available + the caller's filters/where).
+    # ------------------------------------------------------------------
+
+    def count(self, query: Query, *, as_of: Optional[str] = None) -> int:
+        """Count the entities ``find(query)`` would yield, without
+        materializing them (``query.limit``/``offset`` are ignored).
+
+        ADR-0007 count mode. Adapters push this down as ``COUNT(*)`` under
+        the identical predicate; the as-of path counts reconstructed
+        matches (the documented Python-path semantics).
+        """
+        raise NotImplementedError(
+            f"{type(self).__name__} does not implement count()"
+        )
+
+    def facet_counts(
+        self, query: Query, field: str
+    ) -> List[tuple]:
+        """Per-value counts for ``field`` under ``query``'s filters —
+        ``[(value, count), ...]`` ordered by count desc, then value.
+
+        ADR-0007 facet counts. Entities with no stored value for ``field``
+        are not counted (a facet enumerates present values; absence is
+        queried with ``is_null``). Not defined under as-of in the first
+        increment (adapters raise a loud error).
+        """
+        raise NotImplementedError(
+            f"{type(self).__name__} does not implement facet_counts()"
+        )
+
+    def field_range(
+        self, query: Query, field: str
+    ) -> tuple:
+        """``(min, max)`` of ``field`` under ``query``'s filters, for range
+        facets (ADR-0007); ``(None, None)`` when no entity has a value.
+        Not defined under as-of in the first increment.
+        """
+        raise NotImplementedError(
+            f"{type(self).__name__} does not implement field_range()"
+        )
 
     def history(self, entity_id: str) -> List[Dict[str, Any]]:
         """Return the full provenance history for an entity (chronological).
