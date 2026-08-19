@@ -1743,8 +1743,8 @@ standard LinkML — <code>linkml-validate</code> understands it, and so does Mos
   and stored there, so subtype fields (<code>tissue</code>, <code>volume_ml</code>) persist and the
   instance is queryable as its real type:</li>
 </ul>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="n">client</span><span class="o">.</span><span class="n">query</span><span class="p">(</span><span class="s2">&quot;SolidSample&quot;</span><span class="p">)</span>   <span class="c1"># → S1</span>
-<a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a><span class="n">client</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;SolidSample&quot;</span><span class="p">,</span> <span class="s2">&quot;S1&quot;</span><span class="p">)[</span><span class="s2">&quot;data&quot;</span><span class="p">][</span><span class="s2">&quot;tissue&quot;</span><span class="p">]</span>   <span class="c1"># → &quot;brain&quot;</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="n">client</span><span class="o">.</span><span class="n">query</span><span class="p">(</span><span class="s2">"SolidSample"</span><span class="p">)</span>   <span class="c1"># → S1</span>
+<a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a><span class="n">client</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"SolidSample"</span><span class="p">,</span> <span class="s2">"S1"</span><span class="p">)[</span><span class="s2">"data"</span><span class="p">][</span><span class="s2">"tissue"</span><span class="p">]</span>   <span class="c1"># → "brain"</span>
 </code></pre></div>
 <p>The designator value is matched against each candidate subclass's <strong>name</strong> first,
 then its <code>class_uri</code>, then the CURIE/short form of that URI. Using the bare class
