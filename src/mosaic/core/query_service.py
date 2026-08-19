@@ -586,6 +586,360 @@ class QueryService:
             offset=actual_offset,
         )
 
+    def search_all(
+        self, query: str, limit: Optional[int] = 100
+    ) -> list[dict[str, Any]]:
+        """Cross-class ranked full-text search (issue #158).
+
+        Fans over every FTS-indexed class server-side via the adapters'
+        ranked search path, merges by the per-index-normalized score
+        (deterministic ``(score desc, entity_type, id)`` order — scores are
+        normalized to [0, 1] per index, making them comparable in relative
+        terms across classes), truncates to ``limit``, then materializes
+        the page **batched by type** (one composed read per class present —
+        never per-hit). Availability applies exactly as list queries.
+        Returns result dicts (the ``query()`` item envelope) each carrying
+        ``entity_type`` and a ``score`` key, rank-ordered.
+        """
+        if self._storage is None or self._schema_manager is None:
+            return []
+
+        best: dict[tuple[str, str], float] = {}
+        for class_name in self._schema_manager.fts_entity_types():
+            for fts_meta in self._schema_manager.get_fts_tables_for_entity_type(
+                class_name
+            ):
+                for field_meta in fts_meta.fields:
+                    for match in self._storage.search(
+                        query=query,
+                        entity_type=class_name,
+                        field_name=field_meta.field_name,
+                        limit=self.SEARCH_HIT_BUDGET,
+                    ):
+                        key = (class_name, match.entity_id)
+                        if match.score > best.get(key, -1.0):
+                            best[key] = match.score
+        ranked = sorted(best, key=lambda k: (-best[k], k[0], k[1]))
+        if limit is not None:  # limit=0 → zero hits, not unlimited (#130)
+            ranked = ranked[:limit]
+        if not ranked:
+            return []
+
+        by_class: dict[str, list[str]] = {}
+        for class_name, entity_id in ranked:
+            by_class.setdefault(class_name, []).append(entity_id)
+        materialized: dict[tuple[str, str], dict[str, Any]] = {}
+        for class_name, ids in by_class.items():
+            page = list(
+                self._storage.find(
+                    Query(
+                        entity_type=class_name,
+                        where={"field": "id", "op": "in", "value": ids},
+                    )
+                )
+            )
+            for item in self._hydrate_entities(page, as_of=None):
+                materialized[(class_name, item["id"])] = item
+
+        return [
+            {**materialized[key], "score": best[key]}
+            for key in ranked
+            if key in materialized
+        ]
+
+    #: Depth cap and node budget for ``neighbors`` (issue #158) — visible,
+    #: disclosed bounds, never silent truncation.
+    NEIGHBORS_MAX_DEPTH = 5
+    NEIGHBORS_NODE_BUDGET = 1000
+
+    def neighbors(
+        self, entity_id: str, depth: int = 1, *, as_of: Optional[str] = None
+    ) -> dict[str, Any]:
+        """The subgraph around one entity (issue #158): depth-bounded BFS
+        over BOTH edge stores — the ``relationships`` link table (ADR-0002
+        multivalued reference edges, both directions) and the
+        column-stored single-valued references (forward off the frontier's
+        data; reverse via schema-driven FK queries) — closing the
+        ADR-0002 visibility gap a link-table-only traversal has.
+
+        Returns ``{"nodes", "edges", "edge_sources", "notices"}``. Node
+        payloads materialize **batched by type**; edges are kept only when
+        both endpoints materialize (availability parity with list
+        queries). Under ``as_of``, link-table edges replay from provenance
+        (sec6 §6.8.2) and node states reconstruct at ``as_of``; column
+        edges are **out of scope under as_of** (hippo#71) — disclosed via
+        ``edge_sources``/``notices``, never a silently partial temporal
+        graph.
+        """
+        from mosaic.core.exceptions import EntityNotFoundError
+
+        depth = max(1, min(depth, self.NEIGHBORS_MAX_DEPTH))
+        notices: list[str] = []
+        edge_sources = (
+            ["LINK_TABLE"] if as_of is not None else ["LINK_TABLE", "COLUMN"]
+        )
+        empty = {
+            "nodes": [],
+            "edges": [],
+            "edge_sources": edge_sources,
+            "notices": notices,
+        }
+        if self._storage is None:
+            return empty
+
+        if as_of is not None:
+            return self._neighbors_as_of(entity_id, depth, as_of, empty)
+
+        if self._storage.read(entity_id) is None:
+            raise EntityNotFoundError(
+                message=f"Entity not found: {entity_id}",
+                entity_id=entity_id,
+            )
+
+        registry = getattr(self._storage, "schema_registry", None)
+        # Schema-driven single-valued reference map: (class, slot, target).
+        ref_slots: list[tuple[str, str, str]] = []
+        fwd_by_class: dict[str, list[tuple[str, str]]] = {}
+        if registry is not None:
+            known = set(registry.class_names())
+            for class_name in known:
+                for slot in registry.induced_slots(class_name):
+                    if not slot.multivalued and slot.range in known:
+                        ref_slots.append((class_name, slot.name, slot.range))
+                        fwd_by_class.setdefault(class_name, []).append(
+                            (slot.name, slot.range)
+                        )
+
+        seen: set[str] = {entity_id}
+        frontier: set[str] = {entity_id}
+        edges: dict[tuple[str, str, str], dict[str, Any]] = {}
+        truncated = False
+
+        def add_edge(source: str, target: str, rel_type: str, origin: str) -> None:
+            edges.setdefault(
+                (source, target, rel_type),
+                {
+                    "source": source,
+                    "target": target,
+                    "type": rel_type,
+                    "edge_source": origin,
+                },
+            )
+
+        for _ in range(depth):
+            if not frontier or truncated:
+                break
+            new_ids: set[str] = set()
+
+            # Link-table edges, both directions.
+            for fid in frontier:
+                for rel in self.relationships.find_relationships(source_id=fid):
+                    add_edge(fid, rel["target_id"], rel["relationship_type"], "LINK_TABLE")
+                    new_ids.add(rel["target_id"])
+                for rel in self.relationships.find_relationships(target_id=fid):
+                    add_edge(rel["source_id"], fid, rel["relationship_type"], "LINK_TABLE")
+                    new_ids.add(rel["source_id"])
+
+            # Column edges: one batched read per frontier type.
+            types = self._storage.resolve_types(list(frontier)) if hasattr(
+                self._storage, "resolve_types"
+            ) else {}
+            by_type: dict[str, list[str]] = {}
+            for fid, cls in types.items():
+                by_type.setdefault(cls, []).append(fid)
+            for cls, ids in by_type.items():
+                fwd = fwd_by_class.get(cls, [])
+                if not fwd:
+                    continue
+                for entity in self._storage.find(
+                    Query(
+                        entity_type=cls,
+                        where={"field": "id", "op": "in", "value": ids},
+                    )
+                ):
+                    for slot_name, _target in fwd:
+                        value = (entity.data or {}).get(slot_name)
+                        if isinstance(value, str) and value:
+                            add_edge(entity.id, value, slot_name, "COLUMN")
+                            new_ids.add(value)
+            # Reverse column edges: schema-driven FK queries, one per
+            # (class, slot) pair whose target class is on the frontier.
+            for cls, slot_name, target in ref_slots:
+                target_ids = by_type.get(target)
+                if not target_ids:
+                    continue
+                for entity in self._storage.find(
+                    Query(
+                        entity_type=cls,
+                        where={
+                            "field": slot_name,
+                            "op": "in",
+                            "value": target_ids,
+                        },
+                    )
+                ):
+                    referenced = (entity.data or {}).get(slot_name)
+                    if referenced in target_ids:
+                        add_edge(entity.id, referenced, slot_name, "COLUMN")
+                        new_ids.add(entity.id)
+
+            new_ids -= seen
+            if len(seen) + len(new_ids) > self.NEIGHBORS_NODE_BUDGET:
+                keep = self.NEIGHBORS_NODE_BUDGET - len(seen)
+                new_ids = set(sorted(new_ids)[: max(keep, 0)])
+                truncated = True
+                notices.append(
+                    f"Neighborhood truncated at the "
+                    f"{self.NEIGHBORS_NODE_BUDGET}-node budget; increase "
+                    f"specificity or lower depth for a complete view."
+                )
+            seen |= new_ids
+            frontier = new_ids
+
+        nodes = self._materialize_nodes(seen)
+        node_ids = {n["entity_id"] for n in nodes}
+        return {
+            "nodes": nodes,
+            "edges": [
+                e
+                for e in edges.values()
+                if e["source"] in node_ids and e["target"] in node_ids
+            ],
+            "edge_sources": edge_sources,
+            "notices": notices,
+        }
+
+    def _materialize_nodes(self, ids: set[str]) -> list[dict[str, Any]]:
+        """Batched-by-type node materialization (one composed read per
+        class present — the get_entity_loader discipline, never
+        get-per-node). Unavailable/unknown ids drop out here, which is
+        what enforces availability parity on the returned subgraph."""
+        if not ids or not hasattr(self._storage, "resolve_types"):
+            return []
+        types = self._storage.resolve_types(list(ids))
+        by_type: dict[str, list[str]] = {}
+        for eid, cls in types.items():
+            by_type.setdefault(cls, []).append(eid)
+        nodes: list[dict[str, Any]] = []
+        for cls, class_ids in sorted(by_type.items()):
+            page = list(
+                self._storage.find(
+                    Query(
+                        entity_type=cls,
+                        where={"field": "id", "op": "in", "value": class_ids},
+                    )
+                )
+            )
+            for item in self._hydrate_entities(page, as_of=None):
+                nodes.append(
+                    {
+                        "entity_id": item["id"],
+                        "entity_type": cls,
+                        "data": item["data"],
+                        "created_at": item["created_at"],
+                        "updated_at": item["updated_at"],
+                    }
+                )
+        nodes.sort(key=lambda n: (n["entity_type"], n["entity_id"]))
+        return nodes
+
+    def _neighbors_as_of(
+        self,
+        entity_id: str,
+        depth: int,
+        as_of: str,
+        empty: dict[str, Any],
+    ) -> dict[str, Any]:
+        """The as-of neighborhood: BFS (both directions) over the
+        link-table edges live at ``as_of`` (provenance replay), node
+        states reconstructed at ``as_of``. Column edges are out of scope
+        under as-of (hippo#71) — disclosed, never silent."""
+        empty["notices"].append(
+            "asOf neighborhoods cover link-table edges only: column-stored "
+            "single-valued reference edges are not reconstructed at a "
+            "transaction-time (hippo#71); current-state neighbors include "
+            "both edge stores."
+        )
+        live = self.relationships.live_edges_at(as_of)
+        out_adj: dict[str, list[dict[str, Any]]] = {}
+        in_adj: dict[str, list[dict[str, Any]]] = {}
+        for edge in live:
+            out_adj.setdefault(edge["source_id"], []).append(edge)
+            in_adj.setdefault(edge["target_id"], []).append(edge)
+
+        seen: set[str] = {entity_id}
+        frontier: set[str] = {entity_id}
+        edges: dict[tuple[str, str, str], dict[str, Any]] = {}
+        for _ in range(depth):
+            if not frontier:
+                break
+            new_ids: set[str] = set()
+            for fid in frontier:
+                for edge in out_adj.get(fid, []):
+                    key = (edge["source_id"], edge["target_id"], edge["relationship_type"])
+                    edges.setdefault(
+                        key,
+                        {
+                            "source": edge["source_id"],
+                            "target": edge["target_id"],
+                            "type": edge["relationship_type"],
+                            "edge_source": "LINK_TABLE",
+                        },
+                    )
+                    new_ids.add(edge["target_id"])
+                for edge in in_adj.get(fid, []):
+                    key = (edge["source_id"], edge["target_id"], edge["relationship_type"])
+                    edges.setdefault(
+                        key,
+                        {
+                            "source": edge["source_id"],
+                            "target": edge["target_id"],
+                            "type": edge["relationship_type"],
+                            "edge_source": "LINK_TABLE",
+                        },
+                    )
+                    new_ids.add(edge["source_id"])
+            frontier = new_ids - seen
+            seen |= new_ids
+
+        # Node states at as_of: per-node provenance reconstruction (the
+        # documented as-of Python path; the batched discipline applies to
+        # the current-state materializer).
+        types = (
+            self._storage.resolve_types(list(seen))
+            if hasattr(self._storage, "resolve_types")
+            else {}
+        )
+        nodes = []
+        for eid in sorted(seen):
+            state = (
+                self._storage.state_at(eid, as_of)
+                if hasattr(self._storage, "state_at")
+                else None
+            )
+            if state is None:
+                continue  # did not exist / unavailable at as_of
+            data = state.get("state") if isinstance(state, dict) else None
+            if not isinstance(data, dict):
+                continue
+            nodes.append(
+                {
+                    "entity_id": eid,
+                    "entity_type": types.get(eid),
+                    "data": data,
+                    "created_at": None,
+                    "updated_at": None,
+                }
+            )
+        node_ids = {n["entity_id"] for n in nodes}
+        empty["nodes"] = nodes
+        empty["edges"] = [
+            e
+            for e in edges.values()
+            if e["source"] in node_ids and e["target"] in node_ids
+        ]
+        return empty
+
     @staticmethod
     def _parse_iso_timestamp(value: str) -> Optional["datetime"]:
         """Parse an ISO 8601 timestamp, normalizing ``Z`` and naive values to UTC."""

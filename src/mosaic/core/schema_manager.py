@@ -131,6 +131,11 @@ class SchemaManager:
             for slot_name, target in self._registry.reference_slots(entity_type)
         ]
 
+    def fts_entity_types(self) -> list[str]:
+        """Entity types with at least one ``hippo_search``-annotated slot —
+        the classes cross-class search fans over (issue #158)."""
+        return sorted(self._fts_table_metadata)
+
     def get_fts_tables_for_entity_type(
         self, entity_type: str
     ) -> list[FTSTableMetadata]:

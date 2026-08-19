@@ -277,6 +277,39 @@ filters. Results come back in FTS rank order — the point of search — unless
 an explicit `orderBy` is given, which overrides rank (the pinned precedence
 rule). Unknown filter fields are the same coded errors as list queries.
 
+### Cross-class roots: `searchAll` and `neighbors`
+
+Two heterogeneous roots answer questions no per-class query can, using the
+house JSON-envelope pattern (`entityId` + `entityType` + `data: JSON`,
+typed follow-up via the per-type queries):
+
+```graphql
+{
+  searchAll(q: "cortex", limit: 20) { entityId entityType score data }
+  neighbors(id: "some-uuid", depth: 2) {
+    nodes { entityId entityType data }
+    edges { source target type edgeSource }
+    edgeSources
+    notices
+  }
+}
+```
+
+- **`searchAll(q, limit)`** — ranked full-text search across every
+  FTS-indexed class in one request (`score` is normalized per index, so
+  scores compare in relative terms across classes). Materialization is
+  batched by type; availability applies exactly as list queries. The
+  per-class search twins remain for typed results.
+- **`neighbors(id, depth, asOf)`** — the renderable subgraph around one
+  entity, covering **both edge stores**: link-table relationship edges
+  (multivalued references, both directions) and column-stored
+  single-valued references (forward and reverse, schema-driven). Depth is
+  capped at 5 and the node budget at 1000 — a hit bound always lands in
+  `notices`, never silent truncation. Under `asOf`, link-table edges
+  replay from provenance and node states reconstruct at that time, while
+  column edges are disclosed as out of scope (`edgeSources` names what a
+  response covers).
+
 ### Schema introspection (the Mosaic kind)
 
 Beyond GraphQL's own `__schema`, the API exposes Mosaic's domain type model —

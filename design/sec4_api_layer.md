@@ -659,6 +659,10 @@ type Query {
                 orderDir: OrderDirection!): SamplePage!        # unless orderBy overrides
   entityHistory(entityId: ID!): [ProvenanceEntry!]!         # client.history
   supersededBy(id: ID!): SupersessionInfo!                  # supersession chain (mirrors GET /{id}/superseded)
+  searchAll(q: String!, limit: Int!): [SearchHit!]!         # client.search_all — cross-class
+                                                            #   ranked FTS (issue #158)
+  neighbors(id: ID!, depth: Int!, asOf: String): NeighborhoodGraph!  # client.neighbors — two-edge-store
+                                                            #   subgraph envelope (issue #158)
   hippoSchema: [HippoEntityTypeInfo!]!                      # the LinkML type model (mirrors GET /schemas)
   hippoEntityType(name: String!): HippoEntityTypeInfo       # one type + relationships (mirrors /schemas/{type}[/references])
 }
@@ -694,6 +698,17 @@ rewrite). `total` honors the FTS match set (bounded at 1000 hits) and the compos
 Rank-precedence rule: FTS rank order by default; explicit `orderBy` overrides. REST
 `GET /search` mirrors the same envelope and takes the list endpoint's arbitrary
 field-filter query params.
+
+**Heterogeneous roots (issue #158).** `searchAll` and `neighbors` follow the house
+JSON-envelope pattern (`XrefMatch`/`RelatedEntity` precedent; ADR-0005 — deliberately not a
+union/interface root). `searchAll` fans over every FTS-indexed class server-side, merges by
+per-index-normalized rank, and materializes batched by type. `neighbors` returns a renderable
+`{nodes, edges, edgeSources, notices}` subgraph over BOTH edge stores — link-table
+relationship edges (both directions) and column-stored single-valued references (forward +
+schema-driven reverse) — closing the ADR-0002 visibility gap; depth cap 5, 1000-node budget
+with disclosed truncation. Under `asOf`, link edges replay from provenance and node states
+reconstruct at that time; column edges are disclosed as out of scope (hippo#71) — the graph
+is never silently partial.
 
 **Aggregation & ordering (ADR-0007, issue #156).** With `orderBy` (a generated per-class
 `<Type>OrderField` enum: single-valued scalar/enum stored columns incl. `id`; computed

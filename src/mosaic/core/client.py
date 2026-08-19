@@ -987,6 +987,26 @@ class MosaicClient:
             order_by=order_by, order_dir=order_dir,
         )
 
+    def search_all(
+        self, query: str, limit: Optional[int] = 100
+    ) -> list[dict[str, Any]]:
+        """Cross-class ranked full-text search (issue #158): fans over
+        every FTS-indexed class, merges by normalized rank, materializes
+        the page batched by type. Items carry ``entity_type`` and
+        ``score``; availability parity with list queries."""
+        return self._query_service.search_all(query, limit)
+
+    def neighbors(
+        self, entity_id: str, depth: int = 1, *, as_of: Optional[str] = None
+    ) -> dict[str, Any]:
+        """The subgraph around an entity (issue #158): nodes + edges from
+        BOTH edge stores — link-table relationship edges and column-stored
+        single-valued references — depth-bounded, batched-by-type
+        materialization, disclosed caps. Under ``as_of``, link-table edges
+        replay from provenance and node states reconstruct at ``as_of``;
+        column edges are disclosed as out of scope (hippo#71)."""
+        return self._query_service.neighbors(entity_id, depth, as_of=as_of)
+
     # -- ProvenanceService delegations --
 
     def _get_provenance_summary_map(self, entity_type: str) -> dict[str, dict]:
