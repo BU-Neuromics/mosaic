@@ -852,6 +852,8 @@ class MosaicClient:
         filter_mode: str = "and",
         as_of: Optional[str] = None,
         where: Optional[dict[str, Any]] = None,
+        order_by: Optional[str] = None,
+        order_dir: str = "asc",
     ) -> "PaginatedResult":
         """Query entities with filter criteria.
 
@@ -869,10 +871,66 @@ class MosaicClient:
                 / ``{"or": [...]}`` / ``{"not": node}``; composes with
                 ``filters`` by AND. The GraphQL ``where:`` argument compiles
                 to exactly this shape.
+            order_by: Optional stored-slot name to order by (ADR-0007);
+                ordering and pagination push down to storage (NULLs last,
+                stable ``id`` tiebreak). Computed temporal fields are not
+                orderable; not combinable with ``as_of`` or
+                ``date_from``/``date_to``. Omitted = the historical
+                ``created_at``-ascending default.
+            order_dir: "asc" (default) or "desc"; only used with order_by.
         """
         return self._query_service.query(
             entity_type, filters, date_from, date_to, limit, offset, filter_mode,
-            as_of=as_of, where=where,
+            as_of=as_of, where=where, order_by=order_by, order_dir=order_dir,
+        )
+
+    def count(
+        self,
+        entity_type: Optional[str] = None,
+        filters: Optional[list[dict[str, Any]]] = None,
+        filter_mode: str = "and",
+        as_of: Optional[str] = None,
+        where: Optional[dict[str, Any]] = None,
+    ) -> int:
+        """Count matching entities without materializing them (ADR-0007).
+
+        Availability-consistent: counts exactly the entities ``query()``
+        would return under the same criteria. Under ``as_of``, the count is
+        over the reconstructed match set (Python-path semantics).
+        """
+        return self._query_service.count(
+            entity_type, filters, filter_mode, as_of=as_of, where=where
+        )
+
+    def facet_counts(
+        self,
+        entity_type: str,
+        field: str,
+        filters: Optional[list[dict[str, Any]]] = None,
+        filter_mode: str = "and",
+        where: Optional[dict[str, Any]] = None,
+    ) -> list[tuple]:
+        """Per-value counts for ``field`` under the given criteria —
+        ``[(value, count), ...]``, count desc then value asc (ADR-0007).
+        Entities with no stored value are not counted (query absence with
+        ``is_null``). Not defined under as-of in this increment."""
+        return self._query_service.facet_counts(
+            entity_type, field, filters, filter_mode, where=where
+        )
+
+    def field_range(
+        self,
+        entity_type: str,
+        field: str,
+        filters: Optional[list[dict[str, Any]]] = None,
+        filter_mode: str = "and",
+        where: Optional[dict[str, Any]] = None,
+    ) -> tuple:
+        """``(min, max)`` of ``field`` under the given criteria (ADR-0007);
+        ``(None, None)`` when no matching entity has a value. Not defined
+        under as-of in this increment."""
+        return self._query_service.field_range(
+            entity_type, field, filters, filter_mode, where=where
         )
 
     def query_updated_since(

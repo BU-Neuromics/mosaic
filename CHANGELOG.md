@@ -4,6 +4,34 @@
 
 ### Added
 
+- **Aggregation & ordering surface** (ADR-0007, issue #156): the storage
+  `Query` carries `order_by`/`order_dir`, pushed down by both adapters as
+  SQL `ORDER BY` (typed casts on Postgres JSONB so numeric/temporal slots
+  order by value; NULLs last in either direction on both backends; stable
+  `id` tiebreak). `MosaicClient.query(order_by=..., order_dir=...)` runs a
+  pushdown path — SQL ordering + `LIMIT`/`OFFSET` paging, `total` from a
+  `COUNT(*)` under the identical predicate, temporal fields derived for
+  the page only — so ordered paging no longer materializes the match set;
+  without `order_by` the historical `created_at`-ascending path is
+  byte-identical. New SDK aggregation methods `count`, `facet_counts`
+  (per-value buckets, count desc then value, NULLs never counted), and
+  `field_range` (min/max for range facets), all **availability-consistent**:
+  every aggregate sees exactly the entities list queries see
+  (`is_available` + the caller's `filters`/`where`; the pre-existing
+  `entity_counts()` registry semantics are documented as NOT the model).
+  GraphQL: generated per-class `<Type>OrderField` enums (stored columns
+  only — computed temporal fields, references, and multivalued slots are
+  not orderable) with `orderBy`/`orderDir` on every list query, and new
+  roots `{plural}Count`, `{plural}FacetCounts(field)`,
+  `{plural}FieldRange(field)` sharing the list surface's `filters`/`where`
+  arguments. Per the ADR-0007 gate decisions: `orderBy` + `asOf` is a
+  coded error (`ASOF_ORDERING_UNSUPPORTED`), `count` under `asOf` keeps
+  the documented Python-path semantics, the facet/range roots are
+  current-state only, and unknown/unaggregatable fields are coded errors
+  (`UNKNOWN_AGGREGATION_FIELD`/`UNAGGREGATABLE_FIELD`) extending the #149
+  discipline. The `limit=0` → zero rows rule (#130) holds on the pushdown
+  path, with `total` still reported.
+
 - **Generated typed `where:` filter argument** (ADR-0006 increment 2,
   issue #155): every list query gains `where: <Type>Filter` — a generated
   per-class input whose slot fields are per-kind operator objects

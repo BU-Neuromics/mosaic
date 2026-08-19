@@ -78,6 +78,18 @@ class ValidatingEntityStore(EntityStore):
         """Find entities matching a query."""
         return self._store.find(query, as_of=as_of)
 
+    def count(self, query: Any, *, as_of: Any = None) -> int:
+        """Delegate match counting to the wrapped store (ADR-0007)."""
+        return self._store.count(query, as_of=as_of)
+
+    def facet_counts(self, query: Any, field: str) -> Any:
+        """Delegate facet counts to the wrapped store (ADR-0007)."""
+        return self._store.facet_counts(query, field)
+
+    def field_range(self, query: Any, field: str) -> Any:
+        """Delegate min/max aggregation to the wrapped store (ADR-0007)."""
+        return self._store.field_range(query, field)
+
     def history(self, entity_id: str) -> Any:
         """Delegate provenance history to the wrapped store (sec6 §6.7)."""
         return self._store.history(entity_id)

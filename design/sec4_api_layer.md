@@ -640,8 +640,18 @@ Per entity type (names derived from the class name and its accessor convention):
 ```graphql
 type Query {
   sample(id: ID!): Sample                                   # client.get
-  samples(filters: [FilterInput!], filterMode: FilterMode!  # client.query —
-          limit: Int!, offset: Int!): SamplePage!           #   AND/OR + offset pagination
+  samples(filters: [FilterInput!], where: SampleFilter,     # client.query —
+          filterMode: FilterMode!, limit: Int!, offset: Int!,  # AND/OR + offset pagination
+          orderBy: SampleOrderField, orderDir: OrderDirection!,  # ADR-0007 pushdown
+          asOf: String): SamplePage!
+  samplesCount(filters: [FilterInput!], where: SampleFilter,   # client.count — COUNT(*)
+               filterMode: FilterMode!, asOf: String): Int!    #   under the list predicate
+  samplesFacetCounts(field: String!, filters: [FilterInput!],  # client.facet_counts —
+                     where: SampleFilter,                      #   per-value buckets,
+                     filterMode: FilterMode!): [FacetCount!]!  #   count desc then value
+  samplesFieldRange(field: String!, filters: [FilterInput!],   # client.field_range —
+                    where: SampleFilter,                       #   {min,max} for numeric/
+                    filterMode: FilterMode!): FieldRange!      #   temporal range facets
   searchSamples(q: String!, limit: Int!,
                 offset: Int!): [Sample!]!                   # client.search (FTS; mirrors GET /search)
   entityHistory(entityId: ID!): [ProvenanceEntry!]!         # client.history
@@ -670,6 +680,19 @@ in `failures` and never roll back sibling successes (the GraphQL analogue of RES
 `hippoSchema` / `hippoEntityType` are Hippo's *domain* schema introspection — the LinkML
 type model the GraphQL surface itself is generated from — distinct from GraphQL's own
 `__schema` introspection.
+
+**Aggregation & ordering (ADR-0007, issue #156).** With `orderBy` (a generated per-class
+`<Type>OrderField` enum: single-valued scalar/enum stored columns incl. `id`; computed
+temporal fields, references, and multivalued slots excluded), ordering and pagination push
+down to storage — SQL `ORDER BY` (NULLs last both directions, stable `id` tiebreak) +
+`LIMIT`/`OFFSET`, with `total` from a `COUNT(*)` under the identical predicate; without it,
+the historical `createdAt`-ascending Python path is unchanged. The three aggregation roots
+are **availability-consistent** — each sees exactly what the equivalent list query sees
+(`is_available` + caller `filters`/`where`; the registry-semantics `entity_counts()` is NOT
+the model). Gate decisions: `orderBy` + `asOf` is a coded `ASOF_ORDERING_UNSUPPORTED` error;
+`{plural}Count(asOf:)` keeps the documented Python-path semantics; facet/range roots are
+current-state only (no `asOf` argument); unknown/unaggregatable aggregation fields are coded
+errors (`UNKNOWN_AGGREGATION_FIELD` / `UNAGGREGATABLE_FIELD`), extending the #149 discipline.
 
 > **As-of reads (Proposed — ADR-0001 / sec6 §6.8).** Generated query and resolved-traversal
 > fields will gain an additive `asOf: DateTime` argument that reconstructs the result as the

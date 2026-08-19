@@ -930,3 +930,230 @@ class TestPostgresWhereTree:
         assert self._both_paths(
             tree_adapter, {"field": "notes", "op": "is_null", "value": True}
         ) == {"s2"}
+
+
+class TestPostgresAggregationAndOrdering:
+    """Parity for the ADR-0007 aggregation & ordering surface (issue #156).
+
+    ORDER BY pushdown over JSONB (per-range casts so numeric/temporal slots
+    order by value, NULLS LAST + id tiebreak matching SQLite), COUNT(*)
+    under the identical predicate, facet buckets with native jsonb value
+    decode, and min/max with driver-type normalization (Decimal → int/
+    float, date/datetime → ISO strings). Expectations intentionally match
+    ``tests/core/test_aggregation_and_ordering.py``.
+    """
+
+    FUTURE = "2999-01-01T00:00:00+00:00"
+
+    @pytest.fixture
+    def agg_adapter(self):
+        from mosaic.core.storage.adapters.postgres_adapter import (
+            PostgresAdapter,
+            PostgresEntity,
+        )
+        from mosaic.linkml_bridge import SchemaRegistry
+
+        registry = SchemaRegistry.from_yaml(TestPostgresComparisonFilters.SCHEMA)
+        adapter = PostgresAdapter(
+            database_url=POSTGRES_URL,
+            schema_registry=registry,
+            min_pool_size=1,
+            max_pool_size=5,
+        )
+
+        def seed(entity_id, **data):
+            adapter.create(
+                PostgresEntity(
+                    id=entity_id,
+                    entity_type="Specimen",
+                    is_available=True,
+                    version=1,
+                    data={"id": entity_id, **data},
+                )
+            )
+
+        seed("s1", name="Alpha", age=45, score=1.5,
+             collected_on="2024-01-10", is_tumor=False)
+        seed("s2", name="Beta", age=60, score=2.5,
+             collected_on="2025-03-05", is_tumor=True)
+        seed("s3", name="Gamma", age=75, score=3.5,
+             collected_on="2026-06-20", is_tumor=False)
+        # No age/score/collected_on — the NULLs-last target.
+        seed("s4", name="Delta", is_tumor=True)
+        # Made unavailable — must be invisible to every aggregate
+        # (ADR-0007's availability-consistency rule).
+        seed("s5", name="Ghost", age=99, score=9.9, is_tumor=True)
+        adapter.set_availability("s5", "Specimen", False, reason="test")
+
+        yield adapter
+
+        with adapter._transaction() as conn:
+            cur = conn.cursor()
+            cur.execute("DELETE FROM relationships")
+            cur.execute('ALTER TABLE "ProvenanceRecord" DISABLE TRIGGER ALL')
+            cur.execute('DELETE FROM "ProvenanceRecord"')
+            cur.execute('ALTER TABLE "ProvenanceRecord" ENABLE TRIGGER ALL')
+            cur.execute("DELETE FROM entities")
+
+    @staticmethod
+    def _ids(adapter, **query_kwargs):
+        from mosaic.core.storage import Query
+
+        return [
+            e.id
+            for e in adapter.find(Query(entity_type="Specimen", **query_kwargs))
+        ]
+
+    def test_order_asc_nulls_last(self, agg_adapter):
+        assert self._ids(agg_adapter, order_by="age") == ["s1", "s2", "s3", "s4"]
+
+    def test_order_desc_nulls_still_last(self, agg_adapter):
+        assert self._ids(agg_adapter, order_by="age", order_dir="desc") == [
+            "s3", "s2", "s1", "s4",
+        ]
+
+    def test_numeric_order_is_by_value_not_text(self, agg_adapter):
+        # Text ordering would put 9.9 < 45 wrong; the ::numeric cast keeps
+        # value order. (s5 is unavailable and must stay invisible.)
+        assert self._ids(agg_adapter, order_by="score", order_dir="desc") == [
+            "s3", "s2", "s1", "s4",
+        ]
+
+    def test_date_order_by_value(self, agg_adapter):
+        assert self._ids(
+            agg_adapter, order_by="collected_on", order_dir="desc"
+        ) == ["s3", "s2", "s1", "s4"]
+
+    def test_id_tiebreak_is_stable(self, agg_adapter):
+        # is_tumor False×2 (s1,s3), True×2 (s2,s4): ties break by id asc.
+        # Boolean false < true in jsonb-text order ("false" < "true").
+        assert self._ids(agg_adapter, order_by="is_tumor") == [
+            "s1", "s3", "s2", "s4",
+        ]
+
+    def test_order_with_limit_offset_pushdown(self, agg_adapter):
+        assert self._ids(agg_adapter, order_by="age", limit=2, offset=1) == [
+            "s2", "s3",
+        ]
+
+    def test_order_by_id_column(self, agg_adapter):
+        assert self._ids(agg_adapter, order_by="id", order_dir="desc") == [
+            "s4", "s3", "s2", "s1",
+        ]
+
+    def test_unknown_order_column_raises(self, agg_adapter):
+        from mosaic.core.exceptions import ValidationError
+
+        with pytest.raises(ValidationError, match="order_by"):
+            self._ids(agg_adapter, order_by="nope")
+
+    def test_order_by_with_as_of_raises(self, agg_adapter):
+        from mosaic.core.exceptions import ValidationError
+        from mosaic.core.storage import Query
+
+        with pytest.raises(ValidationError, match="as_of|as-of|asOf"):
+            list(
+                agg_adapter.find(
+                    Query(entity_type="Specimen", order_by="age"),
+                    as_of=self.FUTURE,
+                )
+            )
+
+    def test_count_excludes_unavailable(self, agg_adapter):
+        from mosaic.core.storage import Query
+
+        assert agg_adapter.count(Query(entity_type="Specimen")) == 4
+
+    def test_count_with_filters_and_where(self, agg_adapter):
+        from mosaic.core.storage import Query
+
+        assert (
+            agg_adapter.count(
+                Query(
+                    entity_type="Specimen",
+                    filters=[{"field": "age", "op": "gt", "value": 50}],
+                )
+            )
+            == 2
+        )
+        assert (
+            agg_adapter.count(
+                Query(
+                    entity_type="Specimen",
+                    where={
+                        "or": [
+                            {"field": "is_tumor", "value": True},
+                            {"field": "age", "op": "gte", "value": 75},
+                        ]
+                    },
+                )
+            )
+            == 3
+        )
+
+    def test_count_ignores_limit_offset(self, agg_adapter):
+        from mosaic.core.storage import Query
+
+        assert agg_adapter.count(
+            Query(entity_type="Specimen", limit=1, offset=1)
+        ) == 4
+
+    def test_count_as_of(self, agg_adapter):
+        from mosaic.core.storage import Query
+
+        assert (
+            agg_adapter.count(Query(entity_type="Specimen"), as_of=self.FUTURE)
+            == 4
+        )
+
+    def test_facets_decode_native_values(self, agg_adapter):
+        from mosaic.core.storage import Query
+
+        # Booleans come back as bool (native jsonb decode), unavailable s5
+        # is excluded, ties order by value (false < true in jsonb).
+        assert agg_adapter.facet_counts(
+            Query(entity_type="Specimen"), "is_tumor"
+        ) == [(False, 2), (True, 2)]
+        # Integers come back as int, s4's absent age is not a bucket.
+        assert agg_adapter.facet_counts(
+            Query(entity_type="Specimen"), "age"
+        ) == [(45, 1), (60, 1), (75, 1)]
+
+    def test_facets_respect_filters(self, agg_adapter):
+        from mosaic.core.storage import Query
+
+        assert agg_adapter.facet_counts(
+            Query(
+                entity_type="Specimen",
+                filters=[{"field": "age", "op": "gte", "value": 60}],
+            ),
+            "is_tumor",
+        ) == [(False, 1), (True, 1)]
+
+    def test_facet_unknown_field_raises(self, agg_adapter):
+        from mosaic.core.exceptions import ValidationError
+        from mosaic.core.storage import Query
+
+        with pytest.raises(ValidationError, match="facet_counts"):
+            agg_adapter.facet_counts(Query(entity_type="Specimen"), "nope")
+
+    def test_field_range_normalizes_driver_types(self, agg_adapter):
+        from mosaic.core.storage import Query
+
+        q = Query(entity_type="Specimen")
+        assert agg_adapter.field_range(q, "age") == (45, 75)  # int, not Decimal
+        assert agg_adapter.field_range(q, "score") == (1.5, 3.5)
+        assert agg_adapter.field_range(q, "collected_on") == (
+            "2024-01-10", "2026-06-20",  # ISO strings, not date objects
+        )
+
+    def test_field_range_empty_is_none_none(self, agg_adapter):
+        from mosaic.core.storage import Query
+
+        assert agg_adapter.field_range(
+            Query(
+                entity_type="Specimen",
+                filters=[{"field": "name", "value": "nobody"}],
+            ),
+            "age",
+        ) == (None, None)
