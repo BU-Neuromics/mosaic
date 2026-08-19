@@ -2,6 +2,31 @@
 
 ## [Unreleased]
 
+### Changed
+
+- **BREAKING — search composed with the list surface** (issue #157):
+  `MosaicClient.search` / `QueryService.search` return the same
+  `PaginatedResult` envelope as `query()` instead of a bare entity list;
+  the GraphQL search twins return the `Page` type
+  (`items`/`total`/`limit`/`offset`) instead of `[Entity]`, and REST
+  `GET /search` returns the same paginated envelope as `GET /entities`
+  (Aperture — the known consumer — asked for exactly this envelope).
+  Search now runs on **id-set composition**: the adapters' ranked FTS
+  path (bm25 / ts_rank, availability-filtered) produces an ordered id
+  list that feeds ONE composed `find()` — eliminating the per-hit N+1
+  (a 100-hit search used to issue 100 entity reads plus temporal
+  aggregations; now one batched read + one batched temporal aggregation
+  per page) and fixing the `offset >= limit → []` slice bug that
+  silently broke deep paging on GraphQL and REST. Search accepts the
+  list surface's `filters`/`where`/`filter_mode` (REST: the same
+  arbitrary field-filter query params as `GET /entities`), with the
+  identical coded-error discipline; the ranked id set always bounds the
+  result whatever `filter_mode` says. Rank-precedence rule (pinned):
+  results come back in FTS rank order by default; an explicit
+  `order_by` overrides rank via the ADR-0007 pushdown. `total` is the
+  matching-and-filtered count, bounded by the 1000-hit FTS budget, and
+  excludes unavailable entities exactly as list queries do.
+
 ### Added
 
 - **Aggregation & ordering surface** (ADR-0007, issue #156): the storage

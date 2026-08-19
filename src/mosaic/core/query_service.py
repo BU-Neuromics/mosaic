@@ -601,36 +601,119 @@ class QueryService:
             parsed = parsed.replace(tzinfo=timezone.utc)
         return parsed
 
+    #: FTS hit-set budget per search (matches the adapters' ranked-search
+    #: cap). ``total`` is exact within this budget; a match set larger than
+    #: the budget is truncated at the ranking stage.
+    SEARCH_HIT_BUDGET = 1000
+
     def search(
         self,
         entity_type: str,
         query: str,
-        limit: int = 100,
-    ) -> list[dict[str, Any]]:
-        """Search entities using full-text search."""
-        if self._storage is None:
-            return []
+        limit: Optional[int] = 100,
+        offset: Optional[int] = 0,
+        *,
+        filters: Optional[list[dict[str, Any]]] = None,
+        filter_mode: str = "and",
+        where: Optional[dict[str, Any]] = None,
+        order_by: Optional[str] = None,
+        order_dir: str = "asc",
+    ) -> "PaginatedResult":
+        """Full-text search composed with the list surface (issue #157).
 
-        if self._schema_manager is None:
-            return []
+        Id-set composition: both adapters' ranked FTS path (``storage.search``
+        → ``ScoredMatch``, bm25/ts_rank ordered, availability-filtered)
+        produces an ordered id list that feeds ONE ``find()`` as an
+        ``id IN (…)`` predicate alongside the caller's ``filters``/``where``
+        — search results obey exactly the list surface's filter semantics
+        and availability rule, with one batched read per page instead of a
+        per-hit N+1.
+
+        Returns the same ``PaginatedResult`` envelope as ``query()``:
+        ``total`` is the matching-AND-filtered count (bounded by
+        :data:`SEARCH_HIT_BUDGET` FTS hits). With no ``order_by``, items
+        come back in FTS rank order (the point of search); an explicit
+        ``order_by`` overrides rank and pushes ordering + pagination down
+        to storage (the pinned precedence rule).
+        """
+        from mosaic.core.types import PaginatedResult
+
+        if where is not None:
+            where = normalize_where(where)
+        self._validate_order_args(order_by, order_dir, None, None, None)
+
+        empty = PaginatedResult(
+            items=[], total=0, limit=limit or 0, offset=offset or 0
+        )
+        if self._storage is None or self._schema_manager is None:
+            return empty
 
         fts_tables = self._schema_manager.get_fts_tables_for_entity_type(entity_type)
         if not fts_tables:
-            return []
+            return empty
 
-        results = []
+        # Ranked id set: best score per entity across the class's FTS
+        # fields; score desc, first-seen order as the stable tiebreak.
+        best_scores: dict[str, float] = {}
+        first_seen: dict[str, int] = {}
         for fts_meta in fts_tables:
-            fts_results = self._storage.search_fts(
-                table_name=fts_meta.table_name,
-                query=query,
-                limit=limit,
-            )
-            for fts_result in fts_results:
-                entity_id = fts_result["entity_id"]
-                try:
-                    entity = self.get(entity_type, entity_id)
-                    results.append(entity)
-                except EntityNotFoundError:
-                    pass
+            for field_meta in fts_meta.fields:
+                matches = self._storage.search(
+                    query=query,
+                    entity_type=entity_type,
+                    field_name=field_meta.field_name,
+                    limit=self.SEARCH_HIT_BUDGET,
+                )
+                for match in matches:
+                    eid = match.entity_id
+                    first_seen.setdefault(eid, len(first_seen))
+                    if match.score > best_scores.get(eid, -1.0):
+                        best_scores[eid] = match.score
+        ranked_ids = sorted(
+            best_scores, key=lambda eid: (-best_scores[eid], first_seen[eid])
+        )
+        if not ranked_ids:
+            return empty
 
-        return results[:limit]
+        # Compose the ranked id set with the caller's criteria: the id
+        # membership ANDs into the `where` tree (a flat filter would be
+        # subject to filter_mode="or"), flat filters keep their mode.
+        id_leaf = {"field": "id", "op": "in", "value": ranked_ids}
+        tree = id_leaf if where is None else {"and": [id_leaf, where]}
+        composed = Query(
+            entity_type=entity_type,
+            filters=filters or [],
+            filter_mode=filter_mode,
+            where=tree,
+        )
+
+        if order_by is not None:
+            # Explicit ordering overrides rank (the pinned precedence
+            # rule): reuse the list surface's pushdown — SQL ORDER BY +
+            # LIMIT/OFFSET, total from COUNT(*) under the same predicate.
+            composed.limit = limit
+            composed.offset = offset
+            composed.order_by = order_by
+            composed.order_dir = order_dir
+            page_entities = list(self._storage.find(composed))
+            total = self._storage.count(composed)
+        else:
+            # Rank order: one batched read of the filtered hit set,
+            # re-ordered by FTS rank, then paged. Temporal fields are
+            # derived for the page only.
+            rank = {eid: pos for pos, eid in enumerate(ranked_ids)}
+            matched = sorted(
+                self._storage.find(composed),
+                key=lambda e: rank.get(e.id, len(rank)),
+            )
+            total = len(matched)
+            page_entities = matched[offset or 0 :]
+            if limit is not None:  # limit=0 → zero rows, not unlimited (#130)
+                page_entities = page_entities[:limit]
+
+        return PaginatedResult(
+            items=self._hydrate_entities(page_entities, as_of=None),
+            total=total,
+            limit=limit or 0,
+            offset=offset or 0,
+        )

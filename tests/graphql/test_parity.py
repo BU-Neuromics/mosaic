@@ -17,31 +17,43 @@ class TestFullTextSearch:
     def test_search_returns_matching_entities(self, gql):
         _create_sample(gql, name="S1", notes="hippocampus lesion observed")
         _create_sample(gql, name="S2", notes="prefrontal cortex damage")
-        body = gql('{ searchSamples(q: "hippocampus") { name notes createdAt } }')
+        # BREAKING (issue #157): search twins return the Page envelope.
+        body = gql(
+            '{ searchSamples(q: "hippocampus") '
+            "{ items { name notes createdAt } total } }"
+        )
         assert "errors" not in body, body
-        results = body["data"]["searchSamples"]
-        assert [item["name"] for item in results] == ["S1"]
+        page = body["data"]["searchSamples"]
+        assert [item["name"] for item in page["items"]] == ["S1"]
+        assert page["total"] == 1
         # Search results are full envelopes — computed fields included.
-        assert results[0]["createdAt"]
+        assert page["items"][0]["createdAt"]
 
     def test_search_no_results(self, gql):
         _create_sample(gql, name="S1", notes="hippocampus lesion observed")
-        body = gql('{ searchSamples(q: "nonexistentterm12345") { name } }')
-        assert body["data"]["searchSamples"] == []
+        body = gql('{ searchSamples(q: "nonexistentterm12345") { items { name } total } }')
+        assert body["data"]["searchSamples"] == {"items": [], "total": 0}
 
-    def test_search_offset_slices_results(self, gql):
+    def test_search_offset_pages_through_hits(self, gql):
         for i in range(3):
             _create_sample(gql, name=f"S{i}", notes="shared searchable token")
-        first = gql('{ searchSamples(q: "searchable", limit: 2) { name } }')
-        assert len(first["data"]["searchSamples"]) == 2
-        rest = gql('{ searchSamples(q: "searchable", limit: 3, offset: 2) { name } }')
-        assert len(rest["data"]["searchSamples"]) == 1
+        first = gql('{ searchSamples(q: "searchable", limit: 2) { items { name } total } }')
+        assert len(first["data"]["searchSamples"]["items"]) == 2
+        assert first["data"]["searchSamples"]["total"] == 3
+        rest = gql('{ searchSamples(q: "searchable", limit: 3, offset: 2) { items { name } total } }')
+        assert len(rest["data"]["searchSamples"]["items"]) == 1
+        assert rest["data"]["searchSamples"]["total"] == 3
+        # Regression (issue #157): offset >= limit used to return [] via
+        # resolver-side slicing regardless of the hit count.
+        deep = gql('{ searchSamples(q: "searchable", limit: 1, offset: 2) { items { name } total } }')
+        assert len(deep["data"]["searchSamples"]["items"]) == 1
+        assert deep["data"]["searchSamples"]["total"] == 3
 
     def test_search_on_type_without_searchable_slots_is_empty(self, gql):
         # Donor declares no hippo_search slots — same as REST: no FTS
         # tables means no results, not an error.
-        body = gql('{ searchDonors(q: "anything") { name } }')
-        assert body["data"]["searchDonors"] == []
+        body = gql('{ searchDonors(q: "anything") { items { name } total } }')
+        assert body["data"]["searchDonors"] == {"items": [], "total": 0}
 
 
 class TestMosaicSchemaIntrospection:

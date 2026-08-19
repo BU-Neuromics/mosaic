@@ -652,8 +652,11 @@ type Query {
   samplesFieldRange(field: String!, filters: [FilterInput!],   # client.field_range —
                     where: SampleFilter,                       #   {min,max} for numeric/
                     filterMode: FilterMode!): FieldRange!      #   temporal range facets
-  searchSamples(q: String!, limit: Int!,
-                offset: Int!): [Sample!]!                   # client.search (FTS; mirrors GET /search)
+  searchSamples(q: String!, filters: [FilterInput!],        # client.search (FTS; mirrors GET /search) —
+                where: SampleFilter, filterMode: FilterMode!,  # composed with the list surface
+                limit: Int!, offset: Int!,                     # (issue #157): same filter args,
+                orderBy: SampleOrderField,                     # same Page envelope; FTS rank order
+                orderDir: OrderDirection!): SamplePage!        # unless orderBy overrides
   entityHistory(entityId: ID!): [ProvenanceEntry!]!         # client.history
   supersededBy(id: ID!): SupersessionInfo!                  # supersession chain (mirrors GET /{id}/superseded)
   hippoSchema: [HippoEntityTypeInfo!]!                      # the LinkML type model (mirrors GET /schemas)
@@ -680,6 +683,17 @@ in `failures` and never roll back sibling successes (the GraphQL analogue of RES
 `hippoSchema` / `hippoEntityType` are Hippo's *domain* schema introspection — the LinkML
 type model the GraphQL surface itself is generated from — distinct from GraphQL's own
 `__schema` introspection.
+
+**Search composition (issue #157).** The search twins are full citizens of the query surface:
+they take the list surface's `filters`/`where`/`filterMode` and return the same `Page`
+envelope (BREAKING: previously a bare list). Internally the adapters' ranked FTS path
+(bm25/ts_rank, availability-filtered) produces an ordered id list fed to ONE composed
+`find()` as an `id IN (…)` predicate — one batched read + one batched temporal aggregation
+per page (the per-hit N+1 and the `offset >= limit → []` resolver slice bug died with the
+rewrite). `total` honors the FTS match set (bounded at 1000 hits) and the composed filters.
+Rank-precedence rule: FTS rank order by default; explicit `orderBy` overrides. REST
+`GET /search` mirrors the same envelope and takes the list endpoint's arbitrary
+field-filter query params.
 
 **Aggregation & ordering (ADR-0007, issue #156).** With `orderBy` (a generated per-class
 `<Type>OrderField` enum: single-valued scalar/enum stored columns incl. `id`; computed

@@ -171,12 +171,12 @@ def entity_search(
 
     client = _get_readonly_client(db_path, schema)
     try:
-        results = client.search(entity_type, query, limit=limit)
+        result = client.search(entity_type, query, limit=limit)
     except MosaicError as e:
         typer.echo(f"Error: {e.message}", err=True)
         raise typer.Exit(1)
 
-    _emit({"items": results, "total": len(results)}, as_json)
+    _emit({"items": result.items, "total": result.total}, as_json)
 
 
 @entity_app.command(name="history")

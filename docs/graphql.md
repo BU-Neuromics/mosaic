@@ -56,7 +56,7 @@ For each concrete entity class in your schema (say `Sample`), Mosaic generates:
 | Object type | `type Sample` with every slot as a typed field |
 | Page type | `type SamplePage { items, total, limit, offset }` |
 | Input types | `input SampleCreateInput`, `input SampleUpdateInput` |
-| Queries | `sample(id)`, `samples(filters, where, filterMode, limit, offset, orderBy, orderDir, asOf)`, `searchSamples(q, limit, offset)` |
+| Queries | `sample(id)`, `samples(filters, where, filterMode, limit, offset, orderBy, orderDir, asOf)`, `searchSamples(q, filters, where, filterMode, limit, offset, orderBy, orderDir): SamplePage` |
 | Aggregations | `samplesCount(filters, where)`, `samplesFacetCounts(field, filters, where)`, `samplesFieldRange(field, filters, where)` |
 | Mutations | `createSample`, `updateSample`, `setSampleAvailability`, `setSampleAvailabilityBulk`, `supersedeSample` |
 
@@ -238,11 +238,27 @@ query { supersededBy(id: "old") { entityId supersededBy chain } }
 
 ### Full-text search
 
-Slots annotated `hippo_search` in your schema are searchable per type:
+Slots annotated `hippo_search` in your schema are searchable per type. Search
+**composes with the list surface** (issue #157): the twins take the same
+`filters`/`where`/`filterMode` arguments as list queries and return the same
+`Page` envelope:
 
 ```graphql
-{ searchSamples(q: "hippocampus", limit: 20) { id name } }
+{
+  searchSamples(q: "hippocampus", where: {isTumor: {eq: true}}, limit: 20) {
+    items { id name }
+    total
+  }
+}
 ```
+
+Under the hood the ranked FTS hit set feeds one composed list query
+(`id IN (…)` — one batched read per page, no per-hit fetches), so
+availability and filter semantics are identical to list queries and `total`
+honors both the FTS match set (bounded at 1000 hits) and the composed
+filters. Results come back in FTS rank order — the point of search — unless
+an explicit `orderBy` is given, which overrides rank (the pinned precedence
+rule). Unknown filter fields are the same coded errors as list queries.
 
 ### Schema introspection (the Mosaic kind)
 
