@@ -2,32 +2,32 @@
 
 Tracking issue: BU-Neuromics/mosaic#155
 
-> Design-only at this stage: ADR-0006 is Proposed (#153). Do not start implementation tasks
-> until the ADR is ratified and the increment is scheduled.
+> ADR-0006 ratified 2026-08-19; increment 1 implemented. Increments 2–4 to be scheduled.
 
 ## 0. Design gate
 
-- [ ] 0.1 ADR-0006 ratified (Status → Accepted; #153 closed with a link to the record).
-- [ ] 0.2 Deprecation stance for the flat `filters:` arg decided (keep + `@deprecated` vs.
+- [x] 0.1 ADR-0006 ratified (Status → Accepted; #153 closed with a link to the record).
+- [x] 0.2 Deprecation stance for the flat `filters:` arg decided (keep + `@deprecated` vs.
   ADR-0005-style clean break) and recorded in ADR-0006.
-- [ ] 0.3 `contains` semantics pinned per range (string substring case rules; inline
+- [x] 0.3 `contains` semantics pinned per range (string substring case rules; inline
   multivalued membership — SQLite JSON TEXT vs. Postgres JSONB pushdown differ).
 
 ## 1. Comparison operators on the flat path (increment 1)
 
-- [ ] 1.1 `VALID_FILTER_OPS` + `normalize_filter` extended (`neq/gt/gte/lt/lte/contains/
+- [x] 1.1 `VALID_FILTER_OPS` + `normalize_filter` extended (`neq/gt/gte/lt/lte/contains/
   is_null`); unknown ops still raise (#129 discipline preserved).
-- [ ] 1.2 SQLite `_find_per_class` column predicates for each operator.
-- [ ] 1.3 Postgres `find` predicates with per-range casts driven by `SlotModel.range`
+- [x] 1.2 SQLite `_find_per_class` column predicates for each operator.
+- [x] 1.3 Postgres `find` predicates with per-range casts driven by `SlotModel.range`
   (`::numeric`, `::timestamptz`/`::date`, `::boolean`); cast helper written as common code
   shared with `aggregation-and-ordering`.
-- [ ] 1.4 All four `_matches_filters` as-of mirrors implement every operator; shared
-  current-state-vs-as-of agreement tests.
-- [ ] 1.5 `isNull` semantics per ADR-0006 (`IS NULL` / absent-or-null JSONB key; `eq: null`
+- [x] 1.4 All four `_matches_filters` as-of mirrors implement every operator — collapsed
+  onto one shared evaluator (`mosaic.core.storage.matches_operator`) so semantics live
+  once; current-state-vs-as-of agreement tests on both adapters.
+- [x] 1.5 `isNull` semantics per ADR-0006 (`IS NULL` / absent-or-null JSONB key; `eq: null`
   raises coded error; not offered on relationship-backed multivalued refs).
-- [ ] 1.6 GraphQL `FilterOp` enum + `_to_sdk_filters` pass-through; coded errors for
+- [x] 1.6 GraphQL `FilterOp` enum + `_to_sdk_filters` pass-through; coded errors for
   unsupported op-on-slot combinations.
-- [ ] 1.7 SQLite/Postgres parity suite for every operator; full suite green.
+- [x] 1.7 SQLite/Postgres parity suite for every operator; full suite green.
 
 ## 2. Generated `<Type>Filter` + `where:` (increment 2)
 

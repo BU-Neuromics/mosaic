@@ -28,7 +28,15 @@ from typing import TYPE_CHECKING, Any, Dict, Generator, Iterator, List, Optional
 if TYPE_CHECKING:
     from mosaic.linkml_bridge import SchemaRegistry
 
-from mosaic.core.storage import EntityStore, Query, ScoredMatch, normalize_filter
+from mosaic.core.storage import (
+    COMPARISON_SQL_OPS,
+    EntityStore,
+    Query,
+    ScoredMatch,
+    escape_like,
+    matches_operator,
+    normalize_filter,
+)
 from mosaic.core.storage.adapters import sqlite_triggers
 from mosaic.core.storage.fts import (
     FTSTableMetadata,
@@ -2666,8 +2674,8 @@ class SQLiteAdapter(EntityStore):
         Candidate entities are those created at-or-before ``as_of`` (optionally
         scoped to ``query.entity_type``); each is reconstructed to its state at
         ``as_of`` via the provenance log (``get_state_at`` — ``None`` if it was
-        unavailable/deleted then); equality filters apply to the reconstructed
-        data; offset/limit are applied last.
+        unavailable/deleted then); filters apply to the reconstructed data via
+        the shared operator evaluator; offset/limit are applied last.
 
         Filters and pagination run in Python over the reconstructed records
         (correctness-first; the §6.8.4 indexed/cached fast path is a later
@@ -2714,25 +2722,20 @@ class SQLiteAdapter(EntityStore):
         honoring ``filter_mode`` — the as-of (Python-side) analogue of
         ``_find_per_class``'s column predicates. ``id`` resolves to ``entity_id``.
 
-        Supports ``op="eq"`` (default) and ``op="in"`` (set membership —
-        issue #102); an empty ``"in"`` list matches nothing.
+        Operator semantics live once in
+        :func:`mosaic.core.storage.matches_operator`, shared with the
+        Postgres mirror so as-of results never diverge from the SQL
+        builders (ADR-0006).
         """
         filters = query.filters or []
         if not filters:
             return True
 
-        def one(field: str, op: str, value: Any) -> bool:
-            actual = entity_id if field == "id" else data.get(field)
-            if op == "in":
-                if not value:
-                    return False
-                return actual in value
-            return actual == value
-
         checks: list[bool] = []
         for f in filters:
             for field, op, value in normalize_filter(f):
-                checks.append(one(field, op, value))
+                actual = entity_id if field == "id" else data.get(field)
+                checks.append(matches_operator(actual, op, value))
         if not checks:
             return True
         mode = getattr(query, "filter_mode", "and")
@@ -2778,6 +2781,24 @@ class SQLiteAdapter(EntityStore):
                         placeholders = ", ".join("?" for _ in value)
                         filter_clauses.append(f'"{field}" IN ({placeholders})')
                         params.extend(self._coerce_for_column(v) for v in value)
+                    elif op == "is_null":
+                        filter_clauses.append(
+                            f'"{field}" IS NULL' if value else f'"{field}" IS NOT NULL'
+                        )
+                    elif op == "contains":
+                        # Case-insensitive substring (ASCII case folding —
+                        # SQLite LIKE semantics). Pattern metacharacters in
+                        # the value are literals, hence the ESCAPE clause.
+                        filter_clauses.append(f'"{field}" LIKE ? ESCAPE \'\\\'')
+                        params.append(f"%{escape_like(str(value))}%")
+                    elif op in COMPARISON_SQL_OPS:
+                        # NULL columns never satisfy a comparison (SQL
+                        # three-valued logic) — mirrored by
+                        # ``matches_operator`` on the as-of path.
+                        filter_clauses.append(
+                            f'"{field}" {COMPARISON_SQL_OPS[op]} ?'
+                        )
+                        params.append(self._coerce_for_column(value))
                     else:
                         filter_clauses.append(f'"{field}" = ?')
                         params.append(self._coerce_for_column(value))

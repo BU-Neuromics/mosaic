@@ -44,10 +44,82 @@ class Query:
         self.filter_mode = filter_mode  # "and" or "or"
 
 
-# Filter ops recognized by ``normalize_filter`` / adapter predicate builders
-# (issue #102). "eq" is the historical (and default) behavior; "in" is the
-# set-membership predicate-pushdown prerequisite.
-VALID_FILTER_OPS = {"eq", "in"}
+# Filter ops recognized by ``normalize_filter`` / adapter predicate builders.
+# "eq" is the historical (and default) behavior; "in" is set membership
+# (issue #102); the comparison set (neq/gt/gte/lt/lte/contains/is_null) is
+# ADR-0006 increment 1 (issue #155). Every op named here must be implemented
+# by BOTH adapters' SQL builders AND by ``matches_operator`` (the shared
+# Python-side evaluator behind the as-of mirrors) — an op present in one but
+# not the other silently forks current-state and as-of results.
+VALID_FILTER_OPS = {
+    "eq",
+    "in",
+    "neq",
+    "gt",
+    "gte",
+    "lt",
+    "lte",
+    "contains",
+    "is_null",
+}
+
+#: Ops whose SQL rendering is a plain binary comparison on the column value.
+COMPARISON_SQL_OPS = {"neq": "!=", "gt": ">", "gte": ">=", "lt": "<", "lte": "<="}
+
+
+def escape_like(value: str) -> str:
+    """Escape ``%``/``_``/``\\`` in a LIKE pattern fragment (ESCAPE ``\\``)."""
+    return value.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+
+
+def matches_operator(actual: Any, op: str, value: Any) -> bool:
+    """Evaluate one ``(actual, op, value)`` predicate in Python.
+
+    The single shared evaluator behind every as-of ``_matches_filters``
+    mirror (SQLite and Postgres), kept deliberately aligned with the SQL
+    builders' semantics so as-of queries never diverge from current-state
+    queries (ADR-0006):
+
+    - ``is_null`` is the only op that addresses absence: ``value`` is a
+      bool; ``True`` matches entities with no stored value for the field.
+    - Every other op follows SQL NULL semantics — a missing/``None`` actual
+      (or a ``None`` filter value) matches nothing. In particular
+      ``eq`` with ``None`` matches nothing (the SQL builders emit
+      ``col = NULL``, which is never true); use ``is_null`` instead.
+    - ``contains`` is case-insensitive substring match (SQL: ``LIKE``/
+      ``ILIKE``). Note SQLite's LIKE is case-insensitive for ASCII only;
+      non-ASCII case folding may differ per backend.
+    - ``gt``/``gte``/``lt``/``lte`` compare natively; date/datetime slots
+      store ISO-8601 strings, which order lexicographically. A type
+      mismatch matches nothing rather than raising (SQL comparisons on
+      mistyped text likewise fail to match).
+    """
+    if op == "is_null":
+        return (actual is None) if value else (actual is not None)
+    if actual is None or value is None:
+        return False
+    if op == "in":
+        if not value:
+            return False
+        return actual in value
+    if op == "eq":
+        return actual == value
+    if op == "neq":
+        return actual != value
+    if op == "contains":
+        return str(value).lower() in str(actual).lower()
+    if op in COMPARISON_SQL_OPS:
+        try:
+            if op == "gt":
+                return actual > value
+            if op == "gte":
+                return actual >= value
+            if op == "lt":
+                return actual < value
+            return actual <= value
+        except TypeError:
+            return False
+    return False
 
 
 def normalize_filter(f: Dict[str, Any]) -> List[tuple]:
@@ -57,12 +129,14 @@ def normalize_filter(f: Dict[str, Any]) -> List[tuple]:
 
     - Canonical: ``{"field": ..., "value": ..., "op": ...}``. ``op`` is
       optional and defaults to ``"eq"``. It must name a supported operator
-      (:data:`VALID_FILTER_OPS`); an unsupported ``op`` (``"gt"``, ``"ne"``,
-      ``"contains"``, ...) raises
+      (:data:`VALID_FILTER_OPS`); an unsupported ``op`` (``"ne"``,
+      ``"starts_with"``, ...) raises
       :class:`~mosaic.core.exceptions.ValidationError` rather than silently
       degrading to equality — the highest-risk failure for a query API, since
       ``ne`` would otherwise return the *inverse* of what was asked (issue
-      #129). Yields a single ``(field, op, value)`` triple.
+      #129). ``is_null`` additionally requires a boolean ``value`` and
+      ``in`` a list/tuple ``value``, validated here for the same
+      loud-over-wrong reason. Yields a single ``(field, op, value)`` triple.
     - Bare shorthand: ``{field_name: value, ...}``, always ``"eq"``.
       Yields one triple per key (historically each key of a shorthand
       dict is an independent AND'd sub-filter — see the adapters'
@@ -96,13 +170,36 @@ def normalize_filter(f: Dict[str, Any]) -> List[tuple]:
                     f"Unsupported filter operator {op!r} on field "
                     f"{f['field']!r}. Implemented operators: "
                     f"{sorted(VALID_FILTER_OPS)}. Operators such as "
-                    f"'gt'/'lt'/'ne'/'contains' are not supported and once "
-                    f"degraded silently to equality (issue #129); they now "
-                    f"raise so callers are never handed wrong results."
+                    f"'ne'/'starts_with' are not supported and unsupported "
+                    f"ops once degraded silently to equality (issue #129); "
+                    f"they now raise so callers are never handed wrong "
+                    f"results."
                 ),
                 field_name=f["field"],
             )
-        return [(f["field"], op, f["value"])]
+        value = f["value"]
+        if op == "is_null" and not isinstance(value, bool):
+            from mosaic.core.exceptions import ValidationError
+
+            raise ValidationError(
+                message=(
+                    f"Filter op 'is_null' on field {f['field']!r} requires a "
+                    f"boolean value (True = match entities with no stored "
+                    f"value), got {type(value).__name__}."
+                ),
+                field_name=f["field"],
+            )
+        if op == "in" and not isinstance(value, (list, tuple)):
+            from mosaic.core.exceptions import ValidationError
+
+            raise ValidationError(
+                message=(
+                    f"Filter op 'in' on field {f['field']!r} requires a "
+                    f"list of candidate values, got {type(value).__name__}."
+                ),
+                field_name=f["field"],
+            )
+        return [(f["field"], op, value)]
     return [(key, "eq", value) for key, value in f.items()]
 
 
@@ -333,5 +430,8 @@ __all__ = [
     "ScoredMatch",
     "ValidatingEntityStore",
     "VALID_FILTER_OPS",
+    "COMPARISON_SQL_OPS",
     "normalize_filter",
+    "matches_operator",
+    "escape_like",
 ]

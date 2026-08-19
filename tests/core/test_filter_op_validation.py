@@ -1,7 +1,7 @@
 """Filter-operator validation (issue #129).
 
-Only ``eq`` and ``in`` are implemented (:data:`VALID_FILTER_OPS`). Before this
-fix, any other ``op`` (``gt``/``lt``/``ne``/``contains``/...) silently fell
+Ops outside :data:`VALID_FILTER_OPS` raise loudly. Before issue #129, any
+unrecognized ``op`` (``ne``/``starts_with``/...) silently fell
 through to exact equality — the worst failure mode for a query API, because it
 returns a *wrong* result set rather than erroring, and ``ne`` returns the exact
 inverse of what was asked. A canonical filter dict carrying the key
@@ -50,7 +50,7 @@ class TestNormalizeFilterUnit:
         ]
 
     @pytest.mark.parametrize(
-        "op", ["gt", "lt", "gte", "lte", "ne", "not_in", "contains", "starts_with", "is_null"]
+        "op", ["ne", "not_in", "starts_with", "like", "regex"]
     )
     def test_unsupported_op_raises(self, op: str) -> None:
         with pytest.raises(ValidationError, match="Unsupported filter operator"):
@@ -84,9 +84,9 @@ class TestFilterOpValidationThroughClient:
             c.put("Sample", {"id": "s2", "name": "Beta", "tissue": "liver"})
             yield c
 
-    def test_gt_raises_rather_than_matching_equality(self, client: MosaicClient) -> None:
+    def test_starts_with_raises_rather_than_matching_equality(self, client: MosaicClient) -> None:
         with pytest.raises(ValidationError, match="Unsupported filter operator"):
-            client.query("Sample", filters=[{"field": "name", "op": "gt", "value": "Alpha"}])
+            client.query("Sample", filters=[{"field": "name", "op": "starts_with", "value": "Alpha"}])
 
     def test_ne_raises_rather_than_returning_inverse(self, client: MosaicClient) -> None:
         # The dangerous case: silently, ``ne`` used to return the entities that
@@ -102,7 +102,7 @@ class TestFilterOpValidationThroughClient:
         with pytest.raises(ValidationError, match="Unsupported filter operator"):
             client.query(
                 "Sample",
-                filters=[{"field": "name", "op": "contains", "value": "lph"}],
+                filters=[{"field": "name", "op": "starts_with", "value": "lph"}],
                 as_of=FUTURE,
             )
 
@@ -130,6 +130,6 @@ class TestFilterOpValidationLowLevelAdapter:
             a.close()
 
     def test_find_with_unsupported_op_raises(self, adapter) -> None:
-        query = Query(entity_type="Sample", filters=[{"field": "name", "op": "gt", "value": "A"}])
+        query = Query(entity_type="Sample", filters=[{"field": "name", "op": "starts_with", "value": "A"}])
         with pytest.raises(ValidationError, match="Unsupported filter operator"):
             list(adapter.find(query))

@@ -39,6 +39,7 @@ from mosaic.graphql.schema_builder import (
     EntityGraphQLInfo,
     GraphQLTypeBuilder,
     ISODateTime,
+    SlotSpec,
     camel_case,
 )
 from mosaic.linkml_bridge import SchemaRegistry
@@ -50,10 +51,60 @@ class FilterMode(enum.Enum):
     OR = "or"
 
 
-@strawberry.enum(description="Predicate applied to a filter's field/value (SDK filter op).")
+@strawberry.enum(
+    description=(
+        "Predicate applied to a filter's field/value (SDK filter op). "
+        "Which operators a given slot supports depends on its kind/range "
+        "(ADR-0006): comparisons (GT/GTE/LT/LTE) on numeric and temporal "
+        "slots, CONTAINS (case-insensitive substring) on string slots, "
+        "IS_NULL everywhere. An operator outside a slot's set is a coded "
+        "error, never a silently-wrong result (issue #129)."
+    )
+)
 class FilterOp(enum.Enum):
     EQ = "eq"
     IN = "in"
+    NEQ = "neq"
+    GT = "gt"
+    GTE = "gte"
+    LT = "lt"
+    LTE = "lte"
+    CONTAINS = "contains"
+    IS_NULL = "is_null"
+
+
+#: Base LinkML ranges whose values order meaningfully — comparison
+#: operators push down as typed SQL predicates for these (ADR-0006).
+_ORDERED_RANGES = frozenset(
+    {"integer", "float", "double", "decimal", "date", "datetime", "time"}
+)
+
+
+def _allowed_filter_ops(spec: "SlotSpec") -> set[str]:
+    """Operator set a slot's kind/range supports (ADR-0006).
+
+    Multivalued reference slots never reach here (rejected earlier as
+    UNFILTERABLE_FIELD until M5b lands).
+    """
+    if spec.kind == "reference":
+        # Single-valued reference: the stored value is the target UUID.
+        return {"eq", "neq", "in", "is_null"}
+    if spec.multivalued:
+        # Inline multivalued slot (JSON-array column). Membership
+        # ('contains') is deferred — ADR-0006 open note.
+        return {"eq", "is_null"}
+    if spec.kind == "enum":
+        return {"eq", "neq", "in", "is_null"}
+    if spec.scalar_type is JSON:
+        # Structured inline value (issue #48): whole-value equality only.
+        return {"eq", "in", "is_null"}
+    base = spec.base_range or "string"
+    if base in _ORDERED_RANGES:
+        return {"eq", "neq", "in", "gt", "gte", "lt", "lte", "is_null"}
+    if base == "boolean":
+        return {"eq", "neq", "is_null"}
+    # Strings and other text-like scalars.
+    return {"eq", "neq", "in", "contains", "is_null"}
 
 
 @strawberry.input(
@@ -63,7 +114,12 @@ class FilterOp(enum.Enum):
         "camelCase spelling exposed on the entity type is also accepted. An "
         "unrecognized name is an error, never an empty result (issue #149). "
         "``op`` defaults to EQ (equality); IN treats ``value`` as a list and "
-        "matches when the field is a member of it (issue #102)."
+        "matches when the field is a member of it (issue #102). Comparison "
+        "and null-test operators (ADR-0006): GT/GTE/LT/LTE on numeric and "
+        "temporal slots, CONTAINS (case-insensitive substring) on string "
+        "slots, NEQ on comparable slots, IS_NULL (boolean ``value``; true "
+        "matches entities with no stored value) everywhere. ``value: null`` "
+        "is rejected — absence is asked with IS_NULL, never with EQ null."
     )
 )
 class FilterInput:
@@ -440,6 +496,46 @@ def _to_sdk_filters(
                 f"`relatedTo` query for reverse lookups over these edges.",
                 extensions={"code": "UNFILTERABLE_FIELD", "field": f.field},
             )
+        allowed = _allowed_filter_ops(spec)
+        if f.op.value not in allowed:
+            raise GraphQLError(
+                f"Operator {f.op.name} is not supported on "
+                f"{entity.class_name}.{spec.slot_name} "
+                f"(slot range {spec.base_range or spec.kind!s}). Supported "
+                f"operators: "
+                f"{', '.join(sorted(FilterOp(o).name for o in allowed))} "
+                f"(ADR-0006).",
+                extensions={
+                    "code": "UNSUPPORTED_FILTER_OP",
+                    "field": f.field,
+                    "op": f.op.name,
+                },
+            )
+        if f.op is FilterOp.IS_NULL:
+            if not isinstance(f.value, bool):
+                raise GraphQLError(
+                    f"IS_NULL on {entity.class_name}.{spec.slot_name} takes "
+                    f"a boolean value (true = match entities with no stored "
+                    f"value), got {f.value!r}.",
+                    extensions={
+                        "code": "INVALID_FILTER_VALUE",
+                        "field": f.field,
+                    },
+                )
+        elif f.value is None:
+            raise GraphQLError(
+                f"Filter value on {entity.class_name}.{spec.slot_name} is "
+                f"null. GraphQL null cannot distinguish 'explicit null' "
+                f"from 'absent', so equality-with-null is rejected — ask "
+                f"about absence with op: IS_NULL (ADR-0006).",
+                extensions={"code": "INVALID_FILTER_VALUE", "field": f.field},
+            )
+        elif f.op is FilterOp.IN and not isinstance(f.value, list):
+            raise GraphQLError(
+                f"IN on {entity.class_name}.{spec.slot_name} takes a list "
+                f"of candidate values, got {type(f.value).__name__}.",
+                extensions={"code": "INVALID_FILTER_VALUE", "field": f.field},
+            )
         out.append({"field": spec.slot_name, "value": f.value, "op": f.op.value})
     return out
 
@@ -476,8 +572,9 @@ def _make_list_resolver(builder: GraphQLTypeBuilder, entity: EntityGraphQLInfo):
 
     resolver.__name__ = entity.plural_name
     resolver.__doc__ = (
-        f"List {class_name} entities with equality filters and offset "
-        f"pagination (mirrors MosaicClient.query)."
+        f"List {class_name} entities with typed filters (FilterOp: "
+        f"equality, IN, comparisons, CONTAINS, IS_NULL per slot range — "
+        f"ADR-0006) and offset pagination (mirrors MosaicClient.query)."
     )
     resolver.__annotations__["return"] = entity.page_type
     return resolver

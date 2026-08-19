@@ -169,6 +169,9 @@ class SlotSpec:
     enum_cls: Optional[type] = None  # for kind == "enum"
     scalar_type: Any = None  # for kind == "scalar"
     description: Optional[str] = None
+    #: Base LinkML scalar range (typeof chains resolved) for kind ==
+    #: "scalar" — drives the per-slot filter-operator set (ADR-0006).
+    base_range: Optional[str] = None
 
 
 @dataclass
@@ -475,6 +478,7 @@ class GraphQLTypeBuilder:
             has_default=slot.has_default,
             scalar_type=scalar,
             description=slot.description or None,
+            base_range=self._registry.base_scalar_range(slot.range),
         )
 
     def _output_annotation(self, spec: SlotSpec) -> Any:

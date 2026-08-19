@@ -622,3 +622,205 @@ class TestPostgresWriteParity:
         q.filters = [{"field": "in_print", "value": False}]
         ids = [e.id for e in parity_client._storage.find(q)]
         assert ids == [flagged["id"]]
+
+
+class TestPostgresComparisonFilters:
+    """Parity for the ADR-0006 increment-1 operators (issue #155).
+
+    The JSONB predicates — including the per-range casts driven by
+    ``SlotModel.range`` (``::numeric`` / ``::date``), the wrong answer
+    ADR-0006 names as the main Postgres risk — must produce the same id
+    sets as the SQLite column predicates and as the shared as-of mirror
+    (``matches_operator``). Expectations here intentionally match
+    ``tests/core/test_comparison_filters.py``.
+    """
+
+    FUTURE = "2999-01-01T00:00:00+00:00"
+
+    SCHEMA = """
+id: https://example.org/hippo/test_pg_comparison_filters
+name: test_pg_comparison_filters
+prefixes:
+  linkml: https://w3id.org/linkml/
+imports:
+  - linkml:types
+  - hippo_core
+default_range: string
+
+types:
+  AgeInYears:
+    typeof: integer
+    base: int
+    uri: linkml:Integer
+
+classes:
+  Specimen:
+    is_a: Entity
+    attributes:
+      name:
+        required: true
+      age:
+        range: AgeInYears
+      score:
+        range: float
+      collected_on:
+        range: date
+      is_tumor:
+        range: boolean
+      notes: {}
+"""
+
+    @pytest.fixture
+    def cmp_adapter(self):
+        from mosaic.core.storage.adapters.postgres_adapter import (
+            PostgresAdapter,
+            PostgresEntity,
+        )
+        from mosaic.linkml_bridge import SchemaRegistry
+
+        registry = SchemaRegistry.from_yaml(self.SCHEMA)
+        adapter = PostgresAdapter(
+            database_url=POSTGRES_URL,
+            schema_registry=registry,
+            min_pool_size=1,
+            max_pool_size=5,
+        )
+
+        def seed(entity_id, **data):
+            adapter.create(
+                PostgresEntity(
+                    id=entity_id,
+                    entity_type="Specimen",
+                    is_available=True,
+                    version=1,
+                    data={"id": entity_id, **data},
+                )
+            )
+
+        seed(
+            "s1",
+            name="Alpha",
+            age=45,
+            score=1.5,
+            collected_on="2024-01-10",
+            is_tumor=False,
+            notes="First batch",
+        )
+        seed(
+            "s2",
+            name="Beta",
+            age=60,
+            score=2.5,
+            collected_on="2025-03-05",
+            is_tumor=True,
+        )
+        seed(
+            "s3",
+            name="Gamma",
+            age=75,
+            score=3.5,
+            collected_on="2026-06-20",
+            is_tumor=False,
+            notes="follow-up 50%_done",
+        )
+
+        yield adapter
+
+        with adapter._transaction() as conn:
+            cur = conn.cursor()
+            cur.execute("DELETE FROM relationships")
+            cur.execute('ALTER TABLE "ProvenanceRecord" DISABLE TRIGGER ALL')
+            cur.execute('DELETE FROM "ProvenanceRecord"')
+            cur.execute('ALTER TABLE "ProvenanceRecord" ENABLE TRIGGER ALL')
+            cur.execute("DELETE FROM entities")
+
+    def _both_paths(self, adapter, filters, filter_mode="and") -> set:
+        from mosaic.core.storage import Query
+
+        def run(as_of=None):
+            q = Query(
+                entity_type="Specimen",
+                filters=filters,
+                filter_mode=filter_mode,
+            )
+            return {e.id for e in adapter.find(q, as_of=as_of)}
+
+        live = run()
+        asof = run(as_of=self.FUTURE)
+        assert live == asof, (
+            f"live/as-of divergence for {filters!r}: {live} != {asof}"
+        )
+        return live
+
+    def test_gt_integer_casts_numerically(self, cmp_adapter):
+        assert self._both_paths(
+            cmp_adapter, [{"field": "age", "op": "gt", "value": 60}]
+        ) == {"s3"}
+
+    def test_gte_lte_float(self, cmp_adapter):
+        assert self._both_paths(
+            cmp_adapter, [{"field": "score", "op": "gte", "value": 2.5}]
+        ) == {"s2", "s3"}
+        assert self._both_paths(
+            cmp_adapter, [{"field": "score", "op": "lte", "value": 2.5}]
+        ) == {"s1", "s2"}
+
+    def test_numeric_not_lexicographic(self, cmp_adapter):
+        # '100' < '9' as text — the ::numeric cast must prevent that.
+        assert self._both_paths(
+            cmp_adapter, [{"field": "age", "op": "lt", "value": 100}]
+        ) == {"s1", "s2", "s3"}
+
+    def test_gt_date_casts(self, cmp_adapter):
+        assert self._both_paths(
+            cmp_adapter,
+            [{"field": "collected_on", "op": "gt", "value": "2024-12-31"}],
+        ) == {"s2", "s3"}
+
+    def test_neq_excludes_absent(self, cmp_adapter):
+        assert self._both_paths(
+            cmp_adapter,
+            [{"field": "notes", "op": "neq", "value": "First batch"}],
+        ) == {"s3"}
+
+    def test_contains_case_insensitive_and_literal_wildcards(self, cmp_adapter):
+        assert self._both_paths(
+            cmp_adapter, [{"field": "notes", "op": "contains", "value": "FIRST"}]
+        ) == {"s1"}
+        assert self._both_paths(
+            cmp_adapter, [{"field": "notes", "op": "contains", "value": "50%"}]
+        ) == {"s3"}
+        assert self._both_paths(
+            cmp_adapter, [{"field": "notes", "op": "contains", "value": "0_x"}]
+        ) == set()
+
+    def test_is_null_both_ways(self, cmp_adapter):
+        assert self._both_paths(
+            cmp_adapter, [{"field": "notes", "op": "is_null", "value": True}]
+        ) == {"s2"}
+        assert self._both_paths(
+            cmp_adapter, [{"field": "notes", "op": "is_null", "value": False}]
+        ) == {"s1", "s3"}
+
+    def test_eq_none_matches_nothing(self, cmp_adapter):
+        assert self._both_paths(
+            cmp_adapter, [{"field": "notes", "op": "eq", "value": None}]
+        ) == set()
+
+    def test_or_composition(self, cmp_adapter):
+        assert self._both_paths(
+            cmp_adapter,
+            [
+                {"field": "age", "op": "gt", "value": 70},
+                {"field": "notes", "op": "contains", "value": "first"},
+            ],
+            filter_mode="or",
+        ) == {"s1", "s3"}
+
+    def test_comparison_without_entity_type_raises(self, cmp_adapter):
+        from mosaic.core.exceptions import ValidationError
+        from mosaic.core.storage import Query
+
+        q = Query(filters=[{"field": "age", "op": "gt", "value": 60}])
+        with pytest.raises(ValidationError, match="entity_type"):
+            list(cmp_adapter.find(q))
