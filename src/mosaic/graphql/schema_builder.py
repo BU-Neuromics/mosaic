@@ -211,6 +211,10 @@ class EntityGraphQLInfo:
     #: reads these to translate a filter input into the SDK tree.
     filter_input: Any = None
     filter_fields: list[tuple[str, SlotSpec]] = dc_field(default_factory=list)
+    #: Relationship-predicate edges on the filter input (ADR-0006 M5a):
+    #: (input attr name, slot spec, target EntityGraphQLInfo) triples for
+    #: the single-valued reference slots nested as the target's filter.
+    filter_edges: list = dc_field(default_factory=list)
     #: Generated ``<Class>OrderField`` enum (ADR-0007 increment 3): the
     #: orderable stored columns. Member values are LinkML slot names.
     order_field_enum: Any = None
@@ -882,7 +886,41 @@ class GraphQLTypeBuilder:
             cls = bare[class_name]
             annotations: dict[str, Any] = {}
             fields: list[tuple[str, SlotSpec]] = []
+            edges: list = []
             for spec in entity.slots:
+                if spec.kind == "reference" and not spec.multivalued:
+                    # Relationship predicate (ADR-0006 M5a): a to-one edge
+                    # nests the TARGET's filter under the resolved edge
+                    # name — `where: {donor: {age: {gt: 60}}}` — compiled
+                    # to one correlated EXISTS on the FK column. (The raw
+                    # id column stays reachable through the flat `filters:`
+                    # arg.) Bare classes make the cross-reference safe.
+                    if spec.target_class not in bare:
+                        continue  # target type not exposed: no filter to nest
+                    attr = spec.resolved_attr or spec.attr_name
+                    if attr in annotations or attr in {"and_", "or_", "not_"}:
+                        warnings.warn(
+                            f"{class_name}.{spec.slot_name}: edge name "
+                            f"collides on {class_name}Filter; omitted."
+                        )
+                        continue
+                    annotations[attr] = Optional[bare[spec.target_class]]
+                    setattr(
+                        cls,
+                        attr,
+                        strawberry.field(
+                            default=strawberry.UNSET,
+                            description=(
+                                f"Matches entities whose {spec.slot_name} "
+                                f"target exists, is available, and "
+                                f"satisfies this {spec.target_class} "
+                                f"filter (ADR-0006 M5a). Not combinable "
+                                f"with asOf."
+                            ),
+                        ),
+                    )
+                    edges.append((attr, spec, self.entities[spec.target_class]))
+                    continue
                 ops_input = self._filter_ops_input_for(spec)
                 if ops_input is None:
                     continue
@@ -937,16 +975,18 @@ class GraphQLTypeBuilder:
             )
             cls.__annotations__ = annotations
             entity.filter_fields = fields
+            entity.filter_edges = edges
             entity.filter_input = strawberry.input(
                 cls,
                 description=(
                     f"Typed filter for {class_name} (ADR-0006). Slot fields "
                     f"and multiple operators within one field AND together; "
-                    f"nest boolean structure with and/or/not. Reference "
-                    f"edges are not filterable here yet (relationship "
-                    f"predicates arrive in a later increment; use the flat "
-                    f"`filters:` argument for reference-id equality). "
-                    f"Composes with `filters:` by AND."
+                    f"nest boolean structure with and/or/not. To-one "
+                    f"reference edges nest the target type's filter under "
+                    f"the edge name (relationship predicates, M5a — one "
+                    f"correlated EXISTS; not combinable with asOf). "
+                    f"Multivalued reference edges await the some/none "
+                    f"quantifiers (M5b). Composes with `filters:` by AND."
                 ),
             )
 

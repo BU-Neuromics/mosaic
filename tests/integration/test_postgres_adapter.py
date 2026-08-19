@@ -1263,3 +1263,172 @@ class TestPostgresSearchComposition:
         result = search_client.search("Note", "cortex")
         assert "n5" not in self._ids(result)
         assert result.total == 3
+
+
+class TestPostgresRelationshipPredicates:
+    """Parity for to-one relationship predicates (ADR-0006 M5a, #155).
+
+    The JSONB compiler's correlated EXISTS — `relN.id = data->>'edge'`
+    with `entity_type` and availability guards, aliases threaded so nested
+    and self-referential edges never collide, and per-range casts resolved
+    against the TARGET class — must produce the same id sets as the SQLite
+    per-class-table compiler. Expectations intentionally match
+    ``tests/core/test_relationship_predicates.py``.
+    """
+
+    FUTURE = "2999-01-01T00:00:00+00:00"
+
+    SCHEMA_CLASSES = {
+        "Facility": {
+            "attributes": {
+                "id": {"identifier": True},
+                "name": {"range": "string", "required": True},
+                "city": {"range": "string"},
+            }
+        },
+        "Donor": {
+            "attributes": {
+                "id": {"identifier": True},
+                "name": {"range": "string", "required": True},
+                "age": {"range": "integer"},
+                "facility_id": {"range": "Facility"},
+            }
+        },
+        "Sample": {
+            "attributes": {
+                "id": {"identifier": True},
+                "name": {"range": "string", "required": True},
+                "tissue": {"range": "string"},
+                "donor_id": {"range": "Donor"},
+                "parent": {"range": "Sample"},
+            }
+        },
+    }
+
+    @pytest.fixture
+    def rel_adapter(self):
+        from mosaic.core.storage.adapters.postgres_adapter import (
+            PostgresAdapter,
+            PostgresEntity,
+        )
+        from tests.support.linkml_schemas import build_registry
+
+        registry = build_registry(self.SCHEMA_CLASSES)
+        adapter = PostgresAdapter(
+            database_url=POSTGRES_URL,
+            schema_registry=registry,
+            min_pool_size=1,
+            max_pool_size=5,
+        )
+
+        def seed(entity_id, entity_type, **data):
+            adapter.create(
+                PostgresEntity(
+                    id=entity_id,
+                    entity_type=entity_type,
+                    is_available=True,
+                    version=1,
+                    data={"id": entity_id, **data},
+                )
+            )
+
+        seed("f1", "Facility", name="North", city="Boston")
+        seed("f2", "Facility", name="South", city="NYC")
+        seed("d1", "Donor", name="Ada", age=76, facility_id="f1")
+        seed("d2", "Donor", name="Alan", age=41, facility_id="f2")
+        seed("d3", "Donor", name="Grace", age=85)
+        seed("s1", "Sample", name="S1", tissue="brain", donor_id="d1")
+        seed("s2", "Sample", name="S2", tissue="brain", donor_id="d2")
+        seed("s3", "Sample", name="S3", tissue="liver", donor_id="d1")
+        seed("s4", "Sample", name="S4", tissue="brain")
+        seed("s5", "Sample", name="S5", tissue="liver", parent="s1")
+
+        yield adapter
+
+        with adapter._transaction() as conn:
+            cur = conn.cursor()
+            cur.execute("DELETE FROM relationships")
+            cur.execute('ALTER TABLE "ProvenanceRecord" DISABLE TRIGGER ALL')
+            cur.execute('DELETE FROM "ProvenanceRecord"')
+            cur.execute('ALTER TABLE "ProvenanceRecord" ENABLE TRIGGER ALL')
+            cur.execute("DELETE FROM entities")
+        adapter.close()
+
+    @staticmethod
+    def _ids(adapter, where, entity_type="Sample") -> set:
+        from mosaic.core.storage import Query
+
+        return {
+            e.id
+            for e in adapter.find(Query(entity_type=entity_type, where=where))
+        }
+
+    def test_basic_edge_predicate_with_numeric_cast(self, rel_adapter):
+        # age compares through ::numeric on the TARGET class — a text
+        # comparison would order "41" > "60" wrong.
+        where = {"edge": "donor_id", "where": {"field": "age", "op": "gt", "value": 60}}
+        assert self._ids(rel_adapter, where) == {"s1", "s3"}
+
+    def test_edge_composes_with_scalar_by_and(self, rel_adapter):
+        where = {
+            "and": [
+                {"edge": "donor_id", "where": {"field": "age", "op": "gt", "value": 60}},
+                {"field": "tissue", "value": "brain"},
+            ]
+        }
+        assert self._ids(rel_adapter, where) == {"s1"}
+
+    def test_not_edge_includes_refless_entities(self, rel_adapter):
+        where = {
+            "not": {
+                "edge": "donor_id",
+                "where": {"field": "age", "op": "gt", "value": 60},
+            }
+        }
+        assert self._ids(rel_adapter, where) == {"s2", "s4", "s5"}
+
+    def test_nested_edge_inside_edge(self, rel_adapter):
+        where = {
+            "edge": "donor_id",
+            "where": {
+                "edge": "facility_id",
+                "where": {"field": "city", "value": "Boston"},
+            },
+        }
+        assert self._ids(rel_adapter, where) == {"s1", "s3"}
+
+    def test_self_referential_edge(self, rel_adapter):
+        where = {"edge": "parent", "where": {"field": "tissue", "value": "brain"}}
+        assert self._ids(rel_adapter, where) == {"s5"}
+
+    def test_unavailable_target_never_matches(self, rel_adapter):
+        rel_adapter.set_availability("d2", "Donor", False, reason="test")
+        where = {"edge": "donor_id", "where": {"field": "age", "op": "lt", "value": 50}}
+        assert self._ids(rel_adapter, where) == set()
+
+    def test_count_with_edge_predicate(self, rel_adapter):
+        from mosaic.core.storage import Query
+
+        where = {"edge": "donor_id", "where": {"field": "age", "op": "gt", "value": 60}}
+        assert rel_adapter.count(Query(entity_type="Sample", where=where)) == 2
+
+    def test_unknown_edge_raises(self, rel_adapter):
+        from mosaic.core.exceptions import ValidationError
+
+        with pytest.raises(ValidationError, match="to-one reference slots"):
+            self._ids(
+                rel_adapter,
+                {"edge": "nope", "where": {"field": "age", "value": 1}},
+            )
+
+    def test_as_of_with_edge_predicate_raises(self, rel_adapter):
+        from mosaic.core.exceptions import ValidationError
+        from mosaic.core.storage import Query
+
+        where = {"edge": "donor_id", "where": {"field": "age", "op": "gt", "value": 60}}
+        with pytest.raises(ValidationError, match="as_of"):
+            list(
+                rel_adapter.find(
+                    Query(entity_type="Sample", where=where), as_of=self.FUTURE
+                )
+            )

@@ -43,6 +43,7 @@ from mosaic.core.storage import (
     Query,
     ScoredMatch,
     escape_like,
+    has_relationship_predicate,
     matches_operator,
     matches_tree,
     normalize_filter,
@@ -1831,11 +1832,14 @@ class PostgresAdapter(EntityStore):
         value: Any,
         entity_type: Optional[str],
         params: list[Any],
+        qual: str = "",
     ) -> str:
         """SQL predicate for one ``(field, op, value)`` leaf over the JSONB
         document, appending its parameters to ``params``. Shared by the flat
         ``filters`` path and the ``where`` tree compiler so operator
-        rendering lives once (ADR-0006)."""
+        rendering lives once (ADR-0006). ``qual`` scopes ``data`` to a
+        table alias inside relationship EXISTS subqueries (M5a)."""
+        doc = f"{qual}data"
         if op == "in":
             if not value:
                 # Empty IN-list: short-circuit to "no rows match" rather
@@ -1843,16 +1847,16 @@ class PostgresAdapter(EntityStore):
                 return "FALSE"
             params.append(field)
             params.append([self._jsonb_text(v) for v in value])
-            return "data->>%s = ANY(%s)"
+            return f"{doc}->>%s = ANY(%s)"
         if op == "is_null":
             # "No stored value" = key absent OR JSON null, matching the
             # SQLite column-IS-NULL semantics.
             params.append(field)
             params.append(field)
             return (
-                "(NOT jsonb_exists(data, %s) OR data->%s = 'null'::jsonb)"
+                f"(NOT jsonb_exists({doc}, %s) OR {doc}->%s = 'null'::jsonb)"
                 if value
-                else "(jsonb_exists(data, %s) AND data->%s <> 'null'::jsonb)"
+                else f"(jsonb_exists({doc}, %s) AND {doc}->%s <> 'null'::jsonb)"
             )
         if op == "neq":
             # Plain <> (not IS DISTINCT FROM): a missing key yields SQL
@@ -1860,33 +1864,73 @@ class PostgresAdapter(EntityStore):
             # (ADR-0006).
             params.append(field)
             params.append(self._jsonb_text(value))
-            return "data->>%s <> %s"
+            return f"{doc}->>%s <> %s"
         if op == "contains":
             params.append(field)
             params.append(f"%{escape_like(str(value))}%")
-            return "data->>%s ILIKE %s ESCAPE '\\'"
+            return f"{doc}->>%s ILIKE %s ESCAPE '\\'"
         if op in COMPARISON_SQL_OPS:
             cast = self._filter_cast(entity_type, field)
             sql_op = COMPARISON_SQL_OPS[op]
             params.append(field)
             params.append(value if cast else self._jsonb_text(value))
-            return f"(data->>%s){cast} {sql_op} %s{cast}"
+            return f"({doc}->>%s){cast} {sql_op} %s{cast}"
         params.append(field)
         params.append(self._jsonb_text(value))
-        return "data->>%s = %s"
+        return f"{doc}->>%s = %s"
+
+    def _to_one_reference_target(self, entity_type: str, edge: str) -> str:
+        """Resolve a relationship-predicate ``edge`` (M5a) to its target
+        class, raising loudly when the edge is not a single-valued
+        reference slot of ``entity_type`` — mirror of the SQLite helper."""
+        from mosaic.core.exceptions import ValidationError
+
+        registry = self.schema_registry
+        to_one: dict[str, str] = {}
+        if registry is not None:
+            known = set(registry.class_names())
+            for slot in registry.induced_slots(entity_type):
+                if not slot.multivalued and slot.range in known:
+                    to_one[slot.name] = slot.range
+        if edge not in to_one:
+            raise ValidationError(
+                message=(
+                    f"Unknown relationship-predicate edge {edge!r} for "
+                    f"{entity_type}; to-one reference slots: "
+                    f"{sorted(to_one)}. Multivalued reference edges take "
+                    f"the some/none quantifiers (a later increment — "
+                    f"ADR-0006 M5b)."
+                ),
+                field_name=edge,
+            )
+        return to_one[edge]
 
     def _tree_predicate(
         self,
         node: dict[str, Any],
         entity_type: Optional[str],
         params: list[Any],
+        *,
+        scope: str = "",
+        alias_seq: Optional[list[int]] = None,
     ) -> str:
-        """Compile a normalized ``where`` tree to one SQL predicate."""
+        """Compile a normalized ``where`` tree to one SQL predicate.
+
+        ``scope`` is the SQL alias prefix (``'relN.'``) of the entities row
+        the current subtree addresses (empty = the outer, unaliased
+        ``entities``); ``alias_seq`` numbers relationship-EXISTS aliases so
+        nested and self-referential edges (M5a) never collide.
+        """
+        if alias_seq is None:
+            alias_seq = [0]
         if "and" in node:
             return (
                 "("
                 + " AND ".join(
-                    self._tree_predicate(c, entity_type, params)
+                    self._tree_predicate(
+                        c, entity_type, params,
+                        scope=scope, alias_seq=alias_seq,
+                    )
                     for c in node["and"]
                 )
                 + ")"
@@ -1895,14 +1939,55 @@ class PostgresAdapter(EntityStore):
             return (
                 "("
                 + " OR ".join(
-                    self._tree_predicate(c, entity_type, params)
+                    self._tree_predicate(
+                        c, entity_type, params,
+                        scope=scope, alias_seq=alias_seq,
+                    )
                     for c in node["or"]
                 )
                 + ")"
             )
         if "not" in node:
             return "NOT " + self._tree_predicate(
-                node["not"], entity_type, params
+                node["not"], entity_type, params,
+                scope=scope, alias_seq=alias_seq,
+            )
+        if "edge" in node:
+            # Relationship predicate (ADR-0006 M5a): one correlated EXISTS
+            # against the target's entities row keyed on the FK value in
+            # the JSONB document. Availability applies to the target
+            # exactly as list queries would see it. Mirrors the SQLite
+            # per-class-table compiler.
+            from mosaic.core.exceptions import ValidationError
+
+            if not entity_type:
+                raise ValidationError(
+                    message=(
+                        "Relationship predicates require an entity_type on "
+                        "the query: the edge resolves against the class's "
+                        "reference slots (ADR-0006 M5a)."
+                    ),
+                    field_name=node["edge"],
+                )
+            edge = node["edge"]
+            target = self._to_one_reference_target(entity_type, edge)
+            alias_seq[0] += 1
+            alias = f"rel{alias_seq[0]}"
+            outer = scope or "entities."
+            # psycopg substitutes positionally: the placeholders render as
+            # edge key → target type → subtree, so the params must append
+            # in exactly that order (subtree recursion last).
+            params.append(edge)
+            params.append(target)
+            sub = self._tree_predicate(
+                node["where"], target, params,
+                scope=f"{alias}.", alias_seq=alias_seq,
+            )
+            return (
+                f"EXISTS (SELECT 1 FROM entities {alias} "
+                f"WHERE {alias}.id = {outer}data->>%s "
+                f"AND {alias}.entity_type = %s "
+                f"AND {alias}.is_available = TRUE AND {sub})"
             )
         # COALESCE to two-valued logic: a missing key makes the extracted
         # text SQL NULL, and `NOT NULL` is NULL — which would silently
@@ -1911,7 +1996,8 @@ class PostgresAdapter(EntityStore):
         # Forcing every leaf to TRUE/FALSE keeps the tree boolean end to
         # end (ADR-0006's mirror-consistency rule).
         leaf = self._leaf_predicate(
-            node["field"], node["op"], node["value"], entity_type, params
+            node["field"], node["op"], node["value"], entity_type, params,
+            qual=scope,
         )
         return f"COALESCE(({leaf}), FALSE)"
 
@@ -2462,6 +2548,21 @@ class PostgresAdapter(EntityStore):
                     "ordering (ADR-0007 gate decision)."
                 ),
                 field_name="order_by",
+            )
+        where = getattr(query, "where", None)
+        if where is not None and has_relationship_predicate(
+            normalize_where(where)
+        ):
+            from mosaic.core.exceptions import ValidationError
+
+            raise ValidationError(
+                message=(
+                    "Relationship predicates are not supported together "
+                    "with as_of: cross-class temporal joins are out of "
+                    "scope for the reconstruction path (hippo#71 / "
+                    "ADR-0006 M5a)."
+                ),
+                field_name="where",
             )
         with self._transaction() as conn:
             prov = PostgresProvenanceStore(conn, self._schema_version)

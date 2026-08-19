@@ -2,7 +2,7 @@
 
 Tracking issue: BU-Neuromics/mosaic#155
 
-> ADR-0006 ratified 2026-08-19; increments 1–2 implemented. Increments 3–4 (M5a/M5b) to be scheduled.
+> ADR-0006 ratified 2026-08-19; increments 1–3 implemented. Increment 4 (M5b) to be scheduled.
 
 ## 0. Design gate
 
@@ -42,10 +42,15 @@ Tracking issue: BU-Neuromics/mosaic#155
 
 ## 3. M5a — to-one relationship predicates (increment 3)
 
-- [ ] 3.1 Nested target-type filter under the to-one edge name in `<Type>Filter`.
-- [ ] 3.2 Correlated `EXISTS` on the FK column, both adapters; parity tests.
-- [ ] 3.3 `asOf` + relationship predicate → coded `ASOF_RELATIONSHIP_FILTER_UNSUPPORTED`,
-  both adapters, tested.
+- [x] 3.1 Nested target-type filter under the to-one edge name in `<Type>Filter` (bare-class
+  cross-reference; self-referential edges included; edge nesting counts toward the depth cap).
+- [x] 3.2 Correlated `EXISTS` on the FK column, both adapters (SQLite per-class tables;
+  Postgres entities-row with entity_type + availability guards and target-class casts);
+  aliases threaded for nested/self-referential edges; parity tests mirrored
+  (`tests/core/test_relationship_predicates.py` ↔ `TestPostgresRelationshipPredicates`).
+- [x] 3.3 `asOf` + relationship predicate → coded `ASOF_RELATIONSHIP_FILTER_UNSUPPORTED` at
+  the transport (list + count roots) and `ValidationError` in both adapters'
+  `_find_as_of` (defense-in-depth: `matches_tree` also raises on edge nodes); tested.
 
 ## 4. M5b — to-many quantified predicates (increment 4)
 

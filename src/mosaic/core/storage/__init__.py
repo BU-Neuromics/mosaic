@@ -235,13 +235,19 @@ MAX_WHERE_DEPTH = 32
 def normalize_where(node: Dict[str, Any], *, _depth: int = 1) -> Dict[str, Any]:
     """Validate a ``Query.where`` boolean filter tree; return it canonical.
 
-    A node is exactly one of (ADR-0006 increment 2):
+    A node is exactly one of (ADR-0006 increments 2–3):
 
     - a **leaf**: ``{"field": ..., "op": ..., "value": ...}`` (``op``
       optional, default ``"eq"``; validated by :func:`validate_leaf`);
     - ``{"and": [node, ...]}`` / ``{"or": [node, ...]}`` — non-empty lists
       (an empty combinator is ambiguous and raises);
-    - ``{"not": node}``.
+    - ``{"not": node}``;
+    - a **relationship predicate** (M5a): ``{"edge": <single-valued
+      reference slot>, "where": node}`` — matches entities whose
+      referenced target exists, is available, and satisfies the nested
+      tree (compiled to one correlated ``EXISTS``). The adapter resolves
+      and validates the edge against the schema at compile time. Not
+      supported under ``as_of`` (coded error — hippo#71).
 
     Trees compose with the flat ``Query.filters`` by AND. Malformed shapes
     raise :class:`~mosaic.core.exceptions.ValidationError` — the storage
@@ -290,6 +296,24 @@ def normalize_where(node: Dict[str, Any], *, _depth: int = 1) -> Dict[str, Any]:
         return {
             key: [normalize_where(c, _depth=_depth + 1) for c in children]
         }
+    if "edge" in node:
+        if set(node) != {"edge", "where"}:
+            raise ValidationError(
+                message=(
+                    f"Relationship predicate node must be exactly "
+                    f"{{'edge', 'where'}}; got keys {sorted(node)}."
+                ),
+                field_name="where",
+            )
+        if not isinstance(node["edge"], str) or not node["edge"]:
+            raise ValidationError(
+                message="Relationship predicate 'edge' must be a slot name.",
+                field_name="where",
+            )
+        return {
+            "edge": node["edge"],
+            "where": normalize_where(node["where"], _depth=_depth + 1),
+        }
     if "field" in node and "value" in node:
         field, op, value = validate_leaf(
             node["field"], node.get("op", "eq"), node["value"]
@@ -297,11 +321,29 @@ def normalize_where(node: Dict[str, Any], *, _depth: int = 1) -> Dict[str, Any]:
         return {"field": field, "op": op, "value": value}
     raise ValidationError(
         message=(
-            f"Filter tree node is neither a leaf ({{field, op, value}}) nor "
-            f"a combinator ({{and|or|not}}); got keys {sorted(node)}."
+            f"Filter tree node is neither a leaf ({{field, op, value}}), a "
+            f"combinator ({{and|or|not}}), nor a relationship predicate "
+            f"({{edge, where}}); got keys {sorted(node)}."
         ),
         field_name="where",
     )
+
+
+def has_relationship_predicate(node: Dict[str, Any]) -> bool:
+    """True when a normalized ``where`` tree contains an ``edge`` node.
+
+    The as-of path declares relationship predicates out of scope
+    (hippo#71 / ADR-0006's gate): callers combining ``as_of`` with a tree
+    for which this returns True must raise a coded error rather than
+    silently reconstructing a wrong answer.
+    """
+    if "and" in node:
+        return any(has_relationship_predicate(c) for c in node["and"])
+    if "or" in node:
+        return any(has_relationship_predicate(c) for c in node["or"])
+    if "not" in node:
+        return has_relationship_predicate(node["not"])
+    return "edge" in node
 
 
 def matches_tree(
@@ -312,7 +354,22 @@ def matches_tree(
     The tree analogue of :func:`matches_operator` — the shared as-of mirror
     evaluator, kept aligned with the adapters' SQL tree compilers
     (ADR-0006). ``node`` must be normalized (:func:`normalize_where`).
+
+    Relationship predicates raise: the as-of path declares them out of
+    scope (hippo#71), and callers are expected to reject such trees up
+    front (:func:`has_relationship_predicate`) — this raise is the
+    defense-in-depth backstop, never a silently-wrong answer.
     """
+    if "edge" in node:
+        from mosaic.core.exceptions import ValidationError
+
+        raise ValidationError(
+            message=(
+                "Relationship predicates are not supported on the as-of "
+                "reconstruction path (hippo#71 / ADR-0006)."
+            ),
+            field_name="where",
+        )
     if "and" in node:
         return all(matches_tree(data, entity_id, c) for c in node["and"])
     if "or" in node:
@@ -600,6 +657,7 @@ __all__ = [
     "VALID_FILTER_OPS",
     "COMPARISON_SQL_OPS",
     "MAX_WHERE_DEPTH",
+    "has_relationship_predicate",
     "normalize_filter",
     "normalize_where",
     "validate_leaf",

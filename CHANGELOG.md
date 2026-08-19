@@ -2,6 +2,33 @@
 
 ## [Unreleased]
 
+### Added
+
+- **To-one relationship predicates** (ADR-0006 M5a / increment 3, issue
+  #155): the `where` filter tree gains the node
+  `{"edge": <to-one reference slot>, "where": subtree}` — matching
+  entities whose referenced target exists, is available, and satisfies
+  the nested tree — compiled by both adapters to ONE correlated
+  `EXISTS` keyed on the FK value (SQLite: against the target's
+  per-class table; Postgres: against the target's `entities` row with
+  `entity_type` + availability guards, nested trees cast against the
+  TARGET class's ranges). Edges nest arbitrarily (an edge inside an
+  edge) and self-referential edges work (aliases are threaded so inner
+  scopes never collide); `not` over an edge is two-valued — an entity
+  with no referenced target satisfies the negation. GraphQL:
+  `<Type>Filter` nests the target type's filter under the resolved edge
+  name (`where: {donor: {age: {gt: 60}}}`), generated via the two-pass
+  bare-class cross-reference; edge nesting counts toward the
+  `where`-input depth cap. Because the predicate compiles into the
+  shared query WHERE, it composes with everything that rides it: flat
+  filters, search composition, `count`/`facetCounts`/`fieldRange`, and
+  `orderBy`. Gate decisions: `asOf` + any relationship predicate is a
+  coded `ASOF_RELATIONSHIP_FILTER_UNSUPPORTED` error (cross-class
+  temporal joins are out of scope — hippo#71), enforced at the
+  transport and again in both adapters; an unknown edge or a
+  multivalued reference edge raises loudly (the latter naming the M5b
+  `some`/`none` quantifiers that remain the last increment).
+
 ### Changed
 
 - **BREAKING — search composed with the list surface** (issue #157):
