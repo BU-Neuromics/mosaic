@@ -1,0 +1,63 @@
+# Tasks — `typed-filter-inputs`
+
+Tracking issue: BU-Neuromics/mosaic#155
+
+> Design-only at this stage: ADR-0006 is Proposed (#153). Do not start implementation tasks
+> until the ADR is ratified and the increment is scheduled.
+
+## 0. Design gate
+
+- [ ] 0.1 ADR-0006 ratified (Status → Accepted; #153 closed with a link to the record).
+- [ ] 0.2 Deprecation stance for the flat `filters:` arg decided (keep + `@deprecated` vs.
+  ADR-0005-style clean break) and recorded in ADR-0006.
+- [ ] 0.3 `contains` semantics pinned per range (string substring case rules; inline
+  multivalued membership — SQLite JSON TEXT vs. Postgres JSONB pushdown differ).
+
+## 1. Comparison operators on the flat path (increment 1)
+
+- [ ] 1.1 `VALID_FILTER_OPS` + `normalize_filter` extended (`neq/gt/gte/lt/lte/contains/
+  is_null`); unknown ops still raise (#129 discipline preserved).
+- [ ] 1.2 SQLite `_find_per_class` column predicates for each operator.
+- [ ] 1.3 Postgres `find` predicates with per-range casts driven by `SlotModel.range`
+  (`::numeric`, `::timestamptz`/`::date`, `::boolean`); cast helper written as common code
+  shared with `aggregation-and-ordering`.
+- [ ] 1.4 All four `_matches_filters` as-of mirrors implement every operator; shared
+  current-state-vs-as-of agreement tests.
+- [ ] 1.5 `isNull` semantics per ADR-0006 (`IS NULL` / absent-or-null JSONB key; `eq: null`
+  raises coded error; not offered on relationship-backed multivalued refs).
+- [ ] 1.6 GraphQL `FilterOp` enum + `_to_sdk_filters` pass-through; coded errors for
+  unsupported op-on-slot combinations.
+- [ ] 1.7 SQLite/Postgres parity suite for every operator; full suite green.
+
+## 2. Generated `<Type>Filter` + `where:` (increment 2)
+
+- [ ] 2.1 Per-slot operator input objects (`StringFilterOps` etc.) selected by slot
+  kind/range, with LinkML descriptions propagated.
+- [ ] 2.2 `_build_filter_input_types` pass generating `<Type>Filter` per class
+  (slot-name keys + alias resolution as in `resolve_filter_field`); `and`/`or`/`not`.
+- [ ] 2.3 `where:` argument on list queries; translation walker to the normalized SDK filter
+  representation; `where:` + `filters:` compose by AND.
+- [ ] 2.4 Introspection tests: operator sets per slot kind visible in `__schema`; docs
+  (`docs/graphql.md`, sec4 §4.7) updated.
+
+## 3. M5a — to-one relationship predicates (increment 3)
+
+- [ ] 3.1 Nested target-type filter under the to-one edge name in `<Type>Filter`.
+- [ ] 3.2 Correlated `EXISTS` on the FK column, both adapters; parity tests.
+- [ ] 3.3 `asOf` + relationship predicate → coded `ASOF_RELATIONSHIP_FILTER_UNSUPPORTED`,
+  both adapters, tested.
+
+## 4. M5b — to-many quantified predicates (increment 4)
+
+- [ ] 4.1 `some`/`none` quantifier inputs on relationship-backed multivalued reference slots
+  (recursive input types via the two-pass bare-class trick).
+- [ ] 4.2 `EXISTS`/`NOT EXISTS` against the `relationships` link table joined to the target
+  table, both adapters; parity tests.
+- [ ] 4.3 Filter-nesting depth cap with coded error (independent of `QueryDepthLimiter`).
+- [ ] 4.4 Retire the `UNFILTERABLE_FIELD` wall for these slots; error text updated.
+
+## 5. Docs
+
+- [ ] 5.1 sec4 §4.7 filter documentation rewritten around the typed contract; §4.3 CEL sketch
+  annotated as superseded/narrowed for the GraphQL transport (per ADR-0006).
+- [ ] 5.2 `docs/graphql.md` filtering guide with per-operator examples.
