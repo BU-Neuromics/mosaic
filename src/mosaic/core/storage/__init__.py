@@ -36,12 +36,18 @@ class Query:
         limit: Optional[int] = None,
         offset: Optional[int] = None,
         filter_mode: str = "and",
+        where: Optional[Dict[str, Any]] = None,
     ):
         self.entity_type = entity_type
         self.filters = filters or []
         self.limit = limit
         self.offset = offset
         self.filter_mode = filter_mode  # "and" or "or"
+        # Optional boolean filter tree (ADR-0006 increment 2): a node is a
+        # leaf {"field", "op", "value"} or {"and": [...]}/{"or": [...]}/
+        # {"not": node}. Composes with ``filters`` by AND. Validate with
+        # ``normalize_where``.
+        self.where = where
 
 
 # Filter ops recognized by ``normalize_filter`` / adapter predicate builders.
@@ -161,46 +167,153 @@ def normalize_filter(f: Dict[str, Any]) -> List[tuple]:
                 ),
                 field_name=f["field"],
             )
-        op = f.get("op", "eq")
-        if op not in VALID_FILTER_OPS:
-            from mosaic.core.exceptions import ValidationError
-
-            raise ValidationError(
-                message=(
-                    f"Unsupported filter operator {op!r} on field "
-                    f"{f['field']!r}. Implemented operators: "
-                    f"{sorted(VALID_FILTER_OPS)}. Operators such as "
-                    f"'ne'/'starts_with' are not supported and unsupported "
-                    f"ops once degraded silently to equality (issue #129); "
-                    f"they now raise so callers are never handed wrong "
-                    f"results."
-                ),
-                field_name=f["field"],
-            )
-        value = f["value"]
-        if op == "is_null" and not isinstance(value, bool):
-            from mosaic.core.exceptions import ValidationError
-
-            raise ValidationError(
-                message=(
-                    f"Filter op 'is_null' on field {f['field']!r} requires a "
-                    f"boolean value (True = match entities with no stored "
-                    f"value), got {type(value).__name__}."
-                ),
-                field_name=f["field"],
-            )
-        if op == "in" and not isinstance(value, (list, tuple)):
-            from mosaic.core.exceptions import ValidationError
-
-            raise ValidationError(
-                message=(
-                    f"Filter op 'in' on field {f['field']!r} requires a "
-                    f"list of candidate values, got {type(value).__name__}."
-                ),
-                field_name=f["field"],
-            )
-        return [(f["field"], op, value)]
+        return [validate_leaf(f["field"], f.get("op", "eq"), f["value"])]
     return [(key, "eq", value) for key, value in f.items()]
+
+
+def validate_leaf(field: str, op: str, value: Any) -> tuple:
+    """Validate one ``(field, op, value)`` predicate; return it canonical.
+
+    The single leaf-validation chokepoint behind both the flat
+    ``normalize_filter`` path and the ``normalize_where`` tree path:
+    unknown operators, non-boolean ``is_null`` values, and non-list ``in``
+    values raise loudly (issue #129's loud-over-wrong rule).
+    """
+    if op not in VALID_FILTER_OPS:
+        from mosaic.core.exceptions import ValidationError
+
+        raise ValidationError(
+            message=(
+                f"Unsupported filter operator {op!r} on field "
+                f"{field!r}. Implemented operators: "
+                f"{sorted(VALID_FILTER_OPS)}. Operators such as "
+                f"'ne'/'starts_with' are not supported and unsupported "
+                f"ops once degraded silently to equality (issue #129); "
+                f"they now raise so callers are never handed wrong "
+                f"results."
+            ),
+            field_name=field,
+        )
+    if op == "is_null" and not isinstance(value, bool):
+        from mosaic.core.exceptions import ValidationError
+
+        raise ValidationError(
+            message=(
+                f"Filter op 'is_null' on field {field!r} requires a "
+                f"boolean value (True = match entities with no stored "
+                f"value), got {type(value).__name__}."
+            ),
+            field_name=field,
+        )
+    if op == "in" and not isinstance(value, (list, tuple)):
+        from mosaic.core.exceptions import ValidationError
+
+        raise ValidationError(
+            message=(
+                f"Filter op 'in' on field {field!r} requires a "
+                f"list of candidate values, got {type(value).__name__}."
+            ),
+            field_name=field,
+        )
+    return (field, op, value)
+
+
+#: Defensive recursion bound for ``normalize_where``/``matches_tree``.
+#: Transports enforce their own (smaller) caps with coded errors; this one
+#: only prevents stack abuse through the raw SDK.
+MAX_WHERE_DEPTH = 32
+
+
+def normalize_where(node: Dict[str, Any], *, _depth: int = 1) -> Dict[str, Any]:
+    """Validate a ``Query.where`` boolean filter tree; return it canonical.
+
+    A node is exactly one of (ADR-0006 increment 2):
+
+    - a **leaf**: ``{"field": ..., "op": ..., "value": ...}`` (``op``
+      optional, default ``"eq"``; validated by :func:`validate_leaf`);
+    - ``{"and": [node, ...]}`` / ``{"or": [node, ...]}`` — non-empty lists
+      (an empty combinator is ambiguous and raises);
+    - ``{"not": node}``.
+
+    Trees compose with the flat ``Query.filters`` by AND. Malformed shapes
+    raise :class:`~mosaic.core.exceptions.ValidationError` — the storage
+    layer never guesses at intent.
+    """
+    from mosaic.core.exceptions import ValidationError
+
+    if _depth > MAX_WHERE_DEPTH:
+        raise ValidationError(
+            message=(
+                f"Filter tree exceeds the maximum nesting depth "
+                f"({MAX_WHERE_DEPTH})."
+            ),
+            field_name="where",
+        )
+    if not isinstance(node, dict):
+        raise ValidationError(
+            message=(
+                f"Filter tree node must be a dict (leaf or and/or/not "
+                f"combinator), got {type(node).__name__}."
+            ),
+            field_name="where",
+        )
+    combinators = [k for k in ("and", "or", "not") if k in node]
+    if combinators:
+        if len(node) != 1:
+            raise ValidationError(
+                message=(
+                    f"Filter tree combinator node must have exactly one key; "
+                    f"got {sorted(node)}."
+                ),
+                field_name="where",
+            )
+        key = combinators[0]
+        if key == "not":
+            return {"not": normalize_where(node["not"], _depth=_depth + 1)}
+        children = node[key]
+        if not isinstance(children, (list, tuple)) or not children:
+            raise ValidationError(
+                message=(
+                    f"Filter tree {key!r} combinator requires a non-empty "
+                    f"list of child nodes."
+                ),
+                field_name="where",
+            )
+        return {
+            key: [normalize_where(c, _depth=_depth + 1) for c in children]
+        }
+    if "field" in node and "value" in node:
+        field, op, value = validate_leaf(
+            node["field"], node.get("op", "eq"), node["value"]
+        )
+        return {"field": field, "op": op, "value": value}
+    raise ValidationError(
+        message=(
+            f"Filter tree node is neither a leaf ({{field, op, value}}) nor "
+            f"a combinator ({{and|or|not}}); got keys {sorted(node)}."
+        ),
+        field_name="where",
+    )
+
+
+def matches_tree(
+    data: Dict[str, Any], entity_id: str, node: Dict[str, Any]
+) -> bool:
+    """Evaluate a normalized ``where`` tree against a data dict in Python.
+
+    The tree analogue of :func:`matches_operator` — the shared as-of mirror
+    evaluator, kept aligned with the adapters' SQL tree compilers
+    (ADR-0006). ``node`` must be normalized (:func:`normalize_where`).
+    """
+    if "and" in node:
+        return all(matches_tree(data, entity_id, c) for c in node["and"])
+    if "or" in node:
+        return any(matches_tree(data, entity_id, c) for c in node["or"])
+    if "not" in node:
+        return not matches_tree(data, entity_id, node["not"])
+    field = node["field"]
+    actual = entity_id if field == "id" else data.get(field)
+    return matches_operator(actual, node["op"], node["value"])
 
 
 class EntityStore(ABC):
@@ -431,7 +544,11 @@ __all__ = [
     "ValidatingEntityStore",
     "VALID_FILTER_OPS",
     "COMPARISON_SQL_OPS",
+    "MAX_WHERE_DEPTH",
     "normalize_filter",
+    "normalize_where",
+    "validate_leaf",
     "matches_operator",
+    "matches_tree",
     "escape_like",
 ]

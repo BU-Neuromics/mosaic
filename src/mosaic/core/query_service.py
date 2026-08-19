@@ -9,7 +9,7 @@ from mosaic.core.expand_path_parser import ExpandPathParser
 from mosaic.core.provenance_service import ProvenanceService
 from mosaic.core.relationship import RelationshipManager
 from mosaic.core.schema_manager import SchemaManager
-from mosaic.core.storage import Query
+from mosaic.core.storage import Query, normalize_where
 from mosaic.core.storage.adapters.sqlite_adapter import SQLiteAdapter
 
 
@@ -158,6 +158,7 @@ class QueryService:
         offset: Optional[int] = None,
         filter_mode: str = "and",
         as_of: Optional[str] = None,
+        where: Optional[dict[str, Any]] = None,
     ) -> "PaginatedResult":
         """Query entities with filter criteria.
 
@@ -170,8 +171,15 @@ class QueryService:
                 reconstructed as the graph stood at that time (sec6 §6.8 /
                 ADR-0001): entity set, per-entity state, and the computed
                 temporal fields are all bound to ``as_of``. Omitted = current.
+            where: Optional boolean filter tree (ADR-0006 increment 2) — a
+                leaf ``{"field", "op", "value"}`` or ``{"and": [...]}`` /
+                ``{"or": [...]}`` / ``{"not": node}``. Validated up front
+                (``normalize_where``); composes with ``filters`` by AND.
         """
         from mosaic.core.types import PaginatedResult
+
+        if where is not None:
+            where = normalize_where(where)
 
         if self._storage is None:
             return PaginatedResult(
@@ -185,6 +193,7 @@ class QueryService:
             entity_type=entity_type,
             filters=filters or [],
             filter_mode=filter_mode,
+            where=where,
         )
 
         # Pass as_of only when set, so adapters whose find() predates the as-of

@@ -2,7 +2,7 @@
 
 Tracking issue: BU-Neuromics/mosaic#155
 
-> ADR-0006 ratified 2026-08-19; increment 1 implemented. Increments 2–4 to be scheduled.
+> ADR-0006 ratified 2026-08-19; increments 1–2 implemented. Increments 3–4 (M5a/M5b) to be scheduled.
 
 ## 0. Design gate
 
@@ -31,13 +31,13 @@ Tracking issue: BU-Neuromics/mosaic#155
 
 ## 2. Generated `<Type>Filter` + `where:` (increment 2)
 
-- [ ] 2.1 Per-slot operator input objects (`StringFilterOps` etc.) selected by slot
+- [x] 2.1 Per-slot operator input objects (`StringFilterOps` etc.) selected by slot
   kind/range, with LinkML descriptions propagated.
-- [ ] 2.2 `_build_filter_input_types` pass generating `<Type>Filter` per class
+- [x] 2.2 `_build_filter_input_types` pass generating `<Type>Filter` per class
   (slot-name keys + alias resolution as in `resolve_filter_field`); `and`/`or`/`not`.
-- [ ] 2.3 `where:` argument on list queries; translation walker to the normalized SDK filter
+- [x] 2.3 `where:` argument on list queries; translation walker to the normalized SDK filter
   representation; `where:` + `filters:` compose by AND.
-- [ ] 2.4 Introspection tests: operator sets per slot kind visible in `__schema`; docs
+- [x] 2.4 Introspection tests: operator sets per slot kind visible in `__schema`; docs
   (`docs/graphql.md`, sec4 §4.7) updated.
 
 ## 3. M5a — to-one relationship predicates (increment 3)

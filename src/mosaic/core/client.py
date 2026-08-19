@@ -851,6 +851,7 @@ class MosaicClient:
         offset: Optional[int] = None,
         filter_mode: str = "and",
         as_of: Optional[str] = None,
+        where: Optional[dict[str, Any]] = None,
     ) -> "PaginatedResult":
         """Query entities with filter criteria.
 
@@ -863,10 +864,15 @@ class MosaicClient:
             as_of: Optional ISO-8601 transaction-time; when given, results are
                 reconstructed as the graph stood at that time (sec6 §6.8 /
                 ADR-0001). Omitted = current state.
+            where: Optional boolean filter tree (ADR-0006 increment 2) — a
+                leaf ``{"field", "op", "value"}`` or nested ``{"and": [...]}``
+                / ``{"or": [...]}`` / ``{"not": node}``; composes with
+                ``filters`` by AND. The GraphQL ``where:`` argument compiles
+                to exactly this shape.
         """
         return self._query_service.query(
             entity_type, filters, date_from, date_to, limit, offset, filter_mode,
-            as_of=as_of,
+            as_of=as_of, where=where,
         )
 
     def query_updated_since(

@@ -95,6 +95,35 @@ field; ask about absence with `IS_NULL`.
 }
 ```
 
+### Typed `where:` filters
+
+Every list query also takes a generated **`where: <Type>Filter`** argument
+(ADR-0006) — the typed form of the same operators, with boolean structure:
+
+```graphql
+{
+  samples(where: {
+    isTumor: {eq: true},
+    or: [
+      {replicateCount: {gt: 8}},
+      {and: [{volumeMl: {lte: 2.0}}, {notes: {isNull: false}}]}
+    ]
+  }) { total items { name } }
+}
+```
+
+Each slot field takes a per-kind operator object (`StringFilterOps`,
+`IntFilterOps`, `FloatFilterOps`, `DateTimeFilterOps`, `BooleanFilterOps`,
+per-enum `<Enum>FilterOps`, …) carrying **exactly the operators that slot
+supports** — the introspected schema is the capability contract, and a
+wrong operator or mistyped value fails GraphQL validation before execution.
+Slot fields and multiple operators within one object AND together;
+`and`/`or`/`not` nest (depth cap 10; `not` is two-valued — an entity
+missing the field satisfies the negation). `where` composes with the flat
+`filters:` list by AND. Reference edges are not filterable through `where`
+yet (relationship predicates are a later increment; use `filters:` for
+reference-id equality meanwhile).
+
 The exposed class set is decided by Mosaic's shared type model
 (`mosaic.core.schema_typing`) — the same model behind the typed Python SDK — so
 the two surfaces never drift. Framework classes (`Entity`, `ProvenanceRecord`,
@@ -207,10 +236,10 @@ exempt, so GraphiQL works regardless. Configure with
 - **No schema versioning** — the GraphQL schema regenerates from your LinkML
   schema at startup; breaking LinkML changes break the GraphQL contract the
   same way they break the typed SDK.
-- **Flat filter list only** — `filters` carries `op: EQ | IN | NEQ | GT |
-  GTE | LT | LTE | CONTAINS | IS_NULL` with AND/OR composition (each slot
-  supports the operators its range allows; unsupported combinations raise
-  coded errors). Nested boolean groups and relationship predicates arrive
-  with the generated `where:` argument (ADR-0006, in progress).
+- **No relationship predicates yet** — the generated `where:` argument
+  covers scalar/enum slots with nested `and`/`or`/`not`; filtering through
+  reference edges (to-one nesting, to-many `some`/`none` quantifiers)
+  arrives in later ADR-0006 increments. Multivalued references remain
+  unfilterable (`relatedTo` covers reverse lookups).
 - **Updates cannot null-out a field** — omitted and `null` input fields are
   both dropped from the patch.

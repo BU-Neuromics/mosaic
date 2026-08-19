@@ -43,7 +43,9 @@ from mosaic.core.storage import (
     ScoredMatch,
     escape_like,
     matches_operator,
+    matches_tree,
     normalize_filter,
+    normalize_where,
 )
 from mosaic.core.types import ProvenanceRecord as ProvenanceRecordType, TemporalRecord
 from mosaic.core.exceptions import AdapterError, SearchCapabilityError
@@ -1821,6 +1823,97 @@ class PostgresAdapter(EntityStore):
         "time": "::time",
     }
 
+    def _leaf_predicate(
+        self,
+        field: str,
+        op: str,
+        value: Any,
+        entity_type: Optional[str],
+        params: list[Any],
+    ) -> str:
+        """SQL predicate for one ``(field, op, value)`` leaf over the JSONB
+        document, appending its parameters to ``params``. Shared by the flat
+        ``filters`` path and the ``where`` tree compiler so operator
+        rendering lives once (ADR-0006)."""
+        if op == "in":
+            if not value:
+                # Empty IN-list: short-circuit to "no rows match" rather
+                # than `= ANY('{}')` semantics surprises.
+                return "FALSE"
+            params.append(field)
+            params.append([self._jsonb_text(v) for v in value])
+            return "data->>%s = ANY(%s)"
+        if op == "is_null":
+            # "No stored value" = key absent OR JSON null, matching the
+            # SQLite column-IS-NULL semantics.
+            params.append(field)
+            params.append(field)
+            return (
+                "(NOT jsonb_exists(data, %s) OR data->%s = 'null'::jsonb)"
+                if value
+                else "(jsonb_exists(data, %s) AND data->%s <> 'null'::jsonb)"
+            )
+        if op == "neq":
+            # Plain <> (not IS DISTINCT FROM): a missing key yields SQL
+            # NULL and matches nothing, per the shared operator semantics
+            # (ADR-0006).
+            params.append(field)
+            params.append(self._jsonb_text(value))
+            return "data->>%s <> %s"
+        if op == "contains":
+            params.append(field)
+            params.append(f"%{escape_like(str(value))}%")
+            return "data->>%s ILIKE %s ESCAPE '\\'"
+        if op in COMPARISON_SQL_OPS:
+            cast = self._filter_cast(entity_type, field)
+            sql_op = COMPARISON_SQL_OPS[op]
+            params.append(field)
+            params.append(value if cast else self._jsonb_text(value))
+            return f"(data->>%s){cast} {sql_op} %s{cast}"
+        params.append(field)
+        params.append(self._jsonb_text(value))
+        return "data->>%s = %s"
+
+    def _tree_predicate(
+        self,
+        node: dict[str, Any],
+        entity_type: Optional[str],
+        params: list[Any],
+    ) -> str:
+        """Compile a normalized ``where`` tree to one SQL predicate."""
+        if "and" in node:
+            return (
+                "("
+                + " AND ".join(
+                    self._tree_predicate(c, entity_type, params)
+                    for c in node["and"]
+                )
+                + ")"
+            )
+        if "or" in node:
+            return (
+                "("
+                + " OR ".join(
+                    self._tree_predicate(c, entity_type, params)
+                    for c in node["or"]
+                )
+                + ")"
+            )
+        if "not" in node:
+            return "NOT " + self._tree_predicate(
+                node["not"], entity_type, params
+            )
+        # COALESCE to two-valued logic: a missing key makes the extracted
+        # text SQL NULL, and `NOT NULL` is NULL — which would silently
+        # exclude rows under `not` that the Python mirror (``matches_tree``:
+        # absent value => leaf is False, `not` flips to True) includes.
+        # Forcing every leaf to TRUE/FALSE keeps the tree boolean end to
+        # end (ADR-0006's mirror-consistency rule).
+        leaf = self._leaf_predicate(
+            node["field"], node["op"], node["value"], entity_type, params
+        )
+        return f"COALESCE(({leaf}), FALSE)"
+
     def _filter_cast(self, entity_type: Optional[str], field: str) -> str:
         """SQL cast suffix for a comparison predicate on ``field``.
 
@@ -2124,57 +2217,22 @@ class PostgresAdapter(EntityStore):
                 filter_clauses = []
                 for f in query.filters:
                     for field, op, value in normalize_filter(f):
-                        if op == "in":
-                            if not value:
-                                # Empty IN-list: short-circuit to "no rows
-                                # match" rather than `= ANY('{}')` semantics
-                                # surprises.
-                                filter_clauses.append("FALSE")
-                                continue
-                            filter_clauses.append("data->>%s = ANY(%s)")
-                            params.append(field)
-                            params.append([self._jsonb_text(v) for v in value])
-                        elif op == "is_null":
-                            # "No stored value" = key absent OR JSON null,
-                            # matching the SQLite column-IS-NULL semantics.
-                            filter_clauses.append(
-                                "(NOT jsonb_exists(data, %s) "
-                                "OR data->%s = 'null'::jsonb)"
-                                if value
-                                else "(jsonb_exists(data, %s) "
-                                "AND data->%s <> 'null'::jsonb)"
+                        filter_clauses.append(
+                            self._leaf_predicate(
+                                field, op, value, query.entity_type, params
                             )
-                            params.append(field)
-                            params.append(field)
-                        elif op == "neq":
-                            # Plain <> (not IS DISTINCT FROM): a missing key
-                            # yields SQL NULL and matches nothing, per the
-                            # shared operator semantics (ADR-0006).
-                            filter_clauses.append("data->>%s <> %s")
-                            params.append(field)
-                            params.append(self._jsonb_text(value))
-                        elif op == "contains":
-                            filter_clauses.append(
-                                "data->>%s ILIKE %s ESCAPE '\\'"
-                            )
-                            params.append(field)
-                            params.append(f"%{escape_like(str(value))}%")
-                        elif op in COMPARISON_SQL_OPS:
-                            cast = self._filter_cast(query.entity_type, field)
-                            sql_op = COMPARISON_SQL_OPS[op]
-                            filter_clauses.append(
-                                f"(data->>%s){cast} {sql_op} %s{cast}"
-                            )
-                            params.append(field)
-                            params.append(
-                                value if cast else self._jsonb_text(value)
-                            )
-                        else:
-                            filter_clauses.append("data->>%s = %s")
-                            params.append(field)
-                            params.append(self._jsonb_text(value))
+                        )
                 if filter_clauses:
                     sql += " AND (" + joiner.join(filter_clauses) + ")"
+
+            where = getattr(query, "where", None)
+            if where is not None:
+                # Boolean filter tree (ADR-0006 increment 2); composes with
+                # the flat ``filters`` by AND.
+                tree = normalize_where(where)
+                sql += " AND (" + self._tree_predicate(
+                    tree, query.entity_type, params
+                ) + ")"
 
             # `is not None`, not truthiness: LIMIT 0 must return zero rows,
             # not fall through to "no limit" (issue #130).
@@ -2249,6 +2307,12 @@ class PostgresAdapter(EntityStore):
         SQLite mirror so as-of results never diverge from the SQL
         builders (ADR-0006).
         """
+        where = getattr(query, "where", None)
+        if where is not None and not matches_tree(
+            data, entity_id, normalize_where(where)
+        ):
+            return False
+
         filters = query.filters or []
         if not filters:
             return True

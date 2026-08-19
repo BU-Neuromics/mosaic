@@ -153,6 +153,22 @@ def _enum_member_name(value: str) -> str:
     return member
 
 
+#: (input attr, storage op) pairs for the generated filter operator inputs
+#: (ADR-0006 increment 2). The resolvers' where-walker iterates this same
+#: table, so attr↔op mapping lives once.
+FILTER_OP_ATTRS: list[tuple[str, str]] = [
+    ("eq", "eq"),
+    ("neq", "neq"),
+    ("in_", "in"),
+    ("gt", "gt"),
+    ("gte", "gte"),
+    ("lt", "lt"),
+    ("lte", "lte"),
+    ("contains", "contains"),
+    ("is_null", "is_null"),
+]
+
+
 @dataclass
 class SlotSpec:
     """How one type-model slot renders onto the generated GraphQL surface."""
@@ -190,6 +206,11 @@ class EntityGraphQLInfo:
     update_input: Any = None
     create_specs: list[SlotSpec] = dc_field(default_factory=list)
     update_specs: list[SlotSpec] = dc_field(default_factory=list)
+    #: Generated ``<Class>Filter`` input (ADR-0006 increment 2) and its
+    #: (input attr name, slot spec) pairs — the resolvers' where-walker
+    #: reads these to translate a filter input into the SDK tree.
+    filter_input: Any = None
+    filter_fields: list[tuple[str, SlotSpec]] = dc_field(default_factory=list)
 
     def filterable_slot_names(self) -> list[str]:
         """Slot names a list query's ``filters.field`` can match on.
@@ -291,6 +312,7 @@ class GraphQLTypeBuilder:
         self._build_object_types()
         self._build_page_types()
         self._build_input_types()
+        self._build_filter_input_types()
         self._built = True
         return self
 
@@ -726,6 +748,219 @@ class GraphQLTypeBuilder:
             entity.update_input, entity.update_specs = self._build_one_input(
                 entity, "UpdateInput", force_optional=True
             )
+
+    # -- typed filter inputs (ADR-0006 increment 2) --------------------------
+
+    def _build_ops_input(
+        self, name: str, value_type: Any, ops: tuple[str, ...], doc: str
+    ) -> type:
+        """Build one shared per-kind operator input (e.g. StringFilterOps).
+
+        Fields are the operators the kind/range supports — introspection is
+        the capability contract (ADR-0006): a consumer reads exactly which
+        predicates a slot takes off the schema, no side-channel.
+        """
+        cls = type(name, (), {})
+        annotations: dict[str, Any] = {}
+        for attr, op in FILTER_OP_ATTRS:
+            if op not in ops:
+                continue
+            if op == "is_null":
+                annotations[attr] = Optional[bool]
+                setattr(
+                    cls,
+                    attr,
+                    strawberry.field(
+                        default=strawberry.UNSET,
+                        description=(
+                            "true matches entities with no stored value "
+                            "for the field; false the complement."
+                        ),
+                    ),
+                )
+            elif op == "in":
+                annotations[attr] = Optional[list[value_type]]
+                setattr(
+                    cls,
+                    attr,
+                    strawberry.field(
+                        name="in",
+                        default=strawberry.UNSET,
+                        description="Matches when the field is any listed value.",
+                    ),
+                )
+            else:
+                annotations[attr] = Optional[value_type]
+                setattr(cls, attr, strawberry.UNSET)
+        cls.__annotations__ = annotations
+        return strawberry.input(cls, description=doc)
+
+    def _build_filter_input_types(self) -> None:
+        """Generate the shared operator inputs and per-class ``<Class>Filter``
+        inputs with ``and``/``or``/``not`` combinators (ADR-0006 inc. 2).
+
+        Reference slots are deliberately absent until the relationship
+        predicates land (M5a adds to-one nesting under the edge name, M5b
+        adds ``some``/``none`` quantifiers) — adding them later is additive;
+        exposing a placeholder now and retyping it would break consumers.
+        """
+        comparison_ops = ("eq", "neq", "in", "gt", "gte", "lt", "lte", "is_null")
+        self._string_filter_ops = self._build_ops_input(
+            "StringFilterOps",
+            str,
+            ("eq", "neq", "in", "contains", "is_null"),
+            "Operators on string-ranged slots. `contains` is "
+            "case-insensitive substring; `%`/`_` are literals.",
+        )
+        self._int_filter_ops = self._build_ops_input(
+            "IntFilterOps", int, comparison_ops,
+            "Operators on integer-ranged slots (typed comparisons).",
+        )
+        self._float_filter_ops = self._build_ops_input(
+            "FloatFilterOps", float, comparison_ops,
+            "Operators on float/double/decimal-ranged slots.",
+        )
+        self._boolean_filter_ops = self._build_ops_input(
+            "BooleanFilterOps", bool, ("eq", "neq", "is_null"),
+            "Operators on boolean-ranged slots.",
+        )
+        self._date_filter_ops = self._build_ops_input(
+            "DateFilterOps", ISODate, comparison_ops,
+            "Operators on date-ranged slots (ISO-8601 ordering).",
+        )
+        self._datetime_filter_ops = self._build_ops_input(
+            "DateTimeFilterOps", ISODateTime, comparison_ops,
+            "Operators on datetime-ranged slots (ISO-8601 ordering).",
+        )
+        self._time_filter_ops = self._build_ops_input(
+            "TimeFilterOps", ISOTime, comparison_ops,
+            "Operators on time-ranged slots (ISO-8601 ordering).",
+        )
+        self._json_filter_ops = self._build_ops_input(
+            "JsonFilterOps", JSON, ("eq", "in", "is_null"),
+            "Operators on inline structured-value slots: whole-value "
+            "equality/membership only.",
+        )
+        self._list_filter_ops = self._build_ops_input(
+            "ListFilterOps", JSON, ("eq", "is_null"),
+            "Operators on inline multivalued slots: whole-list equality "
+            "only (membership testing is deferred — ADR-0006).",
+        )
+        self._scalar_filter_ops_by_base: dict[str, type] = {
+            "integer": self._int_filter_ops,
+            "float": self._float_filter_ops,
+            "double": self._float_filter_ops,
+            "decimal": self._float_filter_ops,
+            "boolean": self._boolean_filter_ops,
+            "date": self._date_filter_ops,
+            "datetime": self._datetime_filter_ops,
+            "time": self._time_filter_ops,
+        }
+        self._enum_filter_ops: dict[type, type] = {
+            enum_cls: self._build_ops_input(
+                f"{enum_name}FilterOps",
+                enum_cls,
+                ("eq", "neq", "in", "is_null"),
+                f"Operators on {enum_name}-ranged slots.",
+            )
+            for enum_name, enum_cls in self.enums.items()
+        }
+
+        # Pass 1 — bare filter classes, so the and/or/not combinators can
+        # self-reference (and M5a can later cross-reference target filters)
+        # with real class objects.
+        bare: dict[str, type] = {
+            name: type(f"{name}Filter", (), {}) for name in self.entities
+        }
+
+        # Pass 2 — attach per-slot operator fields + combinators, decorate.
+        for class_name, entity in self.entities.items():
+            cls = bare[class_name]
+            annotations: dict[str, Any] = {}
+            fields: list[tuple[str, SlotSpec]] = []
+            for spec in entity.slots:
+                ops_input = self._filter_ops_input_for(spec)
+                if ops_input is None:
+                    continue
+                attr = spec.attr_name
+                if attr in {"and_", "or_", "not_"}:
+                    warnings.warn(
+                        f"{class_name}.{spec.slot_name}: slot collides with "
+                        f"a filter combinator name; omitted from "
+                        f"{class_name}Filter."
+                    )
+                    continue
+                annotations[attr] = Optional[ops_input]
+                setattr(
+                    cls,
+                    attr,
+                    strawberry.field(
+                        default=strawberry.UNSET,
+                        description=spec.description or None,
+                    ),
+                )
+                fields.append((attr, spec))
+            annotations["and_"] = Optional[list[cls]]
+            setattr(
+                cls,
+                "and_",
+                strawberry.field(
+                    name="and",
+                    default=strawberry.UNSET,
+                    description="All sub-filters must match.",
+                ),
+            )
+            annotations["or_"] = Optional[list[cls]]
+            setattr(
+                cls,
+                "or_",
+                strawberry.field(
+                    name="or",
+                    default=strawberry.UNSET,
+                    description="At least one sub-filter must match.",
+                ),
+            )
+            annotations["not_"] = Optional[cls]
+            setattr(
+                cls,
+                "not_",
+                strawberry.field(
+                    name="not",
+                    default=strawberry.UNSET,
+                    description="Negates the sub-filter (two-valued: an "
+                    "entity missing the field satisfies the negation).",
+                ),
+            )
+            cls.__annotations__ = annotations
+            entity.filter_fields = fields
+            entity.filter_input = strawberry.input(
+                cls,
+                description=(
+                    f"Typed filter for {class_name} (ADR-0006). Slot fields "
+                    f"and multiple operators within one field AND together; "
+                    f"nest boolean structure with and/or/not. Reference "
+                    f"edges are not filterable here yet (relationship "
+                    f"predicates arrive in a later increment; use the flat "
+                    f"`filters:` argument for reference-id equality). "
+                    f"Composes with `filters:` by AND."
+                ),
+            )
+
+    def _filter_ops_input_for(self, spec: SlotSpec) -> Optional[type]:
+        """Pick the operator input for one slot — or None to omit the slot
+        (references, until M5a/M5b land)."""
+        if spec.kind == "reference":
+            return None
+        if spec.multivalued:
+            return self._list_filter_ops
+        if spec.kind == "enum":
+            return self._enum_filter_ops.get(spec.enum_cls)
+        if spec.scalar_type is JSON:
+            return self._json_filter_ops
+        base = spec.base_range or "string"
+        return self._scalar_filter_ops_by_base.get(
+            base, self._string_filter_ops
+        )
 
     # -- conversion helpers --------------------------------------------------
 
