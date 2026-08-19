@@ -185,7 +185,9 @@ exempt, so GraphiQL works regardless. Configure with
 - **No schema versioning** — the GraphQL schema regenerates from your LinkML
   schema at startup; breaking LinkML changes break the GraphQL contract the
   same way they break the typed SDK.
-- **Equality filters only** (`filters` + AND/OR composition), mirroring
-  `MosaicClient.query`.
+- **Equality and `in` filters only** (`filters` with `op: EQ | IN`, plus
+  AND/OR composition), mirroring `MosaicClient.query`. Other comparison
+  operators (`gt`, `lt`, `ne`, `contains`, …) raise a coded error rather
+  than silently degrading to equality.
 - **Updates cannot null-out a field** — omitted and `null` input fields are
   both dropped from the patch.
