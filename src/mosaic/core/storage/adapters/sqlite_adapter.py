@@ -34,6 +34,7 @@ from mosaic.core.storage import (
     Query,
     ScoredMatch,
     escape_like,
+    has_relationship_predicate,
     matches_operator,
     matches_tree,
     normalize_filter,
@@ -2696,6 +2697,21 @@ class SQLiteAdapter(EntityStore):
                 ),
                 field_name="order_by",
             )
+        where = getattr(query, "where", None)
+        if where is not None and has_relationship_predicate(
+            normalize_where(where)
+        ):
+            from mosaic.core.exceptions import ValidationError
+
+            raise ValidationError(
+                message=(
+                    "Relationship predicates are not supported together "
+                    "with as_of: cross-class temporal joins are out of "
+                    "scope for the reconstruction path (hippo#71 / "
+                    "ADR-0006 M5a)."
+                ),
+                field_name="where",
+            )
         with self._transaction() as conn:
             prov = self._get_provenance_store(conn)
             candidates = prov.entities_created_by(
@@ -2762,12 +2778,14 @@ class SQLiteAdapter(EntityStore):
         return any(checks) if mode == "or" else all(checks)
 
     def _leaf_predicate(
-        self, field: str, op: str, value: Any, params: list[Any]
+        self, field: str, op: str, value: Any, params: list[Any], qual: str = ""
     ) -> str:
         """SQL predicate for one ``(field, op, value)`` leaf on a per-class
         typed table, appending its parameters to ``params``. Shared by the
         flat ``filters`` path and the ``where`` tree compiler so operator
-        rendering lives once (ADR-0006)."""
+        rendering lives once (ADR-0006). ``qual`` scopes the column to a
+        table alias inside relationship EXISTS subqueries (M5a)."""
+        col = f'{qual}"{field}"'
         if op == "in":
             if not value:
                 # Empty IN-list: short-circuit to "no rows match" rather
@@ -2775,28 +2793,58 @@ class SQLiteAdapter(EntityStore):
                 return "0"
             placeholders = ", ".join("?" for _ in value)
             params.extend(self._coerce_for_column(v) for v in value)
-            return f'"{field}" IN ({placeholders})'
+            return f"{col} IN ({placeholders})"
         if op == "is_null":
-            return f'"{field}" IS NULL' if value else f'"{field}" IS NOT NULL'
+            return f"{col} IS NULL" if value else f"{col} IS NOT NULL"
         if op == "contains":
             # Case-insensitive substring (ASCII case folding — SQLite LIKE
             # semantics). Pattern metacharacters in the value are literals,
             # hence the ESCAPE clause.
             params.append(f"%{escape_like(str(value))}%")
-            return f'"{field}" LIKE ? ESCAPE \'\\\''
+            return f"{col} LIKE ? ESCAPE '\\'"
         if op in COMPARISON_SQL_OPS:
             # NULL columns never satisfy a comparison (SQL three-valued
             # logic) — mirrored by ``matches_operator`` on the as-of path.
             params.append(self._coerce_for_column(value))
-            return f'"{field}" {COMPARISON_SQL_OPS[op]} ?'
+            return f"{col} {COMPARISON_SQL_OPS[op]} ?"
         params.append(self._coerce_for_column(value))
-        return f'"{field}" = ?'
+        return f"{col} = ?"
+
+    def _to_one_reference_target(self, entity_type: str, edge: str) -> str:
+        """Resolve a relationship-predicate ``edge`` (M5a) to its target
+        class, raising loudly when the edge is not a single-valued
+        reference slot of ``entity_type``."""
+        from mosaic.core.exceptions import ValidationError
+
+        registry = self.schema_registry
+        to_one: dict[str, str] = {}
+        if registry is not None:
+            known = set(registry.class_names())
+            for slot in registry.induced_slots(entity_type):
+                if not slot.multivalued and slot.range in known:
+                    to_one[slot.name] = slot.range
+        if edge not in to_one:
+            raise ValidationError(
+                message=(
+                    f"Unknown relationship-predicate edge {edge!r} for "
+                    f"{entity_type}; to-one reference slots: "
+                    f"{sorted(to_one)}. Multivalued reference edges take "
+                    f"the some/none quantifiers (a later increment — "
+                    f"ADR-0006 M5b)."
+                ),
+                field_name=edge,
+            )
+        return to_one[edge]
 
     def _tree_predicate(
         self,
         node: dict[str, Any],
         valid_columns: set[str],
         params: list[Any],
+        *,
+        entity_type: str,
+        scope: str = "",
+        alias_seq: Optional[list[int]] = None,
     ) -> str:
         """Compile a normalized ``where`` tree to one SQL predicate.
 
@@ -2804,12 +2852,23 @@ class SQLiteAdapter(EntityStore):
         unknown field inside a tree raises: a bad leaf under ``or``/``not``
         cannot be expressed as "match nothing" without changing the tree's
         meaning.
+
+        ``scope`` is the SQL prefix (``'"Table".'`` or ``'alias.'``) of the
+        table the current subtree addresses; ``alias_seq`` numbers the
+        relationship-EXISTS aliases so nested and self-referential edges
+        (M5a) never collide.
         """
+        if alias_seq is None:
+            alias_seq = [0]
         if "and" in node:
             return (
                 "("
                 + " AND ".join(
-                    self._tree_predicate(c, valid_columns, params)
+                    self._tree_predicate(
+                        c, valid_columns, params,
+                        entity_type=entity_type, scope=scope,
+                        alias_seq=alias_seq,
+                    )
                     for c in node["and"]
                 )
                 + ")"
@@ -2818,14 +2877,40 @@ class SQLiteAdapter(EntityStore):
             return (
                 "("
                 + " OR ".join(
-                    self._tree_predicate(c, valid_columns, params)
+                    self._tree_predicate(
+                        c, valid_columns, params,
+                        entity_type=entity_type, scope=scope,
+                        alias_seq=alias_seq,
+                    )
                     for c in node["or"]
                 )
                 + ")"
             )
         if "not" in node:
             return "NOT " + self._tree_predicate(
-                node["not"], valid_columns, params
+                node["not"], valid_columns, params,
+                entity_type=entity_type, scope=scope, alias_seq=alias_seq,
+            )
+        if "edge" in node:
+            # Relationship predicate (ADR-0006 M5a): a single-valued
+            # reference is a column holding the target id, so the nested
+            # tree compiles to ONE correlated EXISTS against the target's
+            # per-class table keyed on that FK column. Availability applies
+            # to the target exactly as list queries would see it.
+            edge = node["edge"]
+            target = self._to_one_reference_target(entity_type, edge)
+            alias_seq[0] += 1
+            alias = f"rel{alias_seq[0]}"
+            outer = scope or f'"{entity_type}".'
+            target_columns = self._valid_query_columns(target)
+            sub = self._tree_predicate(
+                node["where"], target_columns, params,
+                entity_type=target, scope=f"{alias}.", alias_seq=alias_seq,
+            )
+            return (
+                f'EXISTS (SELECT 1 FROM "{target}" {alias} '
+                f'WHERE {alias}."id" = {outer}"{edge}" '
+                f"AND {alias}.is_available = 1 AND {sub})"
             )
         field = node["field"]
         if field not in valid_columns:
@@ -2844,7 +2929,9 @@ class SQLiteAdapter(EntityStore):
         # (``matches_tree``: absent value => leaf is False, `not` flips to
         # True) includes. Forcing every leaf to TRUE/FALSE keeps the tree
         # boolean end to end (ADR-0006's mirror-consistency rule).
-        leaf = self._leaf_predicate(field, node["op"], node["value"], params)
+        leaf = self._leaf_predicate(
+            field, node["op"], node["value"], params, qual=scope
+        )
         return f"COALESCE(({leaf}), 0)"
 
     def _query_predicate(
@@ -2877,11 +2964,15 @@ class SQLiteAdapter(EntityStore):
 
         where = getattr(query, "where", None)
         if where is not None:
-            # Boolean filter tree (ADR-0006 increment 2); composes with the
-            # flat ``filters`` by AND.
+            # Boolean filter tree (ADR-0006 increments 2–3); composes with
+            # the flat ``filters`` by AND.
             tree = normalize_where(where)
             clauses.append(
-                "(" + self._tree_predicate(tree, valid_columns, params) + ")"
+                "("
+                + self._tree_predicate(
+                    tree, valid_columns, params, entity_type=entity_type
+                )
+                + ")"
             )
         return " AND ".join(clauses)
 

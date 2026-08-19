@@ -207,9 +207,11 @@ class TestFilterInputIntrospection:
         assert fields["isTumor"] == "BooleanFilterOps"
         assert fields["notes"] == "StringFilterOps"
         assert "and" in fields and "or" in fields and "not" in fields
-        # Reference slots are absent until relationship predicates land.
-        assert "donor" not in fields and "donorId" not in fields
-        assert "parent" not in fields
+        # To-one reference edges nest the TARGET's filter (M5a); the raw
+        # id column is not separately filterable through `where`.
+        assert fields["donor"] == "DonorFilter"
+        assert fields["parent"] == "SampleFilter"  # self-reference works
+        assert "donorId" not in fields
 
     def test_operator_sets_by_kind(self, gql):
         def ops(name):

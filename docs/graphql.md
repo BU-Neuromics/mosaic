@@ -121,9 +121,26 @@ wrong operator or mistyped value fails GraphQL validation before execution.
 Slot fields and multiple operators within one object AND together;
 `and`/`or`/`not` nest (depth cap 10; `not` is two-valued — an entity
 missing the field satisfies the negation). `where` composes with the flat
-`filters:` list by AND. Reference edges are not filterable through `where`
-yet (relationship predicates are a later increment; use `filters:` for
-reference-id equality meanwhile).
+`filters:` list by AND.
+
+**To-one relationship predicates** (ADR-0006 M5a): a single-valued
+reference edge nests the *target* type's filter under the edge name —
+
+```graphql
+{ samples(where: {donor: {ageAtDeath: {gt: 60}}}) { total items { name } } }
+```
+
+— compiled to one correlated `EXISTS` on the FK column: the sample matches
+when its donor exists, is available, and satisfies the nested filter.
+Edges nest arbitrarily (including self-referential edges) and count toward
+the depth cap; `not` over an edge is two-valued (an entity with no
+referenced target satisfies the negation). Relationship predicates compose
+with everything the `where` tree reaches — search, `count`, `facetCounts`,
+`fieldRange`, `orderBy` — but not with `asOf`
+(`extensions.code: ASOF_RELATIONSHIP_FILTER_UNSUPPORTED`). Multivalued
+reference edges are not filterable yet (the `some`/`none` quantifiers are
+the remaining M5b increment; use `relatedTo` for reverse lookups
+meanwhile).
 
 ### Ordering and aggregation
 

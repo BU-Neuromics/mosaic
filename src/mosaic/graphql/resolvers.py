@@ -33,6 +33,7 @@ from mosaic.core.exceptions import (
     ValidationFailure,
 )
 from mosaic.core.schema_typing import EntityTypeModel
+from mosaic.core.storage import has_relationship_predicate
 from mosaic.core.validation.validators import WriteOperation
 from mosaic.graphql import DEFAULT_MAX_QUERY_DEPTH
 from mosaic.graphql.schema_builder import (
@@ -634,6 +635,21 @@ def _where_to_tree(
             {"not": _where_to_tree(entity, not_in, depth + 1, allow_empty=False)}
         )
 
+    # Relationship predicates (ADR-0006 M5a): a to-one edge nests the
+    # target type's filter; the SDK tree carries it as {edge, where}.
+    for attr, spec, target in entity.filter_edges:
+        sub_in = getattr(node, attr, strawberry.UNSET)
+        if sub_in is strawberry.UNSET or sub_in is None:
+            continue
+        parts.append(
+            {
+                "edge": spec.slot_name,
+                "where": _where_to_tree(
+                    target, sub_in, depth + 1, allow_empty=False
+                ),
+            }
+        )
+
     for attr, spec in entity.filter_fields:
         ops_obj = getattr(node, attr, strawberry.UNSET)
         if ops_obj is strawberry.UNSET or ops_obj is None:
@@ -709,6 +725,13 @@ def _make_list_resolver(builder: GraphQLTypeBuilder, entity: EntityGraphQLInfo):
                 "targets current-state storage; as-of reconstruction keeps "
                 "its documented default ordering (ADR-0007).",
                 extensions={"code": "ASOF_ORDERING_UNSUPPORTED"},
+            )
+        if as_of is not None and tree is not None and has_relationship_predicate(tree):
+            raise GraphQLError(
+                "Relationship predicates cannot be combined with asOf: "
+                "cross-class temporal joins are out of scope for the "
+                "as-of reconstruction path (ADR-0006 M5a / hippo#71).",
+                extensions={"code": "ASOF_RELATIONSHIP_FILTER_UNSUPPORTED"},
             )
         try:
             paginated = _client(info).query(
@@ -817,6 +840,13 @@ def _make_count_resolver(builder: GraphQLTypeBuilder, entity: EntityGraphQLInfo)
             if where is not None and where is not strawberry.UNSET
             else None
         )
+        if as_of is not None and tree is not None and has_relationship_predicate(tree):
+            raise GraphQLError(
+                "Relationship predicates cannot be combined with asOf: "
+                "cross-class temporal joins are out of scope for the "
+                "as-of reconstruction path (ADR-0006 M5a / hippo#71).",
+                extensions={"code": "ASOF_RELATIONSHIP_FILTER_UNSUPPORTED"},
+            )
         try:
             return _client(info).count(
                 entity_type=class_name,
