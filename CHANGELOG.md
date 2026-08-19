@@ -4,6 +4,25 @@
 
 ### Added
 
+- **Generated typed `where:` filter argument** (ADR-0006 increment 2,
+  issue #155): every list query gains `where: <Type>Filter` — a generated
+  per-class input whose slot fields are per-kind operator objects
+  (`StringFilterOps`, `IntFilterOps`, `FloatFilterOps`, `DateTimeFilterOps`,
+  `BooleanFilterOps`, per-enum `<Enum>FilterOps`, …) carrying exactly the
+  operators each slot's LinkML range supports, plus `and`/`or`/`not`
+  combinators (input depth cap 10, coded `FILTER_TOO_DEEP`). The
+  introspected schema is the capability contract: wrong operators or
+  mistyped values fail GraphQL validation before execution. The SDK gains
+  the matching `client.query(where=...)` boolean filter tree
+  (`{"field","op","value"}` leaves under `and`/`or`/`not`), validated by
+  `normalize_where` and compiled to SQL on both adapters — with `NOT`
+  forced to two-valued logic (`COALESCE(..., FALSE)`) so an entity missing
+  a field satisfies a negation identically in SQL and in the shared as-of
+  mirror (`matches_tree`). `where` composes with the flat `filters:` by
+  AND; reference slots are deliberately absent from `<Type>Filter` until
+  the relationship-predicate increments (M5a/M5b) land. LinkML slot
+  descriptions propagate onto the generated filter inputs.
+
 - **Comparison and null-test filter operators** (ADR-0006 increment 1,
   issue #155): list-query filters now support `neq`, `gt`/`gte`/`lt`/`lte`
   (numeric and temporal slots), `contains` (case-insensitive substring,

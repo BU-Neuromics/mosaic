@@ -824,3 +824,109 @@ classes:
         q = Query(filters=[{"field": "age", "op": "gt", "value": 60}])
         with pytest.raises(ValidationError, match="entity_type"):
             list(cmp_adapter.find(q))
+
+
+class TestPostgresWhereTree:
+    """Parity for `where` boolean filter trees (ADR-0006 increment 2).
+
+    The JSONB tree compiler — including the COALESCE two-valued `not`
+    semantics — must produce the same id sets as the SQLite column tree
+    compiler and the shared Python mirror (`matches_tree`). Expectations
+    intentionally match `tests/core/test_where_tree.py`.
+    """
+
+    FUTURE = "2999-01-01T00:00:00+00:00"
+
+    @pytest.fixture
+    def tree_adapter(self):
+        from mosaic.core.storage.adapters.postgres_adapter import (
+            PostgresAdapter,
+            PostgresEntity,
+        )
+        from mosaic.linkml_bridge import SchemaRegistry
+
+        registry = SchemaRegistry.from_yaml(TestPostgresComparisonFilters.SCHEMA)
+        adapter = PostgresAdapter(
+            database_url=POSTGRES_URL,
+            schema_registry=registry,
+            min_pool_size=1,
+            max_pool_size=5,
+        )
+
+        def seed(entity_id, **data):
+            adapter.create(
+                PostgresEntity(
+                    id=entity_id,
+                    entity_type="Specimen",
+                    is_available=True,
+                    version=1,
+                    data={"id": entity_id, **data},
+                )
+            )
+
+        seed("s1", name="Alpha", age=45, is_tumor=False, notes="First batch")
+        seed("s2", name="Beta", age=60, is_tumor=True)
+        seed("s3", name="Gamma", age=75, is_tumor=False, notes="follow-up")
+
+        yield adapter
+
+        with adapter._transaction() as conn:
+            cur = conn.cursor()
+            cur.execute("DELETE FROM relationships")
+            cur.execute('ALTER TABLE "ProvenanceRecord" DISABLE TRIGGER ALL')
+            cur.execute('DELETE FROM "ProvenanceRecord"')
+            cur.execute('ALTER TABLE "ProvenanceRecord" ENABLE TRIGGER ALL')
+            cur.execute("DELETE FROM entities")
+
+    def _both_paths(self, adapter, where, filters=None) -> set:
+        from mosaic.core.storage import Query
+
+        def run(as_of=None):
+            q = Query(
+                entity_type="Specimen", filters=filters or [], where=where
+            )
+            return {e.id for e in adapter.find(q, as_of=as_of)}
+
+        live = run()
+        asof = run(as_of=self.FUTURE)
+        assert live == asof, (
+            f"live/as-of divergence for {where!r}: {live} != {asof}"
+        )
+        return live
+
+    def test_leaf_with_cast(self, tree_adapter):
+        assert self._both_paths(
+            tree_adapter, {"field": "age", "op": "gt", "value": 50}
+        ) == {"s2", "s3"}
+
+    def test_and_or_nesting(self, tree_adapter):
+        assert self._both_paths(
+            tree_adapter,
+            {"and": [
+                {"not": {"field": "is_tumor", "value": True}},
+                {"or": [
+                    {"field": "age", "op": "lte", "value": 45},
+                    {"field": "age", "op": "gte", "value": 75},
+                ]},
+            ]},
+        ) == {"s1", "s3"}
+
+    def test_not_is_two_valued_on_jsonb(self, tree_adapter):
+        # s2 has no notes: NOT(contains) must include it — the COALESCE
+        # wrap prevents SQL NULL from silently excluding the row.
+        assert self._both_paths(
+            tree_adapter,
+            {"not": {"field": "notes", "op": "contains", "value": "First"}},
+        ) == {"s2", "s3"}
+
+    def test_composes_with_flat_filters(self, tree_adapter):
+        assert self._both_paths(
+            tree_adapter,
+            {"field": "age", "op": "gt", "value": 50},
+            filters=[{"field": "is_tumor", "value": False}],
+        ) == {"s3"}
+
+    def test_is_null_leaf(self, tree_adapter):
+        assert self._both_paths(
+            tree_adapter, {"field": "notes", "op": "is_null", "value": True}
+        ) == {"s2"}

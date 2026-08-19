@@ -36,6 +36,7 @@ from mosaic.core.schema_typing import EntityTypeModel
 from mosaic.core.validation.validators import WriteOperation
 from mosaic.graphql import DEFAULT_MAX_QUERY_DEPTH
 from mosaic.graphql.schema_builder import (
+    FILTER_OP_ATTRS,
     EntityGraphQLInfo,
     GraphQLTypeBuilder,
     ISODateTime,
@@ -540,24 +541,137 @@ def _to_sdk_filters(
     return out
 
 
+#: Maximum nesting depth of a `where:` filter input (and/or/not levels).
+#: The output-side QueryDepthLimiter does not see input nesting; without a
+#: cap, the recursive <Type>Filter would accept arbitrarily deep trees.
+MAX_WHERE_INPUT_DEPTH = 10
+
+
+def _filter_value(v: Any) -> Any:
+    """GraphQL input value → SDK filter value (enum members → raw values)."""
+    if isinstance(v, enum.Enum):
+        return v.value
+    if isinstance(v, list):
+        return [x.value if isinstance(x, enum.Enum) else x for x in v]
+    return v
+
+
+def _where_to_tree(
+    entity: EntityGraphQLInfo,
+    node: Any,
+    depth: int = 1,
+    *,
+    allow_empty: bool = True,
+) -> Optional[dict[str, Any]]:
+    """Translate a generated ``<Type>Filter`` input into the SDK's boolean
+    filter tree (ADR-0006 increment 2).
+
+    Slot fields and multiple operators within one operator object AND
+    together; ``and``/``or``/``not`` nest. Because the operator inputs are
+    generated per slot kind/range, operator applicability is enforced by
+    GraphQL validation itself — only value-shape problems (explicit nulls,
+    empty objects) and depth need runtime checks here.
+    """
+    if depth > MAX_WHERE_INPUT_DEPTH:
+        raise GraphQLError(
+            f"`where` filter exceeds the maximum nesting depth "
+            f"({MAX_WHERE_INPUT_DEPTH}).",
+            extensions={"code": "FILTER_TOO_DEEP"},
+        )
+    parts: list[dict[str, Any]] = []
+
+    for combinator, key in (("and_", "and"), ("or_", "or")):
+        children_in = getattr(node, combinator, strawberry.UNSET)
+        if children_in is strawberry.UNSET or children_in is None:
+            continue
+        if not children_in:
+            raise GraphQLError(
+                f"`where.{key}` requires a non-empty list of sub-filters.",
+                extensions={"code": "INVALID_FILTER_VALUE"},
+            )
+        children = [
+            _where_to_tree(entity, c, depth + 1, allow_empty=False)
+            for c in children_in
+        ]
+        # A one-child and/or is the child itself.
+        parts.append(children[0] if len(children) == 1 else {key: children})
+
+    not_in = getattr(node, "not_", strawberry.UNSET)
+    if not_in is not strawberry.UNSET and not_in is not None:
+        parts.append(
+            {"not": _where_to_tree(entity, not_in, depth + 1, allow_empty=False)}
+        )
+
+    for attr, spec in entity.filter_fields:
+        ops_obj = getattr(node, attr, strawberry.UNSET)
+        if ops_obj is strawberry.UNSET or ops_obj is None:
+            continue
+        leaves: list[dict[str, Any]] = []
+        for op_attr, op in FILTER_OP_ATTRS:
+            v = getattr(ops_obj, op_attr, strawberry.UNSET)
+            if v is strawberry.UNSET:
+                continue
+            if v is None:
+                raise GraphQLError(
+                    f"`where.{attr}.{op_attr.rstrip('_')}` is null. GraphQL "
+                    f"null cannot distinguish 'explicit null' from 'absent' "
+                    f"— ask about absence with isNull (ADR-0006).",
+                    extensions={
+                        "code": "INVALID_FILTER_VALUE",
+                        "field": spec.slot_name,
+                    },
+                )
+            leaves.append(
+                {"field": spec.slot_name, "op": op, "value": _filter_value(v)}
+            )
+        if not leaves:
+            raise GraphQLError(
+                f"`where.{attr}` is an empty operator object — set at least "
+                f"one operator.",
+                extensions={
+                    "code": "INVALID_FILTER_VALUE",
+                    "field": spec.slot_name,
+                },
+            )
+        parts.extend(leaves)
+
+    if not parts:
+        if allow_empty:
+            return None
+        raise GraphQLError(
+            "Empty filter object inside `and`/`or`/`not` — a sub-filter "
+            "must set at least one field or combinator.",
+            extensions={"code": "INVALID_FILTER_VALUE"},
+        )
+    return parts[0] if len(parts) == 1 else {"and": parts}
+
+
 def _make_list_resolver(builder: GraphQLTypeBuilder, entity: EntityGraphQLInfo):
     class_name = entity.class_name
 
     def resolver(
         info: Info,
         filters: Optional[list[FilterInput]] = None,
+        where=None,
         filter_mode: FilterMode = FilterMode.AND,
         limit: int = 100,
         offset: int = 0,
         as_of: Optional[str] = None,
     ):
+        ent = _builder(info).entities[class_name]
+        tree = (
+            _where_to_tree(ent, where)
+            if where is not None and where is not strawberry.UNSET
+            else None
+        )
         paginated = _client(info).query(
             entity_type=class_name,
-            filters=_to_sdk_filters(_builder(info).entities[class_name], filters),
+            filters=_to_sdk_filters(ent, filters),
             limit=limit,
             offset=offset,
             filter_mode=filter_mode.value,
             as_of=as_of,
+            where=tree,
         )
         b = _builder(info)
         return entity.page_type(
@@ -572,11 +686,14 @@ def _make_list_resolver(builder: GraphQLTypeBuilder, entity: EntityGraphQLInfo):
 
     resolver.__name__ = entity.plural_name
     resolver.__doc__ = (
-        f"List {class_name} entities with typed filters (FilterOp: "
-        f"equality, IN, comparisons, CONTAINS, IS_NULL per slot range — "
-        f"ADR-0006) and offset pagination (mirrors MosaicClient.query)."
+        f"List {class_name} entities with typed filters and offset "
+        f"pagination (mirrors MosaicClient.query). `where` is the typed "
+        f"{class_name}Filter (per-slot operator objects + and/or/not "
+        f"combinators — ADR-0006); the flat `filters` list (FilterOp per "
+        f"entry) remains supported and composes with `where` by AND."
     )
     resolver.__annotations__["return"] = entity.page_type
+    resolver.__annotations__["where"] = Optional[entity.filter_input]
     return resolver
 
 

@@ -35,7 +35,9 @@ from mosaic.core.storage import (
     ScoredMatch,
     escape_like,
     matches_operator,
+    matches_tree,
     normalize_filter,
+    normalize_where,
 )
 from mosaic.core.storage.adapters import sqlite_triggers
 from mosaic.core.storage.fts import (
@@ -2727,6 +2729,12 @@ class SQLiteAdapter(EntityStore):
         Postgres mirror so as-of results never diverge from the SQL
         builders (ADR-0006).
         """
+        where = getattr(query, "where", None)
+        if where is not None and not matches_tree(
+            data, entity_id, normalize_where(where)
+        ):
+            return False
+
         filters = query.filters or []
         if not filters:
             return True
@@ -2740,6 +2748,92 @@ class SQLiteAdapter(EntityStore):
             return True
         mode = getattr(query, "filter_mode", "and")
         return any(checks) if mode == "or" else all(checks)
+
+    def _leaf_predicate(
+        self, field: str, op: str, value: Any, params: list[Any]
+    ) -> str:
+        """SQL predicate for one ``(field, op, value)`` leaf on a per-class
+        typed table, appending its parameters to ``params``. Shared by the
+        flat ``filters`` path and the ``where`` tree compiler so operator
+        rendering lives once (ADR-0006)."""
+        if op == "in":
+            if not value:
+                # Empty IN-list: short-circuit to "no rows match" rather
+                # than emitting invalid `IN ()` SQL.
+                return "0"
+            placeholders = ", ".join("?" for _ in value)
+            params.extend(self._coerce_for_column(v) for v in value)
+            return f'"{field}" IN ({placeholders})'
+        if op == "is_null":
+            return f'"{field}" IS NULL' if value else f'"{field}" IS NOT NULL'
+        if op == "contains":
+            # Case-insensitive substring (ASCII case folding — SQLite LIKE
+            # semantics). Pattern metacharacters in the value are literals,
+            # hence the ESCAPE clause.
+            params.append(f"%{escape_like(str(value))}%")
+            return f'"{field}" LIKE ? ESCAPE \'\\\''
+        if op in COMPARISON_SQL_OPS:
+            # NULL columns never satisfy a comparison (SQL three-valued
+            # logic) — mirrored by ``matches_operator`` on the as-of path.
+            params.append(self._coerce_for_column(value))
+            return f'"{field}" {COMPARISON_SQL_OPS[op]} ?'
+        params.append(self._coerce_for_column(value))
+        return f'"{field}" = ?'
+
+    def _tree_predicate(
+        self,
+        node: dict[str, Any],
+        valid_columns: set[str],
+        params: list[Any],
+    ) -> str:
+        """Compile a normalized ``where`` tree to one SQL predicate.
+
+        Unlike the flat path's legacy answer-with-zero-rows behavior, an
+        unknown field inside a tree raises: a bad leaf under ``or``/``not``
+        cannot be expressed as "match nothing" without changing the tree's
+        meaning.
+        """
+        if "and" in node:
+            return (
+                "("
+                + " AND ".join(
+                    self._tree_predicate(c, valid_columns, params)
+                    for c in node["and"]
+                )
+                + ")"
+            )
+        if "or" in node:
+            return (
+                "("
+                + " OR ".join(
+                    self._tree_predicate(c, valid_columns, params)
+                    for c in node["or"]
+                )
+                + ")"
+            )
+        if "not" in node:
+            return "NOT " + self._tree_predicate(
+                node["not"], valid_columns, params
+            )
+        field = node["field"]
+        if field not in valid_columns:
+            from mosaic.core.exceptions import ValidationError
+
+            raise ValidationError(
+                message=(
+                    f"Unknown filter field {field!r} in where tree; valid "
+                    f"columns: {sorted(valid_columns)}."
+                ),
+                field_name=field,
+            )
+        # COALESCE to two-valued logic: a NULL column makes `col = ?`
+        # evaluate to SQL NULL, and `NOT NULL` is NULL — which would
+        # silently exclude rows under `not` that the Python mirror
+        # (``matches_tree``: absent value => leaf is False, `not` flips to
+        # True) includes. Forcing every leaf to TRUE/FALSE keeps the tree
+        # boolean end to end (ADR-0006's mirror-consistency rule).
+        leaf = self._leaf_predicate(field, node["op"], node["value"], params)
+        return f"COALESCE(({leaf}), 0)"
 
     def _find_per_class(
         self, entity_type: str, query: Query
@@ -2771,39 +2865,24 @@ class SQLiteAdapter(EntityStore):
             for f in query.filters:
                 for field, op, value in normalize_filter(f):
                     if field not in valid_columns:
+                        # Legacy flat-path behavior: an unknown field
+                        # answers with zero rows (GraphQL rejects it far
+                        # earlier with a coded error, #149).
                         return
-                    if op == "in":
-                        if not value:
-                            # Empty IN-list: short-circuit to "no rows match"
-                            # rather than emitting invalid `IN ()` SQL.
-                            filter_clauses.append("0")
-                            continue
-                        placeholders = ", ".join("?" for _ in value)
-                        filter_clauses.append(f'"{field}" IN ({placeholders})')
-                        params.extend(self._coerce_for_column(v) for v in value)
-                    elif op == "is_null":
-                        filter_clauses.append(
-                            f'"{field}" IS NULL' if value else f'"{field}" IS NOT NULL'
-                        )
-                    elif op == "contains":
-                        # Case-insensitive substring (ASCII case folding —
-                        # SQLite LIKE semantics). Pattern metacharacters in
-                        # the value are literals, hence the ESCAPE clause.
-                        filter_clauses.append(f'"{field}" LIKE ? ESCAPE \'\\\'')
-                        params.append(f"%{escape_like(str(value))}%")
-                    elif op in COMPARISON_SQL_OPS:
-                        # NULL columns never satisfy a comparison (SQL
-                        # three-valued logic) — mirrored by
-                        # ``matches_operator`` on the as-of path.
-                        filter_clauses.append(
-                            f'"{field}" {COMPARISON_SQL_OPS[op]} ?'
-                        )
-                        params.append(self._coerce_for_column(value))
-                    else:
-                        filter_clauses.append(f'"{field}" = ?')
-                        params.append(self._coerce_for_column(value))
+                    filter_clauses.append(
+                        self._leaf_predicate(field, op, value, params)
+                    )
             if filter_clauses:
                 sql += " AND (" + joiner.join(filter_clauses) + ")"
+
+        where = getattr(query, "where", None)
+        if where is not None:
+            # Boolean filter tree (ADR-0006 increment 2); composes with the
+            # flat ``filters`` by AND.
+            tree = normalize_where(where)
+            sql += " AND (" + self._tree_predicate(
+                tree, valid_columns, params
+            ) + ")"
 
         # `is not None`, not truthiness: LIMIT 0 must return zero rows, not
         # fall through to "no limit" (issue #130).
