@@ -1127,6 +1127,17 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#cross-class-roots-searchall-and-neighbors" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Cross-class roots: searchAll and neighbors
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#schema-introspection-the-mosaic-kind" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1756,6 +1767,17 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#cross-class-roots-searchall-and-neighbors" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Cross-class roots: searchAll and neighbors
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#schema-introspection-the-mosaic-kind" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -2070,16 +2092,46 @@ honors both the FTS match set (bounded at 1000 hits) and the composed
 filters. Results come back in FTS rank order — the point of search — unless
 an explicit <code>orderBy</code> is given, which overrides rank (the pinned precedence
 rule). Unknown filter fields are the same coded errors as list queries.</p>
+<h3 id="cross-class-roots-searchall-and-neighbors">Cross-class roots: <code>searchAll</code> and <code>neighbors</code><a class="headerlink" href="#cross-class-roots-searchall-and-neighbors" title="Permanent link">&para;</a></h3>
+<p>Two heterogeneous roots answer questions no per-class query can, using the
+house JSON-envelope pattern (<code>entityId</code> + <code>entityType</code> + <code>data: JSON</code>,
+typed follow-up via the per-type queries):</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-11-1" name="__codelineno-11-1" href="#__codelineno-11-1"></a><span class="p">{</span>
+<a id="__codelineno-11-2" name="__codelineno-11-2" href="#__codelineno-11-2"></a><span class="w">  </span><span class="n">searchAll</span><span class="p">(</span><span class="n">q</span><span class="p">:</span><span class="w"> </span><span class="s">"cortex"</span><span class="p">,</span><span class="w"> </span><span class="n">limit</span><span class="p">:</span><span class="w"> </span><span class="mi">20</span><span class="p">)</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="n">entityId</span><span class="w"> </span><span class="n">entityType</span><span class="w"> </span><span class="n">score</span><span class="w"> </span><span class="n">data</span><span class="w"> </span><span class="p">}</span>
+<a id="__codelineno-11-3" name="__codelineno-11-3" href="#__codelineno-11-3"></a><span class="w">  </span><span class="n">neighbors</span><span class="p">(</span><span class="n">id</span><span class="p">:</span><span class="w"> </span><span class="s">"some-uuid"</span><span class="p">,</span><span class="w"> </span><span class="n">depth</span><span class="p">:</span><span class="w"> </span><span class="mi">2</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-11-4" name="__codelineno-11-4" href="#__codelineno-11-4"></a><span class="w">    </span><span class="n">nodes</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="n">entityId</span><span class="w"> </span><span class="n">entityType</span><span class="w"> </span><span class="n">data</span><span class="w"> </span><span class="p">}</span>
+<a id="__codelineno-11-5" name="__codelineno-11-5" href="#__codelineno-11-5"></a><span class="w">    </span><span class="n">edges</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="n">source</span><span class="w"> </span><span class="n">target</span><span class="w"> </span><span class="n">type</span><span class="w"> </span><span class="n">edgeSource</span><span class="w"> </span><span class="p">}</span>
+<a id="__codelineno-11-6" name="__codelineno-11-6" href="#__codelineno-11-6"></a><span class="w">    </span><span class="n">edgeSources</span>
+<a id="__codelineno-11-7" name="__codelineno-11-7" href="#__codelineno-11-7"></a><span class="w">    </span><span class="n">notices</span>
+<a id="__codelineno-11-8" name="__codelineno-11-8" href="#__codelineno-11-8"></a><span class="w">  </span><span class="p">}</span>
+<a id="__codelineno-11-9" name="__codelineno-11-9" href="#__codelineno-11-9"></a><span class="p">}</span>
+</code></pre></div>
+<ul>
+<li><strong><code>searchAll(q, limit)</code></strong> — ranked full-text search across every
+  FTS-indexed class in one request (<code>score</code> is normalized per index, so
+  scores compare in relative terms across classes). Materialization is
+  batched by type; availability applies exactly as list queries. The
+  per-class search twins remain for typed results.</li>
+<li><strong><code>neighbors(id, depth, asOf)</code></strong> — the renderable subgraph around one
+  entity, covering <strong>both edge stores</strong>: link-table relationship edges
+  (multivalued references, both directions) and column-stored
+  single-valued references (forward and reverse, schema-driven). Depth is
+  capped at 5 and the node budget at 1000 — a hit bound always lands in
+  <code>notices</code>, never silent truncation. Under <code>asOf</code>, link-table edges
+  replay from provenance and node states reconstruct at that time, while
+  column edges are disclosed as out of scope (<code>edgeSources</code> names what a
+  response covers).</li>
+</ul>
 <h3 id="schema-introspection-the-mosaic-kind">Schema introspection (the Mosaic kind)<a class="headerlink" href="#schema-introspection-the-mosaic-kind" title="Permanent link">&para;</a></h3>
 <p>Beyond GraphQL's own <code>__schema</code>, the API exposes Mosaic's domain type model —
 useful for generic clients that need the LinkML classification:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-11-1" name="__codelineno-11-1" href="#__codelineno-11-1"></a><span class="p">{</span>
-<a id="__codelineno-11-2" name="__codelineno-11-2" href="#__codelineno-11-2"></a><span class="w">  </span><span class="n">hippoSchema</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="n">name</span><span class="w"> </span><span class="n">accessorName</span><span class="w"> </span><span class="p">}</span>
-<a id="__codelineno-11-3" name="__codelineno-11-3" href="#__codelineno-11-3"></a><span class="w">  </span><span class="n">hippoEntityType</span><span class="p">(</span><span class="n">name</span><span class="p">:</span><span class="w"> </span><span class="s">"Sample"</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
-<a id="__codelineno-11-4" name="__codelineno-11-4" href="#__codelineno-11-4"></a><span class="w">    </span><span class="n">fields</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="n">name</span><span class="w"> </span><span class="n">kind</span><span class="w"> </span><span class="n">range</span><span class="w"> </span><span class="n">role</span><span class="w"> </span><span class="n">required</span><span class="w"> </span><span class="n">multivalued</span><span class="w"> </span><span class="n">targetEntityType</span><span class="w"> </span><span class="n">enumValues</span><span class="w"> </span><span class="p">}</span>
-<a id="__codelineno-11-5" name="__codelineno-11-5" href="#__codelineno-11-5"></a><span class="w">    </span><span class="n">relationships</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="n">field</span><span class="w"> </span><span class="n">targetEntityType</span><span class="w"> </span><span class="p">}</span>
-<a id="__codelineno-11-6" name="__codelineno-11-6" href="#__codelineno-11-6"></a><span class="w">  </span><span class="p">}</span>
-<a id="__codelineno-11-7" name="__codelineno-11-7" href="#__codelineno-11-7"></a><span class="p">}</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-12-1" name="__codelineno-12-1" href="#__codelineno-12-1"></a><span class="p">{</span>
+<a id="__codelineno-12-2" name="__codelineno-12-2" href="#__codelineno-12-2"></a><span class="w">  </span><span class="n">hippoSchema</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="n">name</span><span class="w"> </span><span class="n">accessorName</span><span class="w"> </span><span class="p">}</span>
+<a id="__codelineno-12-3" name="__codelineno-12-3" href="#__codelineno-12-3"></a><span class="w">  </span><span class="n">hippoEntityType</span><span class="p">(</span><span class="n">name</span><span class="p">:</span><span class="w"> </span><span class="s">"Sample"</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-12-4" name="__codelineno-12-4" href="#__codelineno-12-4"></a><span class="w">    </span><span class="n">fields</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="n">name</span><span class="w"> </span><span class="n">kind</span><span class="w"> </span><span class="n">range</span><span class="w"> </span><span class="n">role</span><span class="w"> </span><span class="n">required</span><span class="w"> </span><span class="n">multivalued</span><span class="w"> </span><span class="n">targetEntityType</span><span class="w"> </span><span class="n">enumValues</span><span class="w"> </span><span class="p">}</span>
+<a id="__codelineno-12-5" name="__codelineno-12-5" href="#__codelineno-12-5"></a><span class="w">    </span><span class="n">relationships</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="n">field</span><span class="w"> </span><span class="n">targetEntityType</span><span class="w"> </span><span class="p">}</span>
+<a id="__codelineno-12-6" name="__codelineno-12-6" href="#__codelineno-12-6"></a><span class="w">  </span><span class="p">}</span>
+<a id="__codelineno-12-7" name="__codelineno-12-7" href="#__codelineno-12-7"></a><span class="p">}</span>
 </code></pre></div>
 <h2 id="errors">Errors<a class="headerlink" href="#errors" title="Permanent link">&para;</a></h2>
 <p>SDK errors surface as structured GraphQL errors with a machine-readable
