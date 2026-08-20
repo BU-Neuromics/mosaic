@@ -1968,21 +1968,26 @@ Slot fields and multiple operators within one object AND together;
 <code>and</code>/<code>or</code>/<code>not</code> nest (depth cap 10; <code>not</code> is two-valued — an entity
 missing the field satisfies the negation). <code>where</code> composes with the flat
 <code>filters:</code> list by AND.</p>
-<p><strong>To-one relationship predicates</strong> (ADR-0006 M5a): a single-valued
-reference edge nests the <em>target</em> type's filter under the edge name —</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="p">{</span><span class="w"> </span><span class="n">samples</span><span class="p">(</span><span class="n">where</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="n">donor</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="n">ageAtDeath</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="n">gt</span><span class="p">:</span><span class="w"> </span><span class="mi">60</span><span class="p">}}})</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="n">total</span><span class="w"> </span><span class="n">items</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="n">name</span><span class="w"> </span><span class="p">}</span><span class="w"> </span><span class="p">}</span><span class="w"> </span><span class="p">}</span>
+<p><strong>Relationship predicates</strong> (ADR-0006 M5a/M5b): reference edges nest
+predicates on their <em>targets</em>. A single-valued edge takes the target
+type's filter directly; a multivalued (relationship-backed) edge takes a
+<code>{some, none}</code> quantifier object over it —</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="p">{</span>
+<a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a><span class="w">  </span><span class="n">samples</span><span class="p">(</span><span class="n">where</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="n">donor</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="n">ageAtDeath</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="n">gt</span><span class="p">:</span><span class="w"> </span><span class="mi">60</span><span class="p">}}})</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="n">total</span><span class="w"> </span><span class="n">items</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="n">name</span><span class="w"> </span><span class="p">}</span><span class="w"> </span><span class="p">}</span>
+<a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a><span class="w">  </span><span class="nl">studies</span><span class="p">:</span><span class="w"> </span><span class="n">studys</span><span class="p">(</span><span class="n">where</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="n">samples</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="n">some</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="n">isTumor</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="n">eq</span><span class="p">:</span><span class="w"> </span><span class="nb">true</span><span class="p">}},</span>
+<a id="__codelineno-5-4" name="__codelineno-5-4" href="#__codelineno-5-4"></a><span class="w">                                    </span><span class="n">none</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="n">volumeMl</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="n">lt</span><span class="p">:</span><span class="w"> </span><span class="mf">0.5</span><span class="p">}}}})</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="n">total</span><span class="w"> </span><span class="p">}</span>
+<a id="__codelineno-5-5" name="__codelineno-5-5" href="#__codelineno-5-5"></a><span class="p">}</span>
 </code></pre></div>
-<p>— compiled to one correlated <code>EXISTS</code> on the FK column: the sample matches
-when its donor exists, is available, and satisfies the nested filter.
-Edges nest arbitrarily (including self-referential edges) and count toward
-the depth cap; <code>not</code> over an edge is two-valued (an entity with no
-referenced target satisfies the negation). Relationship predicates compose
-with everything the <code>where</code> tree reaches — search, <code>count</code>, <code>facetCounts</code>,
-<code>fieldRange</code>, <code>orderBy</code> — but not with <code>asOf</code>
-(<code>extensions.code: ASOF_RELATIONSHIP_FILTER_UNSUPPORTED</code>). Multivalued
-reference edges are not filterable yet (the <code>some</code>/<code>none</code> quantifiers are
-the remaining M5b increment; use <code>relatedTo</code> for reverse lookups
-meanwhile).</p>
+<p>— compiled to correlated <code>EXISTS</code> subqueries: on the FK column for to-one
+edges, against the relationships link table joined to the target for
+quantified to-many edges (<code>some</code> = at least one live edge to an available
+matching target; <code>none</code> = its complement — an entity with no edges at all
+matches <code>none</code>). Edges nest arbitrarily (including self-referential
+edges) and count toward the depth cap; <code>not</code> over an edge is two-valued
+(an entity with no referenced target satisfies the negation).
+Relationship predicates compose with everything the <code>where</code> tree reaches
+— search, <code>count</code>, <code>facetCounts</code>, <code>fieldRange</code>, <code>orderBy</code> — but not with
+<code>asOf</code> (<code>extensions.code: ASOF_RELATIONSHIP_FILTER_UNSUPPORTED</code>).</p>
 <h3 id="ordering-and-aggregation">Ordering and aggregation<a class="headerlink" href="#ordering-and-aggregation" title="Permanent link">&para;</a></h3>
 <p>Every list query takes <strong><code>orderBy: &lt;Type&gt;OrderField</code></strong> and
 <strong><code>orderDir: ASC | DESC</code></strong> (ADR-0007). The generated <code>&lt;Type&gt;OrderField</code>
