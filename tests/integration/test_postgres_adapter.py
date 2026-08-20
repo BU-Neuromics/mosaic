@@ -1415,7 +1415,7 @@ class TestPostgresRelationshipPredicates:
     def test_unknown_edge_raises(self, rel_adapter):
         from mosaic.core.exceptions import ValidationError
 
-        with pytest.raises(ValidationError, match="to-one reference slots"):
+        with pytest.raises(ValidationError, match="reference slots"):
             self._ids(
                 rel_adapter,
                 {"edge": "nope", "where": {"field": "age", "value": 1}},
@@ -1547,3 +1547,142 @@ class TestPostgresHeterogeneousRoots:
         assert {(e["source"], e["target"]) for e in graph["edges"]} == {
             ("st1", "s1")
         }
+
+
+class TestPostgresQuantifiedPredicates:
+    """Parity for to-many quantified predicates (ADR-0006 M5b, #155).
+
+    EXISTS/NOT EXISTS over the relationships link table joined to the
+    target's entities row (entity_type + availability guards on both edge
+    and target) must match the SQLite per-class-table compiler.
+    Expectations intentionally match
+    ``tests/core/test_quantified_predicates.py``.
+    """
+
+    FUTURE = "2999-01-01T00:00:00+00:00"
+
+    @pytest.fixture
+    def quant_client(self):
+        from mosaic.core.client import MosaicClient
+        from mosaic.core.storage.adapters.postgres_adapter import PostgresAdapter
+        from tests.support.linkml_schemas import build_registry
+
+        registry = build_registry(
+            {
+                "Sample": {
+                    "attributes": {
+                        "id": {"identifier": True},
+                        "name": {"range": "string", "required": True},
+                        "tissue": {"range": "string"},
+                        "volume": {"range": "integer"},
+                        "parent": {"range": "Sample"},
+                    }
+                },
+                "Study": {
+                    "attributes": {
+                        "id": {"identifier": True},
+                        "title": {"range": "string", "required": True},
+                        "sample_ids": {"range": "Sample", "multivalued": True},
+                    }
+                },
+            }
+        )
+        adapter = PostgresAdapter(
+            database_url=POSTGRES_URL,
+            schema_registry=registry,
+            min_pool_size=1,
+            max_pool_size=5,
+        )
+        client = MosaicClient(storage=adapter, registry=registry)
+        client.put("Sample", {"id": "s1", "name": "S1", "tissue": "brain", "volume": 10})
+        client.put("Sample", {"id": "s2", "name": "S2", "tissue": "liver", "volume": 20})
+        client.put("Sample", {"id": "s3", "name": "S3", "tissue": "brain", "volume": 30})
+        client.put("Study", {"id": "st1", "title": "Brain+Liver",
+                             "sample_ids": ["s1", "s2"]})
+        client.put("Study", {"id": "st2", "title": "LiverOnly",
+                             "sample_ids": ["s2"]})
+        client.put("Study", {"id": "st3", "title": "Empty"})
+        client.put("Study", {"id": "st4", "title": "BrainOnly",
+                             "sample_ids": ["s3"]})
+        yield client
+        with adapter._transaction() as conn:
+            cur = conn.cursor()
+            cur.execute("DELETE FROM relationships")
+            cur.execute('ALTER TABLE "ProvenanceRecord" DISABLE TRIGGER ALL')
+            cur.execute('DELETE FROM "ProvenanceRecord"')
+            cur.execute('ALTER TABLE "ProvenanceRecord" ENABLE TRIGGER ALL')
+            cur.execute("DELETE FROM entities")
+        adapter.close()
+
+    @staticmethod
+    def _ids(client, where, entity_type="Study") -> set:
+        return {i["id"] for i in client.query(entity_type, where=where).items}
+
+    @staticmethod
+    def _some(sub):
+        return {"edge": "sample_ids", "quantifier": "some", "where": sub}
+
+    @staticmethod
+    def _none(sub):
+        return {"edge": "sample_ids", "quantifier": "none", "where": sub}
+
+    def test_some(self, quant_client):
+        assert self._ids(
+            quant_client, self._some({"field": "tissue", "value": "brain"})
+        ) == {"st1", "st4"}
+
+    def test_none_includes_edgeless(self, quant_client):
+        assert self._ids(
+            quant_client, self._none({"field": "tissue", "value": "brain"})
+        ) == {"st2", "st3"}
+
+    def test_comparison_on_target_casts_numerically(self, quant_client):
+        assert self._ids(
+            quant_client,
+            self._some({"field": "volume", "op": "gte", "value": 25}),
+        ) == {"st4"}
+
+    def test_composes_with_combinators(self, quant_client):
+        where = {
+            "and": [
+                self._some({"field": "tissue", "value": "brain"}),
+                {"not": self._some({"field": "tissue", "value": "liver"})},
+            ]
+        }
+        assert self._ids(quant_client, where) == {"st4"}
+
+    def test_unavailable_target_never_satisfies_some(self, quant_client):
+        quant_client.set_availability_bulk(
+            entity_type="Sample", entity_ids=["s3"],
+            is_available=False, reason="test",
+        )
+        assert self._ids(
+            quant_client, self._some({"field": "tissue", "value": "brain"})
+        ) == {"st1"}
+        assert self._ids(
+            quant_client, self._none({"field": "tissue", "value": "brain"})
+        ) == {"st2", "st3", "st4"}
+
+    def test_quantifier_cardinality_mismatches_raise(self, quant_client):
+        from mosaic.core.exceptions import ValidationError
+
+        with pytest.raises(ValidationError, match="some"):
+            self._ids(quant_client, {"edge": "sample_ids",
+                                     "where": {"field": "tissue", "value": "x"}})
+        with pytest.raises(ValidationError, match="to-one"):
+            self._ids(
+                quant_client,
+                {"edge": "parent", "quantifier": "some",
+                 "where": {"field": "tissue", "value": "x"}},
+                entity_type="Sample",
+            )
+
+    def test_as_of_with_quantifier_raises(self, quant_client):
+        from mosaic.core.exceptions import ValidationError
+
+        with pytest.raises(ValidationError, match="as_of"):
+            quant_client.query(
+                "Study",
+                where=self._some({"field": "tissue", "value": "brain"}),
+                as_of=self.FUTURE,
+            )

@@ -211,9 +211,10 @@ class EntityGraphQLInfo:
     #: reads these to translate a filter input into the SDK tree.
     filter_input: Any = None
     filter_fields: list[tuple[str, SlotSpec]] = dc_field(default_factory=list)
-    #: Relationship-predicate edges on the filter input (ADR-0006 M5a):
-    #: (input attr name, slot spec, target EntityGraphQLInfo) triples for
-    #: the single-valued reference slots nested as the target's filter.
+    #: Relationship-predicate edges on the filter input (ADR-0006
+    #: M5a/M5b): (input attr name, slot spec, target EntityGraphQLInfo,
+    #: multivalued) tuples — to-one edges nest the target's filter,
+    #: to-many edges nest the some/none quantifier object.
     filter_edges: list = dc_field(default_factory=list)
     #: Generated ``<Class>OrderField`` enum (ADR-0007 increment 3): the
     #: orderable stored columns. Member values are LinkML slot names.
@@ -881,6 +882,53 @@ class GraphQLTypeBuilder:
             name: type(f"{name}Filter", (), {}) for name in self.entities
         }
 
+        # Per-target quantifier inputs for to-many edges (ADR-0006 M5b):
+        # {some: <Target>Filter, none: <Target>Filter}, shared by every
+        # multivalued edge with the same target. Built lazily against the
+        # bare classes so recursion stays safe.
+        quantifier_inputs: dict[str, type] = {}
+
+        def _quantifier_input(target: str) -> type:
+            if target not in quantifier_inputs:
+                qcls = type(f"{target}EdgeQuantifiers", (), {})
+                qcls.__annotations__ = {
+                    "some": Optional[bare[target]],
+                    "none": Optional[bare[target]],
+                }
+                setattr(
+                    qcls,
+                    "some",
+                    strawberry.field(
+                        default=strawberry.UNSET,
+                        description=(
+                            f"Matches entities with AT LEAST ONE live edge "
+                            f"to an available {target} satisfying this "
+                            f"filter."
+                        ),
+                    ),
+                )
+                setattr(
+                    qcls,
+                    "none",
+                    strawberry.field(
+                        default=strawberry.UNSET,
+                        description=(
+                            f"Matches entities with NO live edge to an "
+                            f"available {target} satisfying this filter "
+                            f"(entities with no edges at all match)."
+                        ),
+                    ),
+                )
+                quantifier_inputs[target] = strawberry.input(
+                    qcls,
+                    description=(
+                        f"some/none quantifiers over a multivalued "
+                        f"reference edge targeting {target} (ADR-0006 "
+                        f"M5b). Both set AND together."
+                    ),
+                )
+            return quantifier_inputs[target]
+
         # Pass 2 — attach per-slot operator fields + combinators, decorate.
         for class_name, entity in self.entities.items():
             cls = bare[class_name]
@@ -888,13 +936,16 @@ class GraphQLTypeBuilder:
             fields: list[tuple[str, SlotSpec]] = []
             edges: list = []
             for spec in entity.slots:
-                if spec.kind == "reference" and not spec.multivalued:
-                    # Relationship predicate (ADR-0006 M5a): a to-one edge
-                    # nests the TARGET's filter under the resolved edge
-                    # name — `where: {donor: {age: {gt: 60}}}` — compiled
-                    # to one correlated EXISTS on the FK column. (The raw
-                    # id column stays reachable through the flat `filters:`
-                    # arg.) Bare classes make the cross-reference safe.
+                if spec.kind == "reference":
+                    # Relationship predicates (ADR-0006 M5a/M5b): a to-one
+                    # edge nests the TARGET's filter under the resolved
+                    # edge name — `where: {donor: {age: {gt: 60}}}` (one
+                    # correlated EXISTS on the FK column); a to-many
+                    # (relationship-backed multivalued) edge nests the
+                    # some/none quantifier object —
+                    # `where: {samples: {some: {...}}}` (EXISTS/NOT EXISTS
+                    # over the link table). Bare classes make the
+                    # cross-references safe.
                     if spec.target_class not in bare:
                         continue  # target type not exposed: no filter to nest
                     attr = spec.resolved_attr or spec.attr_name
@@ -904,22 +955,42 @@ class GraphQLTypeBuilder:
                             f"collides on {class_name}Filter; omitted."
                         )
                         continue
-                    annotations[attr] = Optional[bare[spec.target_class]]
+                    if spec.multivalued:
+                        annotations[attr] = Optional[
+                            _quantifier_input(spec.target_class)
+                        ]
+                        description = (
+                            f"Quantified predicate over the "
+                            f"{spec.slot_name} edges (ADR-0006 M5b): some "
+                            f"= at least one linked {spec.target_class} "
+                            f"matches; none = no linked "
+                            f"{spec.target_class} matches. Not combinable "
+                            f"with asOf."
+                        )
+                    else:
+                        annotations[attr] = Optional[bare[spec.target_class]]
+                        description = (
+                            f"Matches entities whose {spec.slot_name} "
+                            f"target exists, is available, and satisfies "
+                            f"this {spec.target_class} filter (ADR-0006 "
+                            f"M5a). Not combinable with asOf."
+                        )
                     setattr(
                         cls,
                         attr,
                         strawberry.field(
                             default=strawberry.UNSET,
-                            description=(
-                                f"Matches entities whose {spec.slot_name} "
-                                f"target exists, is available, and "
-                                f"satisfies this {spec.target_class} "
-                                f"filter (ADR-0006 M5a). Not combinable "
-                                f"with asOf."
-                            ),
+                            description=description,
                         ),
                     )
-                    edges.append((attr, spec, self.entities[spec.target_class]))
+                    edges.append(
+                        (
+                            attr,
+                            spec,
+                            self.entities[spec.target_class],
+                            spec.multivalued,
+                        )
+                    )
                     continue
                 ops_input = self._filter_ops_input_for(spec)
                 if ops_input is None:
@@ -983,10 +1054,12 @@ class GraphQLTypeBuilder:
                     f"and multiple operators within one field AND together; "
                     f"nest boolean structure with and/or/not. To-one "
                     f"reference edges nest the target type's filter under "
-                    f"the edge name (relationship predicates, M5a — one "
-                    f"correlated EXISTS; not combinable with asOf). "
-                    f"Multivalued reference edges await the some/none "
-                    f"quantifiers (M5b). Composes with `filters:` by AND."
+                    f"the edge name (M5a — one correlated EXISTS); "
+                    f"multivalued reference edges nest some/none "
+                    f"quantifiers over the target's filter (M5b — "
+                    f"EXISTS/NOT EXISTS over the link table). Relationship "
+                    f"predicates are not combinable with asOf. Composes "
+                    f"with `filters:` by AND."
                 ),
             )
 

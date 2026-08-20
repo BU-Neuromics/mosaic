@@ -242,10 +242,14 @@ def normalize_where(node: Dict[str, Any], *, _depth: int = 1) -> Dict[str, Any]:
     - ``{"and": [node, ...]}`` / ``{"or": [node, ...]}`` — non-empty lists
       (an empty combinator is ambiguous and raises);
     - ``{"not": node}``;
-    - a **relationship predicate** (M5a): ``{"edge": <single-valued
-      reference slot>, "where": node}`` — matches entities whose
-      referenced target exists, is available, and satisfies the nested
-      tree (compiled to one correlated ``EXISTS``). The adapter resolves
+    - a **relationship predicate** (M5a/M5b): to-one —
+      ``{"edge": <single-valued reference slot>, "where": node}`` matches
+      entities whose referenced target exists, is available, and
+      satisfies the nested tree (one correlated ``EXISTS`` on the FK
+      column); to-many — ``{"edge": <multivalued reference slot>,
+      "quantifier": "some"|"none", "where": node}`` quantifies over the
+      relationship-backed link-table edges (``EXISTS``/``NOT EXISTS``
+      against the link table joined to the target). The adapter resolves
       and validates the edge against the schema at compile time. Not
       supported under ``as_of`` (coded error — hippo#71).
 
@@ -297,11 +301,13 @@ def normalize_where(node: Dict[str, Any], *, _depth: int = 1) -> Dict[str, Any]:
             key: [normalize_where(c, _depth=_depth + 1) for c in children]
         }
     if "edge" in node:
-        if set(node) != {"edge", "where"}:
+        if set(node) not in ({"edge", "where"}, {"edge", "quantifier", "where"}):
             raise ValidationError(
                 message=(
                     f"Relationship predicate node must be exactly "
-                    f"{{'edge', 'where'}}; got keys {sorted(node)}."
+                    f"{{'edge', 'where'}} (to-one) or "
+                    f"{{'edge', 'quantifier', 'where'}} (to-many); got keys "
+                    f"{sorted(node)}."
                 ),
                 field_name="where",
             )
@@ -310,10 +316,22 @@ def normalize_where(node: Dict[str, Any], *, _depth: int = 1) -> Dict[str, Any]:
                 message="Relationship predicate 'edge' must be a slot name.",
                 field_name="where",
             )
-        return {
+        out = {
             "edge": node["edge"],
             "where": normalize_where(node["where"], _depth=_depth + 1),
         }
+        if "quantifier" in node:
+            if node["quantifier"] not in ("some", "none"):
+                raise ValidationError(
+                    message=(
+                        f"Relationship-predicate quantifier must be 'some' "
+                        f"or 'none', got {node['quantifier']!r} (ADR-0006 "
+                        f"M5b)."
+                    ),
+                    field_name="where",
+                )
+            out["quantifier"] = node["quantifier"]
+        return out
     if "field" in node and "value" in node:
         field, op, value = validate_leaf(
             node["field"], node.get("op", "eq"), node["value"]

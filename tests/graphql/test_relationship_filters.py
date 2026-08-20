@@ -140,10 +140,12 @@ class TestCodedErrors:
         body = gql("{ samples(where: %s) { items { id } } }" % inner)
         assert body["errors"][0]["extensions"]["code"] == "FILTER_TOO_DEEP"
 
-    def test_multivalued_reference_edge_not_offered(self, seeded, gql):
-        # Study.sample_ids is relationship-backed multivalued: no edge
-        # field on StudyFilter until M5b — GraphQL validation rejects it.
+    def test_multivalued_reference_edge_requires_quantifier_shape(self, seeded, gql):
+        # Study.sample_ids is relationship-backed multivalued: its filter
+        # field (`samples`, M5b) takes the {some, none} quantifier object,
+        # never a bare target filter — GraphQL validation rejects the
+        # unquantified shape.
         body = gql(
-            '{ studys(where: {sampleIds: {title: {eq: "x"}}}) { items { id } } }'
+            '{ studys(where: {samples: {name: {eq: "x"}}}) { items { id } } }'
         )
         assert body["errors"], body

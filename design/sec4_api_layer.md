@@ -366,9 +366,13 @@ GET /entities/Sample?tissue_type=brain&tissue_type=liver&is_available=true
 # Returns samples where tissue_type IN ('brain', 'liver') AND is_available = true
 ```
 
-**`filter` parameter (cross-field CEL expression):** For more complex predicates, pass a
-URL-encoded CEL expression as the `filter` parameter. The expression is evaluated against
-each entity's `data` fields.
+**`filter` parameter (cross-field CEL expression):** *(Superseded/narrowed by ADR-0006 for
+the query surface: complex predicates ship as the typed, generated `where: <Type>Filter`
+contract — comparison operators, boolean combinators, and relationship predicates — never
+CEL-on-the-wire. The CEL sketch below remains a REST-layer idea only, unimplemented; CEL's
+platform role is validation expressions, not query filters.)* For more complex predicates,
+pass a URL-encoded CEL expression as the `filter` parameter. The expression is evaluated
+against each entity's `data` fields.
 
 ```
 GET /entities/Sample?filter=data.age_at_collection%20%3E%2018%20%26%26%20data.tissue_type%20!%3D%20%22control%22
@@ -783,7 +787,7 @@ a registry-less `HippoClient` raises `ConfigError` at mount time.
 | No schema-versioning of the GraphQL surface | The schema is regenerated from the deployment's LinkML schema at every mount; there is no `@deprecated` bridging or versioned endpoint when the LinkML schema evolves. Consumers must tolerate additive change; breaking LinkML changes break the GraphQL contract with the same blast radius as the typed SDK. |
 | Multivalued references can't be filtered on | Multivalued slots persist since v0.10.0 (issue #79 / ADR-0002; PostgreSQL parity v0.11.0, issue #81): multivalued *reference* slots are materialized as relationship edges and hydrated on read; non-reference multivalued slots store inline. The residual limitation is narrower — an edge-stored reference has no column, so list-query `filters` reject it with a coded `UNFILTERABLE_FIELD` error (`graphql/resolvers.py`); use the `relatedTo` reverse lookup over those edges instead. |
 | `isAvailable` is always `true` on reads | Default SDK reads exclude unavailable entities, and read envelopes don't carry the flag. Matches the REST surface; lifecycle state is visible via `entityHistory`. |
-| To-many relationship predicates pending (M5b) | Filtering is typed and structured — the flat `filters:` list (`FilterOp`: `EQ`/`IN` v0.12.0 #102; `NEQ`/`GT`/`GTE`/`LT`/`LTE`/`CONTAINS`/`IS_NULL` ADR-0006 inc. 1), the generated `where: <Type>Filter` argument (per-slot operator objects + `and`/`or`/`not`, ADR-0006 inc. 2), and **to-one relationship predicates** (M5a, inc. 3): a single-valued reference edge nests the target's filter, compiled to one correlated `EXISTS` on the FK column (self-referential and nested edges included; `asOf` + relationship predicate → coded `ASOF_RELATIONSHIP_FILTER_UNSUPPORTED`). Only the to-many `some`/`none` quantifiers (M5b) remain; multivalued references stay walled off until then (`relatedTo` covers reverse lookups). |
+| ~~Relationship predicates~~ (ADR-0006 complete) | The typed filter contract is fully implemented (increments 1–4): the flat `filters:` list (`FilterOp`: `EQ`/`IN` v0.12.0 #102; comparison/null-test set inc. 1), the generated `where: <Type>Filter` argument (per-slot operator objects + `and`/`or`/`not`, inc. 2), **to-one relationship predicates** (M5a, inc. 3 — target filter nested under the edge name, one correlated `EXISTS` on the FK), and **to-many `some`/`none` quantifiers** (M5b, inc. 4 — `EXISTS`/`NOT EXISTS` over the ADR-0002 link table joined to the target). `asOf` + any relationship predicate → coded `ASOF_RELATIONSHIP_FILTER_UNSUPPORTED` (hippo#71). The flat `filters:` list still cannot address multivalued references (no column) — quantify through `where` instead. |
 | Clearing a field via update | `null` and omitted input fields are both dropped from the patch; there is no way to null-out a stored value through `updateX` yet. |
 
 ---

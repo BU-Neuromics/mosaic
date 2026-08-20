@@ -2810,31 +2810,50 @@ class SQLiteAdapter(EntityStore):
         params.append(self._coerce_for_column(value))
         return f"{col} = ?"
 
-    def _to_one_reference_target(self, entity_type: str, edge: str) -> str:
-        """Resolve a relationship-predicate ``edge`` (M5a) to its target
-        class, raising loudly when the edge is not a single-valued
-        reference slot of ``entity_type``."""
+    def _reference_edge(
+        self, entity_type: str, edge: str, quantifier: Optional[str]
+    ) -> tuple[str, bool]:
+        """Resolve a relationship-predicate ``edge`` (M5a/M5b) to
+        ``(target_class, multivalued)``, raising loudly on an unknown edge
+        or a quantifier/cardinality mismatch: to-one edges take the bare
+        ``{edge, where}`` shape; to-many (relationship-backed multivalued)
+        edges require a ``some``/``none`` quantifier."""
         from mosaic.core.exceptions import ValidationError
 
         registry = self.schema_registry
-        to_one: dict[str, str] = {}
+        refs: dict[str, tuple[str, bool]] = {}
         if registry is not None:
             known = set(registry.class_names())
             for slot in registry.induced_slots(entity_type):
-                if not slot.multivalued and slot.range in known:
-                    to_one[slot.name] = slot.range
-        if edge not in to_one:
+                if slot.range in known:
+                    refs[slot.name] = (slot.range, bool(slot.multivalued))
+        if edge not in refs:
             raise ValidationError(
                 message=(
                     f"Unknown relationship-predicate edge {edge!r} for "
-                    f"{entity_type}; to-one reference slots: "
-                    f"{sorted(to_one)}. Multivalued reference edges take "
-                    f"the some/none quantifiers (a later increment — "
-                    f"ADR-0006 M5b)."
+                    f"{entity_type}; reference slots: {sorted(refs)}."
                 ),
                 field_name=edge,
             )
-        return to_one[edge]
+        target, multivalued = refs[edge]
+        if multivalued and quantifier is None:
+            raise ValidationError(
+                message=(
+                    f"{entity_type}.{edge} is a multivalued reference edge: "
+                    f"quantify it with 'some' or 'none' (ADR-0006 M5b)."
+                ),
+                field_name=edge,
+            )
+        if not multivalued and quantifier is not None:
+            raise ValidationError(
+                message=(
+                    f"{entity_type}.{edge} is a to-one reference edge: it "
+                    f"takes the bare {{edge, where}} predicate, not a "
+                    f"some/none quantifier (ADR-0006 M5a)."
+                ),
+                field_name=edge,
+            )
+        return target, multivalued
 
     def _tree_predicate(
         self,
@@ -2892,26 +2911,49 @@ class SQLiteAdapter(EntityStore):
                 entity_type=entity_type, scope=scope, alias_seq=alias_seq,
             )
         if "edge" in node:
-            # Relationship predicate (ADR-0006 M5a): a single-valued
-            # reference is a column holding the target id, so the nested
-            # tree compiles to ONE correlated EXISTS against the target's
-            # per-class table keyed on that FK column. Availability applies
-            # to the target exactly as list queries would see it.
+            # Relationship predicate (ADR-0006 M5a/M5b). To-one: a
+            # single-valued reference is a column holding the target id,
+            # so the nested tree compiles to ONE correlated EXISTS against
+            # the target's per-class table keyed on that FK column.
+            # To-many (quantified): the ADR-0002 link table holds the
+            # edges, so `some` is EXISTS over relationships joined to the
+            # target table and `none` its NOT EXISTS complement.
+            # Availability applies to edge and target exactly as list
+            # queries and hydration see them.
             edge = node["edge"]
-            target = self._to_one_reference_target(entity_type, edge)
+            quantifier = node.get("quantifier")
+            target, multivalued = self._reference_edge(
+                entity_type, edge, quantifier
+            )
             alias_seq[0] += 1
             alias = f"rel{alias_seq[0]}"
             outer = scope or f'"{entity_type}".'
             target_columns = self._valid_query_columns(target)
+            if not multivalued:
+                sub = self._tree_predicate(
+                    node["where"], target_columns, params,
+                    entity_type=target, scope=f"{alias}.", alias_seq=alias_seq,
+                )
+                return (
+                    f'EXISTS (SELECT 1 FROM "{target}" {alias} '
+                    f'WHERE {alias}."id" = {outer}"{edge}" '
+                    f"AND {alias}.is_available = 1 AND {sub})"
+                )
+            link = f"{alias}l"
+            params.append(edge)
             sub = self._tree_predicate(
                 node["where"], target_columns, params,
                 entity_type=target, scope=f"{alias}.", alias_seq=alias_seq,
             )
-            return (
-                f'EXISTS (SELECT 1 FROM "{target}" {alias} '
-                f'WHERE {alias}."id" = {outer}"{edge}" '
+            exists = (
+                f"EXISTS (SELECT 1 FROM relationships {link} "
+                f'JOIN "{target}" {alias} ON {alias}."id" = {link}.target_id '
+                f'WHERE {link}.source_id = {outer}"id" '
+                f"AND {link}.relationship_type = ? "
+                f"AND {link}.is_available = 1 "
                 f"AND {alias}.is_available = 1 AND {sub})"
             )
+            return exists if quantifier == "some" else f"NOT {exists}"
         field = node["field"]
         if field not in valid_columns:
             from mosaic.core.exceptions import ValidationError

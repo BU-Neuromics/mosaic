@@ -4,6 +4,27 @@
 
 ### Added
 
+- **To-many quantified relationship predicates** (ADR-0006 M5b /
+  increment 4, issue #155 — the FINAL typed-filter increment): the
+  `where` tree's edge node gains a quantifier —
+  `{"edge": <multivalued reference slot>, "quantifier": "some"|"none",
+  "where": subtree}` — compiled by both adapters to `EXISTS`/`NOT
+  EXISTS` against the ADR-0002 `relationships` link table joined to the
+  target's table, with availability guards on BOTH the edge and the
+  target (an entity with no edges matches `none`; an unavailable target
+  never satisfies `some`). GraphQL: multivalued reference edges on
+  `<Type>Filter` nest a per-target `{some, none}` quantifier object
+  (`<Target>EdgeQuantifiers`) taking the target's filter — recursive via
+  the same bare-class pass as M5a, counted against the `where` depth
+  cap, `asOf` rejected with the coded
+  `ASOF_RELATIONSHIP_FILTER_UNSUPPORTED` error. Loud
+  quantifier/cardinality validation: a multivalued edge without a
+  quantifier, a quantifier on a to-one edge, and unknown quantifiers all
+  raise; the flat `filters:` path's `UNFILTERABLE_FIELD` message for
+  multivalued references now points at the typed `where` quantifiers.
+  With this, the ADR-0006 typed filter contract is fully implemented
+  (increments 1–4).
+
 - **Heterogeneous roots** (issue #158): two additive cross-class query
   roots following the house JSON-envelope pattern (ADR-0005 —
   deliberately not a GraphQL union/interface root; that remains future
