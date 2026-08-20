@@ -591,8 +591,10 @@ def _to_sdk_filters(
             raise GraphQLError(
                 f"{entity.class_name}.{spec.slot_name} is a multivalued "
                 f"reference, stored as relationship edges rather than a "
-                f"column (ADR-0002), so it cannot be filtered on. Use the "
-                f"`relatedTo` query for reverse lookups over these edges.",
+                f"column (ADR-0002), so the flat `filters:` list cannot "
+                f"address it. Quantify over it with the typed `where:` "
+                f"filter instead — some/none under the edge name (ADR-0006 "
+                f"M5b) — or use `relatedTo` for reverse lookups.",
                 extensions={"code": "UNFILTERABLE_FIELD", "field": f.field},
             )
         allowed = _allowed_filter_ops(spec)
@@ -700,20 +702,47 @@ def _where_to_tree(
             {"not": _where_to_tree(entity, not_in, depth + 1, allow_empty=False)}
         )
 
-    # Relationship predicates (ADR-0006 M5a): a to-one edge nests the
-    # target type's filter; the SDK tree carries it as {edge, where}.
-    for attr, spec, target in entity.filter_edges:
+    # Relationship predicates (ADR-0006 M5a/M5b): a to-one edge nests the
+    # target type's filter ({edge, where}); a to-many edge nests the
+    # some/none quantifier object ({edge, quantifier, where}).
+    for attr, spec, target, multivalued in entity.filter_edges:
         sub_in = getattr(node, attr, strawberry.UNSET)
         if sub_in is strawberry.UNSET or sub_in is None:
             continue
-        parts.append(
-            {
-                "edge": spec.slot_name,
-                "where": _where_to_tree(
-                    target, sub_in, depth + 1, allow_empty=False
-                ),
-            }
-        )
+        if not multivalued:
+            parts.append(
+                {
+                    "edge": spec.slot_name,
+                    "where": _where_to_tree(
+                        target, sub_in, depth + 1, allow_empty=False
+                    ),
+                }
+            )
+            continue
+        emitted = False
+        for quantifier in ("some", "none"):
+            q_in = getattr(sub_in, quantifier, strawberry.UNSET)
+            if q_in is strawberry.UNSET or q_in is None:
+                continue
+            emitted = True
+            parts.append(
+                {
+                    "edge": spec.slot_name,
+                    "quantifier": quantifier,
+                    "where": _where_to_tree(
+                        target, q_in, depth + 1, allow_empty=False
+                    ),
+                }
+            )
+        if not emitted:
+            raise GraphQLError(
+                f"`where.{attr}` is an empty quantifier object — set "
+                f"`some` and/or `none` (ADR-0006 M5b).",
+                extensions={
+                    "code": "INVALID_FILTER_VALUE",
+                    "field": spec.slot_name,
+                },
+            )
 
     for attr, spec in entity.filter_fields:
         ops_obj = getattr(node, attr, strawberry.UNSET)

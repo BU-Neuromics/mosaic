@@ -185,7 +185,7 @@ class TestAggregatesSeeEdgePredicates:
 
 class TestLoudErrors:
     def test_unknown_edge_raises(self, client):
-        with pytest.raises(ValidationError, match="to-one reference slots"):
+        with pytest.raises(ValidationError, match="reference slots"):
             ids(client, where={"edge": "nope", "where": {"field": "age", "value": 1}})
 
     def test_multivalued_edge_raises_with_m5b_pointer(self, client):

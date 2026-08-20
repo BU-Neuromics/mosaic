@@ -2,7 +2,8 @@
 
 Tracking issue: BU-Neuromics/mosaic#155
 
-> ADR-0006 ratified 2026-08-19; increments 1–3 implemented. Increment 4 (M5b) to be scheduled.
+> ADR-0006 ratified 2026-08-19; ALL four increments implemented (1–2 on 2026-08-19,
+> 3–4 on 2026-08-19/20). The typed filter contract is complete.
 
 ## 0. Design gate
 
@@ -54,15 +55,22 @@ Tracking issue: BU-Neuromics/mosaic#155
 
 ## 4. M5b — to-many quantified predicates (increment 4)
 
-- [ ] 4.1 `some`/`none` quantifier inputs on relationship-backed multivalued reference slots
-  (recursive input types via the two-pass bare-class trick).
-- [ ] 4.2 `EXISTS`/`NOT EXISTS` against the `relationships` link table joined to the target
-  table, both adapters; parity tests.
-- [ ] 4.3 Filter-nesting depth cap with coded error (independent of `QueryDepthLimiter`).
-- [ ] 4.4 Retire the `UNFILTERABLE_FIELD` wall for these slots; error text updated.
+- [x] 4.1 `some`/`none` quantifier inputs on relationship-backed multivalued reference slots
+  (per-target `<Target>EdgeQuantifiers` input over the bare filter classes; both set AND
+  together).
+- [x] 4.2 `EXISTS`/`NOT EXISTS` against the `relationships` link table joined to the target
+  table (availability guards on edge AND target; edgeless entities match `none`), both
+  adapters; parity tests mirrored (`tests/core/test_quantified_predicates.py` ↔
+  `TestPostgresQuantifiedPredicates`).
+- [x] 4.3 Filter-nesting depth cap with coded error (`MAX_WHERE_INPUT_DEPTH`, landed inc. 2;
+  quantified edges count toward it).
+- [x] 4.4 The `where` path now quantifies over these slots; the flat `filters:` path keeps
+  its `UNFILTERABLE_FIELD` error (no column exists to address) with the text updated to
+  point at the typed `where` quantifiers.
 
 ## 5. Docs
 
-- [ ] 5.1 sec4 §4.7 filter documentation rewritten around the typed contract; §4.3 CEL sketch
-  annotated as superseded/narrowed for the GraphQL transport (per ADR-0006).
-- [ ] 5.2 `docs/graphql.md` filtering guide with per-operator examples.
+- [x] 5.1 sec4 §4.7 filter documentation rewritten around the typed contract (limitation row
+  retired at M5b); §4.3 CEL sketch annotated as superseded/narrowed per ADR-0006.
+- [x] 5.2 `docs/graphql.md` filtering guide with per-operator, `where`-tree, and
+  relationship-predicate examples (M5a + M5b).

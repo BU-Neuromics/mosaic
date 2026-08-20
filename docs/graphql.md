@@ -123,24 +123,29 @@ Slot fields and multiple operators within one object AND together;
 missing the field satisfies the negation). `where` composes with the flat
 `filters:` list by AND.
 
-**To-one relationship predicates** (ADR-0006 M5a): a single-valued
-reference edge nests the *target* type's filter under the edge name —
+**Relationship predicates** (ADR-0006 M5a/M5b): reference edges nest
+predicates on their *targets*. A single-valued edge takes the target
+type's filter directly; a multivalued (relationship-backed) edge takes a
+`{some, none}` quantifier object over it —
 
 ```graphql
-{ samples(where: {donor: {ageAtDeath: {gt: 60}}}) { total items { name } } }
+{
+  samples(where: {donor: {ageAtDeath: {gt: 60}}}) { total items { name } }
+  studies: studys(where: {samples: {some: {isTumor: {eq: true}},
+                                    none: {volumeMl: {lt: 0.5}}}}) { total }
+}
 ```
 
-— compiled to one correlated `EXISTS` on the FK column: the sample matches
-when its donor exists, is available, and satisfies the nested filter.
-Edges nest arbitrarily (including self-referential edges) and count toward
-the depth cap; `not` over an edge is two-valued (an entity with no
-referenced target satisfies the negation). Relationship predicates compose
-with everything the `where` tree reaches — search, `count`, `facetCounts`,
-`fieldRange`, `orderBy` — but not with `asOf`
-(`extensions.code: ASOF_RELATIONSHIP_FILTER_UNSUPPORTED`). Multivalued
-reference edges are not filterable yet (the `some`/`none` quantifiers are
-the remaining M5b increment; use `relatedTo` for reverse lookups
-meanwhile).
+— compiled to correlated `EXISTS` subqueries: on the FK column for to-one
+edges, against the relationships link table joined to the target for
+quantified to-many edges (`some` = at least one live edge to an available
+matching target; `none` = its complement — an entity with no edges at all
+matches `none`). Edges nest arbitrarily (including self-referential
+edges) and count toward the depth cap; `not` over an edge is two-valued
+(an entity with no referenced target satisfies the negation).
+Relationship predicates compose with everything the `where` tree reaches
+— search, `count`, `facetCounts`, `fieldRange`, `orderBy` — but not with
+`asOf` (`extensions.code: ASOF_RELATIONSHIP_FILTER_UNSUPPORTED`).
 
 ### Ordering and aggregation
 

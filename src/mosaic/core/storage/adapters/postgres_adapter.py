@@ -1879,31 +1879,48 @@ class PostgresAdapter(EntityStore):
         params.append(self._jsonb_text(value))
         return f"{doc}->>%s = %s"
 
-    def _to_one_reference_target(self, entity_type: str, edge: str) -> str:
-        """Resolve a relationship-predicate ``edge`` (M5a) to its target
-        class, raising loudly when the edge is not a single-valued
-        reference slot of ``entity_type`` — mirror of the SQLite helper."""
+    def _reference_edge(
+        self, entity_type: str, edge: str, quantifier: Optional[str]
+    ) -> tuple[str, bool]:
+        """Resolve a relationship-predicate ``edge`` (M5a/M5b) to
+        ``(target_class, multivalued)`` — mirror of the SQLite helper:
+        loud on unknown edges and quantifier/cardinality mismatches."""
         from mosaic.core.exceptions import ValidationError
 
         registry = self.schema_registry
-        to_one: dict[str, str] = {}
+        refs: dict[str, tuple[str, bool]] = {}
         if registry is not None:
             known = set(registry.class_names())
             for slot in registry.induced_slots(entity_type):
-                if not slot.multivalued and slot.range in known:
-                    to_one[slot.name] = slot.range
-        if edge not in to_one:
+                if slot.range in known:
+                    refs[slot.name] = (slot.range, bool(slot.multivalued))
+        if edge not in refs:
             raise ValidationError(
                 message=(
                     f"Unknown relationship-predicate edge {edge!r} for "
-                    f"{entity_type}; to-one reference slots: "
-                    f"{sorted(to_one)}. Multivalued reference edges take "
-                    f"the some/none quantifiers (a later increment — "
-                    f"ADR-0006 M5b)."
+                    f"{entity_type}; reference slots: {sorted(refs)}."
                 ),
                 field_name=edge,
             )
-        return to_one[edge]
+        target, multivalued = refs[edge]
+        if multivalued and quantifier is None:
+            raise ValidationError(
+                message=(
+                    f"{entity_type}.{edge} is a multivalued reference edge: "
+                    f"quantify it with 'some' or 'none' (ADR-0006 M5b)."
+                ),
+                field_name=edge,
+            )
+        if not multivalued and quantifier is not None:
+            raise ValidationError(
+                message=(
+                    f"{entity_type}.{edge} is a to-one reference edge: it "
+                    f"takes the bare {{edge, where}} predicate, not a "
+                    f"some/none quantifier (ADR-0006 M5a)."
+                ),
+                field_name=edge,
+            )
+        return target, multivalued
 
     def _tree_predicate(
         self,
@@ -1970,25 +1987,49 @@ class PostgresAdapter(EntityStore):
                     field_name=node["edge"],
                 )
             edge = node["edge"]
-            target = self._to_one_reference_target(entity_type, edge)
+            quantifier = node.get("quantifier")
+            target, multivalued = self._reference_edge(
+                entity_type, edge, quantifier
+            )
             alias_seq[0] += 1
             alias = f"rel{alias_seq[0]}"
             outer = scope or "entities."
-            # psycopg substitutes positionally: the placeholders render as
-            # edge key → target type → subtree, so the params must append
-            # in exactly that order (subtree recursion last).
+            if not multivalued:
+                # psycopg substitutes positionally: the placeholders render
+                # as edge key → target type → subtree, so the params must
+                # append in exactly that order (subtree recursion last).
+                params.append(edge)
+                params.append(target)
+                sub = self._tree_predicate(
+                    node["where"], target, params,
+                    scope=f"{alias}.", alias_seq=alias_seq,
+                )
+                return (
+                    f"EXISTS (SELECT 1 FROM entities {alias} "
+                    f"WHERE {alias}.id = {outer}data->>%s "
+                    f"AND {alias}.entity_type = %s "
+                    f"AND {alias}.is_available = TRUE AND {sub})"
+                )
+            # To-many (M5b): quantify over the ADR-0002 link table joined
+            # to the target's entities row. Placeholder render order:
+            # relationship_type → target type → subtree.
+            link = f"{alias}l"
             params.append(edge)
             params.append(target)
             sub = self._tree_predicate(
                 node["where"], target, params,
                 scope=f"{alias}.", alias_seq=alias_seq,
             )
-            return (
-                f"EXISTS (SELECT 1 FROM entities {alias} "
-                f"WHERE {alias}.id = {outer}data->>%s "
+            exists = (
+                f"EXISTS (SELECT 1 FROM relationships {link} "
+                f"JOIN entities {alias} ON {alias}.id = {link}.target_id "
+                f"WHERE {link}.source_id = {outer}id "
+                f"AND {link}.relationship_type = %s "
+                f"AND {link}.is_available = TRUE "
                 f"AND {alias}.entity_type = %s "
                 f"AND {alias}.is_available = TRUE AND {sub})"
             )
+            return exists if quantifier == "some" else f"NOT {exists}"
         # COALESCE to two-valued logic: a missing key makes the extracted
         # text SQL NULL, and `NOT NULL` is NULL — which would silently
         # exclude rows under `not` that the Python mirror (``matches_tree``:
