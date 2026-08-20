@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## v0.13.0 — 2026-08-20 (BREAKING: search returns a page envelope; the typed filter contract completes — relationship predicates, aggregation & ordering, cross-class roots)
+
 ### Added
 
 - **Relationship cardinality count** (issue #132, deferred from
