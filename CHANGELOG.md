@@ -4,6 +4,21 @@
 
 ### Added
 
+- **Relationship cardinality count** (issue #132, deferred from
+  ADR-0005): `MosaicClient.count_relationship(entity_type, entity_id,
+  edge)` answers the cardinality of a multivalued reference edge with a
+  single indexed `COUNT(*)` over the ADR-0002 `relationships` table
+  joined to the target's table, without resolving any member object —
+  the interim resolve-to-count optimization ADR-0005 called for. Reuses
+  M5b's `_reference_edge` resolution, so an unknown edge or a to-one
+  edge raises the same errors that path already does, and the same
+  availability-consistency rule applies (an edge whose target is
+  unavailable is not counted). GraphQL: every resolvable multivalued
+  reference field gets a `<field>Count: Int!` sibling (e.g.
+  `samplesCount` beside `samples`) — the relationship-count-badge
+  consumer named in the issue no longer has to resolve the whole list
+  just to show its length.
+
 - **To-many quantified relationship predicates** (ADR-0006 M5b /
   increment 4, issue #155 — the FINAL typed-filter increment): the
   `where` tree's edge node gains a quantifier —

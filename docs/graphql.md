@@ -218,6 +218,19 @@ field that walks the relationship.
 Resolved fields load through a per-request DataLoader: resolving the same target
 type N times in one request issues a single batched query.
 
+A multivalued reference field gets a `<field>Count: Int!` sibling — its
+cardinality without resolving any member object (issue #132):
+
+```graphql
+{ study(id: "st1") { samplesCount } }
+```
+
+A single indexed `COUNT(*)` over the `relationships` table; an edge whose
+target is unavailable is not counted (same availability rule the resolved
+list and the `some`/`none` quantifiers apply). Useful for a relationship
+count badge that would otherwise resolve the whole list just to show its
+length.
+
 ### System and temporal fields
 
 Every entity type carries `id` and `isAvailable` (stored), plus the read-only

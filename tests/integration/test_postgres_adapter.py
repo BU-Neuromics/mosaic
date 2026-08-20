@@ -1686,3 +1686,78 @@ class TestPostgresQuantifiedPredicates:
                 where=self._some({"field": "tissue", "value": "brain"}),
                 as_of=self.FUTURE,
             )
+
+
+class TestPostgresRelationshipCount:
+    """Parity for the cheap relationship-cardinality primitive (issue
+    #132, deferred from ADR-0005). Single ``COUNT(*)`` over the
+    relationships table joined to ``entities`` — expectations mirror
+    ``tests/core/test_relationship_count.py``.
+    """
+
+    @pytest.fixture
+    def count_client(self):
+        from mosaic.core.client import MosaicClient
+        from mosaic.core.storage.adapters.postgres_adapter import PostgresAdapter
+        from tests.support.linkml_schemas import build_registry
+
+        registry = build_registry(
+            {
+                "Sample": {
+                    "attributes": {
+                        "id": {"identifier": True},
+                        "name": {"range": "string", "required": True},
+                        "parent": {"range": "Sample"},
+                    }
+                },
+                "Study": {
+                    "attributes": {
+                        "id": {"identifier": True},
+                        "title": {"range": "string", "required": True},
+                        "sample_ids": {"range": "Sample", "multivalued": True},
+                    }
+                },
+            }
+        )
+        adapter = PostgresAdapter(
+            database_url=POSTGRES_URL,
+            schema_registry=registry,
+            min_pool_size=1,
+            max_pool_size=5,
+        )
+        client = MosaicClient(storage=adapter, registry=registry)
+        client.put("Sample", {"id": "s1", "name": "S1"})
+        client.put("Sample", {"id": "s2", "name": "S2"})
+        client.put("Study", {"id": "st1", "title": "Mixed",
+                             "sample_ids": ["s1", "s2"]})
+        client.put("Study", {"id": "st2", "title": "Empty"})
+        yield client
+        with adapter._transaction() as conn:
+            cur = conn.cursor()
+            cur.execute("DELETE FROM relationships")
+            cur.execute('ALTER TABLE "ProvenanceRecord" DISABLE TRIGGER ALL')
+            cur.execute('DELETE FROM "ProvenanceRecord"')
+            cur.execute('ALTER TABLE "ProvenanceRecord" ENABLE TRIGGER ALL')
+            cur.execute("DELETE FROM entities")
+        adapter.close()
+
+    def test_counts_without_resolving(self, count_client):
+        assert count_client.count_relationship("Study", "st1", "sample_ids") == 2
+
+    def test_edgeless_entity_counts_zero(self, count_client):
+        assert count_client.count_relationship("Study", "st2", "sample_ids") == 0
+
+    def test_unavailable_target_not_counted(self, count_client):
+        count_client.set_availability_bulk(
+            entity_type="Sample", entity_ids=["s2"],
+            is_available=False, reason="test",
+        )
+        assert count_client.count_relationship("Study", "st1", "sample_ids") == 1
+
+    def test_quantifier_cardinality_mismatches_raise(self, count_client):
+        from mosaic.core.exceptions import ValidationError
+
+        with pytest.raises(ValidationError, match="reference slots"):
+            count_client.count_relationship("Study", "st1", "nope")
+        with pytest.raises(ValidationError, match="to-one"):
+            count_client.count_relationship("Sample", "s1", "parent")

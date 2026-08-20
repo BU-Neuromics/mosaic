@@ -510,6 +510,17 @@ class QueryService:
         )
         return tuple(self._storage.field_range(query, field))
 
+    def count_relationship(
+        self, entity_type: str, entity_id: str, edge: str
+    ) -> int:
+        """Cardinality of a multivalued reference edge without resolving
+        its member objects (issue #132). See
+        ``EntityStore.count_relationship`` for the availability rule.
+        """
+        if self._storage is None:
+            return 0
+        return self._storage.count_relationship(entity_type, entity_id, edge)
+
     def query_updated_since(
         self,
         entity_type: Optional[str] = None,

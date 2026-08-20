@@ -2529,6 +2529,26 @@ class PostgresAdapter(EntityStore):
             self._normalize_aggregate_value(row["hi"]),
         )
 
+    def count_relationship(
+        self, entity_type: str, entity_id: str, edge: str
+    ) -> int:
+        """Cheap cardinality of a multivalued reference edge (issue #132) —
+        mirrors the SQLite adapter; joins to ``entities`` filtered by
+        ``entity_type`` pending ADR-0008's per-class-table convergence.
+        """
+        target, _ = self._reference_edge(entity_type, edge, "some")
+        sql = (
+            "SELECT COUNT(*) AS c FROM relationships rel "
+            "JOIN entities tgt ON tgt.id = rel.target_id "
+            "WHERE rel.source_id = %s AND rel.relationship_type = %s "
+            "AND rel.is_available = TRUE AND tgt.entity_type = %s "
+            "AND tgt.is_available = TRUE"
+        )
+        with self._transaction() as conn:
+            cur = conn.cursor()
+            cur.execute(sql, (entity_id, edge, target))
+            return int(cur.fetchone()["c"])
+
     def _require_aggregate_field(
         self, query: Query, field: str, *, surface: str
     ) -> str:

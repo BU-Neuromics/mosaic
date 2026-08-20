@@ -3255,6 +3255,30 @@ class SQLiteAdapter(EntityStore):
         hi = decode(row["hi"]) if row["hi"] is not None else None
         return (lo, hi)
 
+    def count_relationship(
+        self, entity_type: str, entity_id: str, edge: str
+    ) -> int:
+        """Cheap cardinality of a multivalued reference edge (issue #132).
+
+        Single indexed ``COUNT(*)`` over the relationships table joined to
+        the target's per-class table — the same shape M5b's ``some``
+        quantifier compiles to (``_reference_edge`` rejects an unknown or
+        to-one edge with the identical errors that path already raises).
+        """
+        target, _ = self._reference_edge(entity_type, edge, "some")
+        if not self._per_class_table_exists(target):
+            return 0
+        with self._transaction() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                f'SELECT COUNT(*) AS c FROM relationships rel '
+                f'JOIN "{target}" tgt ON tgt."id" = rel.target_id '
+                f"WHERE rel.source_id = ? AND rel.relationship_type = ? "
+                f"AND rel.is_available = 1 AND tgt.is_available = 1",
+                (entity_id, edge),
+            )
+            return int(cursor.fetchone()["c"])
+
     def _require_aggregate_field(
         self, query: Query, field: str, *, surface: str
     ) -> tuple[str, set[str]]:
