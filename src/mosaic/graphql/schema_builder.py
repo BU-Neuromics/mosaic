@@ -577,6 +577,16 @@ class GraphQLTypeBuilder:
                             f"ADR-0005 — no silent raw-id fallback)."
                         )
                     used.add(spec.resolved_attr)  # type: ignore[arg-type]
+                    if spec.multivalued:
+                        count_attr = f"{spec.resolved_attr}_count"
+                        if count_attr in used:
+                            raise ValueError(
+                                f"{class_name}.{spec.slot_name}: the cardinality "
+                                f"field '{count_attr}' collides with another "
+                                f"field on {class_name}. Rename the slot to "
+                                f"disambiguate (issue #132)."
+                            )
+                        used.add(count_attr)
                 elif spec.target_class in self.entities:
                     # resolvable was cleared for a name degeneracy even though
                     # the target IS exposed — same ambiguity, fail loud.
@@ -620,6 +630,25 @@ class GraphQLTypeBuilder:
                             ),
                         ),
                     )
+                    if spec.multivalued:
+                        count_attr = f"{spec.resolved_attr}_count"
+                        count_resolver = self._make_reference_count_resolver(
+                            spec, class_name
+                        )
+                        annotations[count_attr] = int
+                        setattr(
+                            cls,
+                            count_attr,
+                            strawberry.field(
+                                resolver=count_resolver,
+                                description=(
+                                    f"Cardinality of `{spec.slot_name}` "
+                                    f"without resolving its member objects "
+                                    f"— a single indexed COUNT(*) over the "
+                                    f"relationship edges (issue #132)."
+                                ),
+                            ),
+                        )
 
             slot_names = {s.slot_name for s in entity.slots}
             for name, annotation in COMPUTED_FIELDS:
@@ -665,6 +694,15 @@ class GraphQLTypeBuilder:
                 return builder.instance_from_envelope(target_class, envelope)
 
             resolver.__annotations__["return"] = Optional[target]
+        return resolver
+
+    def _make_reference_count_resolver(self, spec: SlotSpec, class_name: str) -> Any:
+        edge = spec.slot_name
+
+        async def resolver(self, info: Info) -> int:  # type: ignore[no-untyped-def]
+            client = info.context["client"]
+            return client.count_relationship(class_name, str(self.id), edge)
+
         return resolver
 
     def _build_page_types(self) -> None:

@@ -933,6 +933,19 @@ class MosaicClient:
             entity_type, field, filters, filter_mode, where=where
         )
 
+    def count_relationship(
+        self, entity_type: str, entity_id: str, edge: str
+    ) -> int:
+        """Cardinality of ``entity_id``'s ``edge`` (a multivalued reference
+        slot) without resolving its member objects (issue #132, deferred
+        from ADR-0005). Consumer: a relationship count badge that would
+        otherwise have to resolve the whole list just to show its length.
+
+        Availability-consistent: only counts edges whose target is also
+        available, matching what resolving the list would return.
+        """
+        return self._query_service.count_relationship(entity_type, entity_id, edge)
+
     def query_updated_since(
         self,
         entity_type: Optional[str] = None,

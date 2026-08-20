@@ -143,7 +143,10 @@ JSON emission (a separate concern), or the `findByXref` reverse-lookup surface.
 - **Multivalued cheap-count (deferred, [#132](https://github.com/BU-Neuromics/mosaic/issues/132)).**
   resolve-to-count is the interim; the optimization — a `count` field or relationship total
   that avoids resolving the whole list — is tracked separately and is not a blocker for
-  ratifying this ADR.
+  ratifying this ADR. **Settled at implementation (issue #132):** `MosaicClient.count_relationship`
+  / GraphQL `<field>Count`, a single indexed `COUNT(*)` over the relationships table joined to
+  the target's table (reusing ADR-0006 M5b's edge resolution and availability rule) — resolve-to-count
+  remains available for callers that also want the members.
 - **List-view resolve cost.** Validate the per-page batched-resolve cost against a realistically
   large collection (the brainbank demo) before ratifying — the one force that could push back
   toward Option B.

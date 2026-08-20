@@ -626,6 +626,22 @@ class EntityStore(ABC):
             f"{type(self).__name__} does not implement field_range()"
         )
 
+    def count_relationship(
+        self, entity_type: str, entity_id: str, edge: str
+    ) -> int:
+        """Cardinality of a multivalued reference edge without resolving
+        its member objects (issue #132, deferred from ADR-0005).
+
+        A cheap ``COUNT(*)`` over the ADR-0002 relationships table, scoped
+        to edges available whose target is also available — the same
+        availability-consistency rule the resolved list and ADR-0006 M5b's
+        ``some`` quantifier apply, so this never overcounts relative to
+        what a consumer would see by resolving the list.
+        """
+        raise NotImplementedError(
+            f"{type(self).__name__} does not implement count_relationship()"
+        )
+
     def history(self, entity_id: str) -> List[Dict[str, Any]]:
         """Return the full provenance history for an entity (chronological).
 

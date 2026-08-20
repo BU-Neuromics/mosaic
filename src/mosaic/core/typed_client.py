@@ -54,6 +54,7 @@ SDK_RESERVED_NAMES: frozenset[str] = frozenset(
         "cache_dir_for",
         "cached_fetch",
         "count",
+        "count_relationship",
         "create",
         "delete",
         "facet_counts",
