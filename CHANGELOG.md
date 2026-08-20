@@ -2,6 +2,23 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- **Relative schema `imports:` resolve against the schema, not the process
+  CWD** (datahelix #66). LinkML anchors a schema's relative imports to that
+  schema's `source_file`, but `linkml_runtime` only records `source_file`
+  when a schema is loaded from a *path* — one built from an in-memory
+  *string* has `source_file = None` and falls back to the current working
+  directory. Mosaic builds a `SchemaView` from text whenever it must
+  pre-process a schema first (stripping the Mosaic-only `requires:`
+  directive, or merging every file in a schema directory), so
+  `mosaic migrate --schema-dir schemas` run from `/project` looked for
+  `/project/pathology.yaml` instead of `/project/schemas/pathology.yaml`.
+  `SchemaRegistry` now re-anchors `source_file` to the originating path in
+  both paths, restoring the LinkML contract: a relative import resolves
+  relative to the referencing schema. Out-of-directory relative imports
+  (e.g. `../common/base`) resolve correctly too.
+
 ## v0.13.0 — 2026-08-20 (BREAKING: search returns a page envelope; the typed filter contract completes — relationship predicates, aggregation & ordering, cross-class roots)
 
 ### Added
