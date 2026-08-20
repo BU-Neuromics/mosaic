@@ -250,6 +250,71 @@ class RelatedEntity:
     updated_at: Optional[ISODateTime]
 
 
+@strawberry.type(
+    description=(
+        "One cross-class search hit (issue #158): a heterogeneous JSON "
+        "envelope — the matching entity's type is only known at query "
+        "time, so `data` carries the typed payload as JSON; use "
+        "`entityType` with the per-type queries for typed traversal. "
+        "`score` is the FTS rank, normalized to [0, 1] per index "
+        "(comparable in relative terms across classes)."
+    )
+)
+class SearchHit:
+    entity_id: strawberry.ID
+    entity_type: str
+    score: float
+    data: JSON
+    version: Optional[int]
+    created_at: Optional[ISODateTime]
+    updated_at: Optional[ISODateTime]
+
+
+@strawberry.type(
+    description=(
+        "One node of a neighborhood subgraph (issue #158) — the same "
+        "heterogeneous JSON envelope as SearchHit/XrefMatch."
+    )
+)
+class GraphNode:
+    entity_id: strawberry.ID
+    entity_type: Optional[str]
+    data: JSON
+    created_at: Optional[ISODateTime]
+    updated_at: Optional[ISODateTime]
+
+
+@strawberry.type(
+    description=(
+        "One directed edge of a neighborhood subgraph. `type` is the "
+        "referencing slot / relationship type; `edgeSource` names the "
+        "store it came from — LINK_TABLE (relationship-backed multivalued "
+        "references, ADR-0002) or COLUMN (single-valued reference slots)."
+    )
+)
+class GraphEdge:
+    source: strawberry.ID
+    target: strawberry.ID
+    type: str
+    edge_source: str
+
+
+@strawberry.type(
+    description=(
+        "A depth-bounded subgraph around one entity (issue #158): "
+        "renderable without further queries. `edgeSources` names the edge "
+        "stores covered by this response; `notices` discloses any bound "
+        "hit (node budget) or scoped-out coverage (column edges under "
+        "asOf) — the graph is never silently partial."
+    )
+)
+class NeighborhoodGraph:
+    nodes: list[GraphNode]
+    edges: list[GraphEdge]
+    edge_sources: list[str]
+    notices: list[str]
+
+
 @strawberry.type(description="Result of a supersede operation.")
 class SupersedeResult:
     entity_id: strawberry.ID
@@ -1166,6 +1231,71 @@ def _related_to_resolver(
     return results
 
 
+def _search_all_resolver(info: Info, q: str, limit: int = 100) -> list[SearchHit]:
+    """Cross-class ranked full-text search (issue #158): one request fans
+    over every FTS-indexed class server-side, merged by normalized rank,
+    materialized batched by type (no per-hit reads). The per-class search
+    twins remain for typed results; this root returns heterogeneous JSON
+    envelopes."""
+    hits = _client(info).search_all(q, limit)
+    return [
+        SearchHit(
+            entity_id=strawberry.ID(str(hit["id"])),
+            entity_type=str(hit["entity_type"]),
+            score=float(hit["score"]),
+            data=hit.get("data") or {},
+            version=hit.get("version"),
+            created_at=hit.get("created_at"),
+            updated_at=hit.get("updated_at"),
+        )
+        for hit in hits
+    ]
+
+
+def _neighbors_resolver(
+    info: Info,
+    id: strawberry.ID,  # noqa: A002 - GraphQL arg
+    depth: int = 1,
+    as_of: Optional[str] = None,
+) -> NeighborhoodGraph:
+    """The subgraph around one entity (issue #158): nodes + edges from BOTH
+    edge stores — link-table relationship edges (both directions) and
+    column-stored single-valued references (forward and reverse,
+    schema-driven) — closing the ADR-0002 visibility gap. Depth-bounded
+    (cap 5), 1000-node budget, batched-by-type materialization,
+    availability parity with list queries. Under `asOf`, link-table edges
+    replay from provenance and node states reconstruct at that time;
+    column edges are disclosed as out of scope (hippo#71) via
+    `edgeSources`/`notices` — never a silently partial temporal graph."""
+    try:
+        graph = _client(info).neighbors(str(id), depth, as_of=as_of)
+    except EntityNotFoundError as exc:
+        raise _as_graphql_error(exc) from exc
+    return NeighborhoodGraph(
+        nodes=[
+            GraphNode(
+                entity_id=strawberry.ID(str(n["entity_id"])),
+                entity_type=n.get("entity_type"),
+                data=n.get("data") or {},
+                created_at=n.get("created_at"),
+                updated_at=n.get("updated_at"),
+            )
+            for n in graph["nodes"]
+        ],
+        edges=[
+            GraphEdge(
+                source=strawberry.ID(str(e["source"])),
+                target=strawberry.ID(str(e["target"])),
+                type=e["type"],
+                edge_source=e["edge_source"],
+            )
+            for e in graph["edges"]
+        ],
+        edge_sources=list(graph["edge_sources"]),
+        notices=list(graph["notices"]),
+    )
+
+
 def _make_hippo_schema_resolver(builder: GraphQLTypeBuilder):
     def resolver(info: Info) -> list[MosaicEntityTypeInfo]:
         return [
@@ -1503,6 +1633,12 @@ def build_query_type(builder: GraphQLTypeBuilder) -> type:
     )
     fields.append(
         strawberry.field(resolver=_related_to_resolver, name="relatedTo")
+    )
+    fields.append(
+        strawberry.field(resolver=_search_all_resolver, name="searchAll")
+    )
+    fields.append(
+        strawberry.field(resolver=_neighbors_resolver, name="neighbors")
     )
     fields.append(
         strawberry.field(

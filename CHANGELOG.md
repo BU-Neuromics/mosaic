@@ -4,6 +4,29 @@
 
 ### Added
 
+- **Heterogeneous roots** (issue #158): two additive cross-class query
+  roots following the house JSON-envelope pattern (ADR-0005 —
+  deliberately not a GraphQL union/interface root; that remains future
+  work with its own ADR).
+  `searchAll(q, limit): [SearchHit]` fans over every FTS-indexed class
+  server-side (SDK: `client.search_all`), merges by the per-index
+  normalized rank with a deterministic tiebreak, and materializes the
+  page batched by type — one composed read per class present, never
+  per-hit; availability parity with list queries.
+  `neighbors(id, depth, asOf): NeighborhoodGraph` (SDK:
+  `client.neighbors`) returns a renderable `{nodes, edges, edgeSources,
+  notices}` subgraph covering **both edge stores** — the ADR-0002
+  `relationships` link table (both directions) AND column-stored
+  single-valued references (forward off the frontier's data; reverse
+  via schema-driven FK queries) — closing the visibility gap a
+  link-table-only traversal has. Depth cap 5, 1000-node budget with a
+  disclosed truncation notice, batched-by-type node materialization,
+  and edges kept only when both endpoints materialize (availability
+  parity). Under `asOf`, link-table edges replay from provenance (sec6
+  §6.8.2) and node states reconstruct at that time; column edges are
+  out of scope under as-of (hippo#71) — disclosed via
+  `edgeSources`/`notices`, never a silently partial temporal graph.
+
 - **To-one relationship predicates** (ADR-0006 M5a / increment 3, issue
   #155): the `where` filter tree gains the node
   `{"edge": <to-one reference slot>, "where": subtree}` — matching

@@ -1432,3 +1432,118 @@ class TestPostgresRelationshipPredicates:
                     Query(entity_type="Sample", where=where), as_of=self.FUTURE
                 )
             )
+
+
+class TestPostgresHeterogeneousRoots:
+    """Parity for the heterogeneous roots (issue #158): searchAll's
+    cross-class rank merge over ts_rank and neighbors' two-edge-store
+    union (link table + JSONB column references). Expectations
+    intentionally match ``tests/core/test_heterogeneous_roots.py``."""
+
+    @pytest.fixture
+    def het_client(self):
+        from mosaic.core.client import MosaicClient
+        from mosaic.core.storage.adapters.postgres_adapter import PostgresAdapter
+        from tests.support.linkml_schemas import build_registry
+
+        registry = build_registry(
+            {
+                "Donor": {
+                    "attributes": {
+                        "id": {"identifier": True},
+                        "name": {"range": "string", "required": True},
+                        "bio": {
+                            "range": "string",
+                            "annotations": {"hippo_search": "fts5"},
+                        },
+                    }
+                },
+                "Sample": {
+                    "attributes": {
+                        "id": {"identifier": True},
+                        "name": {"range": "string", "required": True},
+                        "donor_id": {"range": "Donor"},
+                        "notes": {
+                            "range": "string",
+                            "annotations": {"hippo_search": "fts5"},
+                        },
+                    }
+                },
+                "Study": {
+                    "attributes": {
+                        "id": {"identifier": True},
+                        "title": {"range": "string", "required": True},
+                    }
+                },
+            }
+        )
+        adapter = PostgresAdapter(
+            database_url=POSTGRES_URL,
+            schema_registry=registry,
+            min_pool_size=1,
+            max_pool_size=5,
+        )
+        client = MosaicClient(storage=adapter, registry=registry)
+        client.put("Donor", {"id": "d1", "name": "Ada",
+                             "bio": "cortex cortex cortex researcher"})
+        client.put("Sample", {"id": "s1", "name": "S1", "donor_id": "d1",
+                              "notes": "cortex cortex lesion sample"})
+        client.put("Sample", {"id": "s2", "name": "S2",
+                              "notes": "cortex intact tissue sample"})
+        client.put("Study", {"id": "st1", "title": "Cortex Study"})
+        client.relationships.relate("st1", "s1", "includes_sample")
+        yield client
+        with adapter._transaction() as conn:
+            cur = conn.cursor()
+            cur.execute("DELETE FROM relationships")
+            cur.execute('ALTER TABLE "ProvenanceRecord" DISABLE TRIGGER ALL')
+            cur.execute('DELETE FROM "ProvenanceRecord"')
+            cur.execute('ALTER TABLE "ProvenanceRecord" ENABLE TRIGGER ALL')
+            cur.execute("DELETE FROM entities")
+            cur.execute(
+                "SELECT tablename FROM pg_tables "
+                "WHERE schemaname = 'public' AND tablename LIKE 'fts_%'"
+            )
+            for row in cur.fetchall():
+                cur.execute(f'DROP TABLE IF EXISTS "{row["tablename"]}" CASCADE')
+        adapter.close()
+
+    def test_search_all_rank_merged(self, het_client):
+        hits = het_client.search_all("cortex")
+        assert [(h["entity_type"], h["id"]) for h in hits] == [
+            ("Donor", "d1"), ("Sample", "s1"), ("Sample", "s2"),
+        ]
+        assert hits[0]["score"] >= hits[1]["score"] >= hits[2]["score"]
+
+    def test_search_all_availability_parity(self, het_client):
+        het_client.set_availability_bulk(
+            entity_type="Sample", entity_ids=["s1"],
+            is_available=False, reason="test",
+        )
+        hits = het_client.search_all("cortex")
+        assert [(h["entity_type"], h["id"]) for h in hits] == [
+            ("Donor", "d1"), ("Sample", "s2"),
+        ]
+
+    def test_neighbors_gap_both_edge_stores(self, het_client):
+        graph = het_client.neighbors("s1")
+        edges = {(e["source"], e["target"], e["edge_source"])
+                 for e in graph["edges"]}
+        assert ("s1", "d1", "COLUMN") in edges
+        assert ("st1", "s1", "LINK_TABLE") in edges
+        assert {n["entity_id"] for n in graph["nodes"]} == {"s1", "d1", "st1"}
+
+    def test_neighbors_reverse_column_edges(self, het_client):
+        graph = het_client.neighbors("d1")
+        edges = {(e["source"], e["target"], e["type"]) for e in graph["edges"]}
+        assert ("s1", "d1", "donor_id") in edges
+
+    def test_neighbors_as_of_disclosure(self, het_client):
+        graph = het_client.neighbors(
+            "s1", depth=2, as_of="2999-01-01T00:00:00+00:00"
+        )
+        assert graph["edge_sources"] == ["LINK_TABLE"]
+        assert any("hippo#71" in n for n in graph["notices"])
+        assert {(e["source"], e["target"]) for e in graph["edges"]} == {
+            ("st1", "s1")
+        }

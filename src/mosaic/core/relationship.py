@@ -298,6 +298,20 @@ class RelationshipManager:
                 max_depth=max_depth,
             )
 
+    def live_edges_at(self, as_of: str) -> list[dict[str, Any]]:
+        """All link-table edges live at transaction-time ``as_of``.
+
+        Replays ``relationship_add``/``relationship_remove`` provenance
+        events (sec6 §6.8.2) via the adapter's relationship store — the
+        edge set behind as-of traversal, exposed for whole-neighborhood
+        BFS (issue #158) where outbound-only ``traverse`` is not enough.
+        """
+        if self._storage is None:
+            return []
+        with self._storage._transaction() as conn:
+            relationship_store = self._storage._get_relationship_store(conn)
+            return relationship_store._live_edges_at(as_of)
+
     def find_relationships(
         self,
         source_id: Optional[str] = None,
