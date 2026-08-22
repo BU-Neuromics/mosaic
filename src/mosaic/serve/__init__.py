@@ -96,3 +96,34 @@ def create_default_app(
         app.include_router(graphql_router, prefix="/graphql")
 
     return app
+
+
+def create_app_from_env():
+    """Zero-argument app factory for uvicorn's import-string reload/workers mode.
+
+    ``uvicorn --reload``/``--workers`` re-imports the app in a fresh
+    subprocess, so it cannot be handed the CLI's already-built app object —
+    it needs an import-string target it can import itself (issue #171).
+    Config is threaded through the environment (the ``MOSAIC_*`` convention
+    in ``mosaic.config.env``) so the subprocess rebuilds the same deployment
+    ``mosaic serve`` resolved: reads ``MOSAIC_CONFIG`` (a config path, or
+    unset to auto-detect one in the cwd — same as ``mosaic serve`` with no
+    ``--config``), ``MOSAIC_SERVE_GRAPHQL`` (``"1"`` to mount GraphQL), and
+    ``MOSAIC_SERVE_GRAPHQL_MAX_DEPTH`` (optional integer override).
+    """
+    from mosaic.config.env import get_env
+    from mosaic.core.factory import (
+        create_client,
+        create_client_from_config,
+        load_config_autodetect,
+    )
+
+    cfg = load_config_autodetect(get_env("CONFIG"))
+    client = create_client_from_config(cfg) if cfg is not None else create_client()
+
+    max_depth_raw = get_env("SERVE_GRAPHQL_MAX_DEPTH")
+    return create_default_app(
+        client,
+        graphql=get_env("SERVE_GRAPHQL") == "1",
+        graphql_max_query_depth=int(max_depth_raw) if max_depth_raw else None,
+    )
