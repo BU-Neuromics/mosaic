@@ -18,7 +18,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any, Optional, Union
 
-from mosaic.core.exceptions import AdapterError
+from mosaic.core.exceptions import AdapterError, SchemaError
 from mosaic.core.storage import EntityStore
 
 #: Backend assumed when config does not specify ``storage_backend``.
@@ -103,6 +103,7 @@ def build_schema_registry(
         registry = SchemaRegistry.from_path(schema_path)
         if merge_requires:
             registry = _merge_required_loaders(registry, schema_path)
+        _validate_identifier_columns(registry)
         return registry
 
     import importlib.resources
@@ -112,7 +113,58 @@ def build_schema_registry(
     hippo_core_path = importlib.resources.files("mosaic.schemas").joinpath(
         "hippo_core.yaml"
     )
-    return SchemaRegistry(SchemaView(str(hippo_core_path)))
+    registry = SchemaRegistry(SchemaView(str(hippo_core_path)))
+    _validate_identifier_columns(registry)
+    return registry
+
+
+def _validate_identifier_columns(registry: Any) -> None:
+    """Reject a schema where a concrete *entity* class's identifier slot
+    isn't literally named ``id``.
+
+    Mosaic's storage layer treats a literal ``id`` column as every
+    per-class entity table's system row-key — provenance, cross-class UUID
+    resolution, and the generic per-class insert/update/select machinery
+    all key off the literal name ``"id"`` (see ``CLAUDE.md``: "System
+    fields (id, is_available) live on entity tables"). LinkML's own
+    ``SQLTableGenerator``, however, honors whatever slot a class marks
+    ``identifier: true`` verbatim as the SQL primary key, so a class that
+    names its identifier something else (e.g. ``project_id``) gets a table
+    with no ``id`` column at all — which previously surfaced as a raw
+    "table X has no column named id" SQLite error deep inside ingestion
+    (issue #172) instead of a schema-authoring error at load time.
+
+    Scoped to classes carrying the ``is_available`` system slot (i.e.
+    specializing the ``Entity`` mixin) — the same signal the DDL
+    post-processor uses to decide the id/is_available entity invariants
+    apply. Declarative, non-persisted config classes (e.g. the bundled
+    ``Validator``/``ReferenceLoader``) never inherit it and are
+    intentionally exempt.
+    """
+    value_types = registry.value_type_classes()
+    offenders: list[tuple[str, str]] = []
+    for name in registry.class_names():
+        if name in value_types:
+            continue
+        cls = registry.get_class(name)
+        if cls is None or getattr(cls, "abstract", False):
+            continue
+        slot_names = {slot.name for slot in registry.induced_slots(name)}
+        if "is_available" not in slot_names:
+            continue
+        id_slot = registry.identifier_slot(name)
+        if id_slot is not None and id_slot.name != "id":
+            offenders.append((name, id_slot.name))
+
+    if offenders:
+        detail = "; ".join(f"{cls}.{slot}" for cls, slot in offenders)
+        raise SchemaError(
+            "Mosaic requires every entity class's identifier slot to be "
+            f"named 'id'; found non-'id' identifier(s): {detail}. Rename "
+            "the slot to 'id' (inheriting it from the bundled Entity mixin "
+            "is the usual path), and keep any natural/business key as an "
+            "ordinary unique attribute alongside it."
+        )
 
 
 def _merge_required_loaders(registry: Any, schema_path: PathLike) -> Any:

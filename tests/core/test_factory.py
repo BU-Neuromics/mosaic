@@ -14,7 +14,7 @@ from pathlib import Path
 import pytest
 
 from mosaic.config import MosaicConfig
-from mosaic.core.exceptions import AdapterError, ValidationFailure
+from mosaic.core.exceptions import AdapterError, SchemaError, ValidationFailure
 from mosaic.core.factory import (
     DEFAULT_SQLITE_PATH,
     build_schema_registry,
@@ -196,3 +196,78 @@ def test_load_config_autodetect_cwd_config_json(tmp_path, monkeypatch):
 def test_load_config_autodetect_none_when_absent(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     assert load_config_autodetect() is None
+
+
+# ---------------------------------------------------------------------------
+# Identifier-column validation (issue #172)
+# ---------------------------------------------------------------------------
+
+
+def _write_schema(tmp_path: Path, class_body: str) -> Path:
+    schema_path = tmp_path / "schema.yaml"
+    schema_path.write_text(
+        "id: https://example.org/test\n"
+        "name: test\n"
+        "prefixes: {linkml: 'https://w3id.org/linkml/'}\n"
+        "default_range: string\n"
+        "imports: [linkml:types]\n"
+        "classes:\n" + class_body
+    )
+    return schema_path
+
+
+def test_build_schema_registry_rejects_non_id_identifier_on_entity_class(tmp_path):
+    """A class carrying the ``is_available`` system slot must key its
+    identifier ``id`` — otherwise the generic per-class SQLite adapter
+    (which hardcodes an ``id`` column) fails deep inside ingestion instead
+    of at schema-load time."""
+    schema_path = _write_schema(
+        tmp_path,
+        "  BadEntity:\n"
+        "    attributes:\n"
+        "      project_id:\n"
+        "        identifier: true\n"
+        "      is_available:\n"
+        "        range: boolean\n",
+    )
+    with pytest.raises(SchemaError, match=r"BadEntity\.project_id"):
+        build_schema_registry(schema_path)
+
+
+def test_build_schema_registry_allows_non_id_identifier_without_is_available(
+    tmp_path,
+):
+    """A declarative, non-persisted class (no ``is_available``, e.g. the
+    bundled ``Validator``/``ReferenceLoader``) is exempt — it never goes
+    through the id-keyed entity CRUD path."""
+    schema_path = _write_schema(
+        tmp_path,
+        "  ConfigThing:\n"
+        "    attributes:\n"
+        "      name:\n"
+        "        identifier: true\n",
+    )
+    registry = build_schema_registry(schema_path)
+    assert "ConfigThing" in registry.class_names()
+
+
+def test_build_schema_registry_allows_id_identifier(tmp_path):
+    """The common case — identifier literally named ``id`` — is unaffected."""
+    schema_path = _write_schema(
+        tmp_path,
+        "  GoodEntity:\n"
+        "    attributes:\n"
+        "      id:\n"
+        "        identifier: true\n"
+        "      is_available:\n"
+        "        range: boolean\n",
+    )
+    registry = build_schema_registry(schema_path)
+    assert "GoodEntity" in registry.class_names()
+
+
+def test_build_schema_registry_default_bundled_schema_is_valid():
+    """The bundled hippo_core schema (Validator/ReferenceLoader included)
+    must not trip the new validation when no schema_path is given."""
+    registry = build_schema_registry()
+    assert "Entity" in registry.class_names()

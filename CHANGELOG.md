@@ -4,6 +4,30 @@
 
 ### Fixed
 
+- **Entity classes must key their identifier `id`; the schema now says so
+  up front** (issue #172). LinkML's `SQLTableGenerator` names a class's SQL
+  primary key after whatever slot is marked `identifier: true`, but
+  Mosaic's storage layer hardcodes a literal `id` column for every
+  per-class entity table (provenance, cross-class UUID resolution,
+  generic insert/update/select all key off `"id"`). A schema class
+  carrying the `is_available` system slot (i.e. specializing `Entity`)
+  whose identifier is named something else used to fail deep inside
+  ingestion with a raw "table X has no column named id" SQLite error.
+  `build_schema_registry()` now rejects such a schema immediately with an
+  actionable message naming the offending class/slot. Declarative,
+  non-persisted config classes (the bundled `Validator`/`ReferenceLoader`,
+  which have no `is_available`) are unaffected.
+
+- **`mosaic serve --reload`/`--workers` no longer exits 1** (issue #171).
+  Uvicorn requires an import-string app target — not a live app object —
+  for `--reload`/`--workers`, since each reload/worker re-imports the app
+  in its own subprocess; `serve()` was handing it the in-process object
+  directly. Added `mosaic.serve.create_app_from_env()`, a zero-argument
+  factory uvicorn can import, and threaded the resolved `--config`/
+  `--graphql` options through the `MOSAIC_*` environment convention so the
+  subprocess rebuilds the identical deployment. The default (no
+  `--reload`/`--workers`) path is unchanged.
+
 - **Relative schema `imports:` resolve against the schema, not the process
   CWD** (datahelix #66). LinkML anchors a schema's relative imports to that
   schema's `source_file`, but `linkml_runtime` only records `source_file`
