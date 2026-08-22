@@ -157,14 +157,31 @@ def serve(
         )
     # Note: Uvicorn's logging is currently configured through uvicorn configuration,
     # so we might need to pass it explicitly if needed
-    uvicorn.run(
-        app,
-        host=host,
-        port=port,
-        reload=reload,
-        workers=workers,
-        log_level=log_level.lower(),
-    )
+    if reload or workers:
+        # --reload/--workers re-import the app in fresh subprocess(es), so
+        # uvicorn needs an import string rather than the app object built
+        # above (issue #171). Thread the resolved config through the
+        # environment so those subprocesses rebuild the identical
+        # deployment this process just resolved.
+        import os
+
+        if config is not None:
+            os.environ["MOSAIC_CONFIG"] = config
+        if graphql:
+            os.environ["MOSAIC_SERVE_GRAPHQL"] = "1"
+        if graphql_max_depth is not None:
+            os.environ["MOSAIC_SERVE_GRAPHQL_MAX_DEPTH"] = str(graphql_max_depth)
+        uvicorn.run(
+            "mosaic.serve:create_app_from_env",
+            factory=True,
+            host=host,
+            port=port,
+            reload=reload,
+            workers=workers,
+            log_level=log_level.lower(),
+        )
+    else:
+        uvicorn.run(app, host=host, port=port, log_level=log_level.lower())
 
 
 @app.command()
