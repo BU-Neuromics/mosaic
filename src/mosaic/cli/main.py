@@ -2,7 +2,7 @@
 
 import typer
 from pathlib import Path
-from typing import Optional
+from typing import List, Optional
 
 app = typer.Typer(
     name="mosaic",
@@ -53,6 +53,18 @@ def serve(
         "-w",
         help="Number of worker processes to use (defaults to 1)",
     ),
+    reload_dir: Optional[List[str]] = typer.Option(
+        None,
+        "--reload-dir",
+        help=(
+            "Directory to watch for source changes when --reload is set "
+            "(repeatable). Only meaningful with --reload. Defaults to the "
+            "directory containing the imported 'mosaic' package rather than "
+            "the current working directory — cwd must stay the project "
+            "directory so schema_path/database_url in the config keep "
+            "resolving correctly (issue #174)."
+        ),
+    ),
     log_level: str = typer.Option(
         "info",
         "--log-level",
@@ -101,6 +113,7 @@ def serve(
       mosaic serve --port 9000           # Start on custom port
       mosaic serve --log-level debug     # Start with debug logging
       mosaic serve --graphql             # Also serve GraphQL at /graphql
+      mosaic serve --reload --reload-dir /src  # Watch a mounted source tree
     """
     import uvicorn
 
@@ -171,12 +184,30 @@ def serve(
             os.environ["MOSAIC_SERVE_GRAPHQL"] = "1"
         if graphql_max_depth is not None:
             os.environ["MOSAIC_SERVE_GRAPHQL_MAX_DEPTH"] = str(graphql_max_depth)
+
+        reload_dirs = None
+        if reload:
+            # uvicorn defaults reload_dirs to cwd, which is the *project*
+            # directory here (schema_path/database_url resolve against it) —
+            # not necessarily where mosaic's own source lives (e.g. a
+            # PYTHONPATH-mounted checkout shadowing the installed package).
+            # Watch the resolved 'mosaic' package directory instead unless
+            # the caller pins explicit directories (issue #174).
+            if reload_dir:
+                reload_dirs = list(reload_dir)
+            else:
+                import mosaic as _mosaic_pkg
+
+                reload_dirs = [str(Path(_mosaic_pkg.__file__).resolve().parent)]
+            typer.echo(f"Watching for reload in: {', '.join(reload_dirs)}")
+
         uvicorn.run(
             "mosaic.serve:create_app_from_env",
             factory=True,
             host=host,
             port=port,
             reload=reload,
+            reload_dirs=reload_dirs,
             workers=workers,
             log_level=log_level.lower(),
         )
