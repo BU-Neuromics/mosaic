@@ -337,6 +337,42 @@ class TestPostgresAdapterProvenance:
         # Legacy "delete" → availability_change per Decision 9.6.B
         assert record.operation == "availability_change"
 
+    def test_track_methods_carry_the_adapter_schema_version(
+        self, minimal_schema_registry, sample_entity
+    ):
+        """Regression: sec9 §9.6/§9.7 Fallback 2 — these hardcoded schema_version="".
+
+        `track_creation`/`track_update`/`track_deletion` build in-memory
+        ``ProvenanceRecord``s (no DB write) and must carry the adapter's
+        configured ``_schema_version``, not a hardcoded empty string, so a
+        caller that threaded a real version through construction sees it
+        reflected here too.
+        """
+        from mosaic.core.storage.adapters.postgres_adapter import PostgresAdapter
+
+        versioned_adapter = PostgresAdapter(
+            database_url=POSTGRES_URL,
+            schema_registry=minimal_schema_registry,
+            min_pool_size=1,
+            max_pool_size=2,
+            schema_version="v-test-9.7",
+        )
+        try:
+            assert (
+                versioned_adapter.track_creation(sample_entity, {}).schema_version
+                == "v-test-9.7"
+            )
+            assert (
+                versioned_adapter.track_update(sample_entity, {}).schema_version
+                == "v-test-9.7"
+            )
+            assert (
+                versioned_adapter.track_deletion(sample_entity.id, {}).schema_version
+                == "v-test-9.7"
+            )
+        finally:
+            versioned_adapter.close()
+
 
 class TestPostgresAdapterAtomicUpsert:
     """Test atomic upsert behavior for multi-instance safety."""

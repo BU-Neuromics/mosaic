@@ -254,6 +254,38 @@ class TestProvenanceTracking:
 
         adapter.close()
 
+    def test_track_methods_carry_the_adapter_schema_version(self, db_path: str) -> None:
+        """Regression: sec9 §9.6/§9.7 Fallback 2 — these hardcoded schema_version="".
+
+        `track_creation`/`track_update`/`track_deletion` build in-memory
+        ``ProvenanceRecord``s (no DB write) and must carry the adapter's
+        configured ``_schema_version``, not a hardcoded empty string, so a
+        caller that threaded a real version through construction (as
+        ``MosaicClient`` does, Decision 9.7.E) sees it reflected here too.
+        """
+        adapter = SQLiteAdapter(
+            db_path,
+            wal_mode=True,
+            schema_registry=_build_minimal_schema_registry(),
+            schema_version="v-test-9.7",
+        )
+        entity = TestEntity(id="ent-1", name="Test")
+
+        assert adapter.track_creation(entity, {}).schema_version == "v-test-9.7"
+        assert adapter.track_update(entity, {}).schema_version == "v-test-9.7"
+        assert adapter.track_deletion(entity.id, {}).schema_version == "v-test-9.7"
+
+        adapter.close()
+
+    def test_track_methods_default_schema_version_is_empty(self, db_path: str) -> None:
+        """No schema_version supplied at construction → legacy "" (Decision 9.6.F)."""
+        adapter = SQLiteAdapter(db_path, wal_mode=True, schema_registry=_build_minimal_schema_registry())
+        entity = TestEntity(id="ent-1", name="Test")
+
+        assert adapter.track_creation(entity, {}).schema_version == ""
+
+        adapter.close()
+
 
 class TestHistoryMethods:
     """Tests for history() and state_at() methods."""
