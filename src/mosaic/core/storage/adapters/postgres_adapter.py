@@ -2832,7 +2832,7 @@ class PostgresAdapter(EntityStore):
             entity_type=type(entity).__name__,
             entity_id=entity.id,
             actor_id="",
-            schema_version="",
+            schema_version=self._schema_version,
             patch=metadata,
         )
 
@@ -2845,7 +2845,7 @@ class PostgresAdapter(EntityStore):
             entity_type=type(entity).__name__,
             entity_id=entity.id,
             actor_id="",
-            schema_version="",
+            schema_version=self._schema_version,
             patch=metadata,
         )
 
@@ -2858,7 +2858,7 @@ class PostgresAdapter(EntityStore):
             entity_type="unknown",
             entity_id=entity_id,
             actor_id="",
-            schema_version="",
+            schema_version=self._schema_version,
             patch={"status": "deleted", **metadata},
         )
 
