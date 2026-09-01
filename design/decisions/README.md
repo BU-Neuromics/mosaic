@@ -32,4 +32,4 @@ The supersede-don't-delete discipline already used in the Key Decisions Log (ent
 | [0006](./ADR-0006-graphql-typed-filter-contract.md) | The GraphQL filter contract is typed per-class input objects — not CEL on the wire (issue #153) | ✅ Accepted |
 | [0007](./ADR-0007-aggregation-and-ordering-surface.md) | Aggregation & ordering surface — count mode, facet counts, min/max, `order_by` (issue #154) | ✅ Accepted |
 | [0008](./ADR-0008-postgres-per-class-tables-shared-sql-core.md) | Postgres storage converges to generated per-class typed tables + shared SQL core (issue #162) | 🟡 Proposed |
-| [0009](./ADR-0009-mcp-boundary-capability-manifest-queryspec.md) | Mosaic hosts an MCP boundary over a server-derived capability manifest and the QuerySpec artifact (issue #177) | 🟡 Proposed |
+| [0009](./ADR-0009-mcp-boundary-capability-manifest-queryspec.md) | Mosaic hosts an MCP boundary over a server-derived capability manifest and the QuerySpec artifact (issue #177) | ✅ Accepted |
