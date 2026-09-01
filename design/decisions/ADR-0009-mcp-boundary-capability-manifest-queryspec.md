@@ -1,9 +1,8 @@
 # ADR-0009: Mosaic hosts an MCP boundary over a server-derived capability manifest and the QuerySpec artifact
 
-- **Status:** Proposed
-- **Date:** 2026-08-28
-- **Deciders:** labadorf (pending), proposed via cross-repo design session
-  (`BU-Neuromics/mosaic-demo-small`)
+- **Status:** Accepted
+- **Date:** 2026-09-01 (ratified; see #180)
+- **Deciders:** clandaverde, via cross-repo design session (`BU-Neuromics/mosaic-demo-small`)
 - **Related:** ADR-0004 (Hippo → Mosaic rename), ADR-0006 (typed GraphQL filter contract —
   `where:`, issue #153), ADR-0007 (aggregation & ordering surface, issue #154); **Aperture
   ADR-0035** (Accepted 2026-08-19 — cross-class queries are a typed `QuerySpec` artifact,
