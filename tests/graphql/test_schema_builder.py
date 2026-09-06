@@ -11,7 +11,11 @@ import re
 
 import pytest
 
-from mosaic.core.schema_typing import build_type_model, exposed_class_names
+from mosaic.core.schema_typing import (
+    build_capability_manifest,
+    build_type_model,
+    exposed_class_names,
+)
 from mosaic.graphql import build_graphql_schema
 from mosaic.graphql.schema_builder import (
     INFRASTRUCTURE_CLASSES,
@@ -218,6 +222,36 @@ class TestTypingCoreAlignment:
             assert [s.kind for s in entity.slots] == [
                 f.kind.value for f in model[class_name].fields
             ]
+
+    def test_capability_manifest_agrees_with_the_generated_where_contract(
+        self, registry
+    ):
+        """The manifest (issue #181) must not silently drift from what
+        ``where:`` (ADR-0006 M5a/M5b) actually generates and accepts."""
+        builder = GraphQLTypeBuilder(registry).build()
+        manifest = build_capability_manifest(registry)
+        for class_name, entity in builder.entities.items():
+            capability = manifest[class_name]
+            edge_slot_names = {spec.slot_name for _attr, spec, *_ in entity.filter_edges}
+            filter_field_slot_names = {
+                spec.slot_name for _attr, spec in entity.filter_fields
+            }
+            for field in capability.fields:
+                slot_name = field.slot.name
+                if slot_name in edge_slot_names:
+                    # Reference slot whose target is exposed: predicate-
+                    # filterable via a nested edge, never a direct FilterOp.
+                    assert field.predicate is True
+                    assert field.filter_ops == ()
+                elif slot_name in filter_field_slot_names:
+                    # Everything the real `where:` builder gave a FilterOp
+                    # input to, the manifest must report as filterable.
+                    assert field.filter_ops != ()
+                    assert field.predicate is False
+                elif field.slot.kind.name == "REFERENCE":
+                    # Reference to a non-exposed class: unfilterable either way.
+                    assert field.filter_ops == ()
+                    assert field.predicate is False
 
 
 class TestBuilder:
