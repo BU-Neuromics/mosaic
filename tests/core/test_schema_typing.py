@@ -9,7 +9,9 @@ from mosaic.core.schema_typing import (
     SYSTEM_FIELDS,
     EntityTypeModel,
     FieldRole,
+    FilterOp,
     SlotKind,
+    build_capability_manifest,
     build_type_model,
     exposed_class_names,
 )
@@ -107,3 +109,131 @@ classes:
     by_name = {f.name: f for f in widget.fields}
     assert by_name["kind"].has_default is True
     assert by_name["name"].has_default is False
+
+
+# -- capability manifest (issue #181) ----------------------------------------
+
+
+def test_reference_field_has_no_direct_filter_ops_but_is_predicate_filterable():
+    manifest = build_capability_manifest(_registry())
+    project_id = manifest["Sample"].fields_by_name["project_id"]
+    # Resolves the schema_builder/resolvers FilterOp divergence in favor of
+    # the `where:` contract (ADR-0006 M5a/M5b): no direct FilterOp on a
+    # reference field, but predicate-filterable via the nested edge, since
+    # its target (Project) is exposed.
+    assert project_id.filter_ops == ()
+    assert project_id.predicate is True
+    assert project_id.orderable is False
+    assert project_id.aggregatable is False
+    assert project_id.range_queryable is False
+
+
+def test_reference_to_unexposed_class_is_not_predicate_filterable():
+    registry = SchemaRegistry.from_yaml(
+        """
+id: https://example.org/hippo/test_dangling_ref
+name: test_dangling_ref
+prefixes:
+  linkml: https://w3id.org/linkml/
+imports:
+  - linkml:types
+  - hippo_core
+default_range: string
+classes:
+  Widget:
+    is_a: Entity
+    abstract: true
+    attributes:
+      name:
+        required: true
+  Gadget:
+    is_a: Entity
+    attributes:
+      name:
+        required: true
+      widget_id:
+        range: Widget
+"""
+    )
+    manifest = build_capability_manifest(registry)
+    widget_id = manifest["Gadget"].fields_by_name["widget_id"]
+    assert widget_id.filter_ops == ()
+    assert widget_id.predicate is False
+
+
+def test_ordered_scalar_field_gets_full_comparison_ops_and_is_range_queryable():
+    manifest = build_capability_manifest(_registry())
+    volume = manifest["Sample"].fields_by_name["volume_ml"]
+    assert set(volume.filter_ops) == {
+        FilterOp.EQ,
+        FilterOp.NEQ,
+        FilterOp.IN,
+        FilterOp.GT,
+        FilterOp.GTE,
+        FilterOp.LT,
+        FilterOp.LTE,
+        FilterOp.IS_NULL,
+    }
+    assert volume.orderable is True
+    assert volume.aggregatable is True
+    assert volume.range_queryable is True
+
+
+def test_string_field_gets_contains_but_is_not_range_queryable():
+    manifest = build_capability_manifest(_registry())
+    name = manifest["Sample"].fields_by_name["name"]
+    assert set(name.filter_ops) == {
+        FilterOp.EQ,
+        FilterOp.NEQ,
+        FilterOp.IN,
+        FilterOp.CONTAINS,
+        FilterOp.IS_NULL,
+    }
+    assert name.orderable is True
+    assert name.aggregatable is True
+    assert name.range_queryable is False
+
+
+def test_enum_field_is_aggregatable_but_not_range_queryable():
+    manifest = build_capability_manifest(_registry())
+    status = manifest["Sample"].fields_by_name["status"]
+    assert set(status.filter_ops) == {
+        FilterOp.EQ,
+        FilterOp.NEQ,
+        FilterOp.IN,
+        FilterOp.IS_NULL,
+    }
+    assert status.orderable is True
+    assert status.aggregatable is True
+    assert status.range_queryable is False
+
+
+def test_search_available_reflects_hippo_search_annotation_presence():
+    manifest = build_capability_manifest(_registry())
+    # Project.name/description carry `hippo_search: fts5` in the fixture.
+    assert manifest["Project"].search_available is True
+    assert manifest["Project"].fields_by_name["name"].searchable is True
+
+
+def test_search_available_false_with_no_searchable_slots():
+    registry = SchemaRegistry.from_yaml(
+        """
+id: https://example.org/hippo/test_no_search
+name: test_no_search
+prefixes:
+  linkml: https://w3id.org/linkml/
+imports:
+  - linkml:types
+  - hippo_core
+default_range: string
+classes:
+  Widget:
+    is_a: Entity
+    attributes:
+      name:
+        required: true
+"""
+    )
+    manifest = build_capability_manifest(registry)
+    assert manifest["Widget"].search_available is False
+    assert manifest["Widget"].fields_by_name["name"].searchable is False

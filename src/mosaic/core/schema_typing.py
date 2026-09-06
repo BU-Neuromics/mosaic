@@ -212,3 +212,175 @@ def build_type_model(registry: SchemaRegistry) -> dict[str, EntityTypeModel]:
             fields=fields,
         )
     return model
+
+
+# ---------------------------------------------------------------------------
+# Capability manifest (ADR-0009 / issue #181): what the ``where:``-shaped
+# query boundary supports per field, on top of the type model above. Feeds
+# the MCP capability resource (issue #182) and the QuerySpec validator
+# (issue #183) so neither has to re-derive this from raw introspection.
+# ---------------------------------------------------------------------------
+
+
+class FilterOp(enum.Enum):
+    """Operators the ``where:`` contract may accept for a field (ADR-0006)."""
+
+    EQ = "eq"
+    NEQ = "neq"
+    IN = "in"
+    GT = "gt"
+    GTE = "gte"
+    LT = "lt"
+    LTE = "lte"
+    CONTAINS = "contains"
+    IS_NULL = "is_null"
+
+
+#: Base LinkML scalar ranges whose values order meaningfully — comparison
+#: operators and fieldRange min/max are only defined for these (ADR-0006/
+#: ADR-0007). Mirrors ``mosaic.graphql.resolvers._ORDERED_RANGES``; the two
+#: classify the same thing through two transports and must not drift.
+ORDERED_BASE_RANGES: frozenset[str] = frozenset(
+    {"integer", "float", "double", "decimal", "date", "datetime", "time"}
+)
+
+
+def _filter_ops_for_slot(
+    slot: SlotModel, registry: SchemaRegistry
+) -> tuple[FilterOp, ...]:
+    """Operators the ``where:`` contract accepts directly on this field.
+
+    This mirrors ``mosaic.graphql.schema_builder``'s ``_filter_ops_input_for``
+    — the generated ``<Type>Filter`` inputs actually served over ``where:`` —
+    not ``mosaic.graphql.resolvers._allowed_filter_ops``, which serves the
+    older flat ``filters:`` list argument and additionally allows
+    eq/neq/in/is_null directly on a single-valued reference's stored UUID.
+
+    A ``REFERENCE`` slot returns no direct filter ops here: since ADR-0006
+    M5a/M5b landed, references are filtered through the relationship
+    predicate (the nested edge under the slot's name, or a some/none
+    quantifier when multivalued — see ``predicate`` on ``FieldCapability``),
+    never through a FilterOp on the field itself. That is a capability, not
+    an omission — callers must not read an empty ``filter_ops`` tuple on a
+    reference field as "unfilterable."
+    """
+    if slot.kind is SlotKind.REFERENCE:
+        return ()
+    if slot.multivalued:
+        return (FilterOp.EQ, FilterOp.IS_NULL)
+    if slot.kind is SlotKind.ENUM:
+        return (FilterOp.EQ, FilterOp.NEQ, FilterOp.IN, FilterOp.IS_NULL)
+    if slot.kind is SlotKind.STRUCTURED:
+        return (FilterOp.EQ, FilterOp.IN, FilterOp.IS_NULL)
+    base = registry.base_scalar_range(slot.range)
+    if base in ORDERED_BASE_RANGES:
+        return (
+            FilterOp.EQ,
+            FilterOp.NEQ,
+            FilterOp.IN,
+            FilterOp.GT,
+            FilterOp.GTE,
+            FilterOp.LT,
+            FilterOp.LTE,
+            FilterOp.IS_NULL,
+        )
+    if base == "boolean":
+        return (FilterOp.EQ, FilterOp.NEQ, FilterOp.IS_NULL)
+    return (FilterOp.EQ, FilterOp.NEQ, FilterOp.IN, FilterOp.CONTAINS, FilterOp.IS_NULL)
+
+
+@dataclass(frozen=True)
+class FieldCapability:
+    """What one field supports on the ``where:``-shaped query boundary.
+
+    ``orderable`` and ``aggregatable`` currently share one condition (single-
+    valued scalar or enum) — kept as separate flags because they answer
+    separate questions (``orderBy`` vs. ``facetCounts``) that happen to
+    coincide today, not because they are the same capability.
+    """
+
+    slot: SlotModel
+    filter_ops: tuple[FilterOp, ...]
+    #: Relationship-predicate filterable: a nested edge filter under this
+    #: slot's name (to-one, ADR-0006 M5a) or a some/none quantifier over it
+    #: (to-many, M5b). False for a dangling reference to a non-exposed class.
+    predicate: bool
+    orderable: bool  # legal `orderBy` field
+    aggregatable: bool  # legal `facetCounts` field
+    range_queryable: bool  # legal `fieldRange` (min/max) field
+    searchable: bool  # carries a `hippo_search` annotation
+
+
+@dataclass(frozen=True)
+class EntityCapability:
+    """Per-entity capability manifest: ``EntityTypeModel`` plus what the
+    ``where:``/aggregation/search surface supports for each field."""
+
+    class_name: str
+    accessor_name: str
+    description: Optional[str]
+    fields: tuple[FieldCapability, ...]
+    #: Whether `search{Plural}` returns anything for this entity. The root
+    #: field itself is always mounted (issue #181 survey finding) but
+    #: silently returns an empty result with no FTS-annotated slot — callers
+    #: must read this flag, not field presence, to know if search works.
+    search_available: bool
+
+    @property
+    def fields_by_name(self) -> dict[str, FieldCapability]:
+        return {f.slot.name: f for f in self.fields}
+
+
+def build_capability_manifest(
+    registry: SchemaRegistry,
+) -> dict[str, EntityCapability]:
+    """Build the ``where:``/aggregation/search capability manifest for every
+    exposed entity class, on top of :func:`build_type_model`.
+
+    Returns a mapping ``class_name -> EntityCapability``.
+    """
+    type_model = build_type_model(registry)
+    exposed = set(type_model)
+    manifest: dict[str, EntityCapability] = {}
+
+    for class_name, entity in type_model.items():
+        searchable_names = {
+            slot.name for slot, _mode in registry.searchable_slots(class_name)
+        }
+        fields = []
+        for slot in entity.fields:
+            if slot.kind is SlotKind.REFERENCE:
+                filter_ops: tuple[FilterOp, ...] = ()
+                predicate = slot.target_class in exposed
+                orderable = aggregatable = range_queryable = False
+            else:
+                filter_ops = _filter_ops_for_slot(slot, registry)
+                predicate = False
+                orderable = aggregatable = slot.kind in (
+                    SlotKind.SCALAR,
+                    SlotKind.ENUM,
+                ) and not slot.multivalued
+                range_queryable = (
+                    aggregatable
+                    and slot.kind is SlotKind.SCALAR
+                    and registry.base_scalar_range(slot.range) in ORDERED_BASE_RANGES
+                )
+            fields.append(
+                FieldCapability(
+                    slot=slot,
+                    filter_ops=filter_ops,
+                    predicate=predicate,
+                    orderable=orderable,
+                    aggregatable=aggregatable,
+                    range_queryable=range_queryable,
+                    searchable=slot.name in searchable_names,
+                )
+            )
+        manifest[class_name] = EntityCapability(
+            class_name=entity.class_name,
+            accessor_name=entity.accessor_name,
+            description=entity.description,
+            fields=tuple(fields),
+            search_available=bool(searchable_names),
+        )
+    return manifest
