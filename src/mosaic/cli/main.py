@@ -99,6 +99,17 @@ def serve(
             "meaningful with --graphql."
         ),
     ),
+    mcp: bool = typer.Option(
+        False,
+        "--mcp",
+        help=(
+            "Also mount the MCP (Model Context Protocol) transport at "
+            "/mcp — schema and capability-manifest resources (ADR-0009). "
+            "Requires the optional 'mcp' extra and a schema-backed "
+            "deployment (config with a schema_path). Read-only: no write "
+            "or mutation tool exists on this surface."
+        ),
+    ),
 ) -> None:
     """Start the REST API server with customizable configuration.
 
@@ -113,6 +124,7 @@ def serve(
       mosaic serve --port 9000           # Start on custom port
       mosaic serve --log-level debug     # Start with debug logging
       mosaic serve --graphql             # Also serve GraphQL at /graphql
+      mosaic serve --mcp                 # Also serve MCP at /mcp
       mosaic serve --reload --reload-dir /src  # Watch a mounted source tree
     """
     import uvicorn
@@ -154,20 +166,25 @@ def serve(
     typer.echo(f"Starting Mosaic server on {host}:{port} with log level {log_level}")
     try:
         app = create_default_app(
-            client, graphql=graphql, graphql_max_query_depth=graphql_max_depth
+            client,
+            graphql=graphql,
+            graphql_max_query_depth=graphql_max_depth,
+            mcp=mcp,
         )
     except ImportError as exc:
-        # Missing `graphql` extra — fail with the actionable hint.
+        # Missing `graphql`/`mcp` extra — fail with the actionable hint.
         typer.echo(f"Error: {exc}", err=True)
         raise typer.Exit(1)
     except ConfigError as exc:
-        # e.g. --graphql against a deployment without a schema registry.
+        # e.g. --graphql/--mcp against a deployment without a schema registry.
         typer.echo(f"Error: {exc}", err=True)
         raise typer.Exit(1)
     if graphql:
         typer.echo(
             f"GraphQL API (GraphiQL) available at http://{host}:{port}/graphql"
         )
+    if mcp:
+        typer.echo(f"MCP transport available at http://{host}:{port}/mcp")
     # Note: Uvicorn's logging is currently configured through uvicorn configuration,
     # so we might need to pass it explicitly if needed
     if reload or workers:
@@ -184,6 +201,8 @@ def serve(
             os.environ["MOSAIC_SERVE_GRAPHQL"] = "1"
         if graphql_max_depth is not None:
             os.environ["MOSAIC_SERVE_GRAPHQL_MAX_DEPTH"] = str(graphql_max_depth)
+        if mcp:
+            os.environ["MOSAIC_SERVE_MCP"] = "1"
 
         reload_dirs = None
         if reload:

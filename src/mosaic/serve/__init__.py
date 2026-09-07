@@ -40,6 +40,7 @@ def create_default_app(
     hippo_client: MosaicClient | None = None,
     graphql: bool = False,
     graphql_max_query_depth: int | None = None,
+    mcp: bool = False,
 ):
     """Create the default Mosaic API application with all routers.
 
@@ -52,15 +53,24 @@ def create_default_app(
         graphql_max_query_depth: Optional override for the GraphQL
             query-depth limit (defaults to
             ``mosaic.graphql.DEFAULT_MAX_QUERY_DEPTH``).
+        mcp: Mount the MCP (Model Context Protocol) transport at ``/mcp``
+            (requires the optional ``mcp`` extra and a schema-backed
+            ``hippo_client``; ADR-0009). Streamable HTTP, not stdio — see
+            ``mosaic.mcp``'s module docstring for why. Replaces the app's
+            lifespan to run the MCP session manager (Starlette does not
+            run a mounted sub-app's own lifespan); harmless to compose
+            with in the future since ``create_app`` sets no lifespan of
+            its own today.
 
     Returns:
         Configured FastAPI application.
 
     Raises:
-        ImportError: If ``graphql=True`` and the ``graphql`` extra is
-            not installed (message includes the install hint).
-        mosaic.core.exceptions.ConfigError: If ``graphql=True`` and the
-            client carries no SchemaRegistry.
+        ImportError: If ``graphql=True``/``mcp=True`` and the
+            corresponding extra is not installed (message includes the
+            install hint).
+        mosaic.core.exceptions.ConfigError: If ``graphql=True``/
+            ``mcp=True`` and the client carries no SchemaRegistry.
     """
     routers = [
         health.router,
@@ -95,7 +105,32 @@ def create_default_app(
         )
         app.include_router(graphql_router, prefix="/graphql")
 
+    if mcp:
+        # Lazy import — mirrors the graphql branch above; REST/GraphQL-only
+        # deployments never pay the `mcp` package's import cost.
+        from mosaic.mcp import create_mcp_app
+
+        mcp_server, mcp_app = create_mcp_app(hippo_client or MosaicClient())
+        app.mount("/mcp", mcp_app)
+        _wire_mcp_session_manager(app, mcp_server)
+
     return app
+
+
+def _wire_mcp_session_manager(app, mcp_server) -> None:
+    """Enter ``mcp_server.session_manager.run()`` in the host app's own
+    lifespan. Required because Starlette never runs a ``Mount``-ed
+    sub-application's lifespan on its own — the session manager's
+    background task group would otherwise simply never start (every MCP
+    request would then fail with "Task group is not initialized")."""
+    import contextlib
+
+    @contextlib.asynccontextmanager
+    async def _lifespan(_app):
+        async with mcp_server.session_manager.run():
+            yield
+
+    app.router.lifespan_context = _lifespan
 
 
 def create_app_from_env():
@@ -108,8 +143,11 @@ def create_app_from_env():
     in ``mosaic.config.env``) so the subprocess rebuilds the same deployment
     ``mosaic serve`` resolved: reads ``MOSAIC_CONFIG`` (a config path, or
     unset to auto-detect one in the cwd — same as ``mosaic serve`` with no
-    ``--config``), ``MOSAIC_SERVE_GRAPHQL`` (``"1"`` to mount GraphQL), and
-    ``MOSAIC_SERVE_GRAPHQL_MAX_DEPTH`` (optional integer override).
+    ``--config``), ``MOSAIC_SERVE_GRAPHQL`` (``"1"`` to mount GraphQL),
+    ``MOSAIC_SERVE_GRAPHQL_MAX_DEPTH`` (optional integer override), and
+    ``MOSAIC_SERVE_MCP`` (``"1"`` to mount MCP — without this, ``--mcp``
+    silently drops under ``--reload``/``--workers``, since each reloaded/
+    worker subprocess rebuilds the app from this function alone).
     """
     from mosaic.config.env import get_env
     from mosaic.core.factory import (
@@ -126,4 +164,5 @@ def create_app_from_env():
         client,
         graphql=get_env("SERVE_GRAPHQL") == "1",
         graphql_max_query_depth=int(max_depth_raw) if max_depth_raw else None,
+        mcp=get_env("SERVE_MCP") == "1",
     )
