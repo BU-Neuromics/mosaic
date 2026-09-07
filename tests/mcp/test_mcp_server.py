@@ -104,6 +104,37 @@ class TestCapabilitiesResource:
         assert payload == expected
 
 
+@pytest.mark.anyio
+class TestConstructQuerySpecPrompt:
+    async def test_is_registered_and_returns_guidance(self, hippo_client):
+        async with Client(create_mcp_server(hippo_client)) as client:
+            prompts = await client.list_prompts()
+            assert "construct_query_spec" in {p.name for p in prompts.prompts}
+            result = await client.get_prompt("construct_query_spec", {})
+            text = result.messages[0].content.text
+            assert "mosaic://capabilities" in text
+            assert "RelatedCondition" in text
+
+    async def test_goal_argument_is_echoed_into_the_prompt(self, hippo_client):
+        async with Client(create_mcp_server(hippo_client)) as client:
+            result = await client.get_prompt(
+                "construct_query_spec", {"goal": "samples over 5ml"}
+            )
+            text = result.messages[0].content.text
+            assert "samples over 5ml" in text
+
+    async def test_columns_guidance_matches_what_is_actually_implemented(self, hippo_client):
+        # Regression against issue #184's own (stale) text, which described
+        # columns needing an aggregate-vs-explode choice -- #183 decided to
+        # reject columns entirely instead, since no Mosaic-side compiler
+        # exists for it. The prompt must teach the real, current behavior.
+        async with Client(create_mcp_server(hippo_client)) as client:
+            result = await client.get_prompt("construct_query_spec", {})
+            text = result.messages[0].content.text
+            assert "not supported" in text.lower()
+            assert "omit it" in text.lower()
+
+
 class TestRealMount:
     """Proves the mount + session-manager lifespan wiring works over a
     real HTTP server -- the one thing that cannot be proven by reading
