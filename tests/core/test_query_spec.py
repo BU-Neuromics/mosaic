@@ -288,6 +288,25 @@ def test_in_op_with_bad_value_on_enum_field_reports_only_value_type_error():
     assert [e.code for e in result.errors] == ["INVALID_VALUE_TYPE"]
 
 
+def test_multi_column_sort_is_rejected():
+    # Regression: Mosaic's query surface takes one order_by/order_dir pair
+    # (mirrors GraphQL's single-valued orderBy) -- a second sort field used
+    # to validate clean and then silently lose the second column at
+    # execute time (issue #129's "loud over wrong" rule).
+    spec = parse_query_spec(
+        {
+            "v": 1,
+            "anchor": "Sample",
+            "mode": "AND",
+            "criteria": [],
+            "sort": [{"slot": "volume_ml"}, {"slot": "name"}],
+        }
+    )
+    result = validate_query_spec(spec, _manifest())
+    assert not result.valid
+    assert result.errors[0].code == "MULTI_COLUMN_SORT_UNSUPPORTED"
+
+
 def test_as_of_with_related_condition_anywhere_is_rejected():
     spec = parse_query_spec(
         {
