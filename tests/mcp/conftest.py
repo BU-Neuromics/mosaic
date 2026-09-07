@@ -6,12 +6,17 @@ The whole package is skipped when the ``mcp`` package (the optional
 
 from __future__ import annotations
 
+import os
+import sqlite3
+import tempfile
+
 import pytest
 
 # Skip the entire package if the mcp SDK is not installed.
 pytest.importorskip("mcp", reason="mcp not installed; run: pip install datahelix-mosaic[mcp]")
 
 from mosaic.core.client import MosaicClient
+from mosaic.core.storage.adapters.sqlite_adapter import SQLiteAdapter
 from mosaic.linkml_bridge import SchemaRegistry
 from mosaic.serve import create_default_app
 
@@ -68,8 +73,24 @@ def registry() -> SchemaRegistry:
 
 
 @pytest.fixture
-def hippo_client(registry: SchemaRegistry) -> MosaicClient:
-    return MosaicClient(registry=registry)
+def hippo_client(registry: SchemaRegistry):
+    """Storage-backed (not registry-only): the execute_query_spec tests
+    need to write and then query real entities, not just introspect the
+    schema. Mirrors tests/graphql/conftest.py's fixture exactly."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        db_path = os.path.join(tmpdir, "mcp_test.db")
+        storage = SQLiteAdapter(db_path, schema_registry=registry)
+        client = MosaicClient(storage=storage, registry=registry)
+        conn = sqlite3.connect(db_path)
+        for tables in client._fts_table_metadata.values():
+            for meta in tables:
+                conn.execute(
+                    f"CREATE VIRTUAL TABLE IF NOT EXISTS {meta.table_name} "
+                    "USING fts5(entity_id, content)"
+                )
+        conn.commit()
+        conn.close()
+        yield client
 
 
 @pytest.fixture
