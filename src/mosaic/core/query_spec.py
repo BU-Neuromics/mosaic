@@ -30,7 +30,11 @@ it is *what Mosaic's ``where:`` surface can actually compile today*:
   relationship predicate anywhere in the tree that Mosaic's storage layer
   already enforces (``has_relationship_predicate``, ADR-0001).
 - ``sort`` IS accepted, checked against the manifest's per-field
-  ``orderable`` flag (ADR-0007's ``<Class>OrderField``).
+  ``orderable`` flag (ADR-0007's ``<Class>OrderField``) — but capped at
+  ONE entry: Mosaic's query surface (``MosaicClient.query``'s single
+  ``order_by``/``order_dir`` pair, mirrored by GraphQL's single-valued
+  ``orderBy`` argument) has no multi-column sort to compile a second
+  entry against.
 - ``columns`` is REJECTED with a coded, not-a-crash error: its
   aggregate-vs-explode choice on a to-many path has no Mosaic-side
   equivalent to validate against — ADR-0009's own Consequences section
@@ -429,6 +433,17 @@ def validate_query_spec(
                 "'asOf' cannot combine with a RelatedCondition anywhere in "
                 "'criteria' (ADR-0001)",
                 "$.asOf",
+            )
+        )
+    if len(spec.sort) > 1:
+        errors.append(
+            QuerySpecError(
+                "MULTI_COLUMN_SORT_UNSUPPORTED",
+                "Mosaic's query surface takes a single order_by/order_dir "
+                "pair (matches GraphQL's single-valued orderBy argument) — "
+                "'sort' must carry at most one field, not "
+                f"{len(spec.sort)}",
+                "$.sort",
             )
         )
     for i, s in enumerate(spec.sort):
