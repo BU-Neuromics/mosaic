@@ -1,21 +1,28 @@
 """MCP server construction: the schema/capability resources (ADR-0009
 decision 1, issue #182), the ``validate_query_spec``/``execute_query_spec``
 tools (ADR-0009 decision 3, issue #183), the ``count_query_spec``/
-``facet_query_spec``/``field_range_query_spec`` tools (issue #195), and the
-``construct-query-spec`` prompt (ADR-0009 decision 4, issue #184). Built
-once, at mount time, from a ``MosaicClient``'s ``SchemaRegistry`` — no new
-data-access path (ADR-0009: "sharing the same MosaicClient/SchemaRegistry
-every other transport already uses").
+``facet_query_spec``/``field_range_query_spec`` tools (issue #195), the
+``search_query_spec`` tool (issue #196), and the ``construct-query-spec``
+prompt (ADR-0009 decision 4, issue #184). Built once, at mount time, from
+a ``MosaicClient``'s ``SchemaRegistry`` — no new data-access path
+(ADR-0009: "sharing the same MosaicClient/SchemaRegistry every other
+transport already uses").
 
-The three aggregation tools exist because ``QuerySpec`` (ADR-0035) has no
-representation for aggregation at all — ``execute_query_spec`` can only ever
-return rows. Mosaic's own aggregation surface (``count``/``facet_counts``/
-``field_range``, ADR-0007) was already shipped for GraphQL; these tools are
-thin wrappers, not new query logic — same ``compile_query_spec`` output,
-same ``MosaicClient`` methods GraphQL's own resolvers call. Error codes
-(``UNKNOWN_AGGREGATION_FIELD``, ``UNAGGREGATABLE_FIELD``) are copied
-verbatim from ``graphql/resolvers.py``'s ``_resolve_aggregate_field`` so a
-client sees the same failure for the same field regardless of transport.
+The four non-execute tools exist because ``QuerySpec`` (ADR-0035) has no
+representation for aggregation OR search — ``execute_query_spec`` can only
+ever return rows. Mosaic's own aggregation/search surface (``count``/
+``facet_counts``/``field_range``/``search``, ADR-0007/#157) was already
+shipped for GraphQL; these tools are thin wrappers, not new query logic —
+same ``compile_query_spec`` output, same ``MosaicClient`` methods GraphQL's
+own resolvers call. Error codes (``UNKNOWN_AGGREGATION_FIELD``,
+``UNAGGREGATABLE_FIELD``) are copied verbatim from ``graphql/resolvers.py``'s
+``_resolve_aggregate_field`` so a client sees the same failure for the same
+field regardless of transport. ``search_query_spec`` deliberately does NOT
+add a stricter "is this searchable" gate GraphQL's own ``search{Plural}``
+resolvers lack — a non-searchable entity returns an empty result on both
+transports, by the same documented design (``schema_typing.py``'s
+``EntityCapability.search_available`` docstring): inventing a gate on one
+transport only would make the two answer the same call differently.
 
 The two resources are pure functions of the deployment's schema, not
 per-request state, so — unlike GraphQL's resolvers, and unlike the two
@@ -112,9 +119,12 @@ def create_mcp_server(hippo_client: MosaicClient) -> MCPServer:
             "use one of those instead of fetching rows and counting them "
             "yourself, and instead of trying to answer a counting question "
             "with a sorted row list (a QuerySpec has no aggregation shape "
-            "of its own; these tools are the only way to get one). This "
-            "surface is read-only: no write or mutation tool exists here "
-            "(ADR-0009)."
+            "of its own; these tools are the only way to get one). "
+            "search_query_spec full-text searches an entity's searchable "
+            "slots, composed with a QuerySpec's own criteria -- check "
+            "search_available/searchable on mosaic://capabilities before "
+            "calling it. This surface is read-only: no write or mutation "
+            "tool exists here (ADR-0009)."
         ),
     )
 
@@ -171,18 +181,28 @@ def create_mcp_server(hippo_client: MosaicClient) -> MCPServer:
     def _shape_error_dict(exc: QuerySpecShapeError) -> dict[str, Any]:
         return {"code": exc.code, "message": str(exc), "path": exc.path}
 
-    def _reject_unsupported_for_aggregate(spec, *, allow_as_of: bool) -> Optional[dict[str, Any]]:
-        """`sort` has no meaning for a scalar/facet/range result on ANY of
-        the three aggregation tools -- GraphQL's own count/facetCounts/
-        fieldRange resolvers expose no orderBy argument either. `asOf` is
-        supported only for `count` (matches MosaicClient.count's own
-        signature; facet_counts/field_range take no as_of parameter at
-        all -- "Not defined under as-of in this increment", their
-        docstrings). Rejecting loudly here rather than silently dropping
-        either follows issue #129's rule; validate_query_spec's own
+    def _reject_unsupported_for_aggregate(
+        spec, *, allow_sort: bool = False, allow_as_of: bool
+    ) -> Optional[dict[str, Any]]:
+        """Not every QuerySpec field applies to every tool built on top of
+        it, and which ones vary per underlying MosaicClient method's own
+        signature -- not a rule this boundary invents:
+
+        - `sort`: no meaning for a scalar/facet/range result (count/facet/
+          range) -- GraphQL's own count/facetCounts/fieldRange resolvers
+          expose no orderBy argument either. Meaningful for search (an
+          explicit `sort` overrides FTS rank, matching `search()`'s own
+          `order_by`), so `allow_sort=True` there.
+        - `asOf`: supported only where the underlying method takes it --
+          `count()` does; `facet_counts()`/`field_range()`/`search()` do
+          not ("Not defined under as-of in this increment", their
+          docstrings/module notes).
+
+        Rejecting loudly here rather than silently dropping either follows
+        issue #129's rule; validate_query_spec's own
         ASOF_RELATIONSHIP_FILTER_UNSUPPORTED check still runs underneath
         this for count_query_spec's asOf+RelatedCondition case."""
-        if spec.sort:
+        if not allow_sort and spec.sort:
             return {
                 "code": "SORT_NOT_APPLICABLE",
                 "message": "'sort' has no effect on this aggregate result -- omit it",
@@ -192,10 +212,10 @@ def create_mcp_server(hippo_client: MosaicClient) -> MCPServer:
             return {
                 "code": "ASOF_NOT_SUPPORTED",
                 "message": (
-                    "'asOf' is not supported here -- Mosaic's facet_counts/"
-                    "field_range surface takes no as_of parameter (matches "
-                    "the GraphQL surface, which exposes no asOf argument on "
-                    "facetCounts/fieldRange either)"
+                    "'asOf' is not supported here -- the underlying Mosaic "
+                    "query method this tool wraps takes no as_of parameter "
+                    "(matches the equivalent GraphQL surface, which exposes "
+                    "no asOf argument here either)"
                 ),
                 "path": "$.asOf",
             }
@@ -469,6 +489,81 @@ def create_mcp_server(hippo_client: MosaicClient) -> MCPServer:
             }
         return {"valid": True, "errors": [], "min": lo, "max": hi}
 
+    @mcp.tool(
+        annotations=ToolAnnotations(read_only_hint=True),
+        description=(
+            "Full-text search over one entity type, composed with a "
+            "QuerySpec's criteria (issue #196) -- e.g. donors whose notes "
+            "mention a term, further filtered by cohort. Returns the same "
+            "envelope as execute_query_spec ({valid, errors, items, "
+            "total}). Results come back in FTS rank order; an explicit "
+            "'sort' overrides rank. Check mosaic://capabilities' "
+            "'search_available'/'searchable' flags before calling -- an "
+            "entity or field with no searchable slot returns an empty "
+            "result, not an error (matches GraphQL's own searchDonors "
+            "etc., which has the same silent-empty behavior by design)."
+        ),
+    )
+    def search_query_spec(
+        query_spec: dict, q: str, ctx: Context, limit: int = 100, offset: int = 0
+    ) -> dict[str, Any]:
+        client = _client_from_context(ctx, hippo_client)
+        manifest = _manifest_for(client)
+        if not (1 <= limit <= MAX_EXECUTE_LIMIT):
+            return {
+                "valid": False,
+                "errors": [{
+                    "code": "INVALID_LIMIT",
+                    "message": f"'limit' must be between 1 and {MAX_EXECUTE_LIMIT} "
+                    f"(matches execute_query_spec's bound), got {limit}",
+                    "path": "$.limit",
+                }],
+                "items": None,
+                "total": None,
+            }
+        if offset < 0:
+            return {
+                "valid": False,
+                "errors": [{"code": "INVALID_OFFSET", "message": "'offset' must be >= 0", "path": "$.offset"}],
+                "items": None,
+                "total": None,
+            }
+        try:
+            spec = parse_query_spec(query_spec)
+        except QuerySpecShapeError as exc:
+            return {"valid": False, "errors": [_shape_error_dict(exc)], "items": None, "total": None}
+        unsupported = _reject_unsupported_for_aggregate(spec, allow_sort=True, allow_as_of=False)
+        if unsupported:
+            return {"valid": False, "errors": [unsupported], "items": None, "total": None}
+        result = _validate_query_spec(spec, manifest)
+        if not result.valid:
+            return {
+                "valid": False,
+                "errors": [_error_dict(e) for e in result.errors],
+                "items": None,
+                "total": None,
+            }
+        compiled = compile_query_spec(spec, manifest)
+        try:
+            page = client.search(
+                entity_type=compiled.entity_type,
+                query=q,
+                limit=limit,
+                offset=offset,
+                where=compiled.where,
+                order_by=compiled.order_by,
+                order_dir=compiled.order_dir,
+            )
+        except MosaicValidationError as exc:
+            return {
+                "valid": False,
+                "errors": [{"code": "COMPILE_ERROR", "message": str(exc), "path": "$"}],
+                "items": None,
+                "total": None,
+            }
+        dumped = page.model_dump(mode="json")
+        return {"valid": True, "errors": [], "items": dumped["items"], "total": dumped["total"]}
+
     @mcp.prompt(
         title="Construct a Mosaic QuerySpec",
         description=(
@@ -532,6 +627,13 @@ min/max of X", do NOT answer it by listing rows (sorted or not) and do \
 NOT count/group them yourself -- call count_query_spec / \
 facet_query_spec / field_range_query_spec instead. A row list is not an \
 answer to a counting question, even when every row in it is correct.
+
+10. For a free-text/keyword question ("mentions", "contains the word", \
+"about X"), prefer search_query_spec over a `contains` FieldCondition -- \
+`contains` is a substring match on ONE field you name; search_query_spec \
+ranks across every searchable slot on the entity at once. Check \
+search_available on mosaic://capabilities first: an entity with no \
+searchable slot returns an empty result, not an error.
 
 Workflow: call validate_query_spec first if you want to check a draft \
 without running it; call execute_query_spec once you're ready to fetch \
