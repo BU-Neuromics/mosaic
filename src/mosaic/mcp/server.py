@@ -137,14 +137,38 @@ def _reject_malformed_exon_response(body: Any) -> Optional[str]:
     turn = body.get("turn")
     if not isinstance(turn, dict):
         return "the response has no 'turn' object."
+    problem = _reject_malformed_turn(turn)
+    if problem:
+        return f"the turn's {problem}" if problem.startswith("status") else problem
+    suspended = body.get("suspended_turn_ids")
+    if suspended is not None and not isinstance(suspended, list):
+        return "'suspended_turn_ids' is present but not a list."
+
+    # `turns` (the full post-call conversation) is optional for backward
+    # compatibility, but when present every entry must satisfy the same
+    # per-turn contract as `turn` -- these are handed straight to the caller,
+    # and one malformed entry among them is no less a contract break than a
+    # malformed `turn`.
+    turns = body.get("turns")
+    if turns is not None:
+        if not isinstance(turns, list):
+            return "'turns' is present but not a list."
+        for i, t in enumerate(turns):
+            if not isinstance(t, dict):
+                return f"turns[{i}] is not an object."
+            problem = _reject_malformed_turn(t)
+            if problem:
+                return f"turns[{i}]: {problem}"
+    return None
+
+
+def _reject_malformed_turn(turn: dict) -> Optional[str]:
+    """Per-turn contract check, shared by `turn` and every `turns` entry."""
     status = turn.get("status")
     if status not in _EXON_TURN_STATUSES:
-        return (
-            f"the turn's status {status!r} is not one of "
-            f"{sorted(_EXON_TURN_STATUSES)}."
-        )
+        return f"status {status!r} is not one of {sorted(_EXON_TURN_STATUSES)}."
     if not isinstance(turn.get("message"), str):
-        return "the turn carries no 'message' string."
+        return "no 'message' string."
     if status == "proposal":
         if not isinstance(turn.get("query_spec"), dict):
             return "a 'proposal' turn carries no 'query_spec' object."
@@ -153,9 +177,6 @@ def _reject_malformed_exon_response(body: Any) -> Optional[str]:
             f"a {status!r} turn must carry query_spec: null, but one was "
             f"present -- only a 'proposal' changes the draft."
         )
-    suspended = body.get("suspended_turn_ids")
-    if suspended is not None and not isinstance(suspended, list):
-        return "'suspended_turn_ids' is present but not a list."
     return None
 
 
@@ -170,6 +191,13 @@ def _error_turn(utterance: str, message: str) -> dict[str, Any]:
     The turn carries no ``id``: an ``error`` is not a conversational step
     Aperture can later rewind to or edit (there is nothing to recompute),
     so minting an id for it would invite exactly that misuse.
+
+    Callers returning this deliberately OMIT ``turns`` rather than sending
+    ``[]``. Every error path means nothing was applied, so the conversation
+    is *unchanged* — and an empty list would say the opposite ("the
+    conversation is now empty"), which a caller that replaces its state
+    with the response would act on by wiping the chat. Absent means "no
+    authoritative state supplied; keep your own."
     """
     return {
         "id": None,
@@ -708,8 +736,13 @@ def create_mcp_server(hippo_client: MosaicClient) -> MCPServer:
                 "no longer make sense come back in 'suspended_turn_ids' "
                 "for the user to re-prompt rather than being silently "
                 "dropped. Stateless: you own the turn list and must pass "
-                "it back each call; nothing is persisted here. This never "
-                "executes anything -- hand a returned proposal to "
+                "it back each call; nothing is persisted here. ALWAYS "
+                "replace your turn list with the returned 'turns' -- it is "
+                "the authoritative conversation after the call, and after "
+                "an edit the recomputed later turns are only available "
+                "there. If 'turns' is absent (an error turn), nothing was "
+                "applied and your existing list is still current. This "
+                "never executes anything -- hand a returned proposal to "
                 "execute_query_spec only on an explicit user action."
             ),
         )
@@ -785,20 +818,34 @@ def create_mcp_server(hippo_client: MosaicClient) -> MCPServer:
 
             turn = body["turn"]
             suspended = body.get("suspended_turn_ids") or []
+            turns = body.get("turns") or []
 
             # Re-validate IN-PROCESS (a direct function call, never back
             # through MCP -- same process already hosts the validator, and
             # a self-call would be a needless cycle). Only a `proposal`
             # carries a spec; `clarification`/`suspended` turns have none
             # by contract, already checked above.
-            if turn["status"] == "proposal":
+            #
+            # EVERY proposal is checked, not just `turn`. After an edit, the
+            # planning service recomputes the turns following the edited one,
+            # so `turns` can carry freshly-generated specs this deployment
+            # has never seen -- validating only `turn` would let those reach
+            # the caller unchecked, which is exactly the guarantee this
+            # re-validation exists to hold.
+            for candidate in [turn, *turns]:
+                if candidate.get("status") != "proposal":
+                    continue
+                which = (
+                    "proposed" if candidate is turn
+                    else f"recomputed (turn id {candidate.get('id')!r})"
+                )
                 try:
-                    spec = parse_query_spec(turn["query_spec"])
+                    spec = parse_query_spec(candidate["query_spec"])
                 except QuerySpecShapeError as exc:
                     return {
                         "turn": _error_turn(
                             utterance,
-                            f"The planning service proposed a QuerySpec that is not "
+                            f"The planning service {which} a QuerySpec that is not "
                             f"well-formed ({exc.code} at {exc.path}: {exc}). Nothing "
                             f"was applied.",
                         ),
@@ -810,14 +857,18 @@ def create_mcp_server(hippo_client: MosaicClient) -> MCPServer:
                     return {
                         "turn": _error_turn(
                             utterance,
-                            f"The planning service proposed a QuerySpec that failed "
+                            f"The planning service {which} a QuerySpec that failed "
                             f"validation against this deployment's capabilities: "
                             f"{codes}. Nothing was applied.",
                         ),
                         "suspended_turn_ids": [],
                     }
 
-            return {"turn": turn, "suspended_turn_ids": list(suspended)}
+            return {
+                "turn": turn,
+                "suspended_turn_ids": list(suspended),
+                "turns": list(turns),
+            }
 
     @mcp.prompt(
         title="Construct a Mosaic QuerySpec",
