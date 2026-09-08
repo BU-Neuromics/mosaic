@@ -599,3 +599,156 @@ class TestTimeoutConfig:
 
         monkeypatch.setenv("MOSAIC_EXON_TIMEOUT", "7")
         assert _exon_timeout() == 7.0
+
+
+@pytest.mark.anyio
+class TestRecomputedTurnsPassthrough:
+    """`turns` -- the full post-call conversation.
+
+    `turn` + `suspended_turn_ids` is provably insufficient after an edit: the
+    planning service recomputes the turns following the edited one, and
+    without those a caller derives "the current draft" from its own stale
+    copy and executes a pre-edit query.
+    """
+
+    async def test_turns_passed_through(self, hippo_client, exon_configured, monkeypatch):
+        convo = [
+            {
+                "id": "t1",
+                "utterance": "cerebellum samples instead",
+                "status": "proposal",
+                "query_spec": VALID_SPEC,
+                "message": "Cerebellum samples.",
+            },
+            {
+                "id": "t2",
+                "utterance": "only from female donors",
+                "status": "proposal",
+                "query_spec": VALID_SPEC,
+                "message": "Cerebellum samples from female donors.",
+            },
+        ]
+        _install_stub(
+            monkeypatch,
+            response=_StubResponse(
+                {"turn": convo[0], "suspended_turn_ids": [], "turns": convo}
+            ),
+        )
+        payload = await _call_tool(
+            create_mcp_server(hippo_client),
+            "converse_query_spec",
+            {"utterance": "cerebellum samples instead", "edit_turn_id": "t1"},
+        )
+        assert payload["turns"] == convo
+        # The recomputed later turn's message is now reachable, which is the
+        # whole point -- before this it was computed and discarded.
+        assert payload["turns"][1]["message"] == "Cerebellum samples from female donors."
+
+    async def test_absent_turns_is_tolerated(self, hippo_client, exon_configured, monkeypatch):
+        # Backward compatibility: a planning service that predates the field.
+        _install_stub(
+            monkeypatch,
+            response=_StubResponse(
+                {
+                    "turn": {
+                        "id": "t1",
+                        "utterance": "donors",
+                        "status": "clarification",
+                        "query_spec": None,
+                        "message": "Which cohort?",
+                    }
+                }
+            ),
+        )
+        payload = await _call_tool(
+            create_mcp_server(hippo_client),
+            "converse_query_spec",
+            {"utterance": "donors"},
+        )
+        assert payload["turns"] == []
+
+    async def test_recomputed_proposal_is_revalidated(
+        self, hippo_client, exon_configured, monkeypatch
+    ):
+        """The load-bearing case. A recompute produces a spec this deployment
+        has never validated; validating only `turn` would let it through."""
+        good = {
+            "id": "t1",
+            "utterance": "donors",
+            "status": "proposal",
+            "query_spec": VALID_SPEC,
+            "message": "All donors.",
+        }
+        bad_recompute = {
+            "id": "t2",
+            "utterance": "by eye colour",
+            "status": "proposal",
+            "query_spec": {
+                "v": 1,
+                "anchor": "Donor",
+                "mode": "AND",
+                "criteria": [
+                    {"kind": "field", "slot": "eye_colour", "op": "eq", "value": "blue"}
+                ],
+            },
+            "message": "Filtering by eye colour.",
+        }
+        _install_stub(
+            monkeypatch,
+            response=_StubResponse(
+                {"turn": good, "suspended_turn_ids": [], "turns": [good, bad_recompute]}
+            ),
+        )
+        payload = await _call_tool(
+            create_mcp_server(hippo_client),
+            "converse_query_spec",
+            {"utterance": "donors", "edit_turn_id": "t1"},
+        )
+        # `turn` itself was valid, but a recomputed turn was not.
+        assert payload["turn"]["status"] == "error"
+        assert "recomputed" in payload["turn"]["message"]
+        assert "UNKNOWN_SLOT" in payload["turn"]["message"]
+        assert "t2" in payload["turn"]["message"]
+
+    async def test_error_omits_turns_rather_than_emptying_them(
+        self, hippo_client, exon_configured, monkeypatch
+    ):
+        """An error means nothing was applied, so the conversation is
+        UNCHANGED. Returning [] would tell a caller to wipe the chat."""
+        import httpx2
+
+        _install_stub(monkeypatch, raise_exc=httpx2.TimeoutException("t"))
+        payload = await _call_tool(
+            create_mcp_server(hippo_client),
+            "converse_query_spec",
+            {"utterance": "donors"},
+        )
+        assert payload["turn"]["status"] == "error"
+        assert payload.get("turns") in (None, [])
+
+    async def test_malformed_entry_in_turns_is_rejected(
+        self, hippo_client, exon_configured, monkeypatch
+    ):
+        good = {
+            "id": "t1",
+            "utterance": "donors",
+            "status": "proposal",
+            "query_spec": VALID_SPEC,
+            "message": "All donors.",
+        }
+        _install_stub(
+            monkeypatch,
+            response=_StubResponse(
+                {
+                    "turn": good,
+                    "turns": [good, {"status": "clarification", "query_spec": None}],
+                }
+            ),
+        )
+        payload = await _call_tool(
+            create_mcp_server(hippo_client),
+            "converse_query_spec",
+            {"utterance": "donors"},
+        )
+        assert payload["turn"]["status"] == "error"
+        assert "turns[1]" in payload["turn"]["message"]
