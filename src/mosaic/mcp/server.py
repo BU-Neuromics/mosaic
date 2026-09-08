@@ -37,7 +37,9 @@ The prompt is static text (like the resources) — it carries no schema
 data of its own, only procedural guidance about the artifact's semantics.
 
 ``converse_query_spec`` is the one tool here that is not a wrapper over a
-``MosaicClient`` method: it delegates server-to-server to Exon's stateless
+``MosaicClient`` method, and the terms on which it is allowed to exist are
+ADR-0010 (Mosaic's first outbound call — a deployment-shape change, not
+just a new tool): it delegates server-to-server to Exon's stateless
 turn-taking planning core over HTTP (the wire contract is recorded in
 ``mosaic-demo-small``'s ``add-exon-conversational-contract/design.md``
 Decision 8), because Aperture's browser has no backend of its own and must
@@ -50,11 +52,15 @@ as far as this boundary is concerned, and "Mosaic validates before
 anything executes" has to hold even if Exon's own check is stale or
 bypassed. It never calls ``execute_query_spec`` — a ``proposal`` is handed
 back for a separate, explicit execute call once a human confirms it, so
-"the LLM never decides to execute" holds for this tool too.
+"the LLM never decides to execute" holds for this tool too. Its
+client-visible failures name the delegate's *role*, never its address
+(ADR-0010 decision 5): this surface carries no authn, so the endpoint URL
+and any upstream response body go to ``logger`` for the operator instead.
 """
 
 from __future__ import annotations
 
+import logging
 import os
 from dataclasses import asdict
 from typing import Any, Optional
@@ -78,6 +84,8 @@ from mosaic.core.schema_typing import (
     build_type_model,
 )
 from mosaic.mcp.serialize import entity_capability_to_dict, entity_type_model_to_dict
+
+logger = logging.getLogger(__name__)
 
 #: Mirrors REST's list_entities bound (Query(..., ge=1, le=1000)) — this
 #: surface is reachable by less-trusted automated clients than REST's
@@ -105,6 +113,14 @@ DEFAULT_EXON_TIMEOUT_SECONDS = 60.0
 #: this envelope is what Aperture branches on, so an unrecognized status
 #: reaching the UI would be a silent contract break.
 _EXON_TURN_STATUSES = frozenset({"proposal", "clarification", "suspended"})
+
+#: What an ``error`` turn calls the delegate. ADR-0010 decision 5: a
+#: client-visible failure names the delegate's ROLE, never its address.
+#: This surface carries no authn/authz (ADR-0009 item 5), so anything on
+#: an error turn is effectively public, and the endpoint URL is deployment
+#: topology. The URL and the upstream body go to ``logger`` instead, where
+#: an operator can still diagnose the failure.
+EXON_ROLE_NAME = "the configured conversational planning service"
 
 
 def _exon_timeout() -> float:
@@ -169,6 +185,18 @@ def _reject_malformed_turn(turn: dict) -> Optional[str]:
         return f"status {status!r} is not one of {sorted(_EXON_TURN_STATUSES)}."
     if not isinstance(turn.get("message"), str):
         return "no 'message' string."
+    # ``id`` and ``utterance`` are what make a turn addressable: Aperture
+    # passes an id back as ``edit_turn_id`` to rewind, and renders the
+    # utterance beside the turn. A turn missing either survives this
+    # boundary only to break rewind later, in the place this checker
+    # exists to keep failures out of. Checked for the same reason as
+    # ``status`` and ``message`` -- the alternative is a silent contract
+    # break downstream (ADR-0010 decision 3). Applied to every ``turns``
+    # entry too, since a recomputed turn is just as addressable.
+    if not isinstance(turn.get("id"), str) or not turn["id"].strip():
+        return "carries no 'id' string -- it could not be edited or rewound."
+    if not isinstance(turn.get("utterance"), str):
+        return "carries no 'utterance' string."
     if status == "proposal":
         if not isinstance(turn.get("query_spec"), dict):
             return "a 'proposal' turn carries no 'query_spec' object."
@@ -250,7 +278,11 @@ def create_mcp_server(hippo_client: MosaicClient) -> MCPServer:
         " converse_query_spec builds a QuerySpec conversationally across "
         "turns (delegating to a configured planning service) and returns a "
         "proposal or a clarifying question; it never executes -- pass a "
-        "proposal to execute_query_spec only on an explicit user action."
+        "proposal to execute_query_spec only on an explicit user action. "
+        "It is the ONE tool here that does not answer with {valid, errors, "
+        "...}: it returns {turn, suspended_turn_ids}, and reports failure "
+        "as a turn with status 'error' rather than as valid: false or a "
+        "tool exception -- branch on turn.status, not on 'valid'."
         if _exon_configured
         else ""
     )
@@ -718,7 +750,17 @@ def create_mcp_server(hippo_client: MosaicClient) -> MCPServer:
         return {"valid": True, "errors": [], "items": dumped["items"], "total": dumped["total"]}
 
     exon_url = os.environ.get(EXON_URL_ENV, "").strip()
+    # Read alongside the URL, at mount time, so the whole delegate
+    # configuration has one lifecycle: a deployment cannot end up serving
+    # requests against an endpoint chosen at startup with a timeout
+    # changed underneath it. Both change on restart, together.
+    exon_timeout = _exon_timeout()
     if exon_url:
+        logger.info(
+            "MCP: converse_query_spec registered, delegating to %s (timeout %.3gs)",
+            exon_url,
+            exon_timeout,
+        )
 
         @mcp.tool(
             annotations=ToolAnnotations(read_only_hint=True),
@@ -769,48 +811,87 @@ def create_mcp_server(hippo_client: MosaicClient) -> MCPServer:
             # import-time coupling to an HTTP client it never uses.
             import httpx2
 
+            # ADR-0010 decision 5 governs every `except` below: the
+            # client-visible message names the delegate's ROLE
+            # (EXON_ROLE_NAME) and never its address, while the URL and
+            # any upstream text go to `logger` for the operator. This
+            # surface has no authn (ADR-0009 item 5), so an error turn is
+            # effectively public; the endpoint is deployment topology and
+            # the upstream body is another service's raw output.
             try:
-                with httpx2.Client(timeout=_exon_timeout()) as http:
+                with httpx2.Client(timeout=exon_timeout) as http:
                     response = http.post(exon_url, json=payload)
                     response.raise_for_status()
                     body = response.json()
             except httpx2.TimeoutException:
+                logger.warning(
+                    "converse_query_spec: no response from %s within %.3gs",
+                    exon_url,
+                    exon_timeout,
+                )
                 return {
                     "turn": _error_turn(
                         utterance,
-                        f"The conversational planning service at {exon_url} did not "
-                        f"respond within {_exon_timeout():g}s. The conversation is "
-                        f"unchanged -- retrying the same utterance is safe.",
+                        f"{EXON_ROLE_NAME.capitalize()} did not respond within "
+                        f"{exon_timeout:g}s. The conversation is unchanged -- "
+                        f"retrying the same utterance is safe.",
                     ),
                     "suspended_turn_ids": [],
                 }
             except httpx2.HTTPStatusError as exc:
                 # Exon's own 4xx (e.g. an edit_turn_id it doesn't know, or
-                # a query_spec disagreeing with its turn-derived state)
-                # is a caller-contract problem worth surfacing verbatim --
-                # it names what disagreed, which is actionable.
-                detail = (exc.response.text or "").strip()[:500]
+                # a query_spec disagreeing with its turn-derived state) is
+                # a caller-contract problem, and its body names what
+                # disagreed. That detail is genuinely actionable, so it is
+                # logged rather than dropped -- but it is the planner's
+                # raw text, so the client gets the status code (a stable,
+                # Mosaic-authored classification) instead of the body.
+                status = getattr(exc.response, "status_code", None)
+                logger.warning(
+                    "converse_query_spec: %s rejected the request (HTTP %s): %s",
+                    exon_url,
+                    status,
+                    (getattr(exc.response, "text", "") or "").strip()[:500]
+                    or "<no body>",
+                )
+                coded = f" (HTTP {status})" if status is not None else ""
                 return {
                     "turn": _error_turn(
                         utterance,
-                        f"The conversational planning service at {exon_url} rejected "
-                        f"the request. {detail or 'No detail provided.'}",
+                        f"{EXON_ROLE_NAME.capitalize()} rejected the request{coded}. "
+                        f"The conversation is unchanged; the reason is in the Mosaic "
+                        f"server log.",
                     ),
                     "suspended_turn_ids": [],
                 }
             except (httpx2.HTTPError, ValueError) as exc:
                 # ValueError covers a 2xx body that isn't JSON at all.
+                logger.warning(
+                    "converse_query_spec: could not reach %s: %s: %s",
+                    exon_url,
+                    type(exc).__name__,
+                    exc,
+                )
                 return {
                     "turn": _error_turn(
                         utterance,
-                        f"Could not reach the conversational planning service at "
-                        f"{exon_url}: {exc}",
+                        f"Could not reach {EXON_ROLE_NAME}. The conversation is "
+                        f"unchanged; the reason is in the Mosaic server log.",
                     ),
                     "suspended_turn_ids": [],
                 }
 
             malformed = _reject_malformed_exon_response(body)
             if malformed:
+                # The reason is Mosaic-authored (a shape verdict, not
+                # upstream prose), so it is safe on the turn -- but log
+                # the address too, since "which delegate sent this" is
+                # exactly what an operator needs and the turn omits it.
+                logger.warning(
+                    "converse_query_spec: out-of-contract response from %s: %s",
+                    exon_url,
+                    malformed,
+                )
                 return {
                     "turn": _error_turn(utterance, malformed),
                     "suspended_turn_ids": [],
@@ -818,7 +899,17 @@ def create_mcp_server(hippo_client: MosaicClient) -> MCPServer:
 
             turn = body["turn"]
             suspended = body.get("suspended_turn_ids") or []
-            turns = body.get("turns") or []
+            # Distinguish "the service sent no turns" from "the service
+            # sent an empty conversation". #200 established that an error
+            # path must OMIT `turns` rather than send [], because a caller
+            # told to "replace your turn list with the returned turns"
+            # would read [] as "the conversation is now empty" and wipe the
+            # chat. The same reasoning applies on the SUCCESS path against
+            # a planning service that predates the field: coercing absent
+            # to [] there reintroduces exactly that failure, in the one
+            # case #200 set out to stay compatible with. So absent stays
+            # absent all the way to the response.
+            turns = body.get("turns")
 
             # Re-validate IN-PROCESS (a direct function call, never back
             # through MCP -- same process already hosts the validator, and
@@ -832,7 +923,7 @@ def create_mcp_server(hippo_client: MosaicClient) -> MCPServer:
             # has never seen -- validating only `turn` would let those reach
             # the caller unchecked, which is exactly the guarantee this
             # re-validation exists to hold.
-            for candidate in [turn, *turns]:
+            for candidate in [turn, *(turns or [])]:
                 if candidate.get("status") != "proposal":
                     continue
                 which = (
@@ -842,11 +933,23 @@ def create_mcp_server(hippo_client: MosaicClient) -> MCPServer:
                 try:
                     spec = parse_query_spec(candidate["query_spec"])
                 except QuerySpecShapeError as exc:
+                    # These two messages carry Mosaic's OWN validator
+                    # output, not upstream prose, and validate_query_spec
+                    # already returns exactly this detail to clients --
+                    # so it stays on the turn (a planner-driven client
+                    # needs it to retry). Only the address is withheld.
+                    logger.warning(
+                        "converse_query_spec: %s %s a malformed QuerySpec (%s at %s)",
+                        exon_url,
+                        which,
+                        exc.code,
+                        exc.path,
+                    )
                     return {
                         "turn": _error_turn(
                             utterance,
-                            f"The planning service {which} a QuerySpec that is not "
-                            f"well-formed ({exc.code} at {exc.path}: {exc}). Nothing "
+                            f"{EXON_ROLE_NAME.capitalize()} {which} a QuerySpec that "
+                            f"is not well-formed ({exc.code} at {exc.path}: {exc}). Nothing "
                             f"was applied.",
                         ),
                         "suspended_turn_ids": [],
@@ -854,21 +957,30 @@ def create_mcp_server(hippo_client: MosaicClient) -> MCPServer:
                 result = _validate_query_spec(spec, manifest)
                 if not result.valid:
                     codes = "; ".join(f"{e.code} at {e.path}: {e.message}" for e in result.errors)
+                    logger.warning(
+                        "converse_query_spec: %s %s a QuerySpec this deployment "
+                        "rejects: %s",
+                        exon_url,
+                        which,
+                        codes,
+                    )
                     return {
                         "turn": _error_turn(
                             utterance,
-                            f"The planning service {which} a QuerySpec that failed "
-                            f"validation against this deployment's capabilities: "
+                            f"{EXON_ROLE_NAME.capitalize()} {which} a QuerySpec that "
+                            f"failed validation against this deployment's capabilities: "
                             f"{codes}. Nothing was applied.",
                         ),
                         "suspended_turn_ids": [],
                     }
 
-            return {
+            response: dict[str, Any] = {
                 "turn": turn,
                 "suspended_turn_ids": list(suspended),
-                "turns": list(turns),
             }
+            if turns is not None:
+                response["turns"] = list(turns)
+            return response
 
     @mcp.prompt(
         title="Construct a Mosaic QuerySpec",

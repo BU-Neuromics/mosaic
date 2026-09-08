@@ -23,7 +23,7 @@ import json
 import pytest
 from mcp.client.client import Client
 
-from mosaic.mcp.server import EXON_URL_ENV, create_mcp_server
+from mosaic.mcp.server import EXON_ROLE_NAME, EXON_URL_ENV, create_mcp_server
 
 EXON_URL = "http://exon.internal:9100/turn"
 
@@ -44,6 +44,9 @@ class _StubResponse:
     def __init__(self, payload, *, status=200, text=""):
         self._payload = payload
         self._status = status
+        # A real httpx2 response exposes status_code; the tool reads it to
+        # classify a 4xx for the client without echoing the body.
+        self.status_code = status
         self.text = text
 
     def raise_for_status(self):
@@ -65,11 +68,13 @@ class _StubClient:
     request so a test can assert on the exact wire payload."""
 
     calls: list = []
+    inits: list = []
 
     def __init__(self, response=None, raise_exc=None, **kwargs):
         self._response = response
         self._raise = raise_exc
         self.init_kwargs = kwargs
+        type(self).inits.append(kwargs)
 
     def __enter__(self):
         return self
@@ -88,6 +93,7 @@ def _install_stub(monkeypatch, *, response=None, raise_exc=None):
     import httpx2
 
     _StubClient.calls = []
+    _StubClient.inits = []
 
     def factory(**kwargs):
         return _StubClient(response=response, raise_exc=raise_exc, **kwargs)
@@ -428,6 +434,10 @@ class TestFailureSemantics:
         assert "did not respond" in payload["turn"]["message"]
         # Says the conversation is unchanged, so a client knows retrying is safe.
         assert "unchanged" in payload["turn"]["message"]
+        # ADR-0010 decision 5: the role, never the address.
+        assert EXON_URL not in payload["turn"]["message"]
+        assert "exon.internal" not in payload["turn"]["message"]
+        assert EXON_ROLE_NAME.lower() in payload["turn"]["message"].lower()
 
     async def test_unreachable_becomes_error_turn(
         self, hippo_client, exon_configured, monkeypatch
@@ -442,12 +452,19 @@ class TestFailureSemantics:
         )
         assert payload["turn"]["status"] == "error"
         assert "Could not reach" in payload["turn"]["message"]
+        # ADR-0010 decision 5, and the exception text is the operator's,
+        # not the caller's -- neither address nor cause on the turn.
+        assert EXON_URL not in payload["turn"]["message"]
+        assert "connection refused" not in payload["turn"]["message"]
 
-    async def test_exon_4xx_surfaces_its_detail(
-        self, hippo_client, exon_configured, monkeypatch
+    async def test_exon_4xx_reports_status_to_client_and_detail_to_the_log(
+        self, hippo_client, exon_configured, monkeypatch, caplog
     ):
         # Exon's own 400 (e.g. Decision 9's query_spec/turns disagreement)
-        # names what disagreed — that detail is actionable, so keep it.
+        # names what disagreed. That detail is actionable but it is the
+        # planner's raw text, so ADR-0010 decision 5 splits it: the client
+        # gets a Mosaic-authored classification (the status code), the
+        # operator gets the body in the log.
         _install_stub(
             monkeypatch,
             response=_StubResponse(
@@ -456,13 +473,19 @@ class TestFailureSemantics:
                 text="'query_spec' does not match the state derived from 'turns'",
             ),
         )
-        payload = await _call_tool(
-            create_mcp_server(hippo_client),
-            "converse_query_spec",
-            {"utterance": "donors"},
-        )
+        with caplog.at_level("WARNING", logger="mosaic.mcp.server"):
+            payload = await _call_tool(
+                create_mcp_server(hippo_client),
+                "converse_query_spec",
+                {"utterance": "donors"},
+            )
         assert payload["turn"]["status"] == "error"
-        assert "does not match the state derived" in payload["turn"]["message"]
+        assert "rejected the request (HTTP 400)" in payload["turn"]["message"]
+        # The upstream text is NOT on the turn ...
+        assert "does not match the state derived" not in payload["turn"]["message"]
+        # ... but it is not lost either.
+        assert "does not match the state derived" in caplog.text
+        assert EXON_URL in caplog.text
 
     async def test_non_json_body_becomes_error_turn(
         self, hippo_client, exon_configured, monkeypatch
@@ -498,24 +521,93 @@ class TestOutOfContractResponses:
     """Mosaic is the only thing between an out-of-contract Exon and
     Aperture's UI, so an unrecognized shape fails here, named."""
 
+    # Each case is a turn that is complete EXCEPT for the one defect
+    # under test, so the reason asserted is the reason that fired rather
+    # than whichever check happens to run first.
     @pytest.mark.parametrize(
         "body,expected",
         [
             ("not a dict", "expected a JSON object"),
             ({}, "no 'turn' object"),
-            ({"turn": {"status": "bogus", "message": "m"}}, "is not one of"),
-            ({"turn": {"status": "proposal", "message": "m"}}, "carries no 'query_spec'"),
             (
-                {"turn": {"status": "clarification", "message": "m", "query_spec": {"v": 1}}},
-                "must carry query_spec: null",
+                {"turn": {"id": "t1", "utterance": "u", "status": "bogus", "message": "m"}},
+                "is not one of",
             ),
-            ({"turn": {"status": "clarification", "query_spec": None}}, "no 'message' string"),
+            (
+                {"turn": {"id": "t1", "utterance": "u", "status": "proposal", "message": "m"}},
+                "carries no 'query_spec'",
+            ),
             (
                 {
-                    "turn": {"status": "clarification", "query_spec": None, "message": "m"},
+                    "turn": {
+                        "id": "t1",
+                        "utterance": "u",
+                        "status": "clarification",
+                        "message": "m",
+                        "query_spec": {"v": 1},
+                    }
+                },
+                "must carry query_spec: null",
+            ),
+            (
+                {
+                    "turn": {
+                        "id": "t1",
+                        "utterance": "u",
+                        "status": "clarification",
+                        "query_spec": None,
+                    }
+                },
+                "no 'message' string",
+            ),
+            (
+                {
+                    "turn": {
+                        "id": "t1",
+                        "utterance": "u",
+                        "status": "clarification",
+                        "query_spec": None,
+                        "message": "m",
+                    },
                     "suspended_turn_ids": "t1",
                 },
                 "not a list",
+            ),
+            # An id is what edit_turn_id addresses, so a turn without one
+            # survives this boundary only to break rewind later.
+            (
+                {
+                    "turn": {
+                        "utterance": "u",
+                        "status": "clarification",
+                        "query_spec": None,
+                        "message": "m",
+                    }
+                },
+                "carries no 'id' string",
+            ),
+            (
+                {
+                    "turn": {
+                        "id": "   ",
+                        "utterance": "u",
+                        "status": "clarification",
+                        "query_spec": None,
+                        "message": "m",
+                    }
+                },
+                "carries no 'id' string",
+            ),
+            (
+                {
+                    "turn": {
+                        "id": "t1",
+                        "status": "clarification",
+                        "query_spec": None,
+                        "message": "m",
+                    }
+                },
+                "carries no 'utterance' string",
             ),
         ],
     )
@@ -594,11 +686,65 @@ class TestTimeoutConfig:
         monkeypatch.setenv("MOSAIC_EXON_TIMEOUT", "12.5")
         assert _exon_timeout() == 12.5
 
-    def test_timeout_is_passed_to_the_http_client(self, monkeypatch):
-        from mosaic.mcp.server import _exon_timeout
 
+@pytest.mark.anyio
+class TestTimeoutWiring:
+    """The timeout is read at MOUNT time, alongside MOSAIC_EXON_URL, so the
+    whole delegate configuration has one lifecycle -- a running server
+    cannot be serving an endpoint chosen at startup with a timeout changed
+    underneath it."""
+
+    async def test_timeout_reaches_the_http_client(
+        self, hippo_client, exon_configured, monkeypatch
+    ):
         monkeypatch.setenv("MOSAIC_EXON_TIMEOUT", "7")
-        assert _exon_timeout() == 7.0
+        stub = _install_stub(
+            monkeypatch,
+            response=_StubResponse(
+                {
+                    "turn": {
+                        "id": "t1",
+                        "utterance": "donors",
+                        "status": "clarification",
+                        "query_spec": None,
+                        "message": "Which cohort?",
+                    }
+                }
+            ),
+        )
+        await _call_tool(
+            create_mcp_server(hippo_client),
+            "converse_query_spec",
+            {"utterance": "donors"},
+        )
+        (init,) = stub.inits
+        assert init["timeout"] == 7.0
+
+    async def test_timeout_is_fixed_at_mount_time(
+        self, hippo_client, exon_configured, monkeypatch
+    ):
+        monkeypatch.setenv("MOSAIC_EXON_TIMEOUT", "7")
+        server = create_mcp_server(hippo_client)
+        # Changed after the server was built: must not take effect until
+        # the next mount, the same way MOSAIC_EXON_URL does not.
+        monkeypatch.setenv("MOSAIC_EXON_TIMEOUT", "99")
+        stub = _install_stub(
+            monkeypatch,
+            response=_StubResponse(
+                {
+                    "turn": {
+                        "id": "t1",
+                        "utterance": "donors",
+                        "status": "clarification",
+                        "query_spec": None,
+                        "message": "Which cohort?",
+                    }
+                }
+            ),
+        )
+        await _call_tool(server, "converse_query_spec", {"utterance": "donors"})
+        (init,) = stub.inits
+        assert init["timeout"] == 7.0
 
 
 @pytest.mark.anyio
@@ -644,8 +790,16 @@ class TestRecomputedTurnsPassthrough:
         # whole point -- before this it was computed and discarded.
         assert payload["turns"][1]["message"] == "Cerebellum samples from female donors."
 
-    async def test_absent_turns_is_tolerated(self, hippo_client, exon_configured, monkeypatch):
-        # Backward compatibility: a planning service that predates the field.
+    async def test_absent_turns_stays_absent(self, hippo_client, exon_configured, monkeypatch):
+        """Backward compatibility with a planning service that predates the
+        field -- and it must stay ABSENT, not become [].
+
+        The tool description tells a caller to replace its turn list with
+        the returned `turns`. Coercing absent to [] would tell that caller
+        the conversation is now empty, i.e. wipe the chat -- exactly the
+        failure the error paths avoid by omitting the field. The success
+        path has to follow the same rule against a legacy service.
+        """
         _install_stub(
             monkeypatch,
             response=_StubResponse(
@@ -657,6 +811,35 @@ class TestRecomputedTurnsPassthrough:
                         "query_spec": None,
                         "message": "Which cohort?",
                     }
+                }
+            ),
+        )
+        payload = await _call_tool(
+            create_mcp_server(hippo_client),
+            "converse_query_spec",
+            {"utterance": "donors"},
+        )
+        assert "turns" not in payload
+        # The rest of the envelope is unaffected.
+        assert payload["turn"]["status"] == "clarification"
+
+    async def test_empty_turns_is_passed_through_as_empty(
+        self, hippo_client, exon_configured, monkeypatch
+    ):
+        """The converse of the above: a service that DOES send `turns: []`
+        means it, and that is distinguishable from omitting the field."""
+        _install_stub(
+            monkeypatch,
+            response=_StubResponse(
+                {
+                    "turn": {
+                        "id": "t1",
+                        "utterance": "donors",
+                        "status": "clarification",
+                        "query_spec": None,
+                        "message": "Which cohort?",
+                    },
+                    "turns": [],
                 }
             ),
         )
@@ -709,6 +892,8 @@ class TestRecomputedTurnsPassthrough:
         assert "recomputed" in payload["turn"]["message"]
         assert "UNKNOWN_SLOT" in payload["turn"]["message"]
         assert "t2" in payload["turn"]["message"]
+        # ADR-0010 decision 5 holds on this path too.
+        assert EXON_URL not in payload["turn"]["message"]
 
     async def test_error_omits_turns_rather_than_emptying_them(
         self, hippo_client, exon_configured, monkeypatch
@@ -724,7 +909,9 @@ class TestRecomputedTurnsPassthrough:
             {"utterance": "donors"},
         )
         assert payload["turn"]["status"] == "error"
-        assert payload.get("turns") in (None, [])
+        # Absent, not empty -- `in (None, [])` would pass either way and so
+        # would not test the invariant this case is named for.
+        assert "turns" not in payload
 
     async def test_malformed_entry_in_turns_is_rejected(
         self, hippo_client, exon_configured, monkeypatch
@@ -752,3 +939,41 @@ class TestRecomputedTurnsPassthrough:
         )
         assert payload["turn"]["status"] == "error"
         assert "turns[1]" in payload["turn"]["message"]
+
+    async def test_recomputed_turn_missing_id_is_rejected(
+        self, hippo_client, exon_configured, monkeypatch
+    ):
+        """The id/utterance check applies to every `turns` entry, not just
+        the top-level turn -- a recomputed turn is just as addressable."""
+        good = {
+            "id": "t1",
+            "utterance": "donors",
+            "status": "proposal",
+            "query_spec": VALID_SPEC,
+            "message": "All donors.",
+        }
+        _install_stub(
+            monkeypatch,
+            response=_StubResponse(
+                {
+                    "turn": good,
+                    "turns": [
+                        good,
+                        {
+                            "utterance": "and female",
+                            "status": "proposal",
+                            "query_spec": VALID_SPEC,
+                            "message": "Female donors.",
+                        },
+                    ],
+                }
+            ),
+        )
+        payload = await _call_tool(
+            create_mcp_server(hippo_client),
+            "converse_query_spec",
+            {"utterance": "donors"},
+        )
+        assert payload["turn"]["status"] == "error"
+        assert "turns[1]" in payload["turn"]["message"]
+        assert "carries no 'id' string" in payload["turn"]["message"]

@@ -63,19 +63,34 @@ currently only instance.
    cannot reach — mirroring how `--mcp`/`MOSAIC_SERVE_MCP` already gates this whole module. An
    optional integration is *absent*, never present-and-broken.
 
-2. **The planner is untrusted; Mosaic re-validates in-process.** Any `QuerySpec` coming back is
-   re-parsed and re-validated against this deployment's own capability manifest — a direct
-   in-process `validate_query_spec` call, never a self-call back through MCP — before it is
-   handed to a caller. A spec the planner labelled a `proposal` that this deployment's validator
-   rejects is returned as an `error`, not a proposal. This is defence in depth, not redundancy:
-   it holds even if the planner's own check is stale, buggy, or bypassed, and it keeps ADR-0009's
-   guarantee a property of Mosaic rather than of another repo's release cycle.
+2. **The planner is untrusted; Mosaic re-validates in-process.** **Every** `QuerySpec` in the
+   response — not only the turn just taken — is re-parsed and re-validated against this
+   deployment's own capability manifest, via a direct in-process `validate_query_spec` call,
+   never a self-call back through MCP, before any of it is handed to a caller. A spec the planner
+   labelled a `proposal` that this deployment's validator rejects is returned as an `error`, not
+   a proposal. This is defence in depth, not redundancy: it holds even if the planner's own check
+   is stale, buggy, or bypassed, and it keeps ADR-0009's guarantee a property of Mosaic rather
+   than of another repo's release cycle.
+
+   "Every" is load-bearing, and was widened by [#200](https://github.com/BU-Neuromics/mosaic/pull/200)
+   rather than assumed here: editing an earlier turn makes the planner *recompute* the turns that
+   follow it, so a response can carry freshly generated specs this deployment has never seen.
+   Validating only the turn just taken would let those reach the caller unchecked — precisely the
+   hole this term exists to close. Any future field that can carry a `QuerySpec` inherits the
+   same rule.
 
 3. **The response shape is validated strictly, not duck-typed.** An unrecognized turn status, a
    missing `message`, a `proposal` with no spec, a non-`proposal` turn carrying one, a turn
    missing the `id`/`utterance` a caller needs to rewind or edit — each fails at this boundary
-   with the reason named. Mosaic is the only thing between an out-of-contract planning service
-   and a UI; a silent contract break is far harder to diagnose downstream than here.
+   with the reason named, and applies per-turn to every turn in the response, not just the one
+   just taken. Mosaic is the only thing between an out-of-contract planning service and a UI; a
+   silent contract break is far harder to diagnose downstream than here.
+
+   A corollary, from #200: where a response field carries authoritative state a caller is told to
+   adopt, **absent and empty must stay distinguishable end to end**. An omitted conversation means
+   "nothing was applied, keep your own"; an empty one means "the conversation is now empty". A
+   relay that coerces the former into the latter tells a compliant caller to discard state the
+   planner never touched — so absent stays absent, on success and failure paths alike.
 
 4. **Every failure is a structured `error` turn, never a bare tool exception.** Unreachable,
    timed out, non-JSON body, the planner's own 4xx, or still-invalid-after-revalidation all come
