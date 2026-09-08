@@ -2,11 +2,12 @@
 decision 1, issue #182), the ``validate_query_spec``/``execute_query_spec``
 tools (ADR-0009 decision 3, issue #183), the ``count_query_spec``/
 ``facet_query_spec``/``field_range_query_spec`` tools (issue #195), the
-``search_query_spec`` tool (issue #196), and the ``construct-query-spec``
-prompt (ADR-0009 decision 4, issue #184). Built once, at mount time, from
-a ``MosaicClient``'s ``SchemaRegistry`` — no new data-access path
-(ADR-0009: "sharing the same MosaicClient/SchemaRegistry every other
-transport already uses").
+``search_query_spec`` tool (issue #196), the ``converse_query_spec`` tool
+(issue #186, registered only when ``MOSAIC_EXON_URL`` is set), and the
+``construct-query-spec`` prompt (ADR-0009 decision 4, issue #184). Built
+once, at mount time, from a ``MosaicClient``'s ``SchemaRegistry`` — no new
+data-access path (ADR-0009: "sharing the same MosaicClient/SchemaRegistry
+every other transport already uses").
 
 The four non-execute tools exist because ``QuerySpec`` (ADR-0035) has no
 representation for aggregation OR search — ``execute_query_spec`` can only
@@ -34,10 +35,27 @@ read live data, so they take ``ctx: Context`` and resolve
 ``context_getter`` does, falling back to the construction-time client.
 The prompt is static text (like the resources) — it carries no schema
 data of its own, only procedural guidance about the artifact's semantics.
+
+``converse_query_spec`` is the one tool here that is not a wrapper over a
+``MosaicClient`` method: it delegates server-to-server to Exon's stateless
+turn-taking planning core over HTTP (the wire contract is recorded in
+``mosaic-demo-small``'s ``add-exon-conversational-contract/design.md``
+Decision 8), because Aperture's browser has no backend of its own and must
+not hold LLM credentials. It is registered ONLY when ``MOSAIC_EXON_URL``
+names that service — an unconfigured deployment does not advertise a tool
+it cannot serve, mirroring how ``--mcp`` itself gates this whole module.
+Mosaic re-validates whatever ``QuerySpec`` Exon returns, in-process,
+before ever handing back a ``proposal`` turn: Exon is an untrusted planner
+as far as this boundary is concerned, and "Mosaic validates before
+anything executes" has to hold even if Exon's own check is stale or
+bypassed. It never calls ``execute_query_spec`` — a ``proposal`` is handed
+back for a separate, explicit execute call once a human confirms it, so
+"the LLM never decides to execute" holds for this tool too.
 """
 
 from __future__ import annotations
 
+import os
 from dataclasses import asdict
 from typing import Any, Optional
 
@@ -66,6 +84,100 @@ from mosaic.mcp.serialize import entity_capability_to_dict, entity_type_model_to
 #: typical consumers, so rejecting an unreasonable limit loudly (not
 #: silently clamping it) matches issue #129's "loud over wrong" rule.
 MAX_EXECUTE_LIMIT = 1000
+
+#: Env var naming Exon's conversational turn endpoint (issue #186). Unset
+#: (or blank) means ``converse_query_spec`` is not registered at all —
+#: same gating philosophy as ``--mcp``/``MOSAIC_SERVE_MCP`` for this
+#: module: an optional integration is absent, not present-and-broken.
+EXON_URL_ENV = "MOSAIC_EXON_URL"
+
+#: Sized for the hosted-model latency this integration actually targets
+#: (a conversational turn against Bedrock Haiku), NOT for slow local
+#: generation. Deliberately not Exon's own ``REQUEST_TIMEOUT``, which is
+#: tuned far higher for local/Ollama runs and would make a chat turn feel
+#: hung rather than failed. Overridable for a deployment whose model is
+#: slower, but the default should stay in "a person is waiting" territory.
+EXON_TIMEOUT_ENV = "MOSAIC_EXON_TIMEOUT"
+DEFAULT_EXON_TIMEOUT_SECONDS = 60.0
+
+#: The turn statuses Exon itself may return (design.md Decision 8). Any
+#: other value is treated as a malformed response, not passed through:
+#: this envelope is what Aperture branches on, so an unrecognized status
+#: reaching the UI would be a silent contract break.
+_EXON_TURN_STATUSES = frozenset({"proposal", "clarification", "suspended"})
+
+
+def _exon_timeout() -> float:
+    """Read the Exon request timeout, falling back to the default on an
+    unparseable or non-positive value rather than propagating a broken
+    deployment config into per-request failures."""
+    raw = os.environ.get(EXON_TIMEOUT_ENV, "").strip()
+    if not raw:
+        return DEFAULT_EXON_TIMEOUT_SECONDS
+    try:
+        parsed = float(raw)
+    except ValueError:
+        return DEFAULT_EXON_TIMEOUT_SECONDS
+    return parsed if parsed > 0 else DEFAULT_EXON_TIMEOUT_SECONDS
+
+
+def _reject_malformed_exon_response(body: Any) -> Optional[str]:
+    """Check Exon's response against Decision 8's shape before trusting
+    any of it, returning a human-readable reason or None.
+
+    This is deliberately strict rather than duck-typed. Mosaic is the only
+    thing standing between an out-of-contract planning service and
+    Aperture's UI: a missing ``status``, an unrecognized one, or a
+    ``clarification`` that smuggles a ``query_spec`` would each become a
+    silent contract break downstream, where it is far harder to diagnose
+    than here. Cheap to check, and it fails with the reason named.
+    """
+    if not isinstance(body, dict):
+        return f"expected a JSON object, got {type(body).__name__}."
+    turn = body.get("turn")
+    if not isinstance(turn, dict):
+        return "the response has no 'turn' object."
+    status = turn.get("status")
+    if status not in _EXON_TURN_STATUSES:
+        return (
+            f"the turn's status {status!r} is not one of "
+            f"{sorted(_EXON_TURN_STATUSES)}."
+        )
+    if not isinstance(turn.get("message"), str):
+        return "the turn carries no 'message' string."
+    if status == "proposal":
+        if not isinstance(turn.get("query_spec"), dict):
+            return "a 'proposal' turn carries no 'query_spec' object."
+    elif turn.get("query_spec") is not None:
+        return (
+            f"a {status!r} turn must carry query_spec: null, but one was "
+            f"present -- only a 'proposal' changes the draft."
+        )
+    suspended = body.get("suspended_turn_ids")
+    if suspended is not None and not isinstance(suspended, list):
+        return "'suspended_turn_ids' is present but not a list."
+    return None
+
+
+def _error_turn(utterance: str, message: str) -> dict[str, Any]:
+    """Decision 8's third top-level turn status. Exon unreachable, timed
+    out, or a response that still fails Mosaic's re-validation all come
+    back INSIDE the discriminated envelope Aperture already branches on,
+    with ``query_spec: null`` — not as a bare MCP tool exception, which a
+    chat UI would have no structured way to render next to the turns it
+    already drew.
+
+    The turn carries no ``id``: an ``error`` is not a conversational step
+    Aperture can later rewind to or edit (there is nothing to recompute),
+    so minting an id for it would invite exactly that misuse.
+    """
+    return {
+        "id": None,
+        "utterance": utterance,
+        "status": "error",
+        "query_spec": None,
+        "message": message,
+    }
 
 
 def create_mcp_server(hippo_client: MosaicClient) -> MCPServer:
@@ -102,6 +214,19 @@ def create_mcp_server(hippo_client: MosaicClient) -> MCPServer:
         name: entity_capability_to_dict(e) for name, e in capability_manifest.items()
     }
 
+    # Described in `instructions` only when actually registered below --
+    # advertising a tool an unconfigured deployment doesn't expose would
+    # send a client looking for something that isn't in list_tools.
+    _exon_configured = bool(os.environ.get(EXON_URL_ENV, "").strip())
+    _exon_instructions = (
+        " converse_query_spec builds a QuerySpec conversationally across "
+        "turns (delegating to a configured planning service) and returns a "
+        "proposal or a clarifying question; it never executes -- pass a "
+        "proposal to execute_query_spec only on an explicit user action."
+        if _exon_configured
+        else ""
+    )
+
     mcp = MCPServer(
         "mosaic",
         version=_mosaic_version(),
@@ -124,7 +249,7 @@ def create_mcp_server(hippo_client: MosaicClient) -> MCPServer:
             "slots, composed with a QuerySpec's own criteria -- check "
             "search_available/searchable on mosaic://capabilities before "
             "calling it. This surface is read-only: no write or mutation "
-            "tool exists here (ADR-0009)."
+            "tool exists here (ADR-0009)." + _exon_instructions
         ),
     )
 
@@ -563,6 +688,136 @@ def create_mcp_server(hippo_client: MosaicClient) -> MCPServer:
             }
         dumped = page.model_dump(mode="json")
         return {"valid": True, "errors": [], "items": dumped["items"], "total": dumped["total"]}
+
+    exon_url = os.environ.get(EXON_URL_ENV, "").strip()
+    if exon_url:
+
+        @mcp.tool(
+            annotations=ToolAnnotations(read_only_hint=True),
+            description=(
+                "Build a QuerySpec conversationally, one turn at a time "
+                "(issue #186): send the user's new utterance plus the "
+                "conversation so far, get back a single turn. A turn is "
+                "either a 'proposal' (an updated, Mosaic-validated "
+                "QuerySpec plus a plain-language restatement of what it "
+                "now means) or a 'clarification' (a question back, no "
+                "spec change), or 'error' if the planning service is "
+                "unreachable or returned something invalid. Pass "
+                "'edit_turn_id' to redo an EARLIER turn with a new "
+                "utterance -- turns after it are recomputed, and any that "
+                "no longer make sense come back in 'suspended_turn_ids' "
+                "for the user to re-prompt rather than being silently "
+                "dropped. Stateless: you own the turn list and must pass "
+                "it back each call; nothing is persisted here. This never "
+                "executes anything -- hand a returned proposal to "
+                "execute_query_spec only on an explicit user action."
+            ),
+        )
+        def converse_query_spec(
+            utterance: str,
+            ctx: Context,
+            query_spec: Optional[dict] = None,
+            turns: Optional[list[dict]] = None,
+            edit_turn_id: Optional[str] = None,
+        ) -> dict[str, Any]:
+            client = _client_from_context(ctx, hippo_client)
+            manifest = _manifest_for(client)
+            payload = {
+                "utterance": utterance,
+                "query_spec": query_spec,
+                "turns": turns or [],
+                "edit_turn_id": edit_turn_id,
+            }
+
+            # Import here, not at module scope: httpx2 arrives with the
+            # `mcp` extra (the MCP SDK's own HTTP dependency), so it is
+            # guaranteed wherever this module can be imported at all --
+            # but keeping it local means the rest of the server has no
+            # import-time coupling to an HTTP client it never uses.
+            import httpx2
+
+            try:
+                with httpx2.Client(timeout=_exon_timeout()) as http:
+                    response = http.post(exon_url, json=payload)
+                    response.raise_for_status()
+                    body = response.json()
+            except httpx2.TimeoutException:
+                return {
+                    "turn": _error_turn(
+                        utterance,
+                        f"The conversational planning service at {exon_url} did not "
+                        f"respond within {_exon_timeout():g}s. The conversation is "
+                        f"unchanged -- retrying the same utterance is safe.",
+                    ),
+                    "suspended_turn_ids": [],
+                }
+            except httpx2.HTTPStatusError as exc:
+                # Exon's own 4xx (e.g. an edit_turn_id it doesn't know, or
+                # a query_spec disagreeing with its turn-derived state)
+                # is a caller-contract problem worth surfacing verbatim --
+                # it names what disagreed, which is actionable.
+                detail = (exc.response.text or "").strip()[:500]
+                return {
+                    "turn": _error_turn(
+                        utterance,
+                        f"The conversational planning service at {exon_url} rejected "
+                        f"the request. {detail or 'No detail provided.'}",
+                    ),
+                    "suspended_turn_ids": [],
+                }
+            except (httpx2.HTTPError, ValueError) as exc:
+                # ValueError covers a 2xx body that isn't JSON at all.
+                return {
+                    "turn": _error_turn(
+                        utterance,
+                        f"Could not reach the conversational planning service at "
+                        f"{exon_url}: {exc}",
+                    ),
+                    "suspended_turn_ids": [],
+                }
+
+            malformed = _reject_malformed_exon_response(body)
+            if malformed:
+                return {
+                    "turn": _error_turn(utterance, malformed),
+                    "suspended_turn_ids": [],
+                }
+
+            turn = body["turn"]
+            suspended = body.get("suspended_turn_ids") or []
+
+            # Re-validate IN-PROCESS (a direct function call, never back
+            # through MCP -- same process already hosts the validator, and
+            # a self-call would be a needless cycle). Only a `proposal`
+            # carries a spec; `clarification`/`suspended` turns have none
+            # by contract, already checked above.
+            if turn["status"] == "proposal":
+                try:
+                    spec = parse_query_spec(turn["query_spec"])
+                except QuerySpecShapeError as exc:
+                    return {
+                        "turn": _error_turn(
+                            utterance,
+                            f"The planning service proposed a QuerySpec that is not "
+                            f"well-formed ({exc.code} at {exc.path}: {exc}). Nothing "
+                            f"was applied.",
+                        ),
+                        "suspended_turn_ids": [],
+                    }
+                result = _validate_query_spec(spec, manifest)
+                if not result.valid:
+                    codes = "; ".join(f"{e.code} at {e.path}: {e.message}" for e in result.errors)
+                    return {
+                        "turn": _error_turn(
+                            utterance,
+                            f"The planning service proposed a QuerySpec that failed "
+                            f"validation against this deployment's capabilities: "
+                            f"{codes}. Nothing was applied.",
+                        ),
+                        "suspended_turn_ids": [],
+                    }
+
+            return {"turn": turn, "suspended_turn_ids": list(suspended)}
 
     @mcp.prompt(
         title="Construct a Mosaic QuerySpec",
