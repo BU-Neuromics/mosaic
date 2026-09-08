@@ -33,3 +33,4 @@ The supersede-don't-delete discipline already used in the Key Decisions Log (ent
 | [0007](./ADR-0007-aggregation-and-ordering-surface.md) | Aggregation & ordering surface — count mode, facet counts, min/max, `order_by` (issue #154) | ✅ Accepted |
 | [0008](./ADR-0008-postgres-per-class-tables-shared-sql-core.md) | Postgres storage converges to generated per-class typed tables + shared SQL core (issue #162) | 🟡 Proposed |
 | [0009](./ADR-0009-mcp-boundary-capability-manifest-queryspec.md) | Mosaic hosts an MCP boundary over a server-derived capability manifest and the QuerySpec artifact (issue #177) | ✅ Accepted |
+| [0010](./ADR-0010-mcp-outbound-delegation-to-a-planning-service.md) | The MCP boundary may delegate outbound to a planning service, as an untrusted planner behind a validating relay (issue #186) | 🟡 Proposed |

@@ -29,6 +29,31 @@ Runtime environment variables use the `MOSAIC_` prefix (`MOSAIC_CACHE_DIR`,
 `DeprecationWarning` per variable. `${MOSAIC_*}` references inside config
 values fall back the same way.
 
+### Conversational planning delegate (MCP)
+
+The MCP transport can expose a `converse_query_spec` tool that builds a
+`QuerySpec` across conversational turns by delegating to an external planning
+service (ADR-0010). This is the only part of Mosaic that makes an **outbound**
+HTTP request, and it is off unless configured.
+
+| Variable | Default | Effect |
+|---|---|---|
+| `MOSAIC_EXON_URL` | *(unset)* | The planning service's turn endpoint. **Unset or blank → the tool is not registered at all** and does not appear in `list_tools`; Mosaic makes no outbound request. Setting it is what enables the delegate. |
+| `MOSAIC_EXON_TIMEOUT` | `60` | Outbound request timeout in seconds, sized so a stalled turn fails rather than hangs. An unparseable or non-positive value falls back to the default rather than failing every request. |
+
+Both are read once, when the MCP server is mounted — changing either takes
+effect on restart. Two deployment notes:
+
+- The delegate is treated as an **untrusted planner**: any `QuerySpec` it
+  returns is re-validated in-process against this deployment's capabilities
+  before being handed back, and it is never executed automatically.
+- The egress call carries **no credential and no caller identity** (authn/authz
+  is not yet implemented anywhere in Mosaic — see
+  [issue #54](https://github.com/BU-Neuromics/mosaic/issues/54)). Run the
+  planning service on a trusted network segment, and do not expose an
+  MCP surface publicly while the delegate is configured: a reachable
+  Mosaic can be made to spend model invocations at that service.
+
 ## MosaicConfig
 
 The main configuration model for the Mosaic application. Loaded from `config.json`.
