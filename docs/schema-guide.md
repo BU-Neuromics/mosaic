@@ -267,6 +267,63 @@ classes:
 
 With this schema, Cappella can traverse `Dataset.sample -> Sample.donor -> Donor` automatically when you pass criteria like `donor.diagnosis=CTE`.
 
+### Reverse References (`inverse`)
+
+A single-valued reference is stored once, on the side that holds it: `Sample.donor` is a
+column on the `Sample` table. To traverse it the other way — "the samples of this donor" —
+declare the reverse side with LinkML's own `inverse` keyword instead of adding a second,
+independently stored slot:
+
+```yaml
+classes:
+  Donor:
+    attributes:
+      samples:
+        range: Sample
+        multivalued: true
+        inverse: donor          # Sample.donor is the stored FK; this side is derived
+
+  Sample:
+    attributes:
+      donor:
+        range: Donor
+```
+
+`Donor.samples` is a **virtual** reverse edge: it owns no column, no link table and no
+relationship rows. Every read, filter and count through it resolves against `Sample.donor`,
+so there is exactly one stored encoding of the relationship and the two directions can never
+drift apart. Concretely:
+
+- **Reads** hydrate `donor["data"]["samples"]` with the ids of the *available* samples whose
+  `donor` points at the donor, on `get` and `query` alike.
+- **Filters** accept it as a to-many relationship predicate — `{"edge": "samples",
+  "quantifier": "some" | "none", "where": {...}}` in the SDK/`where:` tree, a
+  `RelatedCondition` in a `QuerySpec`, `donors(where: {samples: {some: {...}}})` in GraphQL.
+- **Counts**: `client.count_relationship("Donor", donor_id, "samples")` and GraphQL's
+  `samplesCount`.
+- **Writes ignore it.** A payload that carries `samples` (for example a `get`-then-`put`
+  round-trip) is accepted and the key dropped; it never reaches storage or the provenance
+  log. GraphQL Create/Update inputs omit it and OpenAPI marks it `readOnly`. Change the
+  relationship by writing the forward side (`Sample.donor`).
+- Introspection (`MosaicClient.schema_references()`, the MCP `mosaic://capabilities`
+  resource, GraphQL `entityTypes`) reports the slot with `inverse_of: "donor"` so tools can
+  tell a derived reverse edge from a stored reference.
+
+Rules, checked when the schema loads (a violation is a `SchemaError`):
+
+- `inverse` names a slot that exists on the range class and points back at the declaring
+  class (or one of its ancestors);
+- that forward slot is **single-valued** — the reverse of a multivalued reference (which is
+  stored as relationship rows) is not supported;
+- the declaring slot is `multivalued: true` and is not `required`, an `identifier`, or
+  `inlined`.
+
+!!! note
+    Do not model the reverse side as a plain `multivalued: true` reference without `inverse`.
+    That is a second, independently writable relationship (stored as relationship rows), not
+    a view of the first — the two can silently disagree. Only an explicit `inverse` tells
+    Mosaic "one fact, two directions". See ADR-0011.
+
 ---
 
 ## Mosaic Extensions (Annotations)

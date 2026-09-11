@@ -2,6 +2,31 @@
 
 ## [Unreleased]
 
+### Added
+
+- **Reverse edges via LinkML `inverse` — virtual reverse references**
+  (issue #204, ADR-0011). A multivalued reference slot that names its
+  `inverse` (`Donor.samples: {range: Sample, multivalued: true, inverse:
+  donor}`) is now a *computed* reverse edge over the forward FK column:
+  no column, no link table, no relationship rows of its own. Reads
+  hydrate `data["samples"]` from the target table's `donor` column
+  (available targets only); the SDK/GraphQL `where:` tree and a
+  `QuerySpec` `RelatedCondition` accept it as a `some`/`none` to-many
+  edge compiled to a correlated `EXISTS` on the target table (SQLite and
+  Postgres); `count_relationship`/GraphQL `samplesCount` count the same
+  rows. Writes carrying the slot are accepted and ignored (it never
+  reaches storage or the provenance patch); GraphQL Create/Update inputs
+  omit it and OpenAPI marks it `readOnly`. The type model, MCP
+  `mosaic://schema`/`mosaic://capabilities` resources and GraphQL
+  `entityTypes` introspection carry a new `inverse_of` field naming the
+  forward slot. Schema load validates the declaration (forward slot
+  exists, is single-valued, points back at the declaring class; derived
+  slot multivalued and not required) — the reverse of a *multivalued*
+  forward slot is rejected. This unblocks `mosaic-demo-small`'s chat
+  grounding ("show me the donors of those samples"): the QuerySpec
+  validator and compiler needed no change, only the storage adapters.
+  `construct-query-spec` gains guidance item 11 on `inverse_of` edges.
+
 ### Fixed
 
 - **Entity classes must key their identifier `id`; the schema now says so
