@@ -197,3 +197,48 @@ class TestValidation:
         with pytest.raises(SchemaError) as exc:
             _registry(text)
         assert "2 inverse-slot error(s)" in str(exc.value)
+
+
+class TestTypeModel:
+    def test_inverse_slot_is_a_reference_marked_inverse_of(self):
+        from mosaic.core.schema_typing import SlotKind, build_type_model
+
+        model = build_type_model(_registry(VALID))
+        samples = next(f for f in model["Donor"].fields if f.name == "samples")
+        assert samples.kind is SlotKind.REFERENCE
+        assert samples.multivalued is True
+        assert samples.target_class == "Sample"
+        assert samples.inverse_of == "donor"
+        # The stored (forward) side is an ordinary reference.
+        donor = next(f for f in model["Sample"].fields if f.name == "donor")
+        assert donor.inverse_of is None
+
+    def test_inverse_slot_is_predicate_filterable_in_the_manifest(self):
+        from mosaic.core.schema_typing import build_capability_manifest
+
+        manifest = build_capability_manifest(_registry(VALID))
+        field = manifest["Donor"].fields_by_name["samples"]
+        assert field.predicate is True
+        assert field.filter_ops == ()
+        assert field.orderable is False
+
+    def test_mcp_serialization_carries_inverse_of(self):
+        from mosaic.core.schema_typing import build_capability_manifest
+        from mosaic.mcp.serialize import entity_capability_to_dict
+
+        manifest = build_capability_manifest(_registry(VALID))
+        fields = {f["name"]: f for f in entity_capability_to_dict(manifest["Donor"])["fields"]}
+        assert fields["samples"]["inverse_of"] == "donor"
+        assert fields["samples"]["predicate"] is True
+        assert fields["name"]["inverse_of"] is None
+
+    def test_openapi_renders_inverse_slot_read_only(self):
+        from mosaic.api.openapi import _slot_schema
+        from mosaic.core.schema_typing import build_type_model
+
+        model = build_type_model(_registry(VALID))
+        samples = next(f for f in model["Donor"].fields if f.name == "samples")
+        rendered = _slot_schema(samples)
+        assert rendered["readOnly"] is True
+        assert rendered["type"] == "array"
+        assert "donor" in rendered["description"]

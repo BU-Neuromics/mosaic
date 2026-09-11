@@ -105,6 +105,12 @@ class SlotModel:
     #: uniqueness among available entities. Only meaningful on
     #: STRUCTURED slots ranged against ``ExternalReference``.
     is_external_xref: bool = False
+    #: LinkML ``inverse`` on a multivalued reference (ADR-0011): this slot is
+    #: a *virtual* reverse edge over ``<target_class>.<inverse_of>``'s stored
+    #: FK column — no storage of its own, ignored on write, hydrated /
+    #: filtered / counted through the forward slot. ``None`` for every
+    #: ordinary (stored) slot.
+    inverse_of: Optional[str] = None
 
 
 @dataclass(frozen=True)
@@ -185,6 +191,13 @@ def _classify_slot(slot: Any, registry: SchemaRegistry, enums: dict[str, Any]) -
         enum_name=enum_name,
         enum_values=enum_values,
         is_external_xref=bool(annotation_value(slot, HIPPO_EXTERNAL_XREF)),
+        # Only the multivalued, derived side is virtual (ADR-0011); a
+        # single-valued slot carrying ``inverse`` is the stored FK.
+        inverse_of=(
+            str(slot.inverse)
+            if kind is SlotKind.REFERENCE and slot.multivalued and getattr(slot, "inverse", None)
+            else None
+        ),
     )
 
 

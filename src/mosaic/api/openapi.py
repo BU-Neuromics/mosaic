@@ -122,6 +122,15 @@ def _slot_schema(slot: SlotModel) -> dict[str, Any]:
 
     if slot.role is FieldRole.SYSTEM:
         schema["readOnly"] = True
+    if slot.inverse_of is not None:
+        # ADR-0011: a virtual reverse edge — derived from
+        # ``<target>.<inverse_of>``, ignored on write.
+        schema["readOnly"] = True
+        schema["description"] = (
+            (schema.get("description") or "").rstrip()
+            + f" Derived: the {slot.target_class} entities whose "
+            f"`{slot.inverse_of}` references this entity (read-only)."
+        ).strip()
 
     return schema
 
