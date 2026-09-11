@@ -112,10 +112,10 @@ class SchemaDiffEngine:
         diff: SchemaDiff,
     ) -> None:
         existing_cols = {col["name"] for col in existing.columns}
-        multivalued_ref_slots = {
-            slot_name
-            for slot_name, _ in registry.multivalued_reference_slots(class_name)
-        }
+        # Relationships-backed multivalued references (ADR-0002) and
+        # virtual inverse slots (ADR-0011) own no column — one shared
+        # definition with the DDL generators.
+        multivalued_ref_slots = registry.non_column_slot_names(class_name)
         for slot in registry.induced_slots(class_name):
             if slot.name in existing_cols:
                 continue

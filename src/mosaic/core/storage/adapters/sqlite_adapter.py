@@ -1949,10 +1949,9 @@ class SQLiteAdapter(EntityStore):
         result: list[tuple[str, str]] = []
         if registry is not None:
             try:
-                multivalued = {
-                    name
-                    for name, _ in registry.multivalued_reference_slots(entity_type)
-                }
+                # Relationship-backed multivalued refs (ADR-0002) and virtual
+                # inverse slots (ADR-0011) are not scalar FK columns.
+                multivalued = registry.non_column_slot_names(entity_type)
                 for slot_name, target_range in registry.reference_slots(entity_type):
                     if (
                         target_range

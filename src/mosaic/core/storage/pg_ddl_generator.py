@@ -86,10 +86,10 @@ class PostgresDDLGenerator:
         # column and no FK — they persist as relationships keyed by the
         # slot name instead (issue #79/#81 / ADR-0002), mirroring
         # ``DDLGenerator._rewrite_multivalued_scalar_slots``'s SQLite
-        # treatment of the equivalent case.
-        mv_ref_slot_names = {
-            name for name, _target in registry.multivalued_reference_slots(class_name)
-        }
+        # treatment of the equivalent case. Virtual ``inverse`` slots
+        # (ADR-0011) likewise own no column: they resolve through the
+        # forward FK on the *target* class's table.
+        mv_ref_slot_names = registry.non_column_slot_names(class_name)
         for slot in registry.induced_slots(class_name):
             if slot.name == id_name:
                 continue

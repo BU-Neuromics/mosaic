@@ -929,12 +929,129 @@ def merge_loader_fragments(
     return sv
 
 
+@dataclass(frozen=True)
+class InverseSlot:
+    """One ``inverse``-declared slot: a *virtual* reverse edge (ADR-0011).
+
+    ``name`` is the derived, multivalued slot on the declaring class
+    (``Donor.samples``); ``target_class`` its range (``Sample``);
+    ``forward_slot`` the single-valued reference slot on ``target_class``
+    that stores the relationship as an FK column (``Sample.donor``). The
+    derived side has no column, link table, or relationship rows of its
+    own — every read, filter, and count through it delegates to
+    ``forward_slot``.
+    """
+
+    name: str
+    target_class: str
+    forward_slot: str
+
+
+def _validate_inverse_slots(sv: SchemaView) -> None:
+    """Validate every ``inverse``-declared multivalued slot (ADR-0011).
+
+    LinkML binds ``inverse`` to ``owl:inverseOf``: the reverse direction is
+    *entailed* by the forward slot, never stored independently. Mosaic
+    honours that on the multivalued side only — a multivalued slot naming
+    an ``inverse`` is a virtual reverse edge over the forward FK column
+    and must satisfy:
+
+    - its range is an entity class (not a value type);
+    - it is not ``required``, ``identifier``, ``inlined`` or
+      ``inlined_as_list`` (a derived field cannot be written);
+    - ``inverse`` names a slot induced on the range class;
+    - that forward slot is **single-valued** (the reverse of a
+      relationships-backed multivalued slot is out of scope); and
+    - the forward slot's range is the declaring class or one of its
+      ancestors (so ``forward = <declaring id>`` is well-typed).
+
+    A *single-valued* slot carrying ``inverse`` is the stored side and is
+    left alone (LinkML permits declaring the pair symmetrically).
+
+    Raises ``SchemaError`` aggregating all failures.
+    """
+    if sv.schema.name == "hippo_ext":
+        return
+    classes = sv.all_classes()
+    value_types = value_type_class_names(sv)
+    failures: list[str] = []
+    for class_name in classes:
+        try:
+            induced = sv.class_induced_slots(class_name)
+        except Exception:
+            continue
+        for slot in induced:
+            inverse = getattr(slot, "inverse", None)
+            if not inverse or not slot.multivalued:
+                continue
+            where = f"{class_name}.{slot.name}"
+            rng = slot.range
+            if not rng or rng not in classes or rng in value_types:
+                failures.append(
+                    f"{where} declares `inverse: {inverse}` but its range "
+                    f"{rng!r} is not an entity class; `inverse` is only "
+                    f"meaningful on a slot ranged against another class."
+                )
+                continue
+            if slot.required or slot.identifier:
+                failures.append(
+                    f"{where} declares `inverse: {inverse}` and is "
+                    f"{'required' if slot.required else 'an identifier'}; "
+                    f"an inverse slot is derived from {rng}.{inverse} and "
+                    f"cannot be required on write."
+                )
+            if slot.inlined or slot.inlined_as_list:
+                failures.append(
+                    f"{where} declares `inverse: {inverse}` and is inlined; "
+                    f"an inverse slot resolves to ids through the forward "
+                    f"FK and cannot embed objects."
+                )
+            forward = next(
+                (f for f in sv.class_induced_slots(rng) if f.name == str(inverse)),
+                None,
+            )
+            if forward is None:
+                names = sorted(f.name for f in sv.class_induced_slots(rng))
+                failures.append(
+                    f"{where} declares `inverse: {inverse}` but {rng} has no "
+                    f"slot named {str(inverse)!r}. Slots on {rng}: {names}."
+                )
+                continue
+            if forward.multivalued:
+                failures.append(
+                    f"{where} declares `inverse: {inverse}` but "
+                    f"{rng}.{inverse} is multivalued (stored as relationship "
+                    f"rows, ADR-0002); Mosaic supports the reverse of a "
+                    f"single-valued (FK-column) reference only (ADR-0011)."
+                )
+                continue
+            ancestors = set(sv.class_ancestors(class_name, reflexive=True))
+            if forward.range not in ancestors:
+                failures.append(
+                    f"{where} declares `inverse: {inverse}` but "
+                    f"{rng}.{inverse} is ranged on {forward.range!r}, which "
+                    f"is not {class_name} or one of its ancestors "
+                    f"({sorted(ancestors)}); the forward slot must point "
+                    f"back at the declaring class."
+                )
+    if failures:
+        from mosaic.core.exceptions import SchemaError
+
+        raise SchemaError(
+            f"{len(failures)} inverse-slot error(s) in schema (ADR-0011):\n  - "
+            + "\n  - ".join(failures),
+            error_code="INVERSE_SLOT",
+        )
+
+
 class SchemaRegistry:
     """Mosaic-facing schema registry backed by a LinkML ``SchemaView``."""
 
     def __init__(self, schema_view: SchemaView) -> None:
         _validate_hippo_annotations(schema_view)
+        _validate_inverse_slots(schema_view)
         self._sv = schema_view
+        self._inverse_slots_cache: dict[str, list[InverseSlot]] = {}
         # Schema-driven set of inline value types (issue #90): identifier-less,
         # non-tree-root classes stored inline as JSON TEXT rather than reified
         # into their own table. Computed once — the SchemaView is immutable
@@ -1160,6 +1277,11 @@ class SchemaRegistry:
         author has said the objects embed inline, so they must round-trip as
         structured JSON rather than being coerced into id-only relationship
         rows (issue #121).
+
+        An ``inverse``-declared slot is also excluded (ADR-0011): it is a
+        *virtual* reverse edge resolved through the forward FK column and
+        must never be materialized as relationship rows — see
+        :meth:`inverse_reference_slots`.
         """
         known = set(self._sv.all_classes().keys())
         value_types = self.value_type_classes()
@@ -1173,9 +1295,52 @@ class SchemaRegistry:
                 and rng not in value_types
                 and not slot.inlined
                 and not slot.inlined_as_list
+                and not getattr(slot, "inverse", None)
             ):
                 refs.append((slot.name, rng))
         return refs
+
+    def inverse_reference_slots(self, class_name: str) -> list[InverseSlot]:
+        """``inverse``-declared multivalued slots on ``class_name`` (ADR-0011).
+
+        Each is a virtual reverse edge: ``Donor.samples: {range: Sample,
+        multivalued: true, inverse: donor}`` yields
+        ``InverseSlot("samples", "Sample", "donor")``. Validated at
+        registry construction (:func:`_validate_inverse_slots`), so every
+        entry here has a single-valued forward slot on its target class
+        pointing back at the declaring class. These slots get no column,
+        no link table, and no relationship rows; storage adapters hydrate,
+        filter, and count them through ``forward_slot``. Cached per class.
+        """
+        cached = self._inverse_slots_cache.get(class_name)
+        if cached is not None:
+            return cached
+        out: list[InverseSlot] = []
+        if self.has_class(class_name):
+            for slot in self.induced_slots(class_name):
+                inverse = getattr(slot, "inverse", None)
+                if inverse and slot.multivalued and slot.range:
+                    out.append(
+                        InverseSlot(
+                            name=slot.name,
+                            target_class=str(slot.range),
+                            forward_slot=str(inverse),
+                        )
+                    )
+        self._inverse_slots_cache[class_name] = out
+        return out
+
+    def non_column_slot_names(self, class_name: str) -> set[str]:
+        """Slot names on ``class_name`` that own **no column** on its table.
+
+        The union of relationships-backed multivalued reference slots
+        (ADR-0002) and virtual inverse slots (ADR-0011). The DDL
+        generators and ``schema_diff`` share this one definition so none
+        of them "discovers" a column that was never supposed to exist.
+        """
+        names = {name for name, _ in self.multivalued_reference_slots(class_name)}
+        names.update(inv.name for inv in self.inverse_reference_slots(class_name))
+        return names
 
     def has_subclasses(self, class_name: str) -> bool:
         """True if ``class_name`` has any proper descendant class.
