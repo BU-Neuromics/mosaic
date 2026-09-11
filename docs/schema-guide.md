@@ -305,9 +305,10 @@ drift apart. Concretely:
   round-trip) is accepted and the key dropped; it never reaches storage or the provenance
   log. GraphQL Create/Update inputs omit it and OpenAPI marks it `readOnly`. Change the
   relationship by writing the forward side (`Sample.donor`).
-- Introspection (`MosaicClient.schema_references()`, the MCP `mosaic://capabilities`
-  resource, GraphQL `entityTypes`) reports the slot with `inverse_of: "donor"` so tools can
-  tell a derived reverse edge from a stored reference.
+- Introspection lists it as a relationship (`MosaicClient.schema_references()`), and the
+  typed surfaces — the MCP `mosaic://schema` / `mosaic://capabilities` resources and GraphQL's
+  `hippoSchema` query — report it with `inverse_of: "donor"` so tools can tell a derived
+  reverse edge from a stored reference.
 
 Rules, checked when the schema loads (a violation is a `SchemaError`):
 

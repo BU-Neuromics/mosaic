@@ -18,7 +18,7 @@
   reaches storage or the provenance patch); GraphQL Create/Update inputs
   omit it and OpenAPI marks it `readOnly`. The type model, MCP
   `mosaic://schema`/`mosaic://capabilities` resources and GraphQL
-  `entityTypes` introspection carry a new `inverse_of` field naming the
+  `hippoSchema` introspection carry a new `inverse_of` field naming the
   forward slot. Schema load validates the declaration (forward slot
   exists, is single-valued, points back at the declaring class; derived
   slot multivalued and not required) — the reverse of a *multivalued*
