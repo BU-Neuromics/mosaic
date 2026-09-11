@@ -26,7 +26,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, Dict, Generator, Iterator, List, Optional
 
 if TYPE_CHECKING:
-    from mosaic.linkml_bridge import SchemaRegistry
+    from mosaic.linkml_bridge import InverseSlot, SchemaRegistry
 
 from mosaic.core.storage import (
     COMPARISON_SQL_OPS,
@@ -955,6 +955,9 @@ class SQLiteAdapter(EntityStore):
         self._xref_slots_cache: dict[str, list[str]] = {}
         # Per-class cache of multivalued reference slot names (issue #79).
         self._mv_ref_slots_cache: dict[str, list[str]] = {}
+        # Per-class cache of virtual inverse slots (ADR-0011): slot name ->
+        # InverseSlot(target_class, forward_slot).
+        self._inverse_slots_cache: dict[str, dict[str, "InverseSlot"]] = {}
         # Per-class cache of single-valued polymorphic-base reference slots
         # (slot_name, base_range) — the references with no SQL FK, checked in
         # the application layer at commit (issue #127).
@@ -1536,6 +1539,97 @@ class SQLiteAdapter(EntityStore):
             ).append(row["target_id"])
         return out
 
+    # -- inverse slots → virtual reverse edges (ADR-0011) ---------------------
+
+    def _inverse_slots(self, entity_type: str) -> dict[str, "InverseSlot"]:
+        """Virtual inverse slots of a class, keyed by slot name (ADR-0011).
+
+        Cached per class. Empty when the registry is absent or the class
+        declares no ``inverse`` multivalued reference. These slots own no
+        column, link table, or relationship rows; they resolve through the
+        forward FK column on the *target* class's table.
+        """
+        cached = self._inverse_slots_cache.get(entity_type)
+        if cached is None:
+            registry = self.schema_registry
+            if registry is None or not registry.has_class(entity_type):
+                cached = {}
+            else:
+                cached = {
+                    inv.name: inv
+                    for inv in registry.inverse_reference_slots(entity_type)
+                }
+            self._inverse_slots_cache[entity_type] = cached
+        return cached
+
+    def _strip_inverse_slots(
+        self, entity_type: str, data: dict[str, Any]
+    ) -> dict[str, Any]:
+        """Drop virtual inverse slot keys from a write payload (ADR-0011).
+
+        The reverse edge is *derived* from the forward FK on the target
+        class; a payload carrying it (typically a get-then-put round-trip
+        of a hydrated entity) is accepted and the key ignored, so it never
+        reaches a column, relationship rows, or the provenance patch (which
+        keeps as-of reconstruction free of stale derived lists). Returns
+        ``data`` unchanged (no copy) when nothing needs stripping.
+        """
+        inverse = self._inverse_slots(entity_type)
+        if not inverse or not any(name in data for name in inverse):
+            return data
+        return {k: v for k, v in data.items() if k not in inverse}
+
+    def _hydrate_inverse_refs_batch(
+        self,
+        conn: sqlite3.Connection,
+        entity_type: str,
+        entity_ids: list[str],
+    ) -> dict[str, dict[str, list[str]]]:
+        """Read virtual inverse slots for a set of entities (ADR-0011).
+
+        Returns ``{entity_id: {slot_name: [target_id, ...]}}`` — one query
+        per inverse slot over the target's per-class table, keyed by the
+        forward FK column (no N+1). Only **available** targets appear,
+        matching what list queries and the ``some`` quantifier see. Ids
+        are in ``rowid`` order for determinism.
+        """
+        inverse = self._inverse_slots(entity_type)
+        if not inverse or not entity_ids:
+            return {}
+        out: dict[str, dict[str, list[str]]] = {}
+        cursor = conn.cursor()
+        id_ph = ",".join("?" for _ in entity_ids)
+        for slot_name, inv in inverse.items():
+            if not self._per_class_table_exists(inv.target_class):
+                continue
+            cursor.execute(
+                f'SELECT "id", "{inv.forward_slot}" AS fk FROM "{inv.target_class}" '
+                f'WHERE "{inv.forward_slot}" IN ({id_ph}) AND is_available = 1 '
+                "ORDER BY rowid",
+                tuple(entity_ids),
+            )
+            for row in cursor.fetchall():
+                out.setdefault(row["fk"], {}).setdefault(slot_name, []).append(
+                    row["id"]
+                )
+        return out
+
+    def _hydrate_derived_refs_batch(
+        self,
+        conn: sqlite3.Connection,
+        entity_type: str,
+        entity_ids: list[str],
+    ) -> dict[str, dict[str, list[str]]]:
+        """Every slot that is *not* a column of the per-class table but does
+        belong in ``entity["data"]``: relationships-backed multivalued
+        references (ADR-0002) plus virtual inverse slots (ADR-0011)."""
+        out = self._hydrate_multivalued_refs_batch(conn, entity_type, entity_ids)
+        for eid, slots in self._hydrate_inverse_refs_batch(
+            conn, entity_type, entity_ids
+        ).items():
+            out.setdefault(eid, {}).update(slots)
+        return out
+
     def _init_triggers(self, cursor: sqlite3.Cursor) -> None:
         """Initialize provenance immutability triggers."""
         for trigger_sql in sqlite_triggers.get_trigger_sql_list():
@@ -1866,6 +1960,8 @@ class SQLiteAdapter(EntityStore):
         is_available = (
             1 if not hasattr(entity, "is_available") or entity.is_available else 0
         )
+        # Virtual inverse slots are derived, never written (ADR-0011).
+        entity_data = self._strip_inverse_slots(entity_type, entity_data)
 
         with self._transaction() as conn:
             cursor = conn.cursor()
@@ -2415,7 +2511,7 @@ class SQLiteAdapter(EntityStore):
             if row is None:
                 return None
             version = self._compute_version(cursor, entity_id)
-            mv_refs = self._hydrate_multivalued_refs_batch(
+            mv_refs = self._hydrate_derived_refs_batch(
                 conn, entity_type, [entity_id]
             ).get(entity_id, {})
 
@@ -2512,6 +2608,8 @@ class SQLiteAdapter(EntityStore):
         entity write (sec2 §2.14.9 / Decision 2.14.J).
         """
         del new_version  # version is derived from ProvenanceRecord on read.
+        # Virtual inverse slots are derived, never written (ADR-0011).
+        data = self._strip_inverse_slots(entity_type, data)
         with self._transaction() as conn:
             cursor = conn.cursor()
             self._update_per_class(cursor, entity_type, entity_id, data)
@@ -2612,7 +2710,10 @@ class SQLiteAdapter(EntityStore):
         # ``existing.data``. Re-inject it so the soft-delete provenance
         # patch preserves the full entity payload for round-trip
         # reconstruction by callers that inspect ``patch.data``.
-        snapshot = {"id": entity_id, **existing.data}
+        snapshot = {
+            "id": entity_id,
+            **self._strip_inverse_slots(existing.entity_type, existing.data),
+        }
 
         with self._transaction() as conn:
             cursor = conn.cursor()
@@ -2811,12 +2912,18 @@ class SQLiteAdapter(EntityStore):
 
     def _reference_edge(
         self, entity_type: str, edge: str, quantifier: Optional[str]
-    ) -> tuple[str, bool]:
+    ) -> tuple[str, bool, Optional[str]]:
         """Resolve a relationship-predicate ``edge`` (M5a/M5b) to
-        ``(target_class, multivalued)``, raising loudly on an unknown edge
-        or a quantifier/cardinality mismatch: to-one edges take the bare
-        ``{edge, where}`` shape; to-many (relationship-backed multivalued)
-        edges require a ``some``/``none`` quantifier."""
+        ``(target_class, multivalued, inverse_of)``, raising loudly on an
+        unknown edge or a quantifier/cardinality mismatch: to-one edges
+        take the bare ``{edge, where}`` shape; to-many (relationship-backed
+        multivalued) edges require a ``some``/``none`` quantifier.
+
+        ``inverse_of`` is the forward FK slot on ``target_class`` when
+        ``edge`` is a virtual inverse slot (ADR-0011) — also to-many, also
+        quantified, but compiled against the target table's FK column
+        rather than the relationships link table — and ``None`` otherwise.
+        """
         from mosaic.core.exceptions import ValidationError
 
         registry = self.schema_registry
@@ -2835,6 +2942,8 @@ class SQLiteAdapter(EntityStore):
                 field_name=edge,
             )
         target, multivalued = refs[edge]
+        inverse = self._inverse_slots(entity_type).get(edge)
+        inverse_of = inverse.forward_slot if inverse is not None else None
         if multivalued and quantifier is None:
             raise ValidationError(
                 message=(
@@ -2852,7 +2961,7 @@ class SQLiteAdapter(EntityStore):
                 ),
                 field_name=edge,
             )
-        return target, multivalued
+        return target, multivalued, inverse_of
 
     def _tree_predicate(
         self,
@@ -2921,13 +3030,30 @@ class SQLiteAdapter(EntityStore):
             # queries and hydration see them.
             edge = node["edge"]
             quantifier = node.get("quantifier")
-            target, multivalued = self._reference_edge(
+            target, multivalued, inverse_of = self._reference_edge(
                 entity_type, edge, quantifier
             )
             alias_seq[0] += 1
             alias = f"rel{alias_seq[0]}"
             outer = scope or f'"{entity_type}".'
             target_columns = self._valid_query_columns(target)
+            if inverse_of is not None:
+                # Reverse FK edge (ADR-0011): the relationship is stored on
+                # the *target* row as a single-valued FK column pointing at
+                # this entity, so `some` is EXISTS over the target table
+                # keyed on that column and `none` its NOT EXISTS complement.
+                # No link table is involved; availability applies to the
+                # target exactly as list queries see it.
+                sub = self._tree_predicate(
+                    node["where"], target_columns, params,
+                    entity_type=target, scope=f"{alias}.", alias_seq=alias_seq,
+                )
+                exists = (
+                    f'EXISTS (SELECT 1 FROM "{target}" {alias} '
+                    f'WHERE {alias}."{inverse_of}" = {outer}"id" '
+                    f"AND {alias}.is_available = 1 AND {sub})"
+                )
+                return exists if quantifier == "some" else f"NOT {exists}"
             if not multivalued:
                 sub = self._tree_predicate(
                     node["where"], target_columns, params,
@@ -3103,7 +3229,7 @@ class SQLiteAdapter(EntityStore):
                     r["entity_id"]: int(r["c"]) for r in cursor.fetchall()
                 }
 
-            mv_refs_map = self._hydrate_multivalued_refs_batch(
+            mv_refs_map = self._hydrate_derived_refs_batch(
                 conn, entity_type, row_ids
             )
 
@@ -3264,11 +3390,20 @@ class SQLiteAdapter(EntityStore):
         quantifier compiles to (``_reference_edge`` rejects an unknown or
         to-one edge with the identical errors that path already raises).
         """
-        target, _ = self._reference_edge(entity_type, edge, "some")
+        target, _, inverse_of = self._reference_edge(entity_type, edge, "some")
         if not self._per_class_table_exists(target):
             return 0
         with self._transaction() as conn:
             cursor = conn.cursor()
+            if inverse_of is not None:
+                # Virtual inverse slot (ADR-0011): count the available
+                # target rows whose forward FK points at this entity.
+                cursor.execute(
+                    f'SELECT COUNT(*) AS c FROM "{target}" tgt '
+                    f'WHERE tgt."{inverse_of}" = ? AND tgt.is_available = 1',
+                    (entity_id,),
+                )
+                return int(cursor.fetchone()["c"])
             cursor.execute(
                 f'SELECT COUNT(*) AS c FROM relationships rel '
                 f'JOIN "{target}" tgt ON tgt."id" = rel.target_id '
