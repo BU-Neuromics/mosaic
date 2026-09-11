@@ -1053,6 +1053,14 @@ ranks across every searchable slot on the entity at once. Check \
 search_available on mosaic://capabilities first: an entity with no \
 searchable slot returns an empty result, not an error.
 
+11. A reference field whose `inverse_of` is non-null is a REVERSE edge: \
+it lists the <target_entity_type> entities whose `inverse_of` field \
+points at this entity (e.g. Donor.samples with inverse_of "donor" = the \
+Samples whose donor is this Donor). Use it as a RelatedCondition edge \
+exactly like any other reference -- "the donors of those samples" is \
+anchor Donor + edge samples, never a client-side fan-out over sample ids. \
+It is read-only/derived and is never a filter target for a FieldCondition.
+
 Workflow: call validate_query_spec first if you want to check a draft \
 without running it; call execute_query_spec once you're ready to fetch \
 results -- it validates internally too, and returns the exact same \

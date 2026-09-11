@@ -32,6 +32,10 @@ classes:
     attributes:
       name:
         required: true
+      samples:                  # virtual reverse edge over Sample.donor_id (ADR-0011)
+        range: Sample
+        multivalued: true
+        inverse: donor_id
 
   Sample:
     is_a: Entity
@@ -318,3 +322,62 @@ def test_compiled_where_is_actually_accepted_by_the_real_storage_layer():
         }
     )
     assert normalize_where(study_compiled.where) == study_compiled.where
+
+
+class TestInverseEdges:
+    """ADR-0011: a reverse edge declared with LinkML ``inverse`` compiles
+    exactly like any other to-many edge — the validator and compiler are
+    manifest-driven and need no reverse-specific path (issue #204)."""
+
+    def test_reverse_edge_validates_and_compiles_to_the_quantified_node(self):
+        compiled = _compile(
+            {
+                "v": 1,
+                "anchor": "Donor",
+                "mode": "AND",
+                "criteria": [
+                    {
+                        "kind": "related",
+                        "edge": "samples",
+                        "quantifier": "some",
+                        "criteria": [{"kind": "field", "slot": "status", "op": "eq", "value": "active"}],
+                    }
+                ],
+            }
+        )
+        assert compiled.where == {
+            "edge": "samples",
+            "quantifier": "some",
+            "where": {"field": "status", "op": "eq", "value": "active"},
+        }
+
+    def test_reverse_edge_executes_against_real_storage(self, tmp_path):
+        from mosaic.core.client import MosaicClient
+        from mosaic.core.storage.adapters.sqlite_adapter import SQLiteAdapter
+
+        registry = SchemaRegistry.from_yaml(_SCHEMA)
+        client = MosaicClient(
+            storage=SQLiteAdapter(str(tmp_path / "c.db"), schema_registry=registry),
+            registry=registry,
+        )
+        client.put("Donor", {"id": "d1", "name": "D1"})
+        client.put("Donor", {"id": "d2", "name": "D2"})
+        client.put("Sample", {"id": "s1", "name": "S1", "donor_id": "d1", "status": "active"})
+        client.put("Sample", {"id": "s2", "name": "S2", "donor_id": "d2", "status": "archived"})
+        compiled = _compile(
+            {
+                "v": 1,
+                "anchor": "Donor",
+                "mode": "AND",
+                "criteria": [
+                    {
+                        "kind": "related",
+                        "edge": "samples",
+                        "quantifier": "some",
+                        "criteria": [{"kind": "field", "slot": "status", "op": "eq", "value": "active"}],
+                    }
+                ],
+            }
+        )
+        page = client.query(entity_type=compiled.entity_type, where=compiled.where)
+        assert [i["id"] for i in page.items] == ["d1"]

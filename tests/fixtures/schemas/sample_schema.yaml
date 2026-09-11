@@ -22,6 +22,10 @@ classes:
       description:
         annotations:
           hippo_search: fts5
+      samples:
+        range: Sample
+        multivalued: true
+        inverse: project_id      # virtual reverse edge (ADR-0011)
 
   Sample:
     is_a: Entity
