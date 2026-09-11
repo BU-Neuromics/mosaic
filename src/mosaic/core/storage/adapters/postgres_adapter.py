@@ -1054,6 +1054,9 @@ class PostgresAdapter(EntityStore):
         self._provenance_store: Optional[PostgresProvenanceStore] = None
         # Per-class cache of multivalued reference slot names (issue #79/#81).
         self._mv_ref_slots_cache: dict[str, list[str]] = {}
+        # Per-class cache of virtual inverse slots (ADR-0011): slot name ->
+        # InverseSlot(target_class, forward_slot).
+        self._inverse_slots_cache: dict[str, dict[str, Any]] = {}
         # Per-class cache of filter-cast suffixes for comparison predicates
         # (ADR-0006): slot name -> "::numeric" / "::timestamptz" / "" (text).
         self._filter_cast_cache: dict[str, dict[str, str]] = {}
@@ -1699,12 +1702,99 @@ class PostgresAdapter(EntityStore):
         for entity in entities:
             by_type.setdefault(entity.entity_type, []).append(entity.id)
         for entity_type, ids in by_type.items():
-            hydrated = self._hydrate_multivalued_refs_batch(conn, entity_type, ids)
+            hydrated = self._hydrate_derived_refs_batch(conn, entity_type, ids)
             if not hydrated:
                 continue
             for entity in entities:
                 if entity.entity_type == entity_type and entity.id in hydrated:
                     entity.data.update(hydrated[entity.id])
+
+    # -- inverse slots → virtual reverse edges (ADR-0011) ---------------------
+
+    def _inverse_slots(self, entity_type: str) -> dict[str, Any]:
+        """Virtual inverse slots of a class, keyed by slot name (ADR-0011).
+
+        Postgres mirror of ``SQLiteAdapter._inverse_slots``: cached per
+        class; empty when the registry is absent or the class declares no
+        ``inverse`` multivalued reference. These slots own no key in the
+        stored JSONB document and no relationship rows; they resolve
+        through the forward FK key on the *target* class's documents.
+        """
+        cached = self._inverse_slots_cache.get(entity_type)
+        if cached is None:
+            registry = self.schema_registry
+            if registry is None or not registry.has_class(entity_type):
+                cached = {}
+            else:
+                cached = {
+                    inv.name: inv
+                    for inv in registry.inverse_reference_slots(entity_type)
+                }
+            self._inverse_slots_cache[entity_type] = cached
+        return cached
+
+    def _strip_inverse_slots(
+        self, entity_type: str, data: dict[str, Any]
+    ) -> dict[str, Any]:
+        """Drop virtual inverse slot keys from a write payload (ADR-0011).
+
+        Mirror of ``SQLiteAdapter._strip_inverse_slots``: the reverse edge
+        is derived from the forward FK, so a payload carrying it (a
+        get-then-put round-trip of a hydrated entity) is accepted and the
+        key ignored — never stored, never in the provenance patch.
+        """
+        inverse = self._inverse_slots(entity_type)
+        if not inverse or not any(name in data for name in inverse):
+            return data
+        return {k: v for k, v in data.items() if k not in inverse}
+
+    def _hydrate_inverse_refs_batch(
+        self,
+        conn: "psycopg.Connection",
+        entity_type: str,
+        entity_ids: list[str],
+    ) -> dict[str, dict[str, list[str]]]:
+        """Read virtual inverse slots for a set of entities (ADR-0011).
+
+        Returns ``{entity_id: {slot_name: [target_id, ...]}}`` — one query
+        per inverse slot over the target type's documents keyed by the
+        forward FK key (no N+1). Only **available** targets appear,
+        matching list queries and the ``some`` quantifier. Ids are sorted
+        for determinism (the ``entities`` table has no insertion marker).
+        """
+        inverse = self._inverse_slots(entity_type)
+        if not inverse or not entity_ids:
+            return {}
+        out: dict[str, dict[str, list[str]]] = {}
+        cur = conn.cursor()
+        for slot_name, inv in inverse.items():
+            cur.execute(
+                "SELECT id, data->>%s AS fk FROM entities "
+                "WHERE entity_type = %s AND data->>%s = ANY(%s) "
+                "AND is_available = TRUE ORDER BY id",
+                (inv.forward_slot, inv.target_class, inv.forward_slot, list(entity_ids)),
+            )
+            for row in cur.fetchall():
+                out.setdefault(row["fk"], {}).setdefault(slot_name, []).append(
+                    row["id"]
+                )
+        return out
+
+    def _hydrate_derived_refs_batch(
+        self,
+        conn: "psycopg.Connection",
+        entity_type: str,
+        entity_ids: list[str],
+    ) -> dict[str, dict[str, list[str]]]:
+        """Every slot absent from the stored document but present in
+        ``entity.data``: relationships-backed multivalued references
+        (ADR-0002) plus virtual inverse slots (ADR-0011)."""
+        out = self._hydrate_multivalued_refs_batch(conn, entity_type, entity_ids)
+        for eid, slots in self._hydrate_inverse_refs_batch(
+            conn, entity_type, entity_ids
+        ).items():
+            out.setdefault(eid, {}).update(slots)
+        return out
 
     # ------------------------------------------------------------------
     # EntityStore protocol implementation
@@ -1747,6 +1837,8 @@ class PostgresAdapter(EntityStore):
         # relationships. The provenance patch below still records the
         # unstripped ``entity_data`` so as-of reconstruction sees the full
         # submitted payload.
+        # Virtual inverse slots are derived, never written (ADR-0011).
+        entity_data = self._strip_inverse_slots(entity_type, entity_data)
         stored_data = self._strip_multivalued_refs(entity_type, entity_data)
 
         with self._transaction() as conn:
@@ -1881,10 +1973,12 @@ class PostgresAdapter(EntityStore):
 
     def _reference_edge(
         self, entity_type: str, edge: str, quantifier: Optional[str]
-    ) -> tuple[str, bool]:
+    ) -> tuple[str, bool, Optional[str]]:
         """Resolve a relationship-predicate ``edge`` (M5a/M5b) to
-        ``(target_class, multivalued)`` — mirror of the SQLite helper:
-        loud on unknown edges and quantifier/cardinality mismatches."""
+        ``(target_class, multivalued, inverse_of)`` — mirror of the SQLite
+        helper: loud on unknown edges and quantifier/cardinality
+        mismatches. ``inverse_of`` names the forward FK slot when ``edge``
+        is a virtual inverse slot (ADR-0011), else ``None``."""
         from mosaic.core.exceptions import ValidationError
 
         registry = self.schema_registry
@@ -1903,6 +1997,8 @@ class PostgresAdapter(EntityStore):
                 field_name=edge,
             )
         target, multivalued = refs[edge]
+        inverse = self._inverse_slots(entity_type).get(edge)
+        inverse_of = inverse.forward_slot if inverse is not None else None
         if multivalued and quantifier is None:
             raise ValidationError(
                 message=(
@@ -1920,7 +2016,7 @@ class PostgresAdapter(EntityStore):
                 ),
                 field_name=edge,
             )
-        return target, multivalued
+        return target, multivalued, inverse_of
 
     def _tree_predicate(
         self,
@@ -1988,12 +2084,32 @@ class PostgresAdapter(EntityStore):
                 )
             edge = node["edge"]
             quantifier = node.get("quantifier")
-            target, multivalued = self._reference_edge(
+            target, multivalued, inverse_of = self._reference_edge(
                 entity_type, edge, quantifier
             )
             alias_seq[0] += 1
             alias = f"rel{alias_seq[0]}"
             outer = scope or "entities."
+            if inverse_of is not None:
+                # Reverse FK edge (ADR-0011): the relationship lives on the
+                # *target* document as a single-valued FK key pointing at
+                # this entity — `some` is EXISTS over the target type's rows
+                # keyed on that key, `none` its NOT EXISTS complement. No
+                # link table. Placeholder render order: forward key →
+                # target type → subtree.
+                params.append(inverse_of)
+                params.append(target)
+                sub = self._tree_predicate(
+                    node["where"], target, params,
+                    scope=f"{alias}.", alias_seq=alias_seq,
+                )
+                exists = (
+                    f"EXISTS (SELECT 1 FROM entities {alias} "
+                    f"WHERE {alias}.data->>%s = {outer}id "
+                    f"AND {alias}.entity_type = %s "
+                    f"AND {alias}.is_available = TRUE AND {sub})"
+                )
+                return exists if quantifier == "some" else f"NOT {exists}"
             if not multivalued:
                 # psycopg substitutes positionally: the placeholders render
                 # as edge key → target type → subtree, so the params must
@@ -2098,6 +2214,8 @@ class PostgresAdapter(EntityStore):
         """
         # See ``create`` — multivalued reference slots are stripped from the
         # stored JSONB document; the provenance patch keeps the full ``data``.
+        # Virtual inverse slots are derived, never written (ADR-0011).
+        data = self._strip_inverse_slots(entity_type, data)
         stored_data = self._strip_multivalued_refs(entity_type, data)
 
         with self._transaction() as conn:
@@ -2205,7 +2323,7 @@ class PostgresAdapter(EntityStore):
                 return None
 
             entity = self._row_to_entity(row)
-            mv_refs = self._hydrate_multivalued_refs_batch(
+            mv_refs = self._hydrate_derived_refs_batch(
                 conn, entity.entity_type, [entity.id]
             ).get(entity.id)
             if mv_refs:
@@ -2231,7 +2349,7 @@ class PostgresAdapter(EntityStore):
                 return None
 
             entity = self._row_to_entity(row)
-            mv_refs = self._hydrate_multivalued_refs_batch(
+            mv_refs = self._hydrate_derived_refs_batch(
                 conn, entity.entity_type, [entity.id]
             ).get(entity.id)
             if mv_refs:
@@ -2298,6 +2416,10 @@ class PostgresAdapter(EntityStore):
             ).get(entity_id)
             if mv_refs:
                 original_data = {**original_data, **mv_refs}
+            # Virtual inverse slots (ADR-0011) are derived and stay out of
+            # the snapshot, so as-of reconstruction never replays a stale
+            # reverse list.
+            original_data = self._strip_inverse_slots(entity_type, original_data)
 
             cur.execute(
                 """UPDATE entities SET is_available = FALSE
@@ -2536,7 +2658,19 @@ class PostgresAdapter(EntityStore):
         mirrors the SQLite adapter; joins to ``entities`` filtered by
         ``entity_type`` pending ADR-0008's per-class-table convergence.
         """
-        target, _ = self._reference_edge(entity_type, edge, "some")
+        target, _, inverse_of = self._reference_edge(entity_type, edge, "some")
+        if inverse_of is not None:
+            # Virtual inverse slot (ADR-0011): count the available target
+            # documents whose forward FK key points at this entity.
+            with self._transaction() as conn:
+                cur = conn.cursor()
+                cur.execute(
+                    "SELECT COUNT(*) AS c FROM entities tgt "
+                    "WHERE tgt.entity_type = %s AND tgt.data->>%s = %s "
+                    "AND tgt.is_available = TRUE",
+                    (target, inverse_of, entity_id),
+                )
+                return int(cur.fetchone()["c"])
         sql = (
             "SELECT COUNT(*) AS c FROM relationships rel "
             "JOIN entities tgt ON tgt.id = rel.target_id "
