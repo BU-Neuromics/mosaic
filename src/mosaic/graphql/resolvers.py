@@ -15,6 +15,7 @@ Missing entities map to ``extensions.code = "NOT_FOUND"``.
 from __future__ import annotations
 
 import enum
+import os
 from typing import Any, Optional
 
 import strawberry
@@ -24,6 +25,8 @@ from strawberry.scalars import JSON
 from strawberry.tools import create_type
 from strawberry.types import Info
 
+from mosaic.core.converse_query_spec import EXON_URL_ENV, run_converse_turn
+from mosaic.core.converse_query_spec import exon_timeout as _exon_timeout
 from mosaic.core.exceptions import (
     EntityAlreadySupersededError,
     EntityNotFoundError,
@@ -32,7 +35,7 @@ from mosaic.core.exceptions import (
     ValidationFailed,
     ValidationFailure,
 )
-from mosaic.core.schema_typing import EntityTypeModel
+from mosaic.core.schema_typing import EntityTypeModel, build_capability_manifest
 from mosaic.core.storage import has_relationship_predicate
 from mosaic.core.validation.validators import WriteOperation
 from mosaic.graphql import DEFAULT_MAX_QUERY_DEPTH
@@ -403,6 +406,163 @@ class BatchWriteGraphQLResult:
     validation: BatchValidationGraphQLResult
     entities: list[JSON]
     relationships: list[JSON]
+
+
+# ---------------------------------------------------------------------------
+# converseQuerySpec (issue #205): the GraphQL surface for the `converse_
+# query_spec` MCP tool (issue #186, ADR-0010) — registered only when
+# MOSAIC_EXON_URL is set (see build_mutation_type below), the same gate the
+# MCP tool uses. This is a thin transport wrapper: run_converse_turn (
+# mosaic.core.converse_query_spec) owns every bit of the planning
+# delegation, the ADR-0010 relay terms, the in-process re-validation of
+# every candidate spec, and the suspend/recompute semantics -- nothing
+# here reimplements any of it.
+# ---------------------------------------------------------------------------
+
+
+@strawberry.type(
+    description=(
+        "One turn in a converseQuerySpec conversation (issue #186/#205). "
+        "`status` is one of 'proposal' (an updated, Mosaic-validated "
+        "QuerySpec plus a plain-language restatement of what it now "
+        "means — see `query_spec`), 'clarification' (a question back, no "
+        "spec change), 'suspended' (recomputed away by an edit to an "
+        "earlier turn — see ConverseResult.suspended_turn_ids), or "
+        "'error' (the configured planning service was unreachable, timed "
+        "out, or returned something that failed Mosaic's own "
+        "re-validation; nothing was applied). `id` is null ONLY for an "
+        "'error' turn — an error is not a conversational step that can be "
+        "rewound or edited via `editTurnId`, so it is never assigned one."
+    )
+)
+class ConversationTurn:
+    id: Optional[strawberry.ID]
+    utterance: str
+    status: str
+    message: str
+    query_spec: Optional[JSON]
+
+
+@strawberry.input(
+    description=(
+        "One turn of prior conversation state, passed back into "
+        "converseQuerySpec's `turns` argument exactly as it was received "
+        "from an earlier ConverseResult — mirrors ConversationTurn field "
+        "for field. Always a real prior turn (proposal/clarification/"
+        "suspended); an 'error' turn is never part of the authoritative "
+        "conversation, so it never belongs in this list."
+    )
+)
+class ConversationTurnInput:
+    id: strawberry.ID
+    utterance: str
+    status: str
+    message: str
+    query_spec: Optional[JSON] = None
+
+
+@strawberry.type(
+    description=(
+        "converseQuerySpec's result envelope (issue #186/#205, ADR-0010). "
+        "`turns` is ALWAYS the full conversation so far, including on the "
+        "error path — a deliberate GraphQL-side choice (issue #205): the "
+        "in-process handler this wraps omits its own `turns` on every "
+        "failure (and on a success from a planning service that predates "
+        "the field), meaning 'nothing changed, keep what you had' — but a "
+        "GraphQL client cannot distinguish an omitted field the way that "
+        "handler's own caller can, and this field is non-null. So "
+        "whenever the handler omits `turns`, converseQuerySpec fills it "
+        "in with the caller's OWN input `turns` unchanged (never an empty "
+        "list unless the caller's input `turns` was itself empty, and "
+        "never absent)."
+    )
+)
+class ConverseResult:
+    turn: ConversationTurn
+    turns: list[ConversationTurn]
+    suspended_turn_ids: list[strawberry.ID]
+
+
+def _turn_input_to_dict(turn: ConversationTurnInput) -> dict[str, Any]:
+    return {
+        "id": turn.id,
+        "utterance": turn.utterance,
+        "status": turn.status,
+        "query_spec": turn.query_spec,
+        "message": turn.message,
+    }
+
+
+def _turn_dict_to_graphql(turn: dict[str, Any]) -> ConversationTurn:
+    return ConversationTurn(
+        id=turn.get("id"),
+        utterance=turn["utterance"],
+        status=turn["status"],
+        message=turn["message"],
+        query_spec=turn.get("query_spec"),
+    )
+
+
+def _make_converse_query_spec_resolver(exon_endpoint: str, timeout: float):
+    """Builds the converseQuerySpec resolver bound to the endpoint/timeout
+    read ONCE at schema-build time (mirrors the MCP tool: the whole
+    delegate configuration has one lifecycle, fixed at mount/build time,
+    not re-read per request)."""
+
+    def resolver(
+        info: Info,
+        utterance: str,
+        query_spec: Optional[JSON] = None,
+        turns: Optional[list[ConversationTurnInput]] = None,
+        edit_turn_id: Optional[strawberry.ID] = None,
+    ) -> ConverseResult:
+        client = _client(info)
+        manifest = build_capability_manifest(client.registry)
+        input_turns = [_turn_input_to_dict(t) for t in (turns or [])]
+        result = run_converse_turn(
+            manifest=manifest,
+            exon_endpoint=exon_endpoint,
+            timeout=timeout,
+            utterance=utterance,
+            query_spec=query_spec,
+            turns=input_turns,
+            edit_turn_id=str(edit_turn_id) if edit_turn_id is not None else None,
+        )
+        # The design decision this field's docstring describes: when the
+        # handler omits `turns` (every failure path, and a legacy-planner
+        # success), echo back the caller's own input unchanged rather than
+        # `[]` or leaving the field absent (GraphQL's `turns` is non-null).
+        turns_out = result.get("turns")
+        if turns_out is None:
+            turns_out = input_turns
+        return ConverseResult(
+            turn=_turn_dict_to_graphql(result["turn"]),
+            turns=[_turn_dict_to_graphql(t) for t in turns_out],
+            suspended_turn_ids=list(result.get("suspended_turn_ids") or []),
+        )
+
+    resolver.__name__ = "converse_query_spec"
+    resolver.__doc__ = (
+        "Build a QuerySpec conversationally, one turn at a time (issue "
+        "#186/#205): send the user's new utterance plus the conversation "
+        "so far, get back a single turn. A turn is either a 'proposal' "
+        "(an updated, Mosaic-validated QuerySpec plus a plain-language "
+        "restatement of what it now means) or a 'clarification' (a "
+        "question back, no spec change), or 'error' if the planning "
+        "service is unreachable or returned something invalid. Pass "
+        "'editTurnId' to redo an EARLIER turn with a new utterance -- "
+        "turns after it are recomputed, and any that no longer make "
+        "sense come back in 'suspendedTurnIds' for the user to re-prompt "
+        "rather than being silently dropped. Stateless: the caller owns "
+        "the turn list and must pass it back each call; nothing is "
+        "persisted here. ALWAYS replace your turn list with the "
+        "returned 'turns' -- it is the authoritative conversation after "
+        "the call (see ConverseResult.turns for what happens on error). "
+        "This never executes anything -- hand a returned proposal to an "
+        "execute mutation/query only on an explicit user action. Present "
+        "only when this deployment has MOSAIC_EXON_URL configured."
+    )
+    return resolver
 
 
 # ---------------------------------------------------------------------------
@@ -1724,6 +1884,22 @@ def build_mutation_type(builder: GraphQLTypeBuilder) -> type:
     fields.append(
         strawberry.mutation(resolver=_validate_batch_resolver, name="validateBatch")
     )
+    # converseQuerySpec (issue #205) -- hand-authored, alongside the
+    # codegen'd mutations above, exactly like hippoSchema is hand-authored
+    # alongside the codegen'd Query fields. Registered ONLY when
+    # MOSAIC_EXON_URL is set (read once, at schema-build time, mirroring
+    # the MCP tool's own mount-time gate in mosaic/mcp/server.py) -- an
+    # unconfigured deployment does not advertise a mutation it cannot serve.
+    exon_endpoint = os.environ.get(EXON_URL_ENV, "").strip()
+    if exon_endpoint:
+        fields.append(
+            strawberry.mutation(
+                resolver=_make_converse_query_spec_resolver(
+                    exon_endpoint, _exon_timeout()
+                ),
+                name="converseQuerySpec",
+            )
+        )
     return create_type("Mutation", fields)
 
 
