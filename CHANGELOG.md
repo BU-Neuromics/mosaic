@@ -2,6 +2,27 @@
 
 ## [Unreleased]
 
+### Added
+
+- **`converseQuerySpec` GraphQL mutation** (issue #205): the MCP transport's
+  `converse_query_spec` tool (issue #186, ADR-0010) now has a GraphQL
+  surface too, so a browser-based client (Aperture's conversational query
+  panel) that only speaks GraphQL can reach it. Hand-authored on the
+  generated `Mutation` root alongside the codegen'd mutations — the same
+  pattern `hippoSchema` already uses on `Query` — and registered ONLY when
+  `MOSAIC_EXON_URL` is set, the identical gate the MCP tool uses. Pure
+  transport plumbing: the planning delegation, the ADR-0010 relay terms,
+  the in-process re-validation of every candidate `QuerySpec`, and the
+  suspend/recompute semantics are unchanged and now live in
+  `mosaic.core.converse_query_spec.run_converse_turn`, called directly by
+  both the MCP tool and this mutation — neither reimplements any of it.
+  One deliberate GraphQL-side difference: the underlying handler omits its
+  `turns` field on every failure (and on a legacy-planner success), since
+  GraphQL's `ConverseResult.turns` is non-null, `converseQuerySpec` fills
+  it in with the caller's own input `turns` unchanged whenever the handler
+  omits it — the full conversation so far, never `[]` and never absent,
+  even on an `error` turn.
+
 ### Fixed
 
 - **Entity classes must key their identifier `id`; the schema now says so
