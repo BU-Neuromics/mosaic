@@ -909,10 +909,10 @@
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
-  <a href="#conversational-planning-delegate-mcp" class="md-nav__link">
+  <a href="#conversational-planning-delegate-mcp-graphql" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Conversational planning delegate (MCP)
+        Conversational planning delegate (MCP + GraphQL)
       
     </span>
   </a>
@@ -1801,10 +1801,10 @@
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
-  <a href="#conversational-planning-delegate-mcp" class="md-nav__link">
+  <a href="#conversational-planning-delegate-mcp-graphql" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Conversational planning delegate (MCP)
+        Conversational planning delegate (MCP + GraphQL)
       
     </span>
   </a>
@@ -2102,11 +2102,14 @@ with a <code>DeprecationWarning</code>). When both <code>mosaic.yaml</code> and 
 <code>HIPPO_</code> spellings are honored as a fallback for the deprecation window — one
 <code>DeprecationWarning</code> per variable. <code>${MOSAIC_*}</code> references inside config
 values fall back the same way.</p>
-<h3 id="conversational-planning-delegate-mcp">Conversational planning delegate (MCP)<a class="headerlink" href="#conversational-planning-delegate-mcp" title="Permanent link">&para;</a></h3>
-<p>The MCP transport can expose a <code>converse_query_spec</code> tool that builds a
+<h3 id="conversational-planning-delegate-mcp-graphql">Conversational planning delegate (MCP + GraphQL)<a class="headerlink" href="#conversational-planning-delegate-mcp-graphql" title="Permanent link">&para;</a></h3>
+<p>The MCP transport can expose a <code>converse_query_spec</code> tool, and the GraphQL
+transport a <code>converseQuerySpec</code> mutation (issue #205), that build a
 <code>QuerySpec</code> across conversational turns by delegating to an external planning
-service (ADR-0010). This is the only part of Mosaic that makes an <strong>outbound</strong>
-HTTP request, and it is off unless configured.</p>
+service (ADR-0010). Both share one implementation
+(<code>mosaic.core.converse_query_spec.run_converse_turn</code>) and one gate. This is
+the only part of Mosaic that makes an <strong>outbound</strong> HTTP request, and it is
+off unless configured.</p>
 <table>
 <thead>
 <tr>
@@ -2119,7 +2122,7 @@ HTTP request, and it is off unless configured.</p>
 <tr>
 <td><code>MOSAIC_EXON_URL</code></td>
 <td><em>(unset)</em></td>
-<td>The planning service's turn endpoint. <strong>Unset or blank → the tool is not registered at all</strong> and does not appear in <code>list_tools</code>; Mosaic makes no outbound request. Setting it is what enables the delegate.</td>
+<td>The planning service's turn endpoint. <strong>Unset or blank → neither surface registers it at all</strong> — it does not appear in MCP's <code>list_tools</code>, nor in the GraphQL <code>Mutation</code> type. Mosaic makes no outbound request. Setting it is what enables the delegate, on both transports at once.</td>
 </tr>
 <tr>
 <td><code>MOSAIC_EXON_TIMEOUT</code></td>
@@ -2128,8 +2131,8 @@ HTTP request, and it is off unless configured.</p>
 </tr>
 </tbody>
 </table>
-<p>Both are read once, when the MCP server is mounted — changing either takes
-effect on restart. Two deployment notes:</p>
+<p>Both are read once, when the MCP server is mounted / the GraphQL schema is
+built — changing either takes effect on restart. Two deployment notes:</p>
 <ul>
 <li>The delegate is treated as an <strong>untrusted planner</strong>: any <code>QuerySpec</code> it
   returns is re-validated in-process against this deployment's capabilities
@@ -2137,8 +2140,8 @@ effect on restart. Two deployment notes:</p>
 <li>The egress call carries <strong>no credential and no caller identity</strong> (authn/authz
   is not yet implemented anywhere in Mosaic — see
   <a href="https://github.com/BU-Neuromics/mosaic/issues/54">issue #54</a>). Run the
-  planning service on a trusted network segment, and do not expose an
-  MCP surface publicly while the delegate is configured: a reachable
+  planning service on a trusted network segment, and do not expose an MCP or
+  GraphQL surface publicly while the delegate is configured: a reachable
   Mosaic can be made to spend model invocations at that service.</li>
 </ul>
 <h2 id="mosaicconfig">MosaicConfig<a class="headerlink" href="#mosaicconfig" title="Permanent link">&para;</a></h2>
