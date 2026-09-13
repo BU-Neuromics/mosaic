@@ -102,3 +102,67 @@ def test_hippo_validation_error_handler_returns_422():
     data = response.json()
     assert "error" in data
     assert data["error"] == "Validation Error"
+
+
+def test_factory_omits_cors_headers_by_default():
+    """No cors_allow_origins means no CORS middleware at all (issue #207)."""
+    app = create_app()
+
+    @app.get("/ping")
+    def ping():
+        return {"ok": True}
+
+    client = TestClient(app)
+    response = client.get("/ping", headers={"Origin": "http://localhost:5173"})
+    assert response.status_code == 200
+    assert "access-control-allow-origin" not in response.headers
+
+    preflight = client.options(
+        "/ping",
+        headers={
+            "Origin": "http://localhost:5173",
+            "Access-Control-Request-Method": "GET",
+        },
+    )
+    assert preflight.status_code == 405
+
+
+def test_factory_cors_allow_origins_enables_configured_origin():
+    """An explicit cors_allow_origins list opts a browser origin in (issue #207)."""
+    app = create_app(cors_allow_origins=["http://localhost:5173"])
+
+    @app.post("/ping")
+    def ping():
+        return {"ok": True}
+
+    client = TestClient(app)
+    preflight = client.options(
+        "/ping",
+        headers={
+            "Origin": "http://localhost:5173",
+            "Access-Control-Request-Method": "POST",
+        },
+    )
+    assert preflight.status_code == 200
+    assert (
+        preflight.headers["access-control-allow-origin"]
+        == "http://localhost:5173"
+    )
+
+    response = client.post("/ping", headers={"Origin": "http://localhost:5173"})
+    assert response.status_code == 200
+    assert response.headers["access-control-allow-origin"] == "http://localhost:5173"
+
+
+def test_factory_cors_rejects_unlisted_origin():
+    """An origin not in the explicit list gets no CORS headers (issue #207)."""
+    app = create_app(cors_allow_origins=["http://localhost:5173"])
+
+    @app.get("/ping")
+    def ping():
+        return {"ok": True}
+
+    client = TestClient(app)
+    response = client.get("/ping", headers={"Origin": "http://evil.example"})
+    assert response.status_code == 200
+    assert "access-control-allow-origin" not in response.headers

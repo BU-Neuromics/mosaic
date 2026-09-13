@@ -110,6 +110,17 @@ def serve(
             "or mutation tool exists on this surface."
         ),
     ),
+    cors_origin: Optional[List[str]] = typer.Option(
+        None,
+        "--cors-origin",
+        help=(
+            "Origin allowed to make cross-origin requests against REST, "
+            "GraphQL, and MCP alike (repeatable). Off by default — no "
+            "CORS headers are sent unless at least one origin is given "
+            "here or via 'cors_allow_origins' in mosaic.yaml (issue "
+            "#207). No '*' default: an explicit list only."
+        ),
+    ),
 ) -> None:
     """Start the REST API server with customizable configuration.
 
@@ -126,6 +137,7 @@ def serve(
       mosaic serve --graphql             # Also serve GraphQL at /graphql
       mosaic serve --mcp                 # Also serve MCP at /mcp
       mosaic serve --reload --reload-dir /src  # Watch a mounted source tree
+      mosaic serve --graphql --cors-origin http://localhost:5173  # Allow a browser origin
     """
     import uvicorn
 
@@ -163,6 +175,10 @@ def serve(
             f"{DEFAULT_SQLITE_PATH} with the bundled hippo_core schema"
         )
 
+    cors_allow_origins = (
+        list(cors_origin) if cors_origin else (cfg.cors_allow_origins if cfg else None)
+    )
+
     typer.echo(f"Starting Mosaic server on {host}:{port} with log level {log_level}")
     try:
         app = create_default_app(
@@ -170,6 +186,7 @@ def serve(
             graphql=graphql,
             graphql_max_query_depth=graphql_max_depth,
             mcp=mcp,
+            cors_allow_origins=cors_allow_origins,
         )
     except ImportError as exc:
         # Missing `graphql`/`mcp` extra — fail with the actionable hint.
@@ -185,6 +202,8 @@ def serve(
         )
     if mcp:
         typer.echo(f"MCP transport available at http://{host}:{port}/mcp")
+    if cors_allow_origins:
+        typer.echo(f"CORS enabled for origins: {', '.join(cors_allow_origins)}")
     # Note: Uvicorn's logging is currently configured through uvicorn configuration,
     # so we might need to pass it explicitly if needed
     if reload or workers:
@@ -203,6 +222,8 @@ def serve(
             os.environ["MOSAIC_SERVE_GRAPHQL_MAX_DEPTH"] = str(graphql_max_depth)
         if mcp:
             os.environ["MOSAIC_SERVE_MCP"] = "1"
+        if cors_allow_origins:
+            os.environ["MOSAIC_SERVE_CORS_ORIGINS"] = ",".join(cors_allow_origins)
 
         reload_dirs = None
         if reload:

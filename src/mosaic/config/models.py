@@ -38,6 +38,7 @@ class MosaicConfig(BaseModel):
     write_path_validation_enabled: bool = True
     write_path_validation_timeout: Optional[float] = None
     validators_path: Optional[Path] = None
+    cors_allow_origins: Optional[list[str]] = None
 
     @field_validator("schema_path", mode="before")
     @classmethod

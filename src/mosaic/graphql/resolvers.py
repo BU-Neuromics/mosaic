@@ -16,7 +16,7 @@ from __future__ import annotations
 
 import enum
 import os
-from typing import Any, Optional
+from typing import Annotated, Any, Optional
 
 import strawberry
 from graphql import GraphQLError
@@ -436,7 +436,19 @@ class BatchWriteGraphQLResult:
     )
 )
 class ConversationTurn:
-    id: Optional[strawberry.ID]
+    id: Annotated[
+        Optional[strawberry.ID],
+        strawberry.field(
+            description=(
+                "Null ONLY for an 'error' turn (see `status`) — an error "
+                "is not a conversational step, so it is never assigned an "
+                "id and can never be the target of `editTurnId`. Every "
+                "other status ('proposal', 'clarification', 'suspended') "
+                "always carries one. A client can key off `status == "
+                "\"error\"` instead of an id's absence."
+            )
+        ),
+    ]
     utterance: str
     status: str
     message: str
