@@ -41,6 +41,7 @@ def create_default_app(
     graphql: bool = False,
     graphql_max_query_depth: int | None = None,
     mcp: bool = False,
+    cors_allow_origins: list[str] | None = None,
 ):
     """Create the default Mosaic API application with all routers.
 
@@ -61,6 +62,9 @@ def create_default_app(
             run a mounted sub-app's own lifespan); harmless to compose
             with in the future since ``create_app`` sets no lifespan of
             its own today.
+        cors_allow_origins: Origins allowed to make cross-origin requests
+            against REST, GraphQL, and MCP alike (issue #207). Off by
+            default; ``None``/empty adds no CORS middleware.
 
     Returns:
         Configured FastAPI application.
@@ -87,7 +91,11 @@ def create_default_app(
         drs.router,
     ]
 
-    app = create_app(routers=routers, hippo_client=hippo_client)
+    app = create_app(
+        routers=routers,
+        hippo_client=hippo_client,
+        cors_allow_origins=cors_allow_origins,
+    )
 
     if graphql:
         # Lazy import — `mosaic.graphql` raises a clear ImportError with
@@ -144,10 +152,12 @@ def create_app_from_env():
     ``mosaic serve`` resolved: reads ``MOSAIC_CONFIG`` (a config path, or
     unset to auto-detect one in the cwd — same as ``mosaic serve`` with no
     ``--config``), ``MOSAIC_SERVE_GRAPHQL`` (``"1"`` to mount GraphQL),
-    ``MOSAIC_SERVE_GRAPHQL_MAX_DEPTH`` (optional integer override), and
+    ``MOSAIC_SERVE_GRAPHQL_MAX_DEPTH`` (optional integer override),
     ``MOSAIC_SERVE_MCP`` (``"1"`` to mount MCP — without this, ``--mcp``
     silently drops under ``--reload``/``--workers``, since each reloaded/
-    worker subprocess rebuilds the app from this function alone).
+    worker subprocess rebuilds the app from this function alone), and
+    ``MOSAIC_SERVE_CORS_ORIGINS`` (comma-separated origin list; same
+    silent-drop concern as ``--mcp`` above — issue #207).
     """
     from mosaic.config.env import get_env
     from mosaic.core.factory import (
@@ -160,9 +170,16 @@ def create_app_from_env():
     client = create_client_from_config(cfg) if cfg is not None else create_client()
 
     max_depth_raw = get_env("SERVE_GRAPHQL_MAX_DEPTH")
+    cors_origins_raw = get_env("SERVE_CORS_ORIGINS")
+    cors_allow_origins = (
+        [origin for origin in cors_origins_raw.split(",") if origin]
+        if cors_origins_raw
+        else (cfg.cors_allow_origins if cfg is not None else None)
+    )
     return create_default_app(
         client,
         graphql=get_env("SERVE_GRAPHQL") == "1",
         graphql_max_query_depth=int(max_depth_raw) if max_depth_raw else None,
         mcp=get_env("SERVE_MCP") == "1",
+        cors_allow_origins=cors_allow_origins,
     )
