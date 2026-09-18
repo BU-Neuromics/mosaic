@@ -5,6 +5,7 @@ from typing import Any, Optional
 
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from pydantic import ValidationError
 
@@ -26,7 +27,7 @@ from mosaic.core.exceptions import (
     ValidationFailed,
     ValidationFailure,
 )
-from mosaic.core.middleware import PassThroughAuthMiddleware
+from mosaic.core.middleware import ACTOR_HEADER, PassThroughAuthMiddleware
 
 logger = logging.getLogger(__name__)
 
@@ -81,6 +82,7 @@ def create_app(
     docs_url: str = "/docs",
     redoc_url: str = "/redoc",
     openapi_url: str = "/openapi.json",
+    cors_allow_origins: Optional[list[str]] = None,
 ) -> FastAPI:
     """Create and configure a FastAPI application.
 
@@ -95,6 +97,13 @@ def create_app(
         docs_url: URL path for Swagger UI documentation.
         redoc_url: URL path for ReDoc documentation.
         openapi_url: URL path for OpenAPI schema.
+        cors_allow_origins: Origins allowed to make cross-origin requests
+            (REST, GraphQL, and MCP all share this app, so this covers all
+            three transports). Off by default — an empty/``None`` list adds
+            no CORS middleware at all, so a deployment stays exactly as
+            locked-down as it is today unless an operator opts in with an
+            explicit origin list (issue #207; no ``["*"]`` default since
+            write mutations live on this same surface).
 
     Returns:
         Configured FastAPI application instance.
@@ -237,6 +246,19 @@ def create_app(
     app.add_exception_handler(Exception, generic_exception_handler)
 
     app.add_middleware(PassThroughAuthMiddleware)
+
+    if cors_allow_origins:
+        # Added after PassThroughAuthMiddleware: Starlette's add_middleware
+        # prepends, so the most-recently-added middleware ends up outermost.
+        # CORS must sit outside auth so a preflight OPTIONS request gets its
+        # access-control-allow-* headers before PassThroughAuthMiddleware
+        # gets a chance to 401 it.
+        app.add_middleware(
+            CORSMiddleware,
+            allow_origins=cors_allow_origins,
+            allow_methods=["GET", "POST", "OPTIONS"],
+            allow_headers=["content-type", ACTOR_HEADER],
+        )
 
     if routers:
         for router in routers:
