@@ -598,10 +598,12 @@ class MosaicSlotInfo:
     required: bool
     multivalued: bool
     identifier: bool
+    has_default: bool
     description: Optional[str]
     target_entity_type: Optional[str]  # set when kind == reference
     enum_name: Optional[str]
     enum_values: list[str]
+    is_external_xref: bool
     #: ADR-0011: set when this reference is a virtual reverse edge — names
     #: the forward FK slot on ``target_entity_type`` it derives from.
     inverse_of: Optional[str] = None
@@ -648,10 +650,12 @@ def _entity_type_info(model: EntityTypeModel) -> MosaicEntityTypeInfo:
                 required=slot.required,
                 multivalued=slot.multivalued,
                 identifier=slot.identifier,
+                has_default=slot.has_default,
                 description=slot.description,
                 target_entity_type=slot.target_class,
                 enum_name=slot.enum_name,
                 enum_values=list(slot.enum_values),
+                is_external_xref=slot.is_external_xref,
                 inverse_of=slot.inverse_of,
             )
             for slot in model.fields

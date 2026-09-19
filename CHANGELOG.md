@@ -4,6 +4,13 @@
 
 ### Added
 
+- **`is_external_xref` on the MCP `mosaic://schema` resource; `has_default` and
+  `is_external_xref` on the GraphQL `MosaicSlotInfo` type** (issue #211):
+  `SlotModel` models these two attributes but neither transport surfaced
+  both of them, so a consumer building a data dictionary from either one
+  got a description that was incomplete with no way to tell. Both
+  additions are additive — no existing consumer breaks.
+
 - **`converseQuerySpec` GraphQL mutation** (issue #205): the MCP transport's
   `converse_query_spec` tool (issue #186, ADR-0010) now has a GraphQL
   surface too, so a browser-based client (Aperture's conversational query

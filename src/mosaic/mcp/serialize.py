@@ -31,6 +31,7 @@ def slot_model_to_dict(slot: SlotModel) -> dict[str, Any]:
         "target_entity_type": slot.target_class,
         "enum_name": slot.enum_name,
         "enum_values": list(slot.enum_values),
+        "is_external_xref": slot.is_external_xref,
         # ADR-0011: non-null names the forward FK slot on target_entity_type
         # that this virtual reverse edge is derived from. Read-only.
         "inverse_of": slot.inverse_of,
