@@ -188,6 +188,10 @@ class SlotSpec:
     #: Base LinkML scalar range (typeof chains resolved) for kind ==
     #: "scalar" — drives the per-slot filter-operator set (ADR-0006).
     base_range: Optional[str] = None
+    #: ADR-0011: for kind == "reference", the forward FK slot on
+    #: ``target_class`` this virtual reverse edge derives from. Such a
+    #: slot is read-only — omitted from Create/Update inputs.
+    inverse_of: Optional[str] = None
 
 
 @dataclass
@@ -495,6 +499,7 @@ class GraphQLTypeBuilder:
                 resolvable=resolvable,
                 resolved_attr=resolved_attr if resolvable else None,
                 description=slot.description or None,
+                inverse_of=slot.inverse_of,
             )
 
         # SlotKind.SCALAR — including an ENUM whose definition has no
@@ -757,6 +762,10 @@ class GraphQLTypeBuilder:
             key=lambda s: not self._is_input_required(s, force_optional),
         )
         for slot_spec in ordered:
+            if slot_spec.inverse_of is not None:
+                # ADR-0011: a virtual reverse edge is derived from the
+                # forward FK on the target class — never writable here.
+                continue
             input_spec = SlotSpec(
                 slot_name=slot_spec.slot_name,
                 attr_name=_safe_attr(slot_spec.slot_name),

@@ -68,4 +68,4 @@ jobs:
       - name: Run PostgreSQL integration tests
         env:
           MOSAIC_DATABASE_URL: postgresql://hippo_test:hippo_test@localhost:5432/hippo_test
-        run: pytest tests/integration/test_postgres_adapter.py -v
+        run: pytest tests/integration -k postgres -v

@@ -34,3 +34,4 @@ The supersede-don't-delete discipline already used in the Key Decisions Log (ent
 | [0008](./ADR-0008-postgres-per-class-tables-shared-sql-core.md) | Postgres storage converges to generated per-class typed tables + shared SQL core (issue #162) | 🟡 Proposed |
 | [0009](./ADR-0009-mcp-boundary-capability-manifest-queryspec.md) | Mosaic hosts an MCP boundary over a server-derived capability manifest and the QuerySpec artifact (issue #177) | ✅ Accepted |
 | [0010](./ADR-0010-mcp-outbound-delegation-to-a-planning-service.md) | The MCP boundary may delegate outbound to a planning service, as an untrusted planner behind a validating relay (issue #186) | 🟡 Proposed |
+| [0011](./ADR-0011-inverse-slots-as-virtual-reverse-edges.md) | `inverse`-declared slots are virtual reverse edges over the forward FK — no storage of their own (issue #204) | 🟡 Proposed |
