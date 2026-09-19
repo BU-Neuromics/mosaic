@@ -241,6 +241,14 @@ Supported cardinalities:
 - `many-to-one`: Many entities relate to one (e.g., Sample → Subject)
 - `many-to-many`: Bidirectional many-to-many (e.g., Sample ↔ Sample via derived_from)
 
+Storage follows the slot's shape: a single-valued reference is a column on the declaring
+class's table; a multivalued reference is a set of rows in the `relationships` table keyed
+by the slot name (ADR-0002). A multivalued reference declared with LinkML `inverse` is
+neither — it is a **virtual reverse edge** over the single-valued reference it names
+(`Donor.samples: {range: Sample, multivalued: true, inverse: donor}` reads, filters and
+counts through `Sample.donor`; writes to it are ignored — ADR-0011). See the Schema Guide's
+"Reverse References" section.
+
 ### Graph Traversal
 
 Use the `expand` parameter to fetch related entities in a single query:

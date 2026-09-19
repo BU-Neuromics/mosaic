@@ -298,8 +298,13 @@ def test_sdk_get_schema_fields(sdk_backend):
     assert "id" in fields
     assert "is_available" in fields
 
-    assert len(schema.relationships) == 1
-    assert schema.relationships[0].target_type == "Project"
+    # Sample.project_id (the stored FK) and Project.samples — its declared
+    # LinkML ``inverse`` (ADR-0011), a virtual reverse edge — both surface.
+    rels = {(r.source_type, r.relationship_name): r.target_type for r in schema.relationships}
+    assert rels == {
+        ("Sample", "project_id"): "Project",
+        ("Project", "samples"): "Sample",
+    }
 
 
 def test_sdk_provenance_newest_first(seeded_backend):

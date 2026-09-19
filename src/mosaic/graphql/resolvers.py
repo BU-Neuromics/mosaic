@@ -604,6 +604,9 @@ class MosaicSlotInfo:
     enum_name: Optional[str]
     enum_values: list[str]
     is_external_xref: bool
+    #: ADR-0011: set when this reference is a virtual reverse edge — names
+    #: the forward FK slot on ``target_entity_type`` it derives from.
+    inverse_of: Optional[str] = None
 
 
 @strawberry.type(
@@ -653,6 +656,7 @@ def _entity_type_info(model: EntityTypeModel) -> MosaicEntityTypeInfo:
                 enum_name=slot.enum_name,
                 enum_values=list(slot.enum_values),
                 is_external_xref=slot.is_external_xref,
+                inverse_of=slot.inverse_of,
             )
             for slot in model.fields
         ],
