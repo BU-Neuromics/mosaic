@@ -2964,6 +2964,13 @@ major release.</p>
 - <code>one-to-many</code>: One entity relates to many (e.g., Subject → Samples)
 - <code>many-to-one</code>: Many entities relate to one (e.g., Sample → Subject)
 - <code>many-to-many</code>: Bidirectional many-to-many (e.g., Sample ↔ Sample via derived_from)</p>
+<p>Storage follows the slot's shape: a single-valued reference is a column on the declaring
+class's table; a multivalued reference is a set of rows in the <code>relationships</code> table keyed
+by the slot name (ADR-0002). A multivalued reference declared with LinkML <code>inverse</code> is
+neither — it is a <strong>virtual reverse edge</strong> over the single-valued reference it names
+(<code>Donor.samples: {range: Sample, multivalued: true, inverse: donor}</code> reads, filters and
+counts through <code>Sample.donor</code>; writes to it are ignored — ADR-0011). See the Schema Guide's
+"Reverse References" section.</p>
 <h3 id="graph-traversal">Graph Traversal<a class="headerlink" href="#graph-traversal" title="Permanent link">&para;</a></h3>
 <p>Use the <code>expand</code> parameter to fetch related entities in a single query:</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a><span class="c1"># Fetch a sample with its subject</span>

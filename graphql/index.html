@@ -1982,7 +1982,12 @@ type's filter directly; a multivalued (relationship-backed) edge takes a
 edges, against the relationships link table joined to the target for
 quantified to-many edges (<code>some</code> = at least one live edge to an available
 matching target; <code>none</code> = its complement — an entity with no edges at all
-matches <code>none</code>). Edges nest arbitrarily (including self-referential
+matches <code>none</code>). A <strong>reverse edge</strong> declared with LinkML <code>inverse</code>
+(<code>Donor.samples: {range: Sample, multivalued: true, inverse: donor}</code> —
+see the Schema Guide) takes the same <code>{some, none}</code> object and compiles to
+<code>EXISTS</code> over the <em>target</em> table keyed on its forward FK column, so
+<code>donors(where: {samples: {some: {isTumor: {eq: true}}}})</code> works with no
+link table involved. Edges nest arbitrarily (including self-referential
 edges) and count toward the depth cap; <code>not</code> over an edge is two-valued
 (an entity with no referenced target satisfies the negation).
 Relationship predicates compose with everything the <code>where</code> tree reaches
@@ -2052,9 +2057,13 @@ type N times in one request issues a single batched query.</p>
 cardinality without resolving any member object (issue #132):</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a><span class="p">{</span><span class="w"> </span><span class="n">study</span><span class="p">(</span><span class="n">id</span><span class="p">:</span><span class="w"> </span><span class="s">"st1"</span><span class="p">)</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="n">samplesCount</span><span class="w"> </span><span class="p">}</span><span class="w"> </span><span class="p">}</span>
 </code></pre></div>
-<p>A single indexed <code>COUNT(*)</code> over the <code>relationships</code> table; an edge whose
-target is unavailable is not counted (same availability rule the resolved
-list and the <code>some</code>/<code>none</code> quantifiers apply). Useful for a relationship
+<p>A single indexed <code>COUNT(*)</code> over the <code>relationships</code> table (or over the
+target table's forward FK column for an <code>inverse</code> reverse edge); an edge
+whose target is unavailable is not counted (same availability rule the
+resolved list and the <code>some</code>/<code>none</code> quantifiers apply). A reverse edge
+also resolves as an ordinary list field (<code>donor { samples { name } }</code>)
+but is absent from the class's Create/Update inputs — it is derived from
+the forward slot and not writable. Useful for a relationship
 count badge that would otherwise resolve the whole list just to show its
 length.</p>
 <h3 id="system-and-temporal-fields">System and temporal fields<a class="headerlink" href="#system-and-temporal-fields" title="Permanent link">&para;</a></h3>
