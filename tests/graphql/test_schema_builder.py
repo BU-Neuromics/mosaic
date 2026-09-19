@@ -171,6 +171,13 @@ class TestRootTypes:
         assert "fields: [MosaicSlotInfo!]!" in info
         assert "relationships: [MosaicReferenceInfo!]!" in info
 
+    def test_mosaic_slot_info_carries_every_slot_model_attribute(self, sdl):
+        # Regression for issue #211: hasDefault and isExternalXref were
+        # declared on SlotModel but never surfaced on this GraphQL type.
+        slot_info = _block(sdl, "type MosaicSlotInfo")
+        assert "hasDefault: Boolean!" in slot_info
+        assert "isExternalXref: Boolean!" in slot_info
+
     def test_mutation_root_per_entity(self, sdl):
         mutation = _block(sdl, "type Mutation")
         assert "createSample(data: SampleCreateInput!): Sample!" in mutation

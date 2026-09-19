@@ -69,6 +69,15 @@ class TestSchemaResource:
         assert fields["volume_ml"]["kind"] == "scalar"
         assert fields["name"]["required"] is True
 
+    async def test_every_field_carries_is_external_xref(self, hippo_client, registry):
+        # Regression for issue #211: is_external_xref was silently dropped by
+        # this serializer even though SlotModel carries it.
+        server = create_mcp_server(hippo_client)
+        payload = await _read_json(server, "mosaic://schema")
+        for entity in payload.values():
+            for field in entity["fields"]:
+                assert "is_external_xref" in field
+
 
 @pytest.mark.anyio
 class TestCapabilitiesResource:

@@ -31,6 +31,7 @@ def slot_model_to_dict(slot: SlotModel) -> dict[str, Any]:
         "target_entity_type": slot.target_class,
         "enum_name": slot.enum_name,
         "enum_values": list(slot.enum_values),
+        "is_external_xref": slot.is_external_xref,
     }
 
 
