@@ -1025,6 +1025,17 @@ def _validate_inverse_slots(sv: SchemaView) -> None:
                     f"single-valued (FK-column) reference only (ADR-0011)."
                 )
                 continue
+            if forward.inlined or forward.inlined_as_list:
+                failures.append(
+                    f"{where} declares `inverse: {inverse}` but "
+                    f"{rng}.{inverse} is inlined; LinkML's SQL generator "
+                    f"emits an inlined reference's FK column as "
+                    f"`{inverse}_id`, not `{inverse}`, so the reverse edge "
+                    f"would resolve against a column that doesn't exist "
+                    f"(ADR-0011 supports the reverse of a plain, "
+                    f"non-inlined FK column only)."
+                )
+                continue
             ancestors = set(sv.class_ancestors(class_name, reflexive=True))
             if forward.range not in ancestors:
                 failures.append(

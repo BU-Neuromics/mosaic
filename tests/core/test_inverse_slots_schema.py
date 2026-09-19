@@ -144,6 +144,26 @@ class TestValidation:
             "cannot be required",
         )
 
+    def test_forward_slot_must_not_be_inlined(self):
+        text = _HEADER + """\
+  Donor:
+    is_a: Entity
+    attributes:
+      name:
+      samples:
+        range: Sample
+        multivalued: true
+        inverse: donor
+  Sample:
+    is_a: Entity
+    attributes:
+      name:
+      donor:
+        range: Donor
+        inlined: true
+"""
+        self._rejects(text, "Donor.samples", "is inlined")
+
     def test_inverse_on_non_class_range_rejected(self):
         text = _HEADER + """\
   Donor:
