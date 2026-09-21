@@ -1,7 +1,7 @@
 # ADR-0010: The MCP boundary may delegate outbound to a planning service, as an untrusted planner behind a validating relay
 
-- **Status:** Proposed
-- **Date:** 2026-09-08
+- **Status:** Accepted
+- **Date:** 2026-09-08 (ratified 2026-09-21)
 - **Deciders:** labadorf (review of [#199](https://github.com/BU-Neuromics/mosaic/pull/199)); clandaverde (implementation)
 - **Related:** ADR-0009 (MCP boundary, capability manifest, QuerySpec — this ADR extends its
   surface with the one tool that is not a `MosaicClient` wrapper); **Aperture ADR-0032**
@@ -229,9 +229,23 @@ on them; each makes a Consequence above less sharp.
 
 ## Notes / open sub-questions
 
-- **Status is `Proposed`.** The implementation (#199) is complete and verified end to end, but
-  the terms above — particularly items 5 and 7, and the cost-amplification Consequence — were
-  settled during review of that PR and have not been ratified in a design session.
+- **Ratified 2026-09-21 by clandaverde, without a separate design session.** The earlier note
+  here recorded the terms above — particularly items 5 and 7, and the cost-amplification
+  Consequence — as settled in PR review rather than in a design session, and held the status at
+  `Proposed` on that basis. That gate is released deliberately rather than satisfied: no design
+  session was held. What changed is the evidence, not the process. The relay has now been driven
+  end to end through a browser (Aperture's chat panel → `converseQuerySpec` → a planning service →
+  a re-validated `proposal` → an explicit execute), which exercises items 2, 3, 4, 6 and 7
+  directly.
+
+  **Items 5 and 7 and the cost-amplification Consequence are accepted as written and remain open
+  to amendment.** The cost exposure in particular is accepted, not mitigated: E4 (rate
+  limiting/quota) is still deferred, and anyone who can reach a configured Mosaic can still cause
+  spend at a third party with no attribution. Ratifying the terms does not close that; it records
+  that the boundary's shape is settled while the exposure stays on the follow-up list.
+
+  Reel ADR-0007 records the other side of this arrangement and was gated on this ADR not being
+  led (its precondition P3); it may now be ratified.
 - Whether a future outbound delegate should share one env-var/timeout/logging convention (a
   small `mosaic.mcp.delegate` helper) or keep per-tool config, once there is a second one. One
   instance is not yet a pattern worth abstracting.
