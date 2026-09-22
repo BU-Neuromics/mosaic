@@ -41,22 +41,22 @@ ledger (`certification/composition.lock.json`) has evidence to pin.
 |---|---|
 | `validate` | tag ↔ `pyproject.toml` version check |
 | `build` | wheel + sdist (`uv build`) |
-| `image` | `ghcr.io/bu-neuromics/hippo:{X.Y.Z,latest}`, digest-addressed |
+| `image` | `ghcr.io/bu-neuromics/mosaic:{X.Y.Z,latest}`, digest-addressed |
 | `release` | GitHub Release with CHANGELOG notes, `dist/*`, and `image-digest.json` |
 | `pypi` | PyPI publish — **gated**, see below |
 
 `image-digest.json` is the machine-readable asset the DataHelix bump bot
 reads to move the `composition.lock.json` pin to
-`ghcr.io/bu-neuromics/hippo@sha256:…`:
+`ghcr.io/bu-neuromics/mosaic@sha256:…`:
 
 ```json
 {
-  "component": "hippo",   <!-- stays "hippo" until the coordinated repo rename (ADR-0004) -->
-  "repo": "BU-Neuromics/hippo",
+  "component": "mosaic",
+  "repo": "BU-Neuromics/mosaic",
   "version": "X.Y.Z",
-  "image": "ghcr.io/bu-neuromics/hippo",
+  "image": "ghcr.io/bu-neuromics/mosaic",
   "digest": "sha256:…",
-  "ref": "ghcr.io/bu-neuromics/hippo@sha256:…"
+  "ref": "ghcr.io/bu-neuromics/mosaic@sha256:…"
 }
 ```
 

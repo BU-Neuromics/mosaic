@@ -2,7 +2,152 @@
 
 ## [Unreleased]
 
+## v0.14.0 — 2026-09-22 (the MCP boundary — QuerySpec tools over a capability manifest, conversational planning delegation, reverse edges via LinkML `inverse`)
+
 ### Added
+
+- **The MCP boundary — `mosaic serve --mcp`, a fourth transport**
+  (issue #182, ADR-0009 decision 1). `mosaic/mcp/` mounts alongside
+  REST/GraphQL/CLI, gated by a new `--mcp` flag exactly the way
+  `--graphql` already gates its own surface, and sharing the same
+  `MosaicClient`/`SchemaRegistry` — no new data-access path. Two
+  resources: `mosaic://schema` (the type model) and
+  `mosaic://capabilities` (the manifest below). **Streamable HTTP, not
+  stdio** — ADR-0009's Notes hedged stdio as "the likely default", but
+  stdio runs as a separate client-invoked process with no access to a
+  running FastAPI app, so it cannot satisfy the Decision text's actual
+  requirement of shared app state; see the `mosaic.mcp` package
+  docstring. Because Starlette never runs a mounted sub-app's lifespan,
+  `create_default_app` reassigns the host app's lifespan to enter the
+  MCP session manager's task group when `mcp=True`; `MOSAIC_SERVE_MCP`
+  is threaded through `create_app_from_env()` so `--mcp` does not
+  silently drop under `--reload`/`--workers`. **Read-only: no write or
+  mutation tool exists on this surface.** New optional extra `mcp`
+  (`mcp>=2.1.1`, also in the `all` aggregate).
+
+- **Capability manifest — per-field filter ops, predicates, ordering,
+  aggregation and search** (issue #181). `build_capability_manifest()`
+  in `mosaic.core.schema_typing` lifts three computations that
+  previously existed only inside the GraphQL layer (`schema_builder`'s
+  `<Type>Filter` generation, the resolvers' aggregate-field gating, and
+  the FTS availability check) into the core, on top of the existing
+  `build_type_model()`. This resolved a real divergence between the
+  `where:` contract and the older flat `filters:` list on single-valued
+  references: the manifest reports `where:` semantics — a reference gets
+  no direct `FilterOp`, only relationship-predicate filtering through
+  the nested edge — since QuerySpec only ever compiles to `where:`. A
+  parity test builds the real `GraphQLTypeBuilder` alongside the
+  manifest and asserts they agree on every field, so the two
+  representations cannot drift apart silently again.
+
+- **`validate_query_spec` / `execute_query_spec` MCP tools, and the
+  QuerySpec parser, validator and compiler** (issue #183, ADR-0009
+  decisions 2/3/5). Aperture ADR-0035's `QuerySpec` artifact and its
+  `validateQuerySpec` discipline, ported server-side. Validation is
+  total and manifest-driven: every anchor, slot, op, edge, enum value
+  and sort field is checked against what *this deployment's* schema
+  actually advertises, with structured, coded errors naming the
+  offending item and the valid set — the validate-fix-retry loop
+  ADR-0009 item 3 calls load-bearing. Nested `CriteriaGroup`s are
+  accepted (the `and`/`or`/`not` tree already supports arbitrary depth);
+  `asOf` is accepted under the same relationship-predicate mutual
+  exclusion the storage layer already enforces; `columns` is rejected
+  with a coded error, since its aggregate-vs-explode choice has no
+  Mosaic-side compiler to validate against. The compiler
+  (`mosaic/core/query_spec_compiler.py`) resolves two mappings that have
+  no direct `where:` shape, both verified against the real
+  `normalize_where` rather than assumed: a to-one `RelatedCondition`
+  with quantifier `none` compiles to `{"not": {edge, where}}`, and an
+  empty `criteria` list ("has / has no related record") fills with a
+  trivially-true predicate on the target's own identifier slot, looked
+  up from the manifest rather than hardcoded to `id`. Both tools return
+  a symmetric envelope — `{valid, errors}`, plus `items`/`total` on
+  execute (null when invalid) — so a client can validate-fix-retry with
+  either tool alone. `execute_query_spec` validates unconditionally
+  before compiling and bounds `limit`/`offset` to 1–1000, mirroring
+  REST's `list_entities`.
+
+- **`construct-query-spec` prompt** (issue #184, ADR-0009 decision 4): a
+  static MCP prompt carrying the procedural guidance the two resources
+  do not convey on their own — the field-name convention, how to express
+  relationship predicates, the `asOf`+`RelatedCondition` exclusion, the
+  single-sort-column cap, and (guidance item 11) `inverse_of` edges.
+  Takes an optional `goal` argument echoed into the returned message.
+
+- **Aggregation tools — `count_query_spec`, `facet_query_spec`,
+  `field_range_query_spec`** (issue #195). QuerySpec has no
+  representation for aggregation at all, which left the MCP boundary
+  strictly less capable than Mosaic's own GraphQL surface: a question
+  like "how many donors per cohort", answerable today via
+  `facetCounts`, became inexpressible after adopting the boundary as it
+  stood — and a QuerySpec-emitting client with no such tool returned a
+  *valid* spec listing every donor sorted by cohort, since validation
+  checks shape and legality, never faithfulness to the instruction. All
+  three are thin wrappers over the same `compile_query_spec` output and
+  the same `MosaicClient.count()`/`facet_counts()`/`field_range()`
+  methods the GraphQL resolvers call, with the error codes
+  (`UNKNOWN_AGGREGATION_FIELD`, `UNAGGREGATABLE_FIELD`) copied verbatim
+  so a client sees the same failure for the same field on either
+  transport. `sort` is rejected on all three; `asOf` is honored on
+  `count_query_spec` and rejected on the other two, matching each
+  underlying method's own signature. The server `instructions` and the
+  `construct-query-spec` prompt now route counting-style questions here.
+
+- **`search_query_spec`** (issue #196): the other half of the same gap —
+  the manifest advertises `search_available`/`searchable` flags no tool
+  could act on. A thin wrapper over `MosaicClient.search()`. No `field`
+  argument (FTS runs across every `hippo_search`-annotated slot at once,
+  so there is nothing to check legality against) and `sort` is *honored*
+  rather than rejected, since `search()` takes `order_by`/`order_dir`
+  and an explicit sort overrides FTS rank. `asOf` is rejected. It
+  deliberately does not add a stricter "reject a non-searchable entity"
+  check that the GraphQL `search{Plural}` resolvers lack — matching the
+  documented silent-empty behavior on both transports rather than
+  improving on it unilaterally on one.
+
+- **`converse_query_spec` — outbound planning delegation** (issue #186,
+  ADR-0010): the one tool on this surface that is not a wrapper over a
+  `MosaicClient` method. It delegates server-to-server over HTTP to a
+  stateless turn-taking planning core, because Aperture's browser has no
+  backend of its own and must not hold LLM credentials. Registered
+  **only** when `MOSAIC_EXON_URL` is set — an unconfigured deployment
+  must not advertise a delegate it cannot reach — with
+  `MOSAIC_EXON_TIMEOUT` read at the same mount time so the delegate
+  configuration has one lifecycle. Every returned `QuerySpec` is
+  **re-validated in-process** before it can come back as a `proposal`:
+  the planner is untrusted as far as this boundary is concerned, so
+  "Mosaic validates before anything executes" holds even if the
+  planner's own check is stale or bypassed. The response carries
+  `turns`, the authoritative conversation after the call, on every call
+  and not just edits — a recompute after an edit produces turns a caller
+  cannot derive from its own copy, and one that tried read a *pre-edit*
+  spec and executed the wrong query. Every failure becomes an `error`
+  turn inside the same discriminated envelope (unreachable, timed out,
+  non-JSON body, the planner's own 4xx, still-invalid-after-retry)
+  rather than a bare tool exception, and an out-of-contract response —
+  unrecognized status, missing message, a `proposal` without a spec, a
+  `clarification`/`suspended` turn smuggling one — fails here with the
+  reason named. Per ADR-0010 decision 5, client-visible failures name
+  the delegate's **role**, not its address: the URL, the exception cause
+  and the planner's response body go to `logger.warning` for the
+  operator, since this surface carries no authn and an error turn is
+  effectively public. Error paths **omit** `turns` rather than sending
+  `[]` — every error means nothing was applied, so the conversation is
+  unchanged, and a caller told to adopt the returned state would
+  otherwise wipe the chat.
+
+- **Opt-in CORS** (issues #207, #209): `CORSMiddleware` on the shared
+  FastAPI app — covering REST, GraphQL and MCP alike — but only when an
+  operator supplies an explicit origin list via `--cors-origin`
+  (repeatable) or `mosaic.yaml`'s `cors_allow_origins`. No wildcard
+  default, since write mutations live on the same surface; without it,
+  behavior is unchanged and no CORS headers are emitted at all. This
+  unblocks a browser-hosted Aperture build calling Mosaic across origins
+  (previously only a same-origin dev proxy worked). Also adds a
+  field-level GraphQL description on `ConversationTurn.id` (issue #208)
+  explaining why it is null on `error` turns and to key off `status`
+  instead.
+
 
 - **`is_external_xref` on the MCP `mosaic://schema` resource; `has_default` and
   `is_external_xref` on the GraphQL `MosaicSlotInfo` type** (issue #211):
@@ -54,6 +199,69 @@
 
 ### Fixed
 
+- **The MCP transport's Host allow-list is configurable —
+  `MOSAIC_MCP_ALLOWED_HOSTS`** (issue #214). The boundary answered only
+  loopback callers; anything else got `421 Invalid Host header`, a
+  response whose status and body say nothing about `Host` unless you
+  read the raw bytes, and which the Python client surfaces as a generic
+  "Server returned an error response". `streamable_http_app()` was
+  called with neither `transport_security` nor `host`, so the SDK's
+  DNS-rebinding protection derived its allow-list from the default
+  `127.0.0.1`. Invisible while every caller is a host process on the
+  same machine, and a hard wall the moment the boundary is
+  containerized: a sibling container sends `Host: mosaic:8001`, a client
+  on the Docker host sends `Host: host.docker.internal:8099`, both
+  rejected. The protection is kept — it is what stops a malicious page
+  driving a localhost MCP server via DNS rebinding — and made
+  configurable, with loopback always permitted so the single-machine
+  case is unchanged. `MOSAIC_MCP_ALLOWED_HOSTS=*` turns the check off
+  for a deployment that has decided its own network boundary is the
+  control, the same judgement `--cors-origin '*'` already offers. An
+  empty value is **not** read as `*`: failing open on a typo would
+  disable a security control with nobody noticing.
+
+- **The published image installs the `mcp` extra, so `converseQuerySpec`
+  actually works.** The image installed `.[graphql,postgres]`, but
+  `httpx2` ships only with the `mcp` extra and
+  `core/converse_query_spec.py` imports it at call time — so in a
+  published image the mutation registered, appeared in introspection,
+  and then raised an unhandled `ModuleNotFoundError` on the first real
+  call: a top-level GraphQL error with `data: null`, not the structured
+  `error` turn every client error path expects. ADR-0010 term 1 requires
+  an optional integration be *absent*, never present-and-broken. CI did
+  not catch this because `tests.yml` installs `[dev,graphql,mcp]` and no
+  job built graphql-without-mcp.
+
+- **Multi-column sort in a QuerySpec is rejected rather than silently
+  truncated** (issue #183). Mosaic's query surface takes a single
+  `order_by`/`order_dir` pair (mirrored by GraphQL's single-valued
+  `orderBy`), so there is no second sort column to compile against. A
+  two-field `sort` used to validate clean and would have dropped the
+  second column at execute time — the class of bug issue #129's "loud
+  over wrong" rule exists to prevent. Caught during design of the
+  compiler, before any executor code existed to hide it.
+
+- **`mosaic serve --reload-dir` — reload stops watching the CWD**
+  (issue #174). `serve --reload` never passed `reload_dirs` to uvicorn,
+  so it defaulted to `Path.cwd()` — the project directory, not
+  necessarily where Mosaic's own source lives (e.g. a PYTHONPATH-mounted
+  checkout shadowing the installed package in the DataHelix `ide`
+  recipe), and edits to the mounted source silently triggered no reload.
+  Adds a repeatable `--reload-dir`; when absent it defaults to the
+  resolved `mosaic` package directory rather than the CWD, which must
+  stay the project directory for `schema_path`/`database_url`
+  resolution.
+
+- **Provenance tracking records the adapter's real `schema_version`**
+  (issue #176, sec9 decisions Fallback 2). The `schema_version` column
+  on `ProvenanceRecord` rows built by `track_creation`/`track_update`/
+  `track_deletion` on both the SQLite and Postgres adapters hardcoded
+  `""`, even though both adapters already accept a real
+  `schema_version` at construction (threaded by `MosaicClient` from
+  `SchemaRegistry` per Decision 9.7.E) and use it correctly on the
+  actual write path. These in-memory tracking methods just never picked
+  it up.
+
 - **Entity classes must key their identifier `id`; the schema now says so
   up front** (issue #172). LinkML's `SQLTableGenerator` names a class's SQL
   primary key after whatever slot is marked `identifier: true`, but
@@ -92,6 +300,25 @@
   both paths, restoring the LinkML contract: a relative import resolves
   relative to the referencing schema. Out-of-directory relative imports
   (e.g. `../common/base`) resolve correctly too.
+
+### Upgrading
+
+- **`inverse:` is a schema-authoring change, not a code upgrade.** Nothing
+  in a deployment gains a reverse edge by moving to this version. The
+  capability is reachable only once a deployment's LinkML declares one —
+  a multivalued reference slot naming its `inverse` (`Donor.samples:
+  {range: Sample, multivalued: true, inverse: donor}`) — after which the
+  edge is computed over the forward FK column, with no migration and no
+  rows of its own. Existing schemas are unaffected.
+
+- **`--mcp` and every QuerySpec tool are opt-in.** The MCP surface mounts
+  only under `mosaic serve --mcp`, needs the new `mcp` extra installed,
+  and is read-only. `converse_query_spec` additionally registers only
+  when `MOSAIC_EXON_URL` is set. Containerized MCP callers must set
+  `MOSAIC_MCP_ALLOWED_HOSTS` — the default allow-list is loopback only.
+
+- **CORS stays off** unless an operator supplies an explicit origin list
+  (`--cors-origin` / `cors_allow_origins`). There is no wildcard default.
 
 ## v0.13.0 — 2026-08-20 (BREAKING: search returns a page envelope; the typed filter contract completes — relationship predicates, aggregation & ordering, cross-class roots)
 
