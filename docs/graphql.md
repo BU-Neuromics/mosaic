@@ -140,7 +140,12 @@ type's filter directly; a multivalued (relationship-backed) edge takes a
 edges, against the relationships link table joined to the target for
 quantified to-many edges (`some` = at least one live edge to an available
 matching target; `none` = its complement — an entity with no edges at all
-matches `none`). Edges nest arbitrarily (including self-referential
+matches `none`). A **reverse edge** declared with LinkML `inverse`
+(`Donor.samples: {range: Sample, multivalued: true, inverse: donor}` —
+see the Schema Guide) takes the same `{some, none}` object and compiles to
+`EXISTS` over the *target* table keyed on its forward FK column, so
+`donors(where: {samples: {some: {isTumor: {eq: true}}}})` works with no
+link table involved. Edges nest arbitrarily (including self-referential
 edges) and count toward the depth cap; `not` over an edge is two-valued
 (an entity with no referenced target satisfies the negation).
 Relationship predicates compose with everything the `where` tree reaches
@@ -225,9 +230,13 @@ cardinality without resolving any member object (issue #132):
 { study(id: "st1") { samplesCount } }
 ```
 
-A single indexed `COUNT(*)` over the `relationships` table; an edge whose
-target is unavailable is not counted (same availability rule the resolved
-list and the `some`/`none` quantifiers apply). Useful for a relationship
+A single indexed `COUNT(*)` over the `relationships` table (or over the
+target table's forward FK column for an `inverse` reverse edge); an edge
+whose target is unavailable is not counted (same availability rule the
+resolved list and the `some`/`none` quantifiers apply). A reverse edge
+also resolves as an ordinary list field (`donor { samples { name } }`)
+but is absent from the class's Create/Update inputs — it is derived from
+the forward slot and not writable. Useful for a relationship
 count badge that would otherwise resolve the whole list just to show its
 length.
 
