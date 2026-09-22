@@ -9,7 +9,11 @@
   co-designed against this repo's ADR-0006/0007); `mosaic-demo-small`'s
   `openspec/changes/add-mosaic-mcp-boundary/` (`proposal.md`, `design.md`, `tasks.md`, spec
   deltas — the full, detailed spec this ADR summarizes for ratification purposes); mosaic
-  issue #54 Part A (authn/authz, referenced not resolved by this ADR).
+  issue #54 Part A (authn/authz, referenced not resolved by this ADR); **Aperture ADR-0041**
+  (Proposed 2026-09-22 — splits the `columns` field this ADR lists in the accepted `QuerySpec`
+  shape: traversal and grain stay in the artifact for this validator to check and a future
+  compiler to execute, while visibility and ordering become view-side state that never reaches a
+  boundary; see the note under Consequences).
 - **Tracking issue:** [#177](https://github.com/BU-Neuromics/mosaic/issues/177) (original,
   bundled scope; superseded by the split issues this ADR proposes filing — see Consequences).
 
@@ -82,6 +86,26 @@ conditional way via a new `--mcp` flag on `mosaic serve`, sharing the same `Mosa
    authentication or authorization.
 
 ## Consequences
+
+**Note (2026-09-22) — `columns` has an owner boundary now, and this validator will need to
+follow it.** Item 2 lists `columns` among the `QuerySpec` fields this boundary accepts, and item
+4's prompt teaches an agent that "a to-many `columns` path needs an explicit
+`aggregate`-vs-`explode` choice" — while `core/query_spec.py` raises `COLUMNS_NOT_SUPPORTED` for
+any `columns` key and `mcp/server.py` correctly tells agents to omit it. The implementation is the
+honest one; the ADR text ran ahead of it.
+
+**Aperture ADR-0041** resolves why that field was never built: it is two decisions with different
+owners, separated by the test *does changing it change the row set?* Traversal and grain
+(`explode` — 128 anchors becoming 342 rows) are query semantics and belong in the artifact, where
+this validator checks them and a compiler can eventually execute them; visibility and ordering
+change nothing about the row set and belong in view state that never crosses a boundary. Bound
+together, the first half needed a server compiler and the second needed nothing, so neither
+shipped.
+
+Two follow-ups fall to this ADR when the compiler lands: accept `columns` under that narrowed
+reading, and lift `COLUMNS_NOT_SUPPORTED`. Until then `mcp/server.py:736` stays as it is — the
+prompt should keep saying "omit it", because it is true.
+
 
 - A fourth transport exists with the same trust boundary (or lack thereof) as REST/GraphQL today
   — this ADR does not change or improve on the current no-authn/authz state, it only constrains

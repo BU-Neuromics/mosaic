@@ -1,8 +1,8 @@
 # ADR-0011: `inverse`-declared slots are virtual reverse edges over the forward foreign key
 
-- **Status:** Proposed
-- **Date:** 2026-09-11
-- **Deciders:** labadorf (pending); clandaverde (issue analysis)
+- **Status:** Accepted
+- **Date:** 2026-09-22 (ratified; proposed 2026-09-11)
+- **Deciders:** labadorf; clandaverde (issue analysis)
 - **Related:** ADR-0002 (multivalued reference slots persist as relationships — the storage
   rule this ADR carves an exception out of); ADR-0005 (edge-only GraphQL references);
   ADR-0006 (typed filter contract — M5a/M5b relationship predicates, whose SQL this ADR
@@ -10,7 +10,12 @@
   that surfaced the gap); **Aperture ADR-0035** (`QuerySpec`); `mosaic-demo-small`'s
   `APERTURE_EXON_CONTRACT.md` Decision 8 (the planner re-validates through Mosaic's validator,
   so a reverse edge the validator rejects can never reach a `proposal` turn).
-- **Tracking issue:** [#204](https://github.com/BU-Neuromics/mosaic/issues/204).
+- **Tracking issue:** [#204](https://github.com/BU-Neuromics/mosaic/issues/204) (implemented,
+  `7fc300c`); ratification [#217](https://github.com/BU-Neuromics/mosaic/issues/217). Also
+  **Aperture ADR-0041** (referenced-class slot values in the result table — reverse-traversal
+  display columns gate on a deployment declaring an `inverse:` slot, which is this ADR's
+  mechanism), and its cross-component umbrella
+  [datahelix#93](https://github.com/BU-Neuromics/datahelix/issues/93).
 
 ## Context
 
@@ -161,3 +166,34 @@ Concretely:
   carrying `inverse` is left alone.
 - Whether the reverse id list should be hydrated eagerly (this ADR) or resolved lazily per
   transport — revisit only if read amplification shows up in a real deployment.
+
+## Ratification note (2026-09-22)
+
+**What released the gate is evidence, not a design session** — the same posture ADR-0010's
+ratification took, stated rather than implied.
+
+The decision shipped and is exercised end to end: `7fc300c` (#210) with `3311f98` (schema
+recognition + validation), `999cbdf` (type model, capability manifest, MCP, GraphQL and OpenAPI
+surfacing), `9f0ab00` (SQLite), `27d8bcb` (Postgres), `4887d82` (end-to-end tests + prompt
+guidance). Coverage spans `tests/core/test_inverse_slots.py`, `test_inverse_slots_schema.py`,
+`test_query_spec_compiler.py`, `tests/graphql/test_inverse_slots.py`,
+`tests/mcp/test_mcp_inverse_slots.py`, and `tests/integration/test_postgres_inverse_slots.py` in
+CI. An independent check from the consumer side (Aperture ADR-0041) generated the GraphQL schema
+for a deployment declaring `inverse: donor` and got `Donor.samples: [Sample!]!`,
+`Donor.samplesCount: Int!` and `DonorFilter.samples: SampleEdgeQuantifiers { some, none }` with no
+code change — which is the decision behaving as written.
+
+Both open sub-questions are dispositioned rather than left ambiguous by the status flip:
+
+- **`inverse` on the forward side** is resolved as the ADR reads it. `core/schema_typing.py` sets
+  `inverse_of` only for a multivalued reference slot, so a single-valued slot carrying `inverse`
+  is left alone, and `7a46e12` additionally rejects inlined forward slots for inverse edges.
+- **Eager vs. lazy hydration** was always conditional ("revisit only if read amplification shows
+  up in a real deployment"), so it is a future trigger, not a ratification gate. It stays open.
+
+**Two things ratification does not do, worth naming so nobody plans around them.** No tag contains
+`7fc300c` — the latest is `v0.13.0`, which `datahelix`'s `composition.lock.json` pins — so this is
+unreachable from a certifiable server until a release is cut ([#218](https://github.com/BU-Neuromics/mosaic/issues/218)).
+And no deployment LinkML on the platform declares an `inverse:` slot yet, so nothing exercises it
+outside tests. The blocker consumers were recording (Reel ADR-0006's "`pivot-grain` blocked on
+mosaic#204") moves from *engineering* to *release + schema authoring*; it does not vanish.
