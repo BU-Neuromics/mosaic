@@ -194,6 +194,18 @@ Both open sub-questions are dispositioned rather than left ambiguous by the stat
 **Two things ratification does not do, worth naming so nobody plans around them.** No tag contains
 `7fc300c` — the latest is `v0.13.0`, which `datahelix`'s `composition.lock.json` pins — so this is
 unreachable from a certifiable server until a release is cut ([#218](https://github.com/BU-Neuromics/mosaic/issues/218)).
+
+> **Update (2026-09-25): both are closed.** `v0.14.0` tags this work ([#218](https://github.com/BU-Neuromics/mosaic/issues/218)),
+> `datahelix` pins it, and the pair `aperture0.5.0+mosaic0.14.0` is certified against fixture
+> **1.1.0** — which the fixture was grown to carry precisely so an `inverse:`-declared reverse edge
+> is exercised by the golden path rather than only by this repo's tests.
+>
+> A deployment schema declares four in
+> [mosaic-demo-small#3](https://github.com/BU-Neuromics/mosaic-demo-small/pull/3) — **open, not yet
+> merged**, so the second caveat is closed in evidence rather than in `main`. That evidence is the
+> part worth keeping: serving the declared schema against an untouched copy of that deployment's
+> existing database resolved every edge with **no migration and no re-ingest**, which is this ADR's
+> central storage claim observed outside this repo's tests for the first time.
 And no deployment LinkML on the platform declares an `inverse:` slot yet, so nothing exercises it
 outside tests. The blocker consumers were recording (Reel ADR-0006's "`pivot-grain` blocked on
 mosaic#204") moves from *engineering* to *release + schema authoring*; it does not vanish.
