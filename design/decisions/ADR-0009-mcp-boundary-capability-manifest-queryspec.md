@@ -10,10 +10,10 @@
   `openspec/changes/add-mosaic-mcp-boundary/` (`proposal.md`, `design.md`, `tasks.md`, spec
   deltas — the full, detailed spec this ADR summarizes for ratification purposes); mosaic
   issue #54 Part A (authn/authz, referenced not resolved by this ADR); **Aperture ADR-0041**
-  (Proposed 2026-09-22 — splits the `columns` field this ADR lists in the accepted `QuerySpec`
+  (Accepted 2026-10-02 — splits the `columns` field this ADR lists in the accepted `QuerySpec`
   shape: traversal and grain stay in the artifact for this validator to check and a future
   compiler to execute, while visibility and ordering become view-side state that never reaches a
-  boundary; see the note under Consequences).
+  boundary; see the notes under Consequences).
 - **Tracking issue:** [#177](https://github.com/BU-Neuromics/mosaic/issues/177) (original,
   bundled scope; superseded by the split issues this ADR proposes filing — see Consequences).
 
@@ -105,6 +105,40 @@ shipped.
 Two follow-ups fall to this ADR when the compiler lands: accept `columns` under that narrowed
 reading, and lift `COLUMNS_NOT_SUPPORTED`. Until then `mcp/server.py:736` stays as it is — the
 prompt should keep saying "omit it", because it is true.
+
+**Note (2026-10-02) — the first of those two follow-ups is now scoped and approved: anchor-owned
+`columns` only.** Issue #215 reported the consequence of the gap from the planner's side — *"how
+long did each processing run take?"* is a question about **which field**, and an artifact with only
+`criteria` and `sort` makes the planner reach for the nearest date slot. It asked for scope sign-off
+on an increment before building it. Approved (labadorf, 2026-10-02), in this shape:
+
+- **In scope.** `columns` parses and validates as a list of **anchor-owned slot paths** — single
+  hop, no traversal — checked against the same `EntityCapability.fields_by_name` manifest every
+  other part of this validator already uses, with the same per-field, actionable error text. A
+  validated selection compiles to server-side projection and the REST/MCP envelope carries only
+  the selected slots. GraphQL callers already get this from their own selection sets and are
+  unaffected.
+- **Out of scope, and still rejected.** Any path with a hop — therefore the whole
+  `aggregate`/`explode` choice ADR-0041 keeps in the artifact. Grain is unchanged by this
+  increment: one anchor entity remains one row. That is what makes it a safe increment rather
+  than a partial one.
+- **`COLUMNS_NOT_SUPPORTED` narrows rather than lifts.** It stops refusing the key wholesale and
+  starts refusing *multi-hop paths*, naming the hop it objected to. `mcp/server.py`'s
+  `construct-query-spec` prompt stops saying "omit it" and starts saying "anchor slots only; omit
+  a traversal". Both statements stay true at every point.
+- **The capability manifest must advertise it**, so a client distinguishes a deployment that
+  projects from one that does not without probing — ADR-0029's honest degradation, which is also
+  what lets Aperture keep its client-side projection working unchanged against older servers.
+- **Note the real cost, which is not in this validator.** `MosaicClient.query()`
+  (`core/client.py:844`) takes no projection parameter at all today and always returns full
+  entity envelopes; `compile_query_spec` translates `where`/`order_by`/`as_of` only. The increment
+  is a projection capability on the core SDK query path threaded through
+  `compile_query_spec`/`execute_query_spec` to REST and MCP response shaping — not a parser patch.
+  It touches the same live wire contract as #182/#183/#195/#196/#199/#205, and lands with the same
+  kind of explicit scope note each of those carried.
+
+Only when that compiler lands does the second follow-up — accepting traversal paths and their
+explicit `aggregate`-vs-`explode` choice — come due. This note does not approve it.
 
 
 - A fourth transport exists with the same trust boundary (or lack thereof) as REST/GraphQL today
